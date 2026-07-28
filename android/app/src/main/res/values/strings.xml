@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">PSMobile</string>
+    <string name="slicing">Slicen</string>
+    <string name="slice_starting">wird vorbereitet</string>
+    <string name="channel_slicing">Slicing-Fortschritt</string>
+    <string name="memory_warning">Dieses Modell braucht geschaetzt %1$d MB, das Geraet gibt der App etwa %2$d MB. Das kann fehlschlagen – Modell vereinfachen oder Remote-Slicing nutzen.</string>
+</resources>

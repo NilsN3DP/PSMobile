@@ -1,0 +1,30 @@
+# Externer PrusaSlicer-Checkout - wird per bootstrap.sh geholt
+/external/
+
+# Build-Ausgaben
+/build-out/
+/deps-out/
+**/build/
+**/.cxx/
+*.o
+*.a
+*.so
+*.apk
+*.aab
+
+# Android
+android/local.properties
+android/.gradle/
+android/app/build/
+.gradle/
+
+# iOS / Xcode
+ios/build/
+ios/DerivedData/
+*.xcuserstate
+xcuserdata/
+
+# Editoren
+.vscode/
+.idea/
+*.swp

@@ -1,0 +1,53 @@
+# XcodeGen-Spezifikation.
+#
+# Bewusst kein eingecheckter .xcodeproj-Ordner: der ist unlesbar im Diff
+# und kollidiert bei jeder Aenderung. Stattdessen:
+#
+#   brew install xcodegen
+#   cd ios && xcodegen generate
+#
+# Voraussetzung: build/scripts/build-ios.sh core wurde bereits ausgefuehrt
+# und hat libpsmobile_core.a erzeugt.
+
+name: PSMobile
+options:
+  bundleIdPrefix: de.psmobile
+  deploymentTarget:
+    iOS: "15.0"
+  createIntermediateGroups: true
+
+settings:
+  base:
+    SWIFT_VERSION: "5.9"
+    ENABLE_BITCODE: NO
+    CLANG_ENABLE_MODULES: YES
+    SWIFT_OBJC_BRIDGING_HEADER: PSMobile/Support/PSMobile-Bridging-Header.h
+    HEADER_SEARCH_PATHS:
+      - $(SRCROOT)/../core/include
+    LIBRARY_SEARCH_PATHS:
+      - $(SRCROOT)/../build-out/ios-core-OS64
+      - $(SRCROOT)/../build-out/ios-destdir-OS64/usr/local/lib
+
+targets:
+  PSMobile:
+    type: application
+    platform: iOS
+    sources:
+      - path: PSMobile
+    resources:
+      # Die PrusaSlicer-Profile werden ins Bundle gelegt und beim ersten
+      # Start von PsmCore gelesen. Der Ordner wird von
+      # build/scripts/stage-resources.sh befuellt.
+      - path: Resources/psresources
+        type: folder
+    settings:
+      base:
+        INFOPLIST_FILE: PSMobile/Support/Info.plist
+        PRODUCT_BUNDLE_IDENTIFIER: de.psmobile
+        # Der Kern ist C++ - ohne libc++ fehlen beim Linken alle Symbole.
+        OTHER_LDFLAGS:
+          - -lc++
+          - -lpsmobile_core
+    dependencies:
+      - sdk: OpenGLES.framework
+      - sdk: Metal.framework

@@ -1,0 +1,154 @@
+/*
+ * psm_testcli - Machbarkeitsbeweis fuer M2.
+ *
+ * Bewusst reines C: das beweist nebenbei, dass das ABI wirklich C ist
+ * und ohne C++-Laufzeit auf der Aufruferseite funktioniert.
+ *
+ * Nutzung auf dem Geraet:
+ *   adb push psm_testcli /data/local/tmp/
+ *   adb push modell.stl  /data/local/tmp/
+ *   adb shell /data/local/tmp/psm_testcli \
+ *        --res /data/local/tmp/resources \
+ *        --data /data/local/tmp/psmdata \
+ *        --out /data/local/tmp/out.gcode \
+ *        /data/local/tmp/modell.stl
+ *
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
+#include "psmobile_core.h"
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <time.h>
+
+static void on_log(psm_log_level lvl, const char *msg, void *user)
+{
+    (void) user;
+    static const char *tag[] = { "FEHLER", "WARN  ", "INFO  ", "DEBUG " };
+    fprintf(stderr, "[%s] %s\n", tag[lvl], msg);
+}
+
+static int last_pct = -1;
+
+static int on_progress(int percent, const char *stage, void *user)
+{
+    (void) user;
+    if (percent != last_pct) {
+        printf("  %3d%%  %s\n", percent, stage ? stage : "");
+        fflush(stdout);
+        last_pct = percent;
+    }
+    return 0; /* nicht abbrechen */
+}
+
+static double now_seconds(void)
+{
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (double) ts.tv_sec + (double) ts.tv_nsec / 1e9;
+}
+
+int main(int argc, char **argv)
+{
+    const char *resdir  = "resources";
+    const char *datadir = "psmdata";
+    const char *outfile = "out.gcode";
+    const char *input   = NULL;
+    const char *printer = NULL;
+
+    for (int i = 1; i < argc; ++i) {
+        if (strcmp(argv[i], "--res") == 0 && i + 1 < argc)        resdir  = argv[++i];
+        else if (strcmp(argv[i], "--data") == 0 && i + 1 < argc)  datadir = argv[++i];
+        else if (strcmp(argv[i], "--out") == 0 && i + 1 < argc)   outfile = argv[++i];
+        else if (strcmp(argv[i], "--printer") == 0 && i + 1 < argc) printer = argv[++i];
+        else input = argv[i];
+    }
+
+    if (input == NULL) {
+        fprintf(stderr,
+            "Nutzung: psm_testcli [--res DIR] [--data DIR] [--out DATEI]\n"
+            "                     [--printer NAME] MODELL\n");
+        return 2;
+    }
+
+    /* Zeilenweise puffern: ueber adb haengt stdout an einer Pipe und
+     * waere sonst blockgepuffert - bei einem Absturz gingen genau die
+     * interessanten Zeilen verloren. */
+    setvbuf(stdout, NULL, _IOLBF, 0);
+
+    psm_set_log_callback(on_log, NULL);
+
+    printf("PSMobile-Kern %s, ABI %d\n", psm_core_version(), psm_abi_version());
+
+    psm_session *s = psm_session_create(datadir, resdir);
+    if (s == NULL) {
+        fprintf(stderr, "Session liess sich nicht anlegen: %s\n", psm_last_error(NULL));
+        return 1;
+    }
+
+    if (psm_presets_load_bundled(s) != PSM_OK)
+        fprintf(stderr, "Warnung: Profile nicht geladen (%s) - nutze Vorgabewerte\n",
+                psm_last_error(s));
+
+    if (printer != NULL && psm_preset_select(s, PSM_PRESET_PRINTER, printer) != PSM_OK)
+        fprintf(stderr, "Warnung: Drucker '%s' nicht waehlbar: %s\n", printer, psm_last_error(s));
+
+    psm_object_id ids[64];
+    size_t        count = 0;
+    if (psm_model_load(s, input, ids, 64, &count) != PSM_OK) {
+        fprintf(stderr, "Laden fehlgeschlagen: %s\n", psm_last_error(s));
+        psm_session_destroy(s);
+        return 1;
+    }
+    printf("geladen: %zu Objekt(e) aus %s\n", count, input);
+
+    for (size_t i = 0; i < count && i < 64; ++i) {
+        psm_object_info info;
+        if (psm_model_info(s, ids[i], &info) == PSM_OK)
+            printf("  #%d  %-28s  %7u Dreiecke  %.1f x %.1f x %.1f mm\n",
+                   info.id, info.name, info.triangle_count,
+                   info.bbox_max[0] - info.bbox_min[0],
+                   info.bbox_max[1] - info.bbox_min[1],
+                   info.bbox_max[2] - info.bbox_min[2]);
+    }
+
+    printf("geschaetzter Spitzenspeicher: %.0f MB\n",
+           (double) psm_estimate_slice_memory(s) / (1024.0 * 1024.0));
+
+    printf("slice...\n");
+    const double t0 = now_seconds();
+    if (psm_slice_start(s, on_progress, NULL) != PSM_OK) {
+        fprintf(stderr, "Slice-Start fehlgeschlagen: %s\n", psm_last_error(s));
+        psm_session_destroy(s);
+        return 1;
+    }
+
+    const psm_result wr = psm_slice_wait(s, -1);
+    const double secs = now_seconds() - t0;
+
+    if (wr != PSM_OK) {
+        fprintf(stderr, "Slicing fehlgeschlagen (%d): %s\n", wr, psm_last_error(s));
+        psm_session_destroy(s);
+        return 1;
+    }
+
+    psm_slice_stats st;
+    if (psm_slice_stats_get(s, &st) == PSM_OK)
+        printf("fertig in %.3f s - %d Layer, %.2f mm hoch, Druckzeit %.0f min, "
+               "Filament %.2f m / %.1f g\n",
+               secs, st.layer_count, st.max_z,
+               st.print_time_seconds / 60.0,
+               st.filament_used_mm / 1000.0, st.filament_used_g);
+
+    if (psm_gcode_export(s, outfile) != PSM_OK) {
+        fprintf(stderr, "Export fehlgeschlagen: %s\n", psm_last_error(s));
+        psm_session_destroy(s);
+        return 1;
+    }
+    printf("G-Code geschrieben: %s\n", outfile);
+
+    psm_session_destroy(s);
+    return 0;
+}
