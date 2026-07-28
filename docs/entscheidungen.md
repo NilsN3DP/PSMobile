@@ -99,7 +99,13 @@ beschraenken die Nutzung pro Apple-ID und gelten nach verbreiteter
 Auslegung als unvereinbar mit GPLv3/AGPLv3 (VLC-Praezedenzfall).
 Zusaetzlich verlangt AGPL die Offenlegung aller Aenderungen.
 
-**Naechster Schritt**: siehe `04-lizenz-und-store.md`.
+**Stand 2026-07-28**: Direkter Draht zu Prusa Research vorhanden, Klaerung
+laeuft. Die vier Punkte, die schriftlich zurueckkommen muessen, stehen in
+`06-anfrage-prusa.md` - insbesondere Punkt 2 (Fremdanteile am Copyright),
+weil eine Freigabe von Prusa nur Prusas eigenen Anteil deckt.
+
+**Naechster Schritt**: siehe `04-lizenz-und-store.md` und
+`06-anfrage-prusa.md`.
 
 ---
 
