@@ -535,6 +535,13 @@ JNIEXPORT jint JNICALL JNI_VP(nativePick)(JNIEnv *, jclass, jlong h, jfloat x, j
     return psm_viewport_pick(vp(h), x, y);
 }
 
+JNIEXPORT jint JNICALL JNI_VP(nativeDragSelected)(JNIEnv *, jclass, jlong h,
+                                                  jfloat fx, jfloat fy,
+                                                  jfloat tx, jfloat ty)
+{
+    return psm_viewport_drag_selected(vp(h), fx, fy, tx, ty);
+}
+
 JNIEXPORT void JNICALL JNI_VP(nativeSetSelection)(JNIEnv *, jclass, jlong h, jint id)
 {
     psm_viewport_set_selection(vp(h), id);

@@ -28,6 +28,8 @@ class PsmViewport private constructor(private var handle: Long) {
         @JvmStatic private external fun nativeViewPreset(h: Long, which: Int)
         @JvmStatic private external fun nativePick(h: Long, x: Float, y: Float): Int
         @JvmStatic private external fun nativeSetSelection(h: Long, id: Int)
+        @JvmStatic private external fun nativeDragSelected(
+            h: Long, fx: Float, fy: Float, tx: Float, ty: Float): Int
         @JvmStatic private external fun nativeLastError(h: Long): String
     }
 
@@ -46,6 +48,10 @@ class PsmViewport private constructor(private var handle: Long) {
 
     fun pick(x: Float, y: Float): Int = nativePick(handle, x, y)
     fun setSelection(id: Int) = nativeSetSelection(handle, id)
+
+    /** @return true wenn das ausgewaehlte Objekt bewegt wurde */
+    fun dragSelected(fx: Float, fy: Float, tx: Float, ty: Float): Boolean =
+        nativeDragSelected(handle, fx, fy, tx, ty) != 0
 
     val lastError: String get() = if (handle == 0L) "" else nativeLastError(handle)
 

@@ -72,6 +72,7 @@ fun SceneView(
         },
         update = { view ->
             // Modell hat sich geaendert oder Auswahl gewechselt: neu zeichnen.
+            view.selectedId = selectedId ?: -1
             view.queueEvent {
                 holder.viewport?.setSelection(selectedId ?: -1)
                 holder.viewport?.invalidate()
@@ -112,6 +113,8 @@ private class SceneGLView(
     private var pointers = 0
     private var moved = false
     private var downTime = 0L
+    @Volatile private var dragObject = false
+    @Volatile var selectedId = -1
 
     init {
         // GLES 2.0: genau dafuer sind die Shader aus PrusaSlicer geschrieben.
@@ -151,6 +154,8 @@ private class SceneGLView(
                 lastX = event.x; lastY = event.y
                 pointers = 1; moved = false
                 downTime = System.currentTimeMillis()
+                val x = event.x; val y = event.y
+                queueEvent { dragObject = vp.pick(x, y) == selectedId && selectedId >= 0 }
             }
 
             MotionEvent.ACTION_POINTER_DOWN -> {
@@ -179,7 +184,15 @@ private class SceneGLView(
                     val dy = event.y - lastY
                     if (abs(dx) > 1f || abs(dy) > 1f) {
                         moved = true
-                        queueEvent { vp.orbit(dx, dy) }
+                        val fx = lastX; val fy = lastY
+                        val tx = event.x; val ty = event.y
+                        queueEvent {
+                            // Auf einem ausgewaehlten Objekt verschiebt der
+                            // Finger das Objekt, sonst dreht er die Kamera.
+                            // Genau die Regel aus dem Gestenkonzept.
+                            if (!dragObject || !vp.dragSelected(fx, fy, tx, ty))
+                                vp.orbit(dx, dy)
+                        }
                         requestRender()
                     }
                     lastX = event.x; lastY = event.y
@@ -193,6 +206,7 @@ private class SceneGLView(
                     queueEvent {
                         val id = vp.pick(x, y)
                         vp.setSelection(id)
+                        selectedId = id
                         post { onSelect(id) }
                     }
                     requestRender()

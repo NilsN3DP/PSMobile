@@ -603,6 +603,73 @@ PSM_API void psm_viewport_set_selection(psm_viewport *v, psm_object_id id)
         v->selection = id;
 }
 
+namespace {
+
+/** Schnittpunkt des Sehstrahls durch (x,y) mit der Ebene z = plane_z. */
+bool ray_to_plane(const psm_viewport *v, float x, float y, double plane_z,
+                  Slic3r::Vec3d &out)
+{
+    const Mat4 inv = (v->projection() * v->view()).inverse();
+    const float nx = 2.f * x / static_cast<float>(v->width) - 1.f;
+    const float ny = 1.f - 2.f * y / static_cast<float>(v->height);
+
+    Eigen::Vector4f p0 = inv * Eigen::Vector4f(nx, ny, -1.f, 1.f);
+    Eigen::Vector4f p1 = inv * Eigen::Vector4f(nx, ny,  1.f, 1.f);
+    p0 /= p0.w();
+    p1 /= p1.w();
+
+    const Slic3r::Vec3d o(p0.x(), p0.y(), p0.z());
+    const Slic3r::Vec3d d = Slic3r::Vec3d(p1.x() - p0.x(), p1.y() - p0.y(),
+                                          p1.z() - p0.z()).normalized();
+    if (std::abs(d.z()) < 1e-9)
+        return false;                      // Blick parallel zum Bett
+
+    const double t = (plane_z - o.z()) / d.z();
+    if (t <= 0.0)
+        return false;                      // Ebene liegt hinter der Kamera
+    out = o + d * t;
+    return true;
+}
+
+} // namespace
+
+PSM_API int psm_viewport_drag_selected(psm_viewport *v,
+                                       float from_x, float from_y,
+                                       float to_x, float to_y)
+{
+    if (v == nullptr || v->selection == PSM_INVALID_ID)
+        return 0;
+
+    Slic3r::ModelObject *obj = nullptr;
+    for (Slic3r::ModelObject *o : v->session->model.objects)
+        if (static_cast<psm_object_id>(o->id().id) == v->selection) {
+            obj = o;
+            break;
+        }
+    if (obj == nullptr || obj->instances.empty())
+        return 0;
+
+    /* Auf halber Objekthoehe schneiden, nicht auf dem Bett: sonst laeuft
+     * das Objekt bei flacher Kamera davon. */
+    const Slic3r::BoundingBoxf3 bb = obj->instance_bounding_box(0, false);
+    const double plane_z = (bb.min.z() + bb.max.z()) * 0.5;
+
+    Slic3r::Vec3d a, b;
+    if (! ray_to_plane(v, from_x, from_y, plane_z, a) ||
+        ! ray_to_plane(v, to_x,   to_y,   plane_z, b))
+        return 0;
+
+    Slic3r::ModelInstance *inst = obj->instances.front();
+    Slic3r::Vec3d off = inst->get_offset();
+    off.x() += b.x() - a.x();
+    off.y() += b.y() - a.y();
+    inst->set_offset(off);
+    obj->invalidate_bounding_box();
+
+    v->dirty = true;
+    return 1;
+}
+
 PSM_API const char *psm_viewport_last_error(psm_viewport *v)
 {
     return v == nullptr ? "" : v->last_error.c_str();

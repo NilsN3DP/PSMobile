@@ -103,11 +103,57 @@ Menueleiste, die dreispaltige Parametertabelle.
 
 ---
 
-## 5. Vorschlag fuer die Reihenfolge morgen
+## 5. Arbeitsliste - hier weitermachen
 
-1. Objekt verschieben, skalieren, drehen - ohne das ist der Viewport
-   halb nutzlos, und es ist die auffaelligste Luecke.
-2. PrusaLink-Upload - geht ohne Prusa-Klaerung sofort.
-3. Die 25 fehlenden Parameter entscheiden: nachtragen oder anders holen.
-4. G-Code-Vorschau (M6).
-5. Connect-Upload, sobald die Client-ID geklaert ist.
+**Diese Datei ist die Uebergabe.** Wer kalt hier hereinkommt, liest
+`README.md`, `docs/entscheidungen.md` (vor allem E-12: uebernehmen statt
+nachbauen) und dann diese Liste.
+
+### Bauen und pruefen
+
+```bash
+# Kern (Docker auf localunraid, SSH-Key ~/.ssh/unraid_aipp)
+ANDROID_ABI=x86_64 bash build/scripts/build-core.sh
+bash build/scripts/stage-native.sh x86_64
+bash build/scripts/build-apk.sh
+
+# Auf dem Emulator PSM_Tablet pruefen
+adb install -r android/app/build/outputs/apk/debug/app-debug.apk
+```
+
+Nach Aenderungen am Kern **immer** `stage-native.sh` vor `build-apk.sh` -
+sonst liegt die alte .so im APK.
+
+### Offen, nach Wert sortiert
+
+- [x] **Objekt verschieben** - Ziehen in der Bettebene, fertig.
+- [ ] **Objekt skalieren und drehen** - Gizmos oder numerische Felder in
+      der Seitenleiste, wie PrusaSlicers Object Manipulation.
+      `psm_model_set_rotation` und `psm_model_set_scale` gibt es schon im
+      ABI, es fehlt nur die Oberflaeche.
+- [ ] **PrusaLink** - Druckerliste mit Adresse und API-Key, Upload per
+      `PUT /api/v1/files/usb/<name>` mit Header `X-Api-Key`. Option, nur
+      PrusaLink-Drucker in der Druckerauswahl zu zeigen.
+      Rein nativ (OkHttp), kein libcurl - siehe E-09.
+- [ ] **Gesendete Dateien sichern** - Zielordner per
+      `ACTION_OPEN_DOCUMENT_TREE` waehlen, jede gesendete Datei dorthin
+      kopieren. Funktioniert auch mit eingebundenen Netzlaufwerken.
+- [ ] **Simple-Modus vereinfachen** - derzeit nur eine kuerzere Liste.
+      Ziel: Qualitaet, Material, Fuellung, Stuetzen, Haftung, dann
+      slicen. Der volle Baum bleibt einen Fingertipp entfernt.
+- [ ] **G-Code-Vorschau** (M6, `libvgcode`, ~5600 LOC, schon portabel).
+- [ ] **Objektliste vertiefen** - Baum mit Volumen und Modifikatoren.
+- [ ] **Die 25 fehlenden Parameter** - Entscheidung noetig, siehe 2.1.
+- [ ] **Connect-Upload** - erst wenn die Client-ID geklaert ist, siehe 1.1.
+- [ ] **Stift-Painting** - das Alleinstellungsmerkmal, siehe unten.
+
+### Warum Stift-Painting das Ziel ist
+
+Prusa EasyPrint ist ein Cloud-Slicer: ~60 s Rechenzeit je Platte,
+Tageslimit, grosse Modelle werden abgelehnt, kein vollstaendiger
+Einstellungsbaum. PSMobile slict auf dem Geraet - keine dieser Grenzen.
+
+Bei allen anderen Funktionen sind wir bestenfalls gleichwertig zum
+Desktop. Supports, Naht und MMU-Farben mit dem Stift aufzumalen ist die
+einzige Funktion, bei der die mobile Version **besser** ist als der
+Desktop. Darauf sollte das Projekt hinauslaufen.

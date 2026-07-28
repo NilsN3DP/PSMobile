@@ -58,6 +58,19 @@ PSM_API psm_object_id psm_viewport_pick(psm_viewport *v, float x, float y);
 
 PSM_API void psm_viewport_set_selection(psm_viewport *v, psm_object_id id);
 
+/*
+ * Ausgewaehltes Objekt mit dem Finger verschieben.
+ *
+ * Der Bildschirmversatz wird auf die Bettebene projiziert, damit sich das
+ * Objekt unter dem Finger mitbewegt statt mit fester Empfindlichkeit -
+ * bei schraeger Kamera waere jede Pixelumrechnung falsch.
+ *
+ * @return 1 wenn etwas bewegt wurde, sonst 0.
+ */
+PSM_API int psm_viewport_drag_selected(psm_viewport *v,
+                                       float from_x, float from_y,
+                                       float to_x, float to_y);
+
 /** Letzte Fehlermeldung des Viewports, etwa beim Laden der Shader. */
 PSM_API const char *psm_viewport_last_error(psm_viewport *v);
 

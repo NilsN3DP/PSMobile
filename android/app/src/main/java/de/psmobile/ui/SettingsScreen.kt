@@ -181,47 +181,73 @@ fun SettingsScreen(
     }
 }
 
+/**
+ * Eine Einstellung.
+ *
+ * Aufbau bewusst zweizeilig statt nebeneinander: Beschriftung links,
+ * Bedienelement rechtsbuendig auf fester Breite, Erklaerung darunter in
+ * voller Zeilenbreite. Damit stehen alle Bedienelemente auf einer
+ * senkrechten Linie, unabhaengig davon wie lang die Erklaerung ist -
+ * vorher sprang die Spalte je nach Texthoehe.
+ */
+private val CONTROL_WIDTH = 220.dp
+
 @Composable
 private fun SettingRow(core: PsmCore, meta: PsmCore.ConfigMeta) {
     var value by remember(meta.key) { mutableStateOf(core[meta.key].orEmpty()) }
+    var expanded by remember(meta.key) { mutableStateOf(false) }
 
     fun push(v: String) {
         value = v
         runCatching { core[meta.key] = v }
     }
 
-    Row(
-        Modifier.fillMaxWidth().padding(vertical = 3.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Column(Modifier.weight(1f).padding(end = 12.dp)) {
+    Column(Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
+        Row(
+            Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
             Text(
                 PsUi.tr(meta.label).ifBlank { meta.key },
                 color = PrusaColors.TextPrimary,
                 fontSize = 14.sp,
+                modifier = Modifier.weight(1f).padding(end = 16.dp),
             )
-            if (meta.tooltip.isNotBlank()) {
-                Text(
-                    PsUi.tr(meta.tooltip),
-                    color = PrusaColors.TextMuted,
-                    fontSize = 11.sp,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                )
+
+            Box(Modifier.width(CONTROL_WIDTH), contentAlignment = Alignment.CenterEnd) {
+                when (meta.type) {
+                    PsmCore.ConfigType.BOOL -> Switch(
+                        checked = value == "1" || value.equals("true", true),
+                        onCheckedChange = { push(if (it) "1" else "0") },
+                        colors = SwitchDefaults.colors(checkedTrackColor = PrusaColors.Orange),
+                    )
+                    PsmCore.ConfigType.ENUM -> EnumField(core, meta, value) { push(it) }
+                    else -> ValueField(value, meta.unit) { push(it) }
+                }
             }
         }
 
-        when (meta.type) {
-            PsmCore.ConfigType.BOOL -> Switch(
-                checked = value == "1" || value.equals("true", true),
-                onCheckedChange = { push(if (it) "1" else "0") },
-                colors = SwitchDefaults.colors(checkedTrackColor = PrusaColors.Orange),
+        if (meta.tooltip.isNotBlank()) {
+            // Lange Erklaerungen zeigen erst zwei Zeilen; antippen klappt
+            // sie auf. Manche Tooltips im Original sind fuenf Zeilen lang.
+            Text(
+                PsUi.tr(meta.tooltip),
+                color = PrusaColors.TextMuted,
+                fontSize = 11.sp,
+                lineHeight = 15.sp,
+                maxLines = if (expanded) Int.MAX_VALUE else 2,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 2.dp, end = CONTROL_WIDTH + 16.dp)
+                    .clickable { expanded = !expanded },
             )
-
-            PsmCore.ConfigType.ENUM -> EnumField(core, meta, value) { push(it) }
-
-            else -> ValueField(value, meta.unit) { push(it) }
         }
+
+        HorizontalDivider(
+            Modifier.padding(top = 8.dp),
+            color = PrusaColors.Divider.copy(alpha = 0.5f),
+        )
     }
 }
 
@@ -238,7 +264,7 @@ private fun EnumField(
 
     Box {
         Row(
-            Modifier.width(200.dp).height(44.dp)
+            Modifier.fillMaxWidth().height(44.dp)
                 .clip(RoundedCornerShape(4.dp))
                 .background(PrusaColors.PanelRaised)
                 .border(1.dp, PrusaColors.Divider, RoundedCornerShape(4.dp))
@@ -268,7 +294,7 @@ private fun EnumField(
 @Composable
 private fun ValueField(value: String, unit: String, onChange: (String) -> Unit) {
     Row(
-        Modifier.width(200.dp).height(44.dp)
+        Modifier.fillMaxWidth().height(44.dp)
             .clip(RoundedCornerShape(4.dp))
             .background(PrusaColors.PanelRaised)
             .border(1.dp, PrusaColors.Divider, RoundedCornerShape(4.dp))
