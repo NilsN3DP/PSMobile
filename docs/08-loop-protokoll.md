@@ -7,10 +7,13 @@ passiert ist.
 ## Ablauf fuer jeden Durchlauf
 
 1. **Erst lesen, dann bauen.** In dieser Reihenfolge:
+   `docs/09-fehlerliste.md` (hat Vorrang), dann
    `docs/07-stopp-punkte.md` (Arbeitsliste), dann den letzten Eintrag
    unten, dann `git log --oneline | head -10`.
-2. **Einen Punkt nehmen**, nicht mehrere. Der oberste offene aus
-   Abschnitt 5 der Stopp-Punkte, sofern nichts dagegen spricht.
+2. **Einen Punkt nehmen**, nicht mehrere. **Fehler der Stufe A gehen vor
+   allen neuen Funktionen** - eine App mit vier A-Fehlern ist nicht
+   testbar, egal wie viele Funktionen sie hat. Danach B, danach die
+   Arbeitsliste aus den Stopp-Punkten.
 3. **Bauen und pruefen** - nicht nur schreiben. Nach Kernaenderungen
    immer `stage-native.sh` vor `build-apk.sh`, sonst liegt die alte .so
    im APK.
