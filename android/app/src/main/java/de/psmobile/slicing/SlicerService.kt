@@ -303,6 +303,50 @@ class SlicerService : Service() {
         refreshObjects()
     }
 
+    // --- An einen Drucker senden ------------------------------------------
+
+    private val _sendState = MutableStateFlow<String?>(null)
+    val sendState: StateFlow<String?> = _sendState.asStateFlow()
+
+    fun clearSendState() { _sendState.value = null }
+
+    /**
+     * Schickt den zuletzt erzeugten G-Code an einen PrusaLink-Drucker und
+     * sichert ihn, falls ein Sicherungsordner eingerichtet ist.
+     *
+     * Die Sicherung laeuft auch dann, wenn der Upload scheitert - der
+     * G-Code ist ja trotzdem entstanden, und ihn zu verlieren waere
+     * aergerlicher als ein fehlgeschlagener Upload.
+     */
+    fun sendToPrinter(printer: de.psmobile.net.PrusaLink.Printer, printAfter: Boolean) {
+        val gcode = lastGcode
+        if (gcode == null || !gcode.exists()) {
+            _sendState.value = "Kein G-Code vorhanden – erst slicen"
+            return
+        }
+
+        scope.launch {
+            _sendState.value = "Sende an ${printer.name}…"
+
+            val model = _objects.value.firstOrNull()?.name?.substringBeforeLast('.')
+            val remote = (model ?: "psmobile") + ".gcode"
+
+            val r = de.psmobile.net.PrusaLink.upload(printer, gcode, remote, printAfter)
+            var msg = when (r) {
+                is de.psmobile.net.PrusaLink.Result.Ok -> r.message
+                is de.psmobile.net.PrusaLink.Result.Error -> "Fehler: ${r.message}"
+            }
+
+            if (de.psmobile.net.BackupStore.isConfigured(this@SlicerService)) {
+                val b = de.psmobile.net.BackupStore.archive(
+                    this@SlicerService, gcode, printer.name)
+                msg += if (b.ok) "  ·  gesichert" else "  ·  Sicherung: ${b.message}"
+            }
+
+            _sendState.value = msg
+        }
+    }
+
     /** Import-Fehler in die Oberflaeche durchreichen statt verschlucken. */
     fun reportImportError(t: Throwable) {
         Log.e(TAG, "Import fehlgeschlagen", t)

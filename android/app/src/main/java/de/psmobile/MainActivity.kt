@@ -9,6 +9,7 @@ import android.os.Bundle
 import android.os.IBinder
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -47,6 +48,23 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    /**
+     * Zielordner fuer die Sicherung. Ueber das Storage Access Framework,
+     * damit auch eingebundene Netzlaufwerke funktionieren - ohne
+     * Speicherberechtigung und ohne eigenes SMB im Code.
+     */
+    private val backupPicker = registerForActivityResult(
+        ActivityResultContracts.OpenDocumentTree()
+    ) { uri ->
+        if (uri != null) {
+            contentResolver.takePersistableUriPermission(
+                uri,
+                Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
+            )
+            de.psmobile.net.PrinterStore.setBackupTree(this, uri.toString())
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
@@ -82,6 +100,7 @@ class MainActivity : ComponentActivity() {
                         service = svc,
                         onPickFile = { uri -> importUri(uri) },
                         onShare = { uri -> shareGcode(uri) },
+                        onPickBackupFolder = { backupPicker.launch(null) },
                     )
                 }
             }

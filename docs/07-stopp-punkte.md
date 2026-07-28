@@ -131,13 +131,19 @@ sonst liegt die alte .so im APK.
       der Seitenleiste, wie PrusaSlicers Object Manipulation.
       `psm_model_set_rotation` und `psm_model_set_scale` gibt es schon im
       ABI, es fehlt nur die Oberflaeche.
-- [ ] **PrusaLink** - Druckerliste mit Adresse und API-Key, Upload per
-      `PUT /api/v1/files/usb/<name>` mit Header `X-Api-Key`. Option, nur
-      PrusaLink-Drucker in der Druckerauswahl zu zeigen.
-      Rein nativ (OkHttp), kein libcurl - siehe E-09.
-- [ ] **Gesendete Dateien sichern** - Zielordner per
-      `ACTION_OPEN_DOCUMENT_TREE` waehlen, jede gesendete Datei dorthin
-      kopieren. Funktioniert auch mit eingebundenen Netzlaufwerken.
+- [x] **PrusaLink** - Verwaltung, Verbindungstest, Upload gebaut.
+      **Aber nie gegen ein echtes Geraet gelaufen** - im Emulator gibt es
+      keinen Drucker. Erster Test mit einem echten Drucker steht aus.
+- [ ] **Filter "nur eingerichtete Drucker"** - Der Schalter existiert und
+      wird gespeichert, filtert aber noch nichts. Ansatzpunkt:
+      `SlicerService.refreshPresets()` gegen
+      `PrinterStore.all(context).map { it.presetName }` filtern, wenn
+      `PrinterStore.onlyLinked(context)` gesetzt ist.
+- [x] **Gesendete Dateien sichern** - ueber das Storage Access Framework,
+      damit auch eingebundene Netzlaufwerke gehen. Ebenfalls ungetestet.
+- [ ] **API-Schluessel verschluesselt ablegen** - liegt derzeit in
+      gewoehnlichen SharedPreferences. Vor einer Veroeffentlichung auf
+      EncryptedSharedPreferences umstellen.
 - [ ] **Simple-Modus vereinfachen** - derzeit nur eine kuerzere Liste.
       Ziel: Qualitaet, Material, Fuellung, Stuetzen, Haftung, dann
       slicen. Der volle Baum bleibt einen Fingertipp entfernt.

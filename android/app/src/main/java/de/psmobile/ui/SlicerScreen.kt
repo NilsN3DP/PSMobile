@@ -93,6 +93,7 @@ fun SlicerScreen(
     service: SlicerService?,
     onPickFile: (android.net.Uri) -> Unit,
     onShare: (android.net.Uri) -> Unit,
+    onPickBackupFolder: () -> Unit,
 ) {
     if (service == null) {
         Box(
@@ -101,7 +102,7 @@ fun SlicerScreen(
         ) { CircularProgressIndicator(color = PrusaColors.Orange) }
         return
     }
-    SlicerContent(service, onPickFile, onShare)
+    SlicerContent(service, onPickFile, onShare, onPickBackupFolder)
 }
 
 @Composable
@@ -109,6 +110,7 @@ private fun SlicerContent(
     service: SlicerService,
     onPickFile: (android.net.Uri) -> Unit,
     onShare: (android.net.Uri) -> Unit,
+    onPickBackupFolder: () -> Unit,
 ) {
     val picker = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument()
@@ -122,6 +124,22 @@ private fun SlicerContent(
     val sceneController = remember { SceneController() }
     var settingsTab by remember { mutableStateOf<String?>(null) }
     var settingsMode by remember { mutableStateOf(PsmCore.Mode.SIMPLE) }
+    var showPrinters by remember { mutableStateOf(false) }
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    val sendState by service.sendState.collectAsState()
+    var linkPrinters by remember { mutableStateOf(de.psmobile.net.PrinterStore.all(ctx)) }
+
+    if (showPrinters) {
+        PrintersScreen(
+            presetNames = presets.printers,
+            onClose = {
+                showPrinters = false
+                linkPrinters = de.psmobile.net.PrinterStore.all(ctx)
+            },
+            onPickBackupFolder = onPickBackupFolder,
+        )
+        return
+    }
 
     // Vollbild-Einstellungen wie die Tabs im Desktop-Fenster.
     settingsTab?.let { tab ->
@@ -184,6 +202,9 @@ private fun SlicerContent(
             onSelect = { selectedId = it },
             onShare = onShare,
             onOpenSettings = { settingsTab = it },
+            onManagePrinters = { showPrinters = true },
+            linkPrinters = linkPrinters,
+            sendState = sendState,
             modifier = Modifier.width(SIDEBAR_WIDTH).fillMaxHeight(),
         )
     }
@@ -305,6 +326,9 @@ private fun Sidebar(
     onSelect: (Int) -> Unit,
     onShare: (android.net.Uri) -> Unit,
     onOpenSettings: (String) -> Unit,
+    onManagePrinters: () -> Unit,
+    linkPrinters: List<de.psmobile.net.PrusaLink.Printer>,
+    sendState: String?,
     modifier: Modifier = Modifier,
 ) {
     val isRunning = progress is SlicerService.Progress.Running
@@ -374,6 +398,30 @@ private fun Sidebar(
                 fontSize = 16.sp,
             )
         }
+
+        if (progress is SlicerService.Progress.Done && linkPrinters.isNotEmpty()) {
+            // Direkt an den ersten eingerichteten Drucker.
+            val target = linkPrinters.first()
+            Button(
+                onClick = { service.sendToPrinter(target, false) },
+                modifier = Modifier.fillMaxWidth().height(48.dp),
+                shape = RoundedCornerShape(6.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = PrusaColors.PanelRaised,
+                    contentColor = PrusaColors.TextPrimary,
+                ),
+            ) { Text("An " + target.name + " senden") }
+        }
+
+        sendState?.let {
+            Text(it, color = PrusaColors.TextMuted, fontSize = 12.sp,
+                 modifier = Modifier.fillMaxWidth().padding(top = 2.dp))
+        }
+
+        androidx.compose.material3.TextButton(
+            onClick = onManagePrinters,
+            modifier = Modifier.fillMaxWidth(),
+        ) { Text("Drucker verwalten", color = PrusaColors.TextMuted, fontSize = 12.sp) }
 
         if (progress is SlicerService.Progress.Done) {
             OutlinedButton(
