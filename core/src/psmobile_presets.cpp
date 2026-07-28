@@ -17,6 +17,7 @@
 
 #include <boost/filesystem.hpp>
 #include <set>
+#include <map>
 
 #include "libslic3r/AppConfig.hpp"
 #include "libslic3r/Preset.hpp"
@@ -244,11 +245,30 @@ PSM_API psm_result psm_presets_install(psm_session *s,
     try {
         namespace fs = boost::filesystem;
 
-        /* Auswahl als Menge "vendor:model" - leer bedeutet: alles. */
-        std::set<std::string> wanted;
-        for (size_t i = 0; i < key_count; ++i)
-            if (model_keys != nullptr && model_keys[i] != nullptr)
-                wanted.insert(model_keys[i]);
+        /* Auswahl als Menge "vendor:model" oder "vendor:model:variant".
+         * Leer bedeutet: alles.
+         *
+         * Die Variante ist die Duesengroesse. Ohne sie werden alle
+         * Varianten eines Modells eingerichtet - fuer einen MK4S sind
+         * das zehn Druckerprofile, obwohl man in aller Regel eine
+         * einzige Duese benutzt. */
+        std::set<std::string> wanted_models;                    // "vendor:model"
+        std::map<std::string, std::set<std::string>> wanted_variants;
+
+        for (size_t i = 0; i < key_count; ++i) {
+            if (model_keys == nullptr || model_keys[i] == nullptr)
+                continue;
+            const std::string key = model_keys[i];
+            const size_t second = key.find(':', key.find(':') == std::string::npos
+                                                ? 0 : key.find(':') + 1);
+            if (second != std::string::npos) {
+                wanted_models.insert(key.substr(0, second));
+                wanted_variants[key.substr(0, second)].insert(key.substr(second + 1));
+            } else {
+                wanted_models.insert(key);
+            }
+        }
+        const std::set<std::string> &wanted = wanted_models;
 
         s->presets = std::make_unique<PresetBundle>();
         s->presets->setup_directories();
@@ -310,11 +330,21 @@ PSM_API psm_result psm_presets_install(psm_session *s,
                         wanted.find(vp.id + ":" + m.id) == wanted.end())
                         continue;
 
+                    const std::string mkey = vp.id + ":" + m.id;
+                    const auto vit = wanted_variants.find(mkey);
+                    const std::set<std::string> *vars =
+                        (vit == wanted_variants.end()) ? nullptr : &vit->second;
+
                     if (m.variants.empty()) {
                         app_config.set_variant(vp.id, m.id, "default", true);
                     } else {
-                        for (const VendorProfile::PrinterVariant &v : m.variants)
+                        for (const VendorProfile::PrinterVariant &v : m.variants) {
+                            /* Ohne Duesenangabe alle Varianten, sonst nur
+                             * die ausgewaehlten. */
+                            if (vars != nullptr && vars->find(v.name) == vars->end())
+                                continue;
                             app_config.set_variant(vp.id, m.id, v.name, true);
+                        }
                     }
                     ++models;
                 }

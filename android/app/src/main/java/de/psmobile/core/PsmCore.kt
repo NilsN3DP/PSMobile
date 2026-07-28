@@ -144,7 +144,8 @@ class PsmCore private constructor(private var handle: Long) : Closeable {
         val name: String,
         val family: String,
         val isSla: Boolean,
-        val variantCount: Int,
+        /** Duesengroessen, z. B. 0.25, 0.4, HF0.4 */
+        val variants: List<String>,
     )
 
     /**
@@ -157,7 +158,10 @@ class PsmCore private constructor(private var handle: Long) : Closeable {
         val n = nativeScanPrinterModels(h)
         return (0 until n).mapNotNull { i ->
             nativePrinterModelAt(h, i)?.split('\t')?.takeIf { it.size >= 5 }?.let {
-                PrinterModel(it[0], it[1], it[2], it[3] == "1", it[4].toIntOrNull() ?: 0)
+                PrinterModel(
+                    key = it[0], name = it[1], family = it[2], isSla = it[3] == "1",
+                    variants = it[4].split(',').filter { v -> v.isNotBlank() },
+                )
             }
         }
     }

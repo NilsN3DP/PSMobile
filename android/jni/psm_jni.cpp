@@ -156,10 +156,23 @@ JNIEXPORT jstring JNICALL JNI_FN(nativePrinterModelAt)(JNIEnv *env, jclass, jlon
     if (psm_printer_model_at(sess(h), static_cast<size_t>(index), &m) != PSM_OK)
         return nullptr;
 
+    /* Duesengroessen gleich mitliefern - sonst braucht die
+     * Ersteinrichtung zehn weitere JNI-Aufrufe je Drucker. */
+    std::string variants;
+    for (int32_t v = 0; v < m.variant_count; ++v) {
+        char buf[64] = { 0 };
+        if (psm_printer_variant_at(sess(h), static_cast<size_t>(index),
+                                   static_cast<size_t>(v), buf, sizeof(buf)) != PSM_OK)
+            continue;
+        if (! variants.empty())
+            variants += ",";
+        variants += buf;
+    }
+
     std::string s = std::string(m.vendor_id) + ":" + m.model_id + "\t" +
                     m.name + "\t" + m.family + "\t" +
                     std::to_string(m.technology) + "\t" +
-                    std::to_string(m.variant_count);
+                    variants;
     return env->NewStringUTF(s.c_str());
 }
 
