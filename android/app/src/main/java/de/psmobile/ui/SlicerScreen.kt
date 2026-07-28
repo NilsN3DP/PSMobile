@@ -120,6 +120,7 @@ private fun SlicerContent(
     val progress by service.progress.collectAsState()
     val presets by service.presets.collectAsState()
     val sceneRevision by service.sceneRevision.collectAsState()
+    val configRevision by service.configRevision.collectAsState()
     var selectedId by remember { mutableStateOf<Int?>(null) }
     val sceneController = remember { SceneController() }
     // Navigation liegt im Service, damit ein eingehendes Modell die
@@ -152,6 +153,7 @@ private fun SlicerContent(
                 tab = tab,
                 mode = settingsMode,
                 onModeChange = { settingsMode = it },
+                configRevision = configRevision,
                 onClose = { service.showBed(); service.refreshQuickSettings() },
             )
             return

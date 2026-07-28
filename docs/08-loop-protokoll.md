@@ -173,3 +173,29 @@ Benutzername und Passwort arbeitet, nicht mehr mit API-Schluessel.
 - Backticks in einem ssh-Kommando werden von der lokalen Shell als
   Kommandosubstitution gelesen. Fuer Dokumentaenderungen die
   Datei-Werkzeuge nehmen, nicht python-Heredocs ueber ssh.
+
+### 2026-07-29, 01:45 - Loop-Durchlauf 2: A2 und A3
+
+Beide zusammen genommen, weil sie dieselbe Ursache haben - die
+Zustandsverwaltung der Einstellungsseite. Eines ohne das andere zu
+beheben waere halbe Arbeit gewesen.
+
+**Gemacht**
+- `SlicerService.configRevision` eingefuehrt. Steigt bei Profilwechsel
+  und Neuinstallation.
+- A2: Die Metadaten kommen jetzt einmal je Seite, Stufe und Revision aus
+  einem `remember`, statt bei jeder Neuzeichnung fuer jeden Parameter
+  einzeln ueber JNI.
+- A3: Die Zeilen haengen ihren zwischengespeicherten Wert an dieselbe
+  Revision.
+
+**Gemessen**
+- Wechsel von "0.20mm SPEED @MK4S 0.4" auf "0.10mm FAST DETAIL @MK4S 0.4":
+  Schichthoehe zieht von 0,2 auf 0,1 mit. Vorher blieb 0,2 stehen und
+  waere beim naechsten Antippen in das neue Profil zurueckgeschrieben
+  worden.
+- Die Profilliste zeigt genau die 5 Profile der MK4S mit 0.4er Duese.
+
+**Aufgefallen**
+- Nichts Neues. Der Durchlauf lief ohne Umweg durch, weil diesmal vor
+  jedem Tippen ein Screenshot geprueft wurde - die Lehre aus Durchlauf 1.

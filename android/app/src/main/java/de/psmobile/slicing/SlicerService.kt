@@ -184,6 +184,7 @@ class SlicerService : Service() {
                 prefs.edit().putStringSet("printers", keys.toSet()).apply()
                 refreshPresets()
                 refreshQuickSettings()
+                bumpConfig()
                 _setupNeeded.value = false
             } catch (t: Throwable) {
                 Log.e(TAG, "Ersteinrichtung fehlgeschlagen", t)
@@ -248,6 +249,7 @@ class SlicerService : Service() {
         refreshPresets()
         refreshQuickSettings()   // ein anderes Profil bringt andere Werte mit
         refreshObjects()
+        bumpConfig()
     }
 
     /** Fuer den Viewport, der direkt auf der Session arbeitet (E-03). */
@@ -284,6 +286,20 @@ class SlicerService : Service() {
     val sceneRevision: StateFlow<Int> = _sceneRevision.asStateFlow()
 
     private fun bumpScene() { _sceneRevision.value = _sceneRevision.value + 1 }
+
+    /**
+     * Steigt bei jeder Aenderung an der Konfiguration - Profilwechsel,
+     * Neuinstallation, Einzelwert.
+     *
+     * Die Einstellungsseite haengt ihre zwischengespeicherten Werte daran
+     * auf. Ohne das zeigte sie nach einem Profilwechsel weiter die alten
+     * Werte und schrieb sie beim naechsten Antippen in die neue
+     * Konfiguration zurueck - Befund A3 in docs/09-fehlerliste.md.
+     */
+    private val _configRevision = MutableStateFlow(0)
+    val configRevision: StateFlow<Int> = _configRevision.asStateFlow()
+
+    private fun bumpConfig() { _configRevision.value = _configRevision.value + 1 }
 
     fun refreshQuickSettings() {
         val c = core ?: return

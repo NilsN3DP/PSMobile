@@ -63,6 +63,7 @@ fun SettingsScreen(
     tab: String,                       // "print" | "filament" | "printer"
     mode: PsmCore.Mode,
     onModeChange: (PsmCore.Mode) -> Unit,
+    configRevision: Int,
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -153,14 +154,23 @@ fun SettingsScreen(
                 return@Column
             }
 
+            // Metadaten einmal je Seite und Stufe holen. Vorher lief
+            // configMeta() fuer jeden Parameter in der Komposition, also
+            // bei jeder Neuzeichnung erneut - bei 40 sichtbaren Werten
+            // 40 JNI-Aufrufe je Bild. Befund A2.
+            val metaByGroup = remember(page.title, mode, configRevision) {
+                page.groups.associate { g ->
+                    g.title to g.options.mapNotNull { core.configMeta(it) }
+                        .filter { it.mode.ordinal <= mode.ordinal }
+                }
+            }
+
             LazyColumn(
                 Modifier.fillMaxSize().padding(horizontal = 16.dp),
                 verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
                 page.groups.forEach { group ->
-                    // Metadaten einmal je Gruppe holen und nach Stufe filtern.
-                    val visible = group.options.mapNotNull { core.configMeta(it) }
-                        .filter { it.mode.ordinal <= mode.ordinal }
+                    val visible = metaByGroup[group.title].orEmpty()
                     if (visible.isEmpty()) return@forEach
 
                     item(key = "g_${page.title}_${group.title}") {
@@ -173,7 +183,7 @@ fun SettingsScreen(
                         )
                     }
                     items(visible, key = { it.key }) { meta ->
-                        SettingRow(core, meta)
+                        SettingRow(core, meta, configRevision)
                     }
                 }
             }
@@ -193,8 +203,11 @@ fun SettingsScreen(
 private val CONTROL_WIDTH = 220.dp
 
 @Composable
-private fun SettingRow(core: PsmCore, meta: PsmCore.ConfigMeta) {
-    var value by remember(meta.key) { mutableStateOf(core[meta.key].orEmpty()) }
+private fun SettingRow(core: PsmCore, meta: PsmCore.ConfigMeta, configRevision: Int) {
+    // Die Revision gehoert in den Schluessel: sonst zeigt die Zeile nach
+    // einem Profilwechsel den alten Wert und schreibt ihn beim naechsten
+    // Antippen in die neue Konfiguration zurueck. Befund A3.
+    var value by remember(meta.key, configRevision) { mutableStateOf(core[meta.key].orEmpty()) }
     var expanded by remember(meta.key) { mutableStateOf(false) }
 
     fun push(v: String) {

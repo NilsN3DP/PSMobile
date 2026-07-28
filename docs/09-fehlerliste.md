@@ -40,19 +40,27 @@ denselben Intent nicht zweimal auswertet. Am Geraet nachgeprueft: nur
 noch ein Objekt, und der Emulator meldet, dass der Intent an die
 bestehende Instanz zugestellt wurde.
 
-### A2 · Einstellungen fragen pro Bild ueber JNI ab
-`SettingsScreen` ruft `core.configMeta(key)` fuer **jeden** Parameter der
-Seite direkt in der Komposition auf - also bei jeder Neuzeichnung erneut.
-Bei 40 sichtbaren Parametern sind das 40 JNI-Aufrufe je Bild.
+### A2 · Einstellungen fragen pro Bild ueber JNI ab — BEHOBEN
+Behoben im Loop-Durchlauf 01:45. Die Metadaten werden jetzt einmal je
+Seite, Stufe und Profilrevision in einem `remember` geholt statt bei
+jeder Neuzeichnung.
 
-*Ansatz*: Metadaten je Seite einmal in `remember(page, mode)` holen.
+*Ursprungsbefund*: `SettingsScreen` rief `core.configMeta(key)` fuer
+jeden Parameter direkt in der Komposition auf - bei 40 sichtbaren
+Parametern 40 JNI-Aufrufe je Bild.
 
-### A3 · Werte veralten beim Profilwechsel
-`SettingRow` haelt den Wert in `remember(meta.key)`. Wechselt man das
-Druckprofil, zeigt die Seite weiter die alten Werte, schreibt sie beim
-naechsten Antippen aber in die neue Konfiguration zurueck.
+### A3 · Werte veralten beim Profilwechsel — BEHOBEN
+Behoben im Loop-Durchlauf 01:45. `SlicerService.configRevision` steigt
+bei jedem Profilwechsel und jeder Neuinstallation; die Zeilen haengen
+ihren zwischengespeicherten Wert daran auf.
 
-*Ansatz*: Schluessel des `remember` um eine Profil-Revision erweitern.
+Am Geraet nachgeprueft: Wechsel von "0.20mm SPEED @MK4S 0.4" auf
+"0.10mm FAST DETAIL @MK4S 0.4" laesst die Schichthoehe von 0,2 auf 0,1
+mitziehen. Vorher blieb 0,2 stehen.
+
+*Ursprungsbefund*: `SettingRow` hielt den Wert in `remember(meta.key)`
+und schrieb den alten Wert beim naechsten Antippen in die neue
+Konfiguration zurueck.
 
 ### A4 · Sprache wird nicht gemerkt
 Die Ersteinrichtung ruft `PsUi.setLanguage`, schreibt die Wahl aber nie
