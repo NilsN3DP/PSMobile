@@ -33,7 +33,15 @@ object PrinterStore {
                 id = o.optString("id", UUID.randomUUID().toString()),
                 name = o.optString("name"),
                 host = o.optString("host"),
+                // Alte Eintraege ohne "auth" hatten nur einen API-Key.
+                auth = if (o.optString("auth", "") == "apikey")
+                    PrusaLink.Auth.API_KEY
+                else if (!o.has("auth") && o.optString("apiKey").isNotBlank())
+                    PrusaLink.Auth.API_KEY
+                else PrusaLink.Auth.USER_PASSWORD,
                 apiKey = o.optString("apiKey"),
+                username = o.optString("username", PrusaLink.DEFAULT_USER),
+                password = o.optString("password"),
                 presetName = o.optString("presetName"),
                 storage = o.optString("storage", "usb"),
             )
@@ -47,7 +55,10 @@ object PrinterStore {
                 put("id", p.id)
                 put("name", p.name)
                 put("host", p.host)
+                put("auth", if (p.auth == PrusaLink.Auth.API_KEY) "apikey" else "userpass")
                 put("apiKey", p.apiKey)
+                put("username", p.username)
+                put("password", p.password)
                 put("presetName", p.presetName)
                 put("storage", p.storage)
             })

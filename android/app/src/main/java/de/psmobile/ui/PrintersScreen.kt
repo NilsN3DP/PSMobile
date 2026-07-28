@@ -80,7 +80,7 @@ fun PrintersScreen(
                      modifier = Modifier.clickable(onClick = onClose))
                 Box(Modifier.weight(1f))
                 OutlinedButton(onClick = {
-                    editing = PrusaLink.Printer(UUID.randomUUID().toString(), "", "", "")
+                    editing = PrusaLink.Printer(UUID.randomUUID().toString(), "", "")
                 }) { Text(PsUi.tr("Add printer")) }
             }
 
@@ -88,7 +88,7 @@ fun PrintersScreen(
                  fontSize = 22.sp, fontWeight = FontWeight.SemiBold,
                  modifier = Modifier.padding(top = 12.dp))
             Text(
-                "Geräte im Netzwerk. Der API-Schlüssel steht auf dem Drucker unter Einstellungen › Netzwerk.",
+                "Geräte im Netzwerk. Benutzername und Passwort stehen auf dem Drucker unter Einstellungen › Netzwerk › PrusaLink.",
                 color = PrusaColors.TextMuted, fontSize = 13.sp,
             )
 
@@ -201,6 +201,9 @@ private fun PrinterEditor(
     var name by remember { mutableStateOf(printer.name) }
     var host by remember { mutableStateOf(printer.host) }
     var key by remember { mutableStateOf(printer.apiKey) }
+    var user by remember { mutableStateOf(printer.username) }
+    var pass by remember { mutableStateOf(printer.password) }
+    var auth by remember { mutableStateOf(printer.auth) }
     var preset by remember { mutableStateOf(printer.presetName) }
     var testResult by remember { mutableStateOf<String?>(null) }
     var testing by remember { mutableStateOf(false) }
@@ -222,7 +225,32 @@ private fun PrinterEditor(
 
             Field("Name", name) { name = it }
             Field("Adresse (IP oder Hostname)", host) { host = it }
-            Field("API-Schlüssel", key) { key = it }
+            // PrusaLink ab 0.7 nutzt Benutzername und Passwort ueber
+            // HTTP-Digest; aeltere Firmware einen API-Schluessel.
+            Text("Anmeldung", color = PrusaColors.TextMuted, fontSize = 12.sp)
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                listOf(
+                    PrusaLink.Auth.USER_PASSWORD to "Benutzer + Passwort",
+                    PrusaLink.Auth.API_KEY to "API-Schlüssel",
+                ).forEach { (mode, label) ->
+                    val active = mode == auth
+                    Box(
+                        Modifier.weight(1f).height(40.dp)
+                            .clip(RoundedCornerShape(4.dp))
+                            .background(if (active) PrusaColors.Orange
+                                        else PrusaColors.PanelRaised)
+                            .clickable { auth = mode },
+                        contentAlignment = Alignment.Center,
+                    ) { Text(label, color = PrusaColors.TextPrimary, fontSize = 13.sp) }
+                }
+            }
+
+            if (auth == PrusaLink.Auth.USER_PASSWORD) {
+                Field("Benutzername", user) { user = it }
+                Field("Passwort", pass) { pass = it }
+            } else {
+                Field("API-Schlüssel", key) { key = it }
+            }
 
             if (presetNames.isNotEmpty()) {
                 Text("Zugehöriges Druckerprofil", color = PrusaColors.TextMuted, fontSize = 12.sp)
@@ -237,11 +265,15 @@ private fun PrinterEditor(
 
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedButton(
-                    enabled = host.isNotBlank() && key.isNotBlank() && !testing,
+                    enabled = !testing && host.isNotBlank() && (
+                        if (auth == PrusaLink.Auth.API_KEY) key.isNotBlank()
+                        else user.isNotBlank() && pass.isNotBlank()),
                     onClick = {
                         testing = true
                         scope.launch {
-                            testResult = onTest(printer.copy(host = host, apiKey = key))
+                            testResult = onTest(printer.copy(
+                            host = host, auth = auth, apiKey = key,
+                            username = user, password = pass))
                             testing = false
                         }
                     },
@@ -253,11 +285,15 @@ private fun PrinterEditor(
                     OutlinedButton(onClick = onDelete) { Text("Löschen") }
                 OutlinedButton(onClick = onCancel) { Text("Abbrechen") }
                 Button(
-                    enabled = host.isNotBlank() && key.isNotBlank(),
+                    enabled = host.isNotBlank() && (
+                        if (auth == PrusaLink.Auth.API_KEY) key.isNotBlank()
+                        else user.isNotBlank() && pass.isNotBlank()),
                     onClick = {
                         onSave(printer.copy(
                             name = name.ifBlank { host },
-                            host = host, apiKey = key, presetName = preset,
+                            host = host, auth = auth, apiKey = key,
+                            username = user, password = pass,
+                            presetName = preset,
                         ))
                     },
                     colors = ButtonDefaults.buttonColors(

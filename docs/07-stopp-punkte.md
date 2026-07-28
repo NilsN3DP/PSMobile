@@ -153,6 +153,44 @@ sonst liegt die alte .so im APK.
 - [ ] **Connect-Upload** - erst wenn die Client-ID geklaert ist, siehe 1.1.
 - [ ] **Stift-Painting** - das Alleinstellungsmerkmal, siehe unten.
 
+### Fehlerjagd, sobald die Funktionen stehen
+
+Wenn die Liste oben weitgehend abgearbeitet ist, **vor** weiteren
+Funktionen einen systematischen Durchgang machen. Nicht "laeuft ja",
+sondern gezielt kaputtmachen:
+
+**Randfaelle beim Modell**
+- Datei, die kein Modell ist. Leere Datei. 0-Byte-STL.
+- Mesh mit Loechern, umgedrehten Normalen, doppelten Dreiecken.
+- Modell groesser als das Bett. Modell mit 5 Mio. Dreiecken.
+- Modell mit Umlauten und Leerzeichen im Namen.
+
+**Zustandsuebergaenge**
+- Slicen, waehrend schon geslict wird. Abbrechen mitten im Lauf.
+- Drucker wechseln, waehrend geslict wird.
+- Objekt loeschen, waehrend geslict wird.
+- App drehen, in den Hintergrund, zurueck - jeweils mit laufendem Job.
+- Zweimal hintereinander slicen (der Absturz beim Print-Abbau kam genau
+  daher).
+
+**Speicher**
+- Grosses Modell auf einem Geraet mit wenig RAM. Greift die Warnung aus
+  `psm_estimate_slice_memory`? Ueberlebt die App den Low-Memory-Killer?
+
+**Netz**
+- Drucker nicht erreichbar, falsches Passwort, Kabel waehrend des
+  Uploads gezogen, Drucker beschaeftigt, Speicher voll.
+- Sicherungsordner entzogen oder Netzlaufwerk offline.
+
+**Oberflaeche**
+- Alle 247 Parameter je Typ einmal aendern - bleibt der Wert stehen?
+  Wird er beim Slicen wirklich benutzt?
+- Sprache umschalten, waehrend die Einstellungen offen sind.
+- Ersteinrichtung ohne Auswahl abschliessen.
+
+Gefundene Fehler hier eintragen, nicht sofort alle beheben - erst
+sammeln, dann nach Schwere sortieren.
+
 ### Warum Stift-Painting das Ziel ist
 
 Prusa EasyPrint ist ein Cloud-Slicer: ~60 s Rechenzeit je Platte,

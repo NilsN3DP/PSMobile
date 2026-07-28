@@ -112,3 +112,32 @@ machen, Zusammenfassung hier eintragen.
 **Aufgefallen**
 - Kotlin-String-Interpolation in einem ssh-Kommando wird von der lokalen
   Shell gefressen. Patch-Skripte als Datei schreiben, nicht inline.
+- **`adb install -r` tauscht die DEX auf diesem Emulator nicht
+  zuverlaessig.** Zweimal wurde eine alte Oberflaeche getestet und
+  faelschlich fuer kaputt gehalten. Immer erst `adb uninstall
+  de.psmobile`, dann `adb install`.
+
+### 2026-07-29, Korrektur der PrusaLink-Anmeldung
+
+**Anlass**: Hinweis vom Nutzer, dass PrusaLink inzwischen mit
+Benutzername und Passwort arbeitet, nicht mehr mit API-Schluessel.
+
+**Geprueft, nicht geraten**: In PrusaSlicers `OctoPrint.cpp`,
+`PrusaLink::set_auth` stehen beide Verfahren nebeneinander -
+`atKeyPassword` setzt `X-Api-Key`, `atUserPassword` ruft
+`http.auth_digest`. Also **HTTP-Digest**, nicht Basic.
+
+**Gemacht**
+- `net/DigestAuth.kt`: Digest nach RFC 7616 von Hand. Androids
+  HttpURLConnection beherrscht nur Basic - Digest muss selbst gerechnet
+  werden.
+- `PrusaLink` unterstuetzt beide Verfahren, Vorgabe ist Benutzer und
+  Passwort mit `maker` als Benutzernamen.
+- Beim Upload wird die nonce vorher ueber eine billige GET-Anfrage
+  geholt. Wer erst sendet und dann 401 bekommt, hat die Datei umsonst
+  uebertragen. Bei abgelaufener nonce wird einmal neu geholt und
+  wiederholt.
+- Alte gespeicherte Eintraege ohne `auth`-Feld, die einen API-Schluessel
+  hatten, werden weiter als API-Schluessel behandelt.
+
+**Weiterhin ungetestet gegen ein echtes Geraet.**

@@ -13,24 +13,34 @@ import java.net.URL
  * curl-Referenz, der Netzwerkcode sitzt beim Desktop nur in der
  * GUI-Schicht. Siehe docs/entscheidungen.md, E-09.
  *
- * Endpunkte aus PrusaLink selbst (buddy-prusalink-local-control):
- *   GET  /api/v1/status              Zustand, dient auch als Verbindungstest
- *   PUT  /api/v1/files/{storage}/{name}   Datei hochladen
- * Beides mit dem Kopf `X-Api-Key`.
+ * Zwei Anmeldeverfahren, genau wie PrusaSlicer sie in OctoPrint.cpp
+ * unterscheidet (`PrusaLink::set_auth`):
+ *   - aeltere Firmware: Kopfzeile `X-Api-Key`
+ *   - ab PrusaLink 0.7: HTTP-Digest mit Benutzername und Passwort
+ * Digest, nicht Basic - Basic wird abgelehnt.
  *
- * Absichtlich ohne Fremdbibliothek - HttpURLConnection reicht fuer zwei
- * Aufrufe und spart eine Abhaengigkeit.
+ * Endpunkte:
+ *   GET  /api/v1/status                    Zustand, dient als Verbindungstest
+ *   PUT  /api/v1/files/{storage}/{name}    Datei hochladen
  */
 object PrusaLink {
 
     private const val TAG = "PrusaLink"
     private const val TIMEOUT_MS = 15_000
 
+    /** Vorgabe bei PrusaLink; der Nutzer kann sie aendern. */
+    const val DEFAULT_USER = "maker"
+
+    enum class Auth { API_KEY, USER_PASSWORD }
+
     data class Printer(
         val id: String,
         val name: String,
-        val host: String,          // IP oder Hostname, ohne Schema
-        val apiKey: String,
+        val host: String,               // IP oder Hostname, ohne Schema
+        val auth: Auth = Auth.USER_PASSWORD,
+        val apiKey: String = "",
+        val username: String = DEFAULT_USER,
+        val password: String = "",
         /** Preset-Name in PSMobile, damit Profil und Geraet zusammenfinden. */
         val presetName: String = "",
         val storage: String = "usb",
@@ -38,6 +48,13 @@ object PrusaLink {
         val baseUrl: String
             get() = if (host.startsWith("http")) host.trimEnd('/')
                     else "http://${host.trimEnd('/')}"
+
+        /** Anmeldedaten vollstaendig? */
+        val isComplete: Boolean
+            get() = host.isNotBlank() && when (auth) {
+                Auth.API_KEY -> apiKey.isNotBlank()
+                Auth.USER_PASSWORD -> username.isNotBlank() && password.isNotBlank()
+            }
     }
 
     sealed interface Result {
@@ -45,17 +62,27 @@ object PrusaLink {
         data class Error(val message: String) : Result
     }
 
-    /** Zustand abfragen. Dient zugleich als Test fuer Adresse und Schluessel. */
-    fun probe(p: Printer): Result = try {
-        val c = open(p, "/api/v1/status", "GET")
-        val code = c.responseCode
-        val body = (if (code in 200..299) c.inputStream else c.errorStream)
-            ?.bufferedReader()?.use { it.readText() }.orEmpty()
-        c.disconnect()
+    /**
+     * Digest-Herausforderungen je Drucker merken.
+     *
+     * Wichtig fuer den Upload: Wer erst sendet und dann eine 401 bekommt,
+     * hat die Datei bereits umsonst uebertragen. Deshalb wird die nonce
+     * aus einer billigen Anfrage geholt und fuer den PUT wiederverwendet -
+     * bei qop=auth ist das mit hochgezaehltem nc ausdruecklich erlaubt.
+     */
+    private val challenges = mutableMapOf<String, DigestAuth.Challenge>()
 
+    /** Zustand abfragen. Dient zugleich als Test der Anmeldedaten. */
+    fun probe(p: Printer): Result = try {
+        val (code, body) = request(p, "/api/v1/status", "GET")
         when (code) {
             in 200..299 -> Result.Ok(describe(body))
-            401, 403 -> Result.Error("API-Schluessel abgelehnt (HTTP $code)")
+            401 -> Result.Error(
+                if (p.auth == Auth.USER_PASSWORD)
+                    "Benutzername oder Passwort abgelehnt"
+                else "API-Schlüssel abgelehnt")
+            403 -> Result.Error("Zugriff verweigert (HTTP 403)")
+            404 -> Result.Error("Kein PrusaLink unter dieser Adresse")
             else -> Result.Error("HTTP $code")
         }
     } catch (t: Throwable) {
@@ -70,7 +97,64 @@ object PrusaLink {
      */
     fun upload(p: Printer, file: File, remoteName: String, printAfter: Boolean): Result = try {
         val safe = remoteName.replace(Regex("[^A-Za-z0-9._-]"), "_")
-        val c = open(p, "/api/v1/files/${p.storage}/$safe", "PUT")
+        val path = "/api/v1/files/${p.storage}/$safe"
+
+        // Bei Digest zuerst eine billige Anfrage, um die nonce zu holen -
+        // sonst ginge die Datei beim ersten Versuch ins Leere.
+        if (p.auth == Auth.USER_PASSWORD && challenges[p.id] == null)
+            runCatching { request(p, "/api/v1/status", "GET") }
+
+        var (code, body) = put(p, path, file, printAfter)
+
+        // Abgelaufene nonce: einmal neu holen und wiederholen.
+        if (code == 401 && p.auth == Auth.USER_PASSWORD) {
+            challenges.remove(p.id)
+            runCatching { request(p, "/api/v1/status", "GET") }
+            val retry = put(p, path, file, printAfter)
+            code = retry.first
+            body = retry.second
+        }
+
+        when (code) {
+            in 200..299 -> Result.Ok(
+                if (printAfter) "Gesendet, Druck gestartet" else "Gesendet")
+            401 -> Result.Error("Anmeldung abgelehnt")
+            409 -> Result.Error("Datei existiert bereits oder Drucker beschäftigt")
+            413 -> Result.Error("Datei zu groß für den Speicher")
+            else -> Result.Error("HTTP $code: ${body.take(200)}")
+        }
+    } catch (t: Throwable) {
+        Log.w(TAG, "Upload fehlgeschlagen", t)
+        Result.Error(t.message ?: "Übertragung fehlgeschlagen")
+    }
+
+    // --- Innereien --------------------------------------------------------
+
+    private fun request(p: Printer, path: String, method: String): Pair<Int, String> {
+        var c = open(p, path, method)
+        var code = c.responseCode
+
+        // Erste Digest-Herausforderung einsammeln und wiederholen.
+        if (code == 401 && p.auth == Auth.USER_PASSWORD) {
+            val ch = DigestAuth.parseChallenge(c.getHeaderField("WWW-Authenticate"))
+            c.disconnect()
+            if (ch != null) {
+                challenges[p.id] = ch
+                c = open(p, path, method)
+                code = c.responseCode
+            } else {
+                return 401 to ""
+            }
+        }
+
+        val body = (if (code in 200..299) c.inputStream else c.errorStream)
+            ?.bufferedReader()?.use { it.readText() }.orEmpty()
+        c.disconnect()
+        return code to body
+    }
+
+    private fun put(p: Printer, path: String, file: File, printAfter: Boolean): Pair<Int, String> {
+        val c = open(p, path, "PUT")
         c.doOutput = true
         c.setRequestProperty("Content-Type", "application/octet-stream")
         c.setRequestProperty("Print-After-Upload", if (printAfter) "?1" else "?0")
@@ -83,16 +167,7 @@ object PrusaLink {
         val body = (if (code in 200..299) c.inputStream else c.errorStream)
             ?.bufferedReader()?.use { it.readText() }.orEmpty()
         c.disconnect()
-
-        when (code) {
-            in 200..299 -> Result.Ok(if (printAfter) "Gesendet, Druck gestartet" else "Gesendet")
-            409 -> Result.Error("Datei existiert bereits oder Drucker beschäftigt")
-            401, 403 -> Result.Error("API-Schlüssel abgelehnt (HTTP $code)")
-            else -> Result.Error("HTTP $code: ${body.take(200)}")
-        }
-    } catch (t: Throwable) {
-        Log.w(TAG, "Upload fehlgeschlagen", t)
-        Result.Error(t.message ?: "Übertragung fehlgeschlagen")
+        return code to body
     }
 
     private fun open(p: Printer, path: String, method: String): HttpURLConnection =
@@ -100,14 +175,22 @@ object PrusaLink {
             requestMethod = method
             connectTimeout = TIMEOUT_MS
             readTimeout = TIMEOUT_MS
-            setRequestProperty("X-Api-Key", p.apiKey)
             setRequestProperty("Accept", "application/json")
+
+            when (p.auth) {
+                Auth.API_KEY -> setRequestProperty("X-Api-Key", p.apiKey)
+                Auth.USER_PASSWORD -> challenges[p.id]?.let { ch ->
+                    setRequestProperty(
+                        "Authorization",
+                        DigestAuth.authorization(ch, p.username, p.password, method, path),
+                    )
+                }
+            }
         }
 
     /** Aus der Statusantwort etwas Lesbares machen. */
     private fun describe(body: String): String = runCatching {
-        val o = JSONObject(body)
-        val printer = o.optJSONObject("printer")
+        val printer = JSONObject(body).optJSONObject("printer")
         val state = printer?.optString("state").orEmpty()
         val nozzle = printer?.optDouble("temp_nozzle", Double.NaN) ?: Double.NaN
         buildString {
