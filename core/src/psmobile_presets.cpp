@@ -16,6 +16,7 @@
 #include <cstring>
 
 #include <boost/filesystem.hpp>
+#include <set>
 
 #include "libslic3r/AppConfig.hpp"
 #include "libslic3r/Preset.hpp"
@@ -84,9 +85,10 @@ std::vector<size_t> usable_filament_indices(psm_session *s)
     if (s->presets->extruders_filaments.empty())
         return {};
 
+    /* ExtruderFilaments hat kein size() - die Liste laeuft aber index-
+     * gleich zur Filament-Sammlung, so nutzt PrusaSlicer sie auch. */
     const ExtruderFilaments &ef = s->presets->extruders_filaments.front();
-    const size_t n = std::min(fc.size(), ef.size());
-    for (size_t i = 0; i < n; ++i) {
+    for (size_t i = 0; i < fc.size(); ++i) {
         const Preset &p = fc.preset(i);
         if (p.is_default && fc.size() > fc.num_default_presets())
             continue;
@@ -143,12 +145,110 @@ extern "C" {
 /* Presets                                                             */
 /* ------------------------------------------------------------------ */
 
-PSM_API psm_result psm_presets_load_bundled(psm_session *s)
+PSM_API psm_result psm_printer_models_scan(psm_session *s, size_t *out_count)
 {
     if (s == nullptr)
         return PSM_ERR_INVALID_ARG;
     try {
         namespace fs = boost::filesystem;
+        s->printer_models.clear();
+
+        const fs::path src_profiles = fs::path(s->resdir) / "profiles";
+        if (! fs::exists(src_profiles)) {
+            s->set_error("Profilverzeichnis fehlt: " + src_profiles.string());
+            return PSM_ERR_IO;
+        }
+
+        /* Nur die Vendor-Abschnitte lesen, keine Presets materialisieren.
+         * Das ist der schnelle Teil - das Laden der 5762 Filamentprofile
+         * dauert Sekunden, dieser Durchlauf Millisekunden. */
+        for (fs::directory_iterator it(src_profiles); it != fs::directory_iterator(); ++it) {
+            if (! fs::is_regular_file(it->status()) || it->path().extension() != ".ini")
+                continue;
+            try {
+                const VendorProfile vp = VendorProfile::from_ini(it->path(), true);
+                if (! vp.valid())
+                    continue;
+                for (const VendorProfile::PrinterModel &m : vp.models) {
+                    psm_session::ScannedModel sm;
+                    sm.vendor_id  = vp.id;
+                    sm.model_id   = m.id;
+                    sm.name       = m.name;
+                    sm.family     = m.family;
+                    sm.technology = (m.technology == ptSLA) ? 1 : 0;
+                    for (const VendorProfile::PrinterVariant &v : m.variants)
+                        sm.variants.push_back(v.name);
+                    sm.bundle_path = it->path().string();
+                    s->printer_models.push_back(std::move(sm));
+                }
+            } catch (const std::exception &e) {
+                psm_emit_log(PSM_LOG_WARN, "Bundle uebersprungen: " +
+                             it->path().filename().string() + " (" + e.what() + ")");
+            }
+        }
+
+        if (out_count != nullptr)
+            *out_count = s->printer_models.size();
+        psm_emit_log(PSM_LOG_INFO,
+                     std::to_string(s->printer_models.size()) + " Druckermodelle gefunden");
+        return PSM_OK;
+    } catch (const std::exception &e) {
+        s->set_error(e.what());
+        return PSM_ERR_GENERIC;
+    }
+}
+
+PSM_API psm_result psm_printer_model_at(psm_session *s, size_t index, psm_printer_model *out)
+{
+    if (s == nullptr || out == nullptr)
+        return PSM_ERR_INVALID_ARG;
+    if (index >= s->printer_models.size())
+        return PSM_ERR_INVALID_ARG;
+
+    const psm_session::ScannedModel &m = s->printer_models[index];
+    std::memset(out, 0, sizeof(*out));
+    copy_str(out->vendor_id, sizeof(out->vendor_id), m.vendor_id);
+    copy_str(out->model_id,  sizeof(out->model_id),  m.model_id);
+    copy_str(out->name,      sizeof(out->name),      m.name);
+    copy_str(out->family,    sizeof(out->family),    m.family);
+    out->technology    = m.technology;
+    out->variant_count = static_cast<int32_t>(m.variants.size());
+    return PSM_OK;
+}
+
+PSM_API psm_result psm_printer_variant_at(psm_session *s, size_t model_index,
+                                          size_t variant_index, char *out, size_t out_cap)
+{
+    if (s == nullptr || out == nullptr)
+        return PSM_ERR_INVALID_ARG;
+    if (model_index >= s->printer_models.size())
+        return PSM_ERR_INVALID_ARG;
+    const auto &vars = s->printer_models[model_index].variants;
+    if (variant_index >= vars.size())
+        return PSM_ERR_INVALID_ARG;
+    copy_str(out, out_cap, vars[variant_index]);
+    return PSM_OK;
+}
+
+PSM_API psm_result psm_presets_load_bundled(psm_session *s)
+{
+    return psm_presets_install(s, nullptr, 0);
+}
+
+PSM_API psm_result psm_presets_install(psm_session *s,
+                                       const char *const *model_keys,
+                                       size_t key_count)
+{
+    if (s == nullptr)
+        return PSM_ERR_INVALID_ARG;
+    try {
+        namespace fs = boost::filesystem;
+
+        /* Auswahl als Menge "vendor:model" - leer bedeutet: alles. */
+        std::set<std::string> wanted;
+        for (size_t i = 0; i < key_count; ++i)
+            if (model_keys != nullptr && model_keys[i] != nullptr)
+                wanted.insert(model_keys[i]);
 
         s->presets = std::make_unique<PresetBundle>();
         s->presets->setup_directories();
@@ -203,6 +303,13 @@ PSM_API psm_result psm_presets_load_bundled(psm_session *s)
                     continue;
                 }
                 for (const VendorProfile::PrinterModel &m : vp.models) {
+                    /* Nur die gewaehlten Modelle installieren. Alles zu
+                     * nehmen kostet 13 s Startzeit und ueberschwemmt die
+                     * Auswahllisten - siehe E-13. */
+                    if (! wanted.empty() &&
+                        wanted.find(vp.id + ":" + m.id) == wanted.end())
+                        continue;
+
                     if (m.variants.empty()) {
                         app_config.set_variant(vp.id, m.id, "default", true);
                     } else {
@@ -237,10 +344,17 @@ PSM_API psm_result psm_presets_load_bundled(psm_session *s)
 
         /* Die aktive Konfiguration ist ab jetzt die aus den Presets. */
         s->config = s->presets->full_config();
+        /* Nutzbare Anzahl melden, nicht die Rohsumme: load_presets() legt
+         * immer alle Profile in die Sammlungen, sichtbar und kompatibel
+         * ist aber nur ein Bruchteil. Die Rohsumme zu melden waere
+         * irrefuehrend. */
         psm_emit_log(PSM_LOG_INFO,
-                     std::to_string(loaded) + " Drucker, " +
-                     std::to_string(s->presets->prints.size()) + " Druckprofile, " +
-                     std::to_string(s->presets->filaments.size()) + " Filamente");
+                     std::to_string(usable_indices(s->presets->printers).size()) + " Drucker, " +
+                     std::to_string(usable_indices(s->presets->prints).size()) + " Druckprofile, " +
+                     std::to_string(usable_filament_indices(s).size()) + " Filamente nutzbar" +
+                     " (von " + std::to_string(loaded) + "/" +
+                     std::to_string(s->presets->prints.size()) + "/" +
+                     std::to_string(s->presets->filaments.size()) + " geladen)");
 
         s->last_error.clear();
         return PSM_OK;
@@ -353,6 +467,13 @@ PSM_API psm_result psm_config_meta_for(psm_session *s, const char *key, psm_conf
         copy_str(out->unit,     sizeof(out->unit),     def->sidetext);
 
         out->type = map_type(def->type);
+
+        /* Sichtbarkeitsstufe direkt aus PrintConfig uebernehmen. */
+        switch (def->mode) {
+            case comSimple:   out->mode = PSM_MODE_SIMPLE;   break;
+            case comAdvanced: out->mode = PSM_MODE_ADVANCED; break;
+            default:          out->mode = PSM_MODE_EXPERT;   break;
+        }
 
         /* PrusaSlicer nutzt FLT_MAX/-FLT_MAX als "keine Grenze". */
         if (def->min > -FLT_MAX) { out->has_min = 1; out->min = static_cast<float>(def->min); }

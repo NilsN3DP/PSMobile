@@ -54,6 +54,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
@@ -119,6 +120,22 @@ private fun SlicerContent(
     val sceneRevision by service.sceneRevision.collectAsState()
     var selectedId by remember { mutableStateOf<Int?>(null) }
     val sceneController = remember { SceneController() }
+    var settingsTab by remember { mutableStateOf<String?>(null) }
+    var settingsMode by remember { mutableStateOf(PsmCore.Mode.SIMPLE) }
+
+    // Vollbild-Einstellungen wie die Tabs im Desktop-Fenster.
+    settingsTab?.let { tab ->
+        service.coreOrNull?.let { core ->
+            SettingsScreen(
+                core = core,
+                tab = tab,
+                mode = settingsMode,
+                onModeChange = { settingsMode = it },
+                onClose = { settingsTab = null; service.refreshQuickSettings() },
+            )
+            return
+        }
+    }
 
     val selected = objects.firstOrNull { it.id == selectedId } ?: objects.firstOrNull()
 
@@ -128,15 +145,18 @@ private fun SlicerContent(
             .background(PrusaColors.Background)
             .windowInsetsPadding(WindowInsets.safeDrawing),
     ) {
-        ToolStrip(
-            hasSelection = selected != null,
-            onAdd = { picker.launch(arrayOf("*/*")) },
-            onDelete = { selected?.let { service.removeObject(it.id) } },
-            onDeleteAll = { service.clearBed() },
-            onArrange = { service.arrange() },
-            onDropToBed = { selected?.let { service.dropToBed(it.id) } },
-            onDuplicate = { selected?.let { service.duplicate(it.id) } },
-        )
+        ToolStrip(hasSelection = selected != null) { name ->
+            // Zuordnung nach den Werkzeugnamen aus GLCanvas3D.cpp
+            when (name) {
+                "add"       -> picker.launch(arrayOf("*/*"))
+                "delete"    -> selected?.let { service.removeObject(it.id) }
+                "deleteall" -> service.clearBed()
+                "arrange"   -> service.arrange()
+                "copy"      -> selected?.let { service.duplicate(it.id) }
+                "more"      -> selected?.let { service.duplicate(it.id) }
+                "fewer"     -> selected?.let { service.removeObject(it.id) }
+            }
+        }
 
         // Echter GLES-Viewport auf Basis der Shader aus PrusaSlicer.
         Box(Modifier.weight(1f).fillMaxHeight()) {
@@ -163,6 +183,7 @@ private fun SlicerContent(
             progress = progress,
             onSelect = { selectedId = it },
             onShare = onShare,
+            onOpenSettings = { settingsTab = it },
             modifier = Modifier.width(SIDEBAR_WIDTH).fillMaxHeight(),
         )
     }
@@ -172,54 +193,50 @@ private fun SlicerContent(
 /* Werkzeugleiste                                                      */
 /* ------------------------------------------------------------------ */
 
+/**
+ * Werkzeugleiste aus PrusaSlicers eigener Definition.
+ *
+ * Reihenfolge, Icon-Datei und Tooltip stammen aus GLCanvas3D.cpp und
+ * werden von build/scripts/extract-ui.py als toolbar.json uebernommen.
+ * Nichts davon ist hier ausgewaehlt oder benannt - siehe E-12.
+ *
+ * Am Desktop laeuft diese Leiste waagerecht ueber dem Bett. Auf dem
+ * Tablet steht sie senkrecht links: quer wuerde sie bei 56 dp Zielgroesse
+ * die halbe Bettbreite fressen.
+ */
 @Composable
 private fun ToolStrip(
     hasSelection: Boolean,
-    onAdd: () -> Unit,
-    onDelete: () -> Unit,
-    onDeleteAll: () -> Unit,
-    onArrange: () -> Unit,
-    onDropToBed: () -> Unit,
-    onDuplicate: () -> Unit,
+    onTool: (String) -> Unit,
 ) {
+    val tools = PsUi.toolbar
+    // Welche Werkzeuge ohne Auswahl sinnlos sind - entspricht den
+    // enabling_callbacks im Original.
+    val needsSelection = setOf("delete", "copy", "more", "fewer",
+                               "splitobjects", "splitvolumes", "settings")
+    val notYet = setOf("paste", "layersediting", "undo", "redo",
+                       "arrangecurrent", "splitobjects", "splitvolumes", "settings")
+
     Column(
         Modifier
             .width(TOOL_SIZE + 16.dp)
             .fillMaxHeight()
             .background(PrusaColors.Panel)
+            .verticalScroll(rememberScrollState())
             .padding(vertical = 8.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
-        ToolButton(Icons.Default.Add, "Modell hinzufügen", true, onAdd)
-        ToolButton(Icons.Default.ContentCopy, "Duplizieren", hasSelection, onDuplicate)
-        ToolButton(Icons.Default.Delete, "Löschen", hasSelection, onDelete)
-        ToolButton(Icons.Default.DeleteSweep, "Bett leeren", true, onDeleteAll)
-
-        HorizontalDivider(
-            Modifier.padding(vertical = 8.dp, horizontal = 12.dp),
-            color = PrusaColors.Divider,
-        )
-
-        ToolButton(Icons.Default.GridView, "Anordnen", true, onArrange)
-        ToolButton(Icons.Default.VerticalAlignBottom, "Aufs Bett legen", hasSelection, onDropToBed)
-
-        // Verschieben, Skalieren und Drehen brauchen den Viewport (M4) -
-        // deshalb sichtbar, aber noch inaktiv, damit die Leiste schon
-        // ihre endgueltige Form hat.
-        ToolButton(Icons.Default.OpenWith, "Verschieben (M5)", false) {}
-        ToolButton(Icons.Default.ZoomOutMap, "Skalieren (M5)", false) {}
-        ToolButton(Icons.Default.Rotate90DegreesCcw, "Drehen (M5)", false) {}
+        tools.forEach { tool ->
+            val enabled = tool.name !in notYet &&
+                          (tool.name !in needsSelection || hasSelection)
+            ToolButton(tool, enabled) { onTool(tool.name) }
+        }
     }
 }
 
 @Composable
-private fun ToolButton(
-    icon: ImageVector,
-    description: String,
-    enabled: Boolean,
-    onClick: () -> Unit,
-) {
+private fun ToolButton(tool: PsUi.Tool, enabled: Boolean, onClick: () -> Unit) {
     Box(
         Modifier
             .size(TOOL_SIZE)
@@ -228,11 +245,10 @@ private fun ToolButton(
             .clickable(enabled = enabled, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
-        Icon(
-            icon,
-            contentDescription = description,
-            tint = if (enabled) PrusaColors.TextPrimary else PrusaColors.TextMuted.copy(alpha = 0.4f),
-            modifier = Modifier.size(26.dp),
+        PsIcon(
+            name = tool.icon,
+            modifier = Modifier.size(28.dp).alpha(if (enabled) 1f else 0.3f),
+            contentDescription = PsUi.tr(tool.tooltip),
         )
     }
 }
@@ -288,10 +304,10 @@ private fun Sidebar(
     progress: SlicerService.Progress,
     onSelect: (Int) -> Unit,
     onShare: (android.net.Uri) -> Unit,
+    onOpenSettings: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val isRunning = progress is SlicerService.Progress.Running
-    val quick by service.quickSettings.collectAsState()
 
     Column(
         modifier
@@ -303,36 +319,31 @@ private fun Sidebar(
             Modifier.weight(1f).verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            SectionLabel("Drucker")
-            PresetCombo(presets.printers, presets.selectedPrinter) {
+            // Beschriftungen wie im Original, uebersetzt aus dessen Katalog.
+            SectionLabel(PsUi.tr("Printer"))
+            PresetCombo(presets.printers, presets.selectedPrinter,
+                        onEdit = { onOpenSettings("printer") }) {
                 service.selectPreset(PsmCore.PresetType.PRINTER, it)
             }
 
-            SectionLabel("Druckeinstellungen")
-            PresetCombo(presets.prints, presets.selectedPrint) {
+            SectionLabel(PsUi.tr("Print settings"))
+            PresetCombo(presets.prints, presets.selectedPrint,
+                        onEdit = { onOpenSettings("print") }) {
                 service.selectPreset(PsmCore.PresetType.PRINT, it)
             }
 
-            SectionLabel("Filament")
-            PresetCombo(presets.filaments, presets.selectedFilament) {
+            SectionLabel(PsUi.tr("Filament"))
+            PresetCombo(presets.filaments, presets.selectedFilament,
+                        onEdit = { onOpenSettings("filament") }) {
                 service.selectPreset(PsmCore.PresetType.FILAMENT, it)
             }
 
             HorizontalDivider(Modifier.padding(vertical = 4.dp), color = PrusaColors.Divider)
 
-            SectionLabel("Schnelleinstellungen")
-            QuickSetting("Schichthöhe", quick.layerHeight, SlicerService.LAYER_HEIGHTS) {
-                service.setQuick(SlicerService.QuickKey.LAYER_HEIGHT, it)
-            }
-            QuickSetting("Füllung", quick.fillDensity, SlicerService.FILL_DENSITIES) {
-                service.setQuick(SlicerService.QuickKey.FILL_DENSITY, it)
-            }
-            QuickSetting("Stützen", quick.supports, SlicerService.SUPPORT_MODES) {
-                service.setQuick(SlicerService.QuickKey.SUPPORTS, it)
-            }
-            QuickSetting("Rand", quick.brim, SlicerService.BRIM_MODES) {
-                service.setQuick(SlicerService.QuickKey.BRIM, it)
-            }
+            // Die frueheren "Schnelleinstellungen" waren handverlesen und
+            // damit Nachbau. Ersetzt durch den vollstaendigen Einstellungs-
+            // bildschirm hinter dem Zahnrad - Struktur und Stufen kommen
+            // aus PrusaSlicer selbst. Siehe E-12.
 
             if (objects.isNotEmpty()) {
                 HorizontalDivider(Modifier.padding(vertical = 4.dp), color = PrusaColors.Divider)
@@ -395,7 +406,12 @@ private fun SectionLabel(text: String) {
  * trifft die Desktop-Optik besser und ist mit 48 dp gut treffbar.
  */
 @Composable
-private fun PresetCombo(options: List<String>, selected: String, onSelect: (String) -> Unit) {
+private fun PresetCombo(
+    options: List<String>,
+    selected: String,
+    onEdit: () -> Unit,
+    onSelect: (String) -> Unit,
+) {
     var expanded by remember { mutableStateOf(false) }
 
     Box(Modifier.fillMaxWidth()) {
@@ -419,6 +435,11 @@ private fun PresetCombo(options: List<String>, selected: String, onSelect: (Stri
                 modifier = Modifier.weight(1f),
             )
             Text("▾", color = PrusaColors.TextMuted)
+            Box(
+                Modifier.size(32.dp).clip(RoundedCornerShape(4.dp))
+                    .clickable(onClick = onEdit),
+                contentAlignment = Alignment.Center,
+            ) { PsIcon("cog.svg", Modifier.size(16.dp)) }
         }
 
         DropdownMenu(
@@ -439,40 +460,6 @@ private fun PresetCombo(options: List<String>, selected: String, onSelect: (Stri
                     },
                     onClick = { expanded = false; onSelect(name) },
                 )
-            }
-        }
-    }
-}
-
-/** Ein Parameter als Reihe grosser Schaltflaechen statt als Zahleneingabe. */
-@Composable
-private fun QuickSetting(
-    label: String,
-    value: String,
-    options: List<Pair<String, String>>,
-    onSelect: (String) -> Unit,
-) {
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Text(label, color = PrusaColors.TextPrimary, fontSize = 13.sp)
-        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            options.forEach { (raw, caption) ->
-                val active = raw == value
-                Box(
-                    Modifier
-                        .weight(1f)
-                        .height(40.dp)
-                        .clip(RoundedCornerShape(4.dp))
-                        .background(if (active) PrusaColors.Orange else PrusaColors.PanelRaised)
-                        .clickable { onSelect(raw) },
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text(
-                        caption,
-                        color = PrusaColors.TextPrimary,
-                        fontSize = 12.sp,
-                        fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal,
-                    )
-                }
             }
         }
     }

@@ -66,11 +66,21 @@ int main(int argc, char **argv)
         else input = argv[i];
     }
 
-    int list_only = 0;
-    for (int i = 1; i < argc; ++i)
-        if (strcmp(argv[i], "--list") == 0) { list_only = 1; input = NULL; }
+    int list_only = 0, scan_only = 0;
+    const char *install_keys[32];
+    size_t install_count = 0;
 
-    if (input == NULL && ! list_only) {
+    for (int i = 1; i < argc; ++i) {
+        if (strcmp(argv[i], "--list") == 0)      { list_only = 1; input = NULL; }
+        else if (strcmp(argv[i], "--scan") == 0) { scan_only = 1; input = NULL; }
+        else if (strcmp(argv[i], "--install") == 0 && i + 1 < argc &&
+                 install_count < 32) {
+            install_keys[install_count++] = argv[++i];
+            if (input == argv[i]) input = NULL;
+        }
+    }
+
+    if (input == NULL && ! list_only && ! scan_only) {
         fprintf(stderr,
             "Nutzung: psm_testcli [--res DIR] [--data DIR] [--out DATEI]\n"
             "                     [--printer NAME] MODELL\n"
@@ -93,9 +103,35 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    if (psm_presets_load_bundled(s) != PSM_OK)
+    /* Druckermodelle sichten - das ist der schnelle Schritt. */
+    size_t n_models = 0;
+    const double t_scan = now_seconds();
+    if (psm_printer_models_scan(s, &n_models) == PSM_OK)
+        printf("%zu Druckermodelle gefunden in %.2f s\n",
+               n_models, now_seconds() - t_scan);
+
+    if (scan_only) {
+        for (size_t i = 0; i < n_models && i < 200; ++i) {
+            psm_printer_model m;
+            if (psm_printer_model_at(s, i, &m) == PSM_OK)
+                printf("  %s:%-24s %-34s %s (%d Varianten)\n",
+                       m.vendor_id, m.model_id, m.name,
+                       m.technology == 0 ? "FFF" : "SLA", m.variant_count);
+        }
+        psm_session_destroy(s);
+        return 0;
+    }
+
+    /* Nur die per --install gewaehlten Modelle einrichten, sonst alle. */
+    const double t_inst = now_seconds();
+    const psm_result ir = (install_count > 0)
+        ? psm_presets_install(s, install_keys, install_count)
+        : psm_presets_load_bundled(s);
+    if (ir != PSM_OK)
         fprintf(stderr, "Warnung: Profile nicht geladen (%s) - nutze Vorgabewerte\n",
                 psm_last_error(s));
+    else
+        printf("Profile eingerichtet in %.2f s\n", now_seconds() - t_inst);
 
     if (list_only) {
         static const char *label[] = { "Druckprofile", "Filamente", "Drucker" };

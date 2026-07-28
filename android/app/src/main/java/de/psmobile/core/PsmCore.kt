@@ -47,6 +47,11 @@ class PsmCore private constructor(private var handle: Long) : Closeable {
         @JvmStatic private external fun nativeLastError(h: Long): String
         @JvmStatic private external fun nativeClear(h: Long): Int
         @JvmStatic private external fun nativeLoadPresets(h: Long): Int
+        @JvmStatic private external fun nativeScanPrinterModels(h: Long): Int
+        @JvmStatic private external fun nativePrinterModelAt(h: Long, index: Int): String?
+        @JvmStatic private external fun nativeInstallPresets(h: Long, keys: Array<String>): Int
+        @JvmStatic private external fun nativeConfigMeta(h: Long, key: String): String?
+        @JvmStatic private external fun nativeConfigEnumAt(h: Long, key: String, index: Int): String?
         @JvmStatic private external fun nativeLoadModel(h: Long, path: String): IntArray?
         @JvmStatic private external fun nativeRemoveModel(h: Long, id: Int): Int
         @JvmStatic private external fun nativeListObjects(h: Long): IntArray?
@@ -131,6 +136,83 @@ class PsmCore private constructor(private var handle: Long) : Closeable {
     fun clear() = check(nativeClear(requireHandle()), "Zuruecksetzen")
 
     fun loadBundledPresets() = check(nativeLoadPresets(requireHandle()), "Profile laden")
+
+    // --- Ersteinrichtung --------------------------------------------------
+
+    data class PrinterModel(
+        val key: String,        // "vendor:model"
+        val name: String,
+        val family: String,
+        val isSla: Boolean,
+        val variantCount: Int,
+    )
+
+    /**
+     * Sichtet die verfuegbaren Druckermodelle, ohne Profile zu laden.
+     * Schnell (gemessen 0,05 s fuer 37 Modelle) - im Gegensatz zum
+     * vollstaendigen Laden, das ueber 13 s braucht.
+     */
+    fun scanPrinterModels(): List<PrinterModel> {
+        val h = requireHandle()
+        val n = nativeScanPrinterModels(h)
+        return (0 until n).mapNotNull { i ->
+            nativePrinterModelAt(h, i)?.split('\t')?.takeIf { it.size >= 5 }?.let {
+                PrinterModel(it[0], it[1], it[2], it[3] == "1", it[4].toIntOrNull() ?: 0)
+            }
+        }
+    }
+
+    /** Richtet genau die angegebenen Modelle ein. Leer = alle. */
+    fun installPresets(keys: List<String>) =
+        check(nativeInstallPresets(requireHandle(), keys.toTypedArray()), "Profile einrichten")
+
+    // --- Parameter-Metadaten ---------------------------------------------
+
+    enum class ConfigType { BOOL, INT, FLOAT, STRING, ENUM, PERCENT, POINT, OTHER }
+    enum class Mode { SIMPLE, ADVANCED, EXPERT }
+
+    data class ConfigMeta(
+        val key: String,
+        val type: ConfigType,
+        val mode: Mode,
+        val min: Float?,
+        val max: Float?,
+        val enumCount: Int,
+        val label: String,
+        val unit: String,
+        val tooltip: String,
+    )
+
+    fun configMeta(key: String): ConfigMeta? {
+        val p = nativeConfigMeta(requireHandle(), key)?.split('\t') ?: return null
+        if (p.size < 10) return null
+        val type = when (p[0].toIntOrNull()) {
+            0 -> ConfigType.BOOL; 1 -> ConfigType.INT; 2 -> ConfigType.FLOAT
+            3 -> ConfigType.STRING; 4 -> ConfigType.ENUM; 5 -> ConfigType.PERCENT
+            6 -> ConfigType.POINT; else -> ConfigType.OTHER
+        }
+        val mode = when (p[1].toIntOrNull()) {
+            0 -> Mode.SIMPLE; 1 -> Mode.ADVANCED; else -> Mode.EXPERT
+        }
+        return ConfigMeta(
+            key = key,
+            type = type,
+            mode = mode,
+            min = if (p[2] == "1") p[3].toFloatOrNull() else null,
+            max = if (p[4] == "1") p[5].toFloatOrNull() else null,
+            enumCount = p[6].toIntOrNull() ?: 0,
+            label = p[7],
+            unit = p[8],
+            tooltip = p.drop(9).joinToString("\t"),
+        )
+    }
+
+    /** @return Paare aus (Wert, Beschriftung) */
+    fun configEnumValues(key: String, count: Int): List<Pair<String, String>> =
+        (0 until count).mapNotNull { i ->
+            nativeConfigEnumAt(requireHandle(), key, i)?.split('\t')
+                ?.takeIf { it.size >= 2 }?.let { it[0] to it[1] }
+        }
 
     /** @return IDs der neu erzeugten Objekte */
     fun loadModel(path: String): IntArray =

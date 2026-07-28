@@ -10,9 +10,14 @@ import android.os.IBinder
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import de.psmobile.ui.PsUi
+import de.psmobile.ui.SetupScreen
 import androidx.lifecycle.lifecycleScope
 import de.psmobile.slicing.SlicerService
 import de.psmobile.ui.SlicerScreen
@@ -54,11 +59,31 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             PSMobileTheme {
-                SlicerScreen(
-                    service = service,
-                    onPickFile = { uri -> importUri(uri) },
-                    onShare = { uri -> shareGcode(uri) },
-                )
+                val svc = service
+                // Uebernommene Oberflaechen-Daten laden; Englisch ist
+                // Standard, siehe E-12.
+                LaunchedEffect(svc) {
+                    PsUi.load(this@MainActivity, svc?.uiLanguage ?: "en")
+                }
+
+                val setupNeeded by (svc?.setupNeeded?.collectAsState()
+                    ?: remember { mutableStateOf(false) })
+
+                if (svc != null && setupNeeded) {
+                    val models by svc.printerModels.collectAsState()
+                    val busy by svc.setupBusy.collectAsState()
+                    SetupScreen(
+                        models = models,
+                        busy = busy,
+                        onConfirm = { svc.completeSetup(it) },
+                    )
+                } else {
+                    SlicerScreen(
+                        service = svc,
+                        onPickFile = { uri -> importUri(uri) },
+                        onShare = { uri -> shareGcode(uri) },
+                    )
+                }
             }
         }
     }

@@ -140,13 +140,70 @@ class SlicerService : Service() {
         val resDir = ResourceInstaller.ensureInstalled(this)
         val dataDir = File(filesDir, "psmdata").apply { mkdirs() }
         val c = PsmCore.create(dataDir.absolutePath, resDir.absolutePath)
-        runCatching { c.loadBundledPresets() }
-            .onFailure { Log.w(TAG, "Profile nicht geladen: ${it.message}") }
         core = c
-        refreshPresets()
-        refreshQuickSettings()
+
+        // Nur die bei der Ersteinrichtung gewaehlten Drucker einrichten.
+        // Alles zu laden kostet 13,5 s statt 1,9 s - siehe SetupScreen.
+        val chosen = installedPrinters()
+        if (chosen.isEmpty()) {
+            _setupNeeded.value = true
+            _printerModels.value = runCatching { c.scanPrinterModels() }.getOrDefault(emptyList())
+        } else {
+            runCatching { c.installPresets(chosen.toList()) }
+                .onFailure { Log.w(TAG, "Profile nicht geladen: ${it.message}") }
+            _setupNeeded.value = false
+            refreshPresets()
+            refreshQuickSettings()
+        }
         return c
     }
+
+    // --- Ersteinrichtung --------------------------------------------------
+
+    private val prefs by lazy { getSharedPreferences("psmobile", Context.MODE_PRIVATE) }
+
+    private val _setupNeeded = MutableStateFlow(false)
+    val setupNeeded: StateFlow<Boolean> = _setupNeeded.asStateFlow()
+
+    private val _printerModels = MutableStateFlow<List<PsmCore.PrinterModel>>(emptyList())
+    val printerModels: StateFlow<List<PsmCore.PrinterModel>> = _printerModels.asStateFlow()
+
+    private val _setupBusy = MutableStateFlow(false)
+    val setupBusy: StateFlow<Boolean> = _setupBusy.asStateFlow()
+
+    fun installedPrinters(): Set<String> =
+        prefs.getStringSet("printers", emptySet()) ?: emptySet()
+
+    /** Richtet die gewaehlten Drucker ein und merkt sich die Auswahl. */
+    fun completeSetup(keys: List<String>) {
+        val c = core ?: return
+        scope.launch {
+            _setupBusy.value = true
+            try {
+                c.installPresets(keys)
+                prefs.edit().putStringSet("printers", keys.toSet()).apply()
+                refreshPresets()
+                refreshQuickSettings()
+                _setupNeeded.value = false
+            } catch (t: Throwable) {
+                Log.e(TAG, "Ersteinrichtung fehlgeschlagen", t)
+                _progress.value = Progress.Failed(t.message ?: "Einrichtung fehlgeschlagen")
+            } finally {
+                _setupBusy.value = false
+            }
+        }
+    }
+
+    /** Druckerauswahl erneut oeffnen. */
+    fun reopenSetup() {
+        val c = core ?: return
+        _printerModels.value = runCatching { c.scanPrinterModels() }.getOrDefault(emptyList())
+        _setupNeeded.value = true
+    }
+
+    var uiLanguage: String
+        get() = prefs.getString("lang", "en") ?: "en"
+        set(v) { prefs.edit().putString("lang", v).apply() }
 
     /**
      * Legt den fertigen G-Code an einen teilbaren Ort und liefert eine

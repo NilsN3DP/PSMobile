@@ -257,6 +257,19 @@ typedef enum {
     PSM_CFG_OTHER   = 99
 } psm_config_type;
 
+/*
+ * Sichtbarkeitsstufe eines Parameters.
+ *
+ * Steht bereits an jeder Option in PrintConfig (comSimple/comAdvanced/
+ * comExpert). Welche Einstellung auf welcher Stufe erscheint, ist damit
+ * uebernommene Information und keine Entwurfsentscheidung.
+ */
+typedef enum {
+    PSM_MODE_SIMPLE   = 0,
+    PSM_MODE_ADVANCED = 1,
+    PSM_MODE_EXPERT   = 2
+} psm_config_mode;
+
 typedef struct {
     char            key[64];
     char            label[128];
@@ -264,6 +277,7 @@ typedef struct {
     char            tooltip[1024];
     char            unit[16];
     psm_config_type type;
+    psm_config_mode mode;
     float           min;
     float           max;
     int32_t         has_min;

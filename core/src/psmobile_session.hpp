@@ -55,6 +55,18 @@ struct psm_session
     /* Schluesselliste fuer die generierte Experten-UI, einmal aufgebaut */
     std::vector<std::string>         config_keys;
 
+    /* Ergebnis von psm_printer_models_scan - fuer die Ersteinrichtung */
+    struct ScannedModel {
+        std::string vendor_id;
+        std::string model_id;
+        std::string name;
+        std::string family;
+        int         technology = 0;   /* 0 = FFF, 1 = SLA */
+        std::vector<std::string> variants;
+        std::string bundle_path;
+    };
+    std::vector<ScannedModel> printer_models;
+
     void set_error(const std::string &e)
     {
         last_error = e;

@@ -15,6 +15,7 @@
 
 #include <cstring>
 #include <string>
+#include <vector>
 
 #include "psmobile_core.h"
 #include "psm_viewport.h"
@@ -135,6 +136,85 @@ JNIEXPORT jint JNICALL JNI_FN(nativeClear)(JNIEnv *, jclass, jlong h)
 JNIEXPORT jint JNICALL JNI_FN(nativeLoadPresets)(JNIEnv *, jclass, jlong h)
 {
     return psm_presets_load_bundled(sess(h));
+}
+
+/* --- Ersteinrichtung -------------------------------------------------- */
+
+JNIEXPORT jint JNICALL JNI_FN(nativeScanPrinterModels)(JNIEnv *, jclass, jlong h)
+{
+    size_t n = 0;
+    if (psm_printer_models_scan(sess(h), &n) != PSM_OK)
+        return 0;
+    return static_cast<jint>(n);
+}
+
+/* "vendor:model\tName\tFamilie\tTechnologie\tVarianten" - ein String statt
+ * fuenf JNI-Aufrufen je Modell. */
+JNIEXPORT jstring JNICALL JNI_FN(nativePrinterModelAt)(JNIEnv *env, jclass, jlong h, jint index)
+{
+    psm_printer_model m;
+    if (psm_printer_model_at(sess(h), static_cast<size_t>(index), &m) != PSM_OK)
+        return nullptr;
+
+    std::string s = std::string(m.vendor_id) + ":" + m.model_id + "\t" +
+                    m.name + "\t" + m.family + "\t" +
+                    std::to_string(m.technology) + "\t" +
+                    std::to_string(m.variant_count);
+    return env->NewStringUTF(s.c_str());
+}
+
+JNIEXPORT jint JNICALL JNI_FN(nativeInstallPresets)(JNIEnv *env, jclass, jlong h,
+                                                    jobjectArray keys)
+{
+    const jsize n = keys == nullptr ? 0 : env->GetArrayLength(keys);
+
+    std::vector<std::string> owned;
+    std::vector<const char *> ptrs;
+    owned.reserve(static_cast<size_t>(n));
+    ptrs.reserve(static_cast<size_t>(n));
+
+    for (jsize i = 0; i < n; ++i) {
+        auto js = static_cast<jstring>(env->GetObjectArrayElement(keys, i));
+        owned.push_back(jstr(env, js));
+        env->DeleteLocalRef(js);
+    }
+    for (const std::string &s : owned)
+        ptrs.push_back(s.c_str());
+
+    return psm_presets_install(sess(h), ptrs.empty() ? nullptr : ptrs.data(),
+                               ptrs.size());
+}
+
+/* --- Konfigurations-Metadaten ----------------------------------------- */
+
+/* "typ\tmodus\thasMin\tmin\thasMax\tmax\tenumCount\tlabel\teinheit\ttooltip" */
+JNIEXPORT jstring JNICALL JNI_FN(nativeConfigMeta)(JNIEnv *env, jclass, jlong h, jstring key)
+{
+    const std::string k = jstr(env, key);
+    psm_config_meta m;
+    if (psm_config_meta_for(sess(h), k.c_str(), &m) != PSM_OK)
+        return nullptr;
+
+    std::string s = std::to_string(static_cast<int>(m.type)) + "\t" +
+                    std::to_string(static_cast<int>(m.mode)) + "\t" +
+                    std::to_string(m.has_min) + "\t" + std::to_string(m.min) + "\t" +
+                    std::to_string(m.has_max) + "\t" + std::to_string(m.max) + "\t" +
+                    std::to_string(m.enum_count) + "\t" +
+                    m.label + "\t" + m.unit + "\t" + m.tooltip;
+    return env->NewStringUTF(s.c_str());
+}
+
+/* "wert\tbeschriftung" */
+JNIEXPORT jstring JNICALL JNI_FN(nativeConfigEnumAt)(JNIEnv *env, jclass, jlong h,
+                                                     jstring key, jint index)
+{
+    const std::string k = jstr(env, key);
+    char value[256] = { 0 };
+    char label[256] = { 0 };
+    if (psm_config_enum_value_at(sess(h), k.c_str(), static_cast<size_t>(index),
+                                 value, sizeof(value), label, sizeof(label)) != PSM_OK)
+        return nullptr;
+    return env->NewStringUTF((std::string(value) + "\t" + label).c_str());
 }
 
 JNIEXPORT jintArray JNICALL JNI_FN(nativeLoadModel)(JNIEnv *env, jclass, jlong h, jstring path)

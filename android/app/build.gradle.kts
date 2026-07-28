@@ -66,6 +66,8 @@ dependencies {
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.documentfile)
     implementation(libs.kotlinx.coroutines.android)
+    implementation(libs.coil.compose)
+    implementation(libs.coil.svg)
 
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.ui)
