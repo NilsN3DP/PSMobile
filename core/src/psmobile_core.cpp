@@ -24,6 +24,10 @@
 #include "libslic3r/FileReader.hpp"
 #include "libslic3r/Utils.hpp"
 
+#include <arrange/Beds.hpp>
+#include <arrange-wrapper/ModelArrange.hpp>
+#include <arrange-wrapper/ArrangeSettingsView.hpp>
+
 namespace {
 
 /* ------------------------------------------------------------------ */
@@ -394,6 +398,34 @@ PSM_API psm_result psm_model_duplicate(psm_session *s, psm_object_id id, psm_obj
         copy->ensure_on_bed();
         if (out_new_id != nullptr)
             *out_new_id = static_cast<psm_object_id>(copy->id().id);
+        return PSM_OK;
+    PSM_GUARD_END(s)
+}
+
+PSM_API psm_result psm_arrange(psm_session *s, float gap_mm)
+{
+    PSM_GUARD_BEGIN(s)
+        if (s->model.objects.empty())
+            return PSM_OK;
+
+        /* Bettform kommt aus der aktiven Konfiguration; ohne gewaehlten
+         * Drucker ist das die Vorgabe aus FullPrintConfig. */
+        const Slic3r::Points bedpts = Slic3r::get_bed_shape(s->config);
+        if (bedpts.empty()) {
+            s->set_error("Druckbett ist nicht definiert");
+            return PSM_ERR_GENERIC;
+        }
+
+        const Slic3r::Vec2crd gap{ 0, 0 };
+        Slic3r::arr2::ArrangeBed bed = Slic3r::arr2::to_arrange_bed(bedpts, gap);
+
+        Slic3r::arr2::ArrangeSettings cfg;
+        const double dist = (gap_mm > 0.f)
+            ? static_cast<double>(gap_mm)
+            : Slic3r::min_object_distance(s->config);
+        cfg.set_distance_from_objects(dist);
+
+        Slic3r::arrange_objects(s->model, bed, cfg);
         return PSM_OK;
     PSM_GUARD_END(s)
 }

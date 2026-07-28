@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths>
+    <!-- Nur der Freigabeordner, nicht der ganze Cache: was geteilt wird,
+         soll bewusst dorthin kopiert werden. -->
+    <cache-path name="share" path="share/" />
+</paths>

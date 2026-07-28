@@ -57,6 +57,7 @@ class MainActivity : ComponentActivity() {
                 SlicerScreen(
                     service = service,
                     onPickFile = { uri -> importUri(uri) },
+                    onShare = { uri -> shareGcode(uri) },
                 )
             }
         }
@@ -91,17 +92,31 @@ class MainActivity : ComponentActivity() {
     private fun importUri(uri: Uri) {
         val svc = service ?: return
         lifecycleScope.launch {
-            withContext(Dispatchers.IO) {
+            val result = withContext(Dispatchers.IO) {
                 runCatching {
-                    val name = queryDisplayName(uri) ?: "modell.stl"
+                    val name = queryDisplayName(uri) ?: uri.lastPathSegment ?: "modell.stl"
                     val dest = File(cacheDir, "import").apply { mkdirs() }.resolve(name)
                     contentResolver.openInputStream(uri)?.use { input ->
                         dest.outputStream().use { input.copyTo(it) }
-                    } ?: error("Datei nicht lesbar")
+                    } ?: error("Datei nicht lesbar: $uri")
                     svc.loadModel(dest.absolutePath)
                 }
             }
+            // Fehler muessen sichtbar werden. Vorher verschluckte ein
+            // blankes runCatching sie, und in der UI passierte wortlos
+            // nichts - der schlimmste Fehlerzustand ueberhaupt.
+            result.onFailure { svc.reportImportError(it) }
         }
+    }
+
+    /** G-Code an Files, Drive, PrusaLink-Apps o. ae. weiterreichen. */
+    private fun shareGcode(uri: Uri) {
+        val send = Intent(Intent.ACTION_SEND).apply {
+            type = "text/plain"          // G-Code hat keinen eigenen MIME-Typ
+            putExtra(Intent.EXTRA_STREAM, uri)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        startActivity(Intent.createChooser(send, "G-Code teilen"))
     }
 
     private fun queryDisplayName(uri: Uri): String? =

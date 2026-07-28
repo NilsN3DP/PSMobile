@@ -52,7 +52,9 @@ target_include_directories(psmobile_core
     PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/core/src
 )
 
-target_link_libraries(psmobile_core PRIVATE libslic3r)
+# slic3r-arrange-wrapper liegt neben libslic3r und wird von ihr nicht
+# mitgezogen - Auto-Arrange braucht es aber.
+target_link_libraries(psmobile_core PRIVATE libslic3r slic3r-arrange-wrapper)
 
 # Nur die psm_*-Symbole nach aussen. Haelt die .so klein und verhindert,
 # dass Slic3r-Symbole mit denen anderer Bibliotheken kollidieren.

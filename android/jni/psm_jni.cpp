@@ -229,6 +229,16 @@ JNIEXPORT jint JNICALL JNI_FN(nativeDropToBed)(JNIEnv *, jclass, jlong h, jint i
     return psm_model_drop_to_bed(sess(h), id);
 }
 
+JNIEXPORT jint JNICALL JNI_FN(nativeArrange)(JNIEnv *, jclass, jlong h, jfloat gapMm)
+{
+    return psm_arrange(sess(h), gapMm);
+}
+
+JNIEXPORT jint JNICALL JNI_FN(nativeScaleToFit)(JNIEnv *, jclass, jlong h, jint id, jfloat sizeMm)
+{
+    return psm_model_scale_to_fit(sess(h), id, sizeMm);
+}
+
 JNIEXPORT jint JNICALL JNI_FN(nativeDuplicate)(JNIEnv *, jclass, jlong h, jint id)
 {
     psm_object_id nid = PSM_INVALID_ID;

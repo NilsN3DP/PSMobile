@@ -93,29 +93,63 @@ PSM_API psm_result psm_presets_load_bundled(psm_session *s)
 
         /* Die mitgelieferten Vendor-Bundles liegen unter resdir/profiles.
          *
-         * Auf dem Desktop holt der PresetUpdater sie aus dem Netz und
-         * PresetBundle::load_presets() liest sie ueber eine AppConfig ein,
-         * in der installierte Drucker vermerkt sind. Auf dem Mobilgeraet
-         * gibt es weder Updater noch vorhandene AppConfig, deshalb laden
-         * wir die Bundles direkt als Systemprofile. Das ist der kuerzere
-         * und robustere Weg - und er kommt ohne beschreibbares
-         * Vendor-Verzeichnis aus. */
+         * Der direkte Weg ueber load_configbundle(LoadSystem) sieht
+         * naheliegend aus, fuehrt aber nicht zum Ziel: die Presets werden
+         * zwar geparst (gemessen: 6983), landen aber nicht in den
+         * Sammlungen, weil kein Drucker als installiert gilt. In den
+         * Auswahllisten blieben dann nur die "- default -"-Eintraege.
+         *
+         * Richtig ist der Weg, den auch der Desktop nimmt:
+         *   1. Bundles ins beschreibbare datadir/vendor kopieren
+         *   2. eine AppConfig aufbauen, in der jedes Druckermodell und
+         *      jede Variante als installiert markiert ist
+         *   3. load_presets() damit fuettern
+         * Auf dem Desktop erledigt Schritt 2 der Installationsassistent;
+         * mobil liefern wir die Profile mit und nehmen alles. */
         const fs::path src_profiles = fs::path(s->resdir) / "profiles";
         if (! fs::exists(src_profiles)) {
             s->set_error("Profilverzeichnis fehlt: " + src_profiles.string());
             return PSM_ERR_IO;
         }
 
-        size_t loaded = 0;
+        const fs::path vendor_dir = fs::path(Slic3r::data_dir()) / "vendor";
+        fs::create_directories(vendor_dir);
+
+        AppConfig app_config(AppConfig::EAppMode::Editor);
+        size_t bundles = 0, models = 0;
+
         for (fs::directory_iterator it(src_profiles); it != fs::directory_iterator(); ++it) {
             if (! fs::is_regular_file(it->status()) || it->path().extension() != ".ini")
                 continue;
             try {
-                auto res = s->presets->load_configbundle(
-                    it->path().string(),
-                    PresetBundle::LoadConfigBundleAttribute::LoadSystem,
-                    ForwardCompatibilitySubstitutionRule::EnableSilent);
-                loaded += res.second;
+                const fs::path dst = vendor_dir / it->path().filename();
+                fs::copy_file(it->path(), dst, fs::copy_options::overwrite_existing);
+
+                /* .idx daneben legen, falls vorhanden - PresetBundle
+                 * zieht daraus die Versionsinformation. */
+                fs::path idx = it->path();
+                idx.replace_extension(".idx");
+                if (fs::exists(idx))
+                    fs::copy_file(idx, vendor_dir / idx.filename(),
+                                  fs::copy_options::overwrite_existing);
+
+                const VendorProfile vp = VendorProfile::from_ini(dst, true);
+                if (! vp.valid()) {
+                    psm_emit_log(PSM_LOG_WARN,
+                                 "Bundle ohne gueltigen Vendor-Abschnitt: " +
+                                 it->path().filename().string());
+                    continue;
+                }
+                for (const VendorProfile::PrinterModel &m : vp.models) {
+                    if (m.variants.empty()) {
+                        app_config.set_variant(vp.id, m.id, "default", true);
+                    } else {
+                        for (const VendorProfile::PrinterVariant &v : m.variants)
+                            app_config.set_variant(vp.id, m.id, v.name, true);
+                    }
+                    ++models;
+                }
+                ++bundles;
             } catch (const std::exception &e) {
                 /* Ein kaputtes Vendor-Bundle darf nicht den ganzen Start
                  * verhindern - der Rest bleibt nutzbar. */
@@ -125,17 +159,26 @@ PSM_API psm_result psm_presets_load_bundled(psm_session *s)
             }
         }
 
-        if (loaded == 0) {
-            s->set_error("keine Profile gefunden in " + src_profiles.string());
+        if (bundles == 0) {
+            s->set_error("keine brauchbaren Profile in " + src_profiles.string());
             return PSM_ERR_PARSE;
         }
 
+        s->presets->load_presets(app_config, ForwardCompatibilitySubstitutionRule::EnableSilent);
         s->presets->update_multi_material_filament_presets();
         s->presets->update_compatible(PresetSelectCompatibleType::Always);
 
+        psm_emit_log(PSM_LOG_INFO,
+                     std::to_string(bundles) + " Bundle(s), " + std::to_string(models) +
+                     " Druckermodelle installiert");
+        size_t loaded = s->presets->printers.size();
+
         /* Die aktive Konfiguration ist ab jetzt die aus den Presets. */
         s->config = s->presets->full_config();
-        psm_emit_log(PSM_LOG_INFO, std::to_string(loaded) + " Profile geladen");
+        psm_emit_log(PSM_LOG_INFO,
+                     std::to_string(loaded) + " Drucker, " +
+                     std::to_string(s->presets->prints.size()) + " Druckprofile, " +
+                     std::to_string(s->presets->filaments.size()) + " Filamente");
 
         s->last_error.clear();
         return PSM_OK;

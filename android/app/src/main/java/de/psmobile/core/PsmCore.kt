@@ -57,6 +57,8 @@ class PsmCore private constructor(private var handle: Long) : Closeable {
         @JvmStatic private external fun nativeSetScale(h: Long, id: Int, x: Float, y: Float, z: Float): Int
         @JvmStatic private external fun nativeDropToBed(h: Long, id: Int): Int
         @JvmStatic private external fun nativeDuplicate(h: Long, id: Int): Int
+        @JvmStatic private external fun nativeArrange(h: Long, gapMm: Float): Int
+        @JvmStatic private external fun nativeScaleToFit(h: Long, id: Int, sizeMm: Float): Int
         @JvmStatic private external fun nativePresetCount(h: Long, type: Int): Int
         @JvmStatic private external fun nativePresetNameAt(h: Long, type: Int, index: Int): String
         @JvmStatic private external fun nativePresetSelect(h: Long, type: Int, name: String): Int
@@ -159,6 +161,12 @@ class PsmCore private constructor(private var handle: Long) : Closeable {
     fun dropToBed(id: Int) = check(nativeDropToBed(requireHandle(), id), "Aufs Bett legen")
 
     fun duplicate(id: Int): Int = nativeDuplicate(requireHandle(), id)
+
+    /** @param gapMm 0 = Abstand aus der Druckerkonfiguration übernehmen */
+    fun arrange(gapMm: Float = 0f) = check(nativeArrange(requireHandle(), gapMm), "Anordnen")
+
+    fun scaleToFit(id: Int, sizeMm: Float) =
+        check(nativeScaleToFit(requireHandle(), id, sizeMm), "Auf Größe skalieren")
 
     fun presetNames(type: PresetType): List<String> {
         val h = requireHandle()

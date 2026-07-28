@@ -66,10 +66,15 @@ int main(int argc, char **argv)
         else input = argv[i];
     }
 
-    if (input == NULL) {
+    int list_only = 0;
+    for (int i = 1; i < argc; ++i)
+        if (strcmp(argv[i], "--list") == 0) { list_only = 1; input = NULL; }
+
+    if (input == NULL && ! list_only) {
         fprintf(stderr,
             "Nutzung: psm_testcli [--res DIR] [--data DIR] [--out DATEI]\n"
-            "                     [--printer NAME] MODELL\n");
+            "                     [--printer NAME] MODELL\n"
+            "         psm_testcli [--res DIR] [--data DIR] --list\n");
         return 2;
     }
 
@@ -91,6 +96,23 @@ int main(int argc, char **argv)
     if (psm_presets_load_bundled(s) != PSM_OK)
         fprintf(stderr, "Warnung: Profile nicht geladen (%s) - nutze Vorgabewerte\n",
                 psm_last_error(s));
+
+    if (list_only) {
+        static const char *label[] = { "Druckprofile", "Filamente", "Drucker" };
+        for (int t = 0; t < 3; ++t) {
+            const size_t n = psm_preset_count(s, (psm_preset_type) t);
+            printf("\n%s: %zu\n", label[t], n);
+            for (size_t i = 0; i < n && i < 40; ++i) {
+                char name[256];
+                if (psm_preset_name_at(s, (psm_preset_type) t, i, name, sizeof(name)) == PSM_OK)
+                    printf("  %s\n", name);
+            }
+            if (n > 40)
+                printf("  ... (%zu weitere)\n", n - 40);
+        }
+        psm_session_destroy(s);
+        return 0;
+    }
 
     if (printer != NULL && psm_preset_select(s, PSM_PRESET_PRINTER, printer) != PSM_OK)
         fprintf(stderr, "Warnung: Drucker '%s' nicht waehlbar: %s\n", printer, psm_last_error(s));
