@@ -35,6 +35,68 @@ void copy_str(char *dst, size_t cap, const std::string &src)
     dst[n] = '\0';
 }
 
+/*
+ * Indizes der Presets, die zur aktuellen Auswahl passen.
+ *
+ * PrusaSlicer fuehrt je Preset zwei Flags: is_visible (vom Nutzer
+ * installiert) und is_compatible (passt zum gewaehlten Drucker bzw.
+ * Druckprofil). Ohne diesen Filter stehen alle 5762 Filamente in der
+ * Liste, auch die fuer voellig andere Drucker - unbrauchbar.
+ *
+ * Das "- default -" wird uebersprungen, solange es echte Profile gibt.
+ */
+std::vector<size_t> usable_indices(const PresetCollection &c)
+{
+    std::vector<size_t> out;
+    out.reserve(64);
+    for (size_t i = 0; i < c.size(); ++i) {
+        const Preset &p = c.preset(i);
+        if (p.is_default && c.size() > c.num_default_presets())
+            continue;
+        if (! p.is_visible || ! p.is_compatible)
+            continue;
+        out.push_back(i);
+    }
+    /* Falls der Filter alles wegnimmt - etwa weil noch kein Drucker
+     * gewaehlt ist - lieber alles Sichtbare zeigen als eine leere Liste. */
+    if (out.empty())
+        for (size_t i = 0; i < c.size(); ++i)
+            if (c.preset(i).is_visible)
+                out.push_back(i);
+    return out;
+}
+
+/*
+ * Filamente sind ein Sonderfall.
+ *
+ * Ihre Kompatibilitaet steht nicht in der flachen PresetCollection,
+ * sondern je Extruder in PresetBundle::extruders_filaments. PrusaSlicer
+ * prueft dort genau so:
+ *     m_extr_filaments[i].is_compatible && m_filaments->preset(i).is_visible
+ * Ohne diesen Umweg blieben von 5762 Filamenten alle stehen, statt der
+ * paar hundert, die zum gewaehlten Drucker passen.
+ */
+std::vector<size_t> usable_filament_indices(psm_session *s)
+{
+    const PresetCollection &fc = s->presets->filaments;
+    std::vector<size_t> out;
+
+    if (s->presets->extruders_filaments.empty())
+        return {};
+
+    const ExtruderFilaments &ef = s->presets->extruders_filaments.front();
+    const size_t n = std::min(fc.size(), ef.size());
+    for (size_t i = 0; i < n; ++i) {
+        const Preset &p = fc.preset(i);
+        if (p.is_default && fc.size() > fc.num_default_presets())
+            continue;
+        if (! p.is_visible || ! ef.filament(i).is_compatible)
+            continue;
+        out.push_back(i);
+    }
+    return out;
+}
+
 PresetCollection *collection_for(psm_session *s, psm_preset_type type)
 {
     if (! s->presets)
@@ -196,7 +258,10 @@ PSM_API size_t psm_preset_count(psm_session *s, psm_preset_type type)
     if (s == nullptr)
         return 0;
     PresetCollection *c = collection_for(s, type);
-    return c == nullptr ? 0 : c->size();
+    if (c == nullptr)
+        return 0;
+    return (type == PSM_PRESET_FILAMENT)
+        ? usable_filament_indices(s).size() : usable_indices(*c).size();
 }
 
 PSM_API psm_result psm_preset_name_at(psm_session *s, psm_preset_type type,
@@ -208,9 +273,11 @@ PSM_API psm_result psm_preset_name_at(psm_session *s, psm_preset_type type,
         PresetCollection *c = collection_for(s, type);
         if (c == nullptr)
             return PSM_ERR_NOT_FOUND;
-        if (index >= c->size())
+        const std::vector<size_t> idx = (type == PSM_PRESET_FILAMENT)
+            ? usable_filament_indices(s) : usable_indices(*c);
+        if (index >= idx.size())
             return PSM_ERR_INVALID_ARG;
-        copy_str(out, out_cap, c->preset(index).name);
+        copy_str(out, out_cap, c->preset(idx[index]).name);
         return PSM_OK;
     } catch (const std::exception &e) {
         s->set_error(e.what());
@@ -230,6 +297,14 @@ PSM_API psm_result psm_preset_select(psm_session *s, psm_preset_type type, const
             s->set_error(std::string("Preset nicht waehlbar: ") + name);
             return PSM_ERR_NOT_FOUND;
         }
+
+        /* Ein neuer Drucker aendert, welche Druck- und Filamentprofile
+         * ueberhaupt passen. Ohne diesen Aufruf blieben die alten Flags
+         * stehen und die Listen zeigten Unpassendes. Always waehlt bei
+         * Bedarf gleich ein kompatibles Profil aus. */
+        s->presets->update_multi_material_filament_presets();
+        s->presets->update_compatible(PresetSelectCompatibleType::Always);
+
         s->config = s->presets->full_config();
         return PSM_OK;
     } catch (const std::exception &e) {

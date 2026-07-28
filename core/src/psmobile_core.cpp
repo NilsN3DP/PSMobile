@@ -225,11 +225,32 @@ PSM_API psm_result psm_model_load(psm_session *s,
             return PSM_ERR_PARSE;
         }
 
+        /* Bettmitte bestimmen: neue Objekte landen dort, so wie es
+         * PrusaSlicer beim Laden auch macht. Ohne das klebt jedes Modell
+         * im Ursprung, also in der vorderen linken Bettecke. */
+        Slic3r::Vec2d bed_center(0.0, 0.0);
+        try {
+            const Slic3r::Points bedpts = Slic3r::get_bed_shape(s->config);
+            if (bedpts.size() >= 3) {
+                Slic3r::BoundingBoxf bb;
+                for (const Slic3r::Point &p : bedpts)
+                    bb.merge(Slic3r::Vec2d(Slic3r::unscale<double>(p.x()),
+                                           Slic3r::unscale<double>(p.y())));
+                bed_center = bb.center();
+            }
+        } catch (...) { /* ohne Bett bleibt es beim Ursprung */ }
+
         size_t written = 0;
         size_t total   = 0;
         for (Slic3r::ModelObject *src : loaded.objects) {
             Slic3r::ModelObject *dst = s->model.add_object(*src);
-            first_instance(dst);
+            Slic3r::ModelInstance *inst = first_instance(dst);
+
+            /* Objekt um seinen eigenen Schwerpunkt zentrieren und dann
+             * auf die Bettmitte setzen. */
+            dst->center_around_origin(false);
+            inst->set_offset(Slic3r::Vec3d(bed_center.x(), bed_center.y(),
+                                           inst->get_offset().z()));
             dst->ensure_on_bed();
             if (out_ids != nullptr && written < out_ids_cap)
                 out_ids[written++] = static_cast<psm_object_id>(dst->id().id);

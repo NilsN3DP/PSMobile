@@ -179,7 +179,48 @@ typedef enum {
     PSM_PRESET_PRINTER  = 2
 } psm_preset_type;
 
-/** Laedt die gebuendelten Vendor-Profile aus resdir/profiles. */
+/*
+ * Ersteinrichtung: erst die verfuegbaren Druckermodelle ansehen, dann
+ * gezielt installieren.
+ *
+ * Warum nicht einfach alles laden: Die mitgelieferten Prusa-Bundles
+ * ergeben 221 Drucker, 520 Druckprofile und 5762 Filamente. Das kostet
+ * beim Start rund 14 Sekunden und ueberschwemmt jede Auswahlliste.
+ * Der Desktop loest das ueber den Konfigurationsassistenten - hier
+ * genauso: einmal die eigenen Drucker waehlen, danach ist nur noch
+ * relevant, was dazu passt.
+ */
+
+typedef struct {
+    char    vendor_id[64];
+    char    model_id[64];
+    char    name[128];
+    char    family[64];
+    int32_t technology;      /* 0 = FFF, 1 = SLA */
+    int32_t variant_count;   /* Duesengroessen bzw. Varianten */
+} psm_printer_model;
+
+/** Liest die Vendor-Bundles, ohne Presets zu materialisieren. Schnell. */
+PSM_API psm_result psm_printer_models_scan(psm_session *s, size_t *out_count);
+
+PSM_API psm_result psm_printer_model_at(psm_session *s, size_t index, psm_printer_model *out);
+
+/** Variante (z. B. Duesendurchmesser) eines Modells. */
+PSM_API psm_result psm_printer_variant_at(psm_session *s, size_t model_index, size_t variant_index,
+                                          char *out, size_t out_cap);
+
+/**
+ * Installiert genau die angegebenen Modelle und laedt die dazu passenden
+ * Profile.
+ *
+ * @param model_keys Schluessel im Format "vendor_id:model_id".
+ * @param count      Anzahl. 0 bedeutet: alles installieren.
+ */
+PSM_API psm_result psm_presets_install(psm_session *s,
+                                       const char *const *model_keys,
+                                       size_t count);
+
+/** Kurzform fuer psm_presets_install(s, NULL, 0) - installiert alles. */
 PSM_API psm_result psm_presets_load_bundled(psm_session *s);
 
 PSM_API size_t psm_preset_count(psm_session *s, psm_preset_type type);

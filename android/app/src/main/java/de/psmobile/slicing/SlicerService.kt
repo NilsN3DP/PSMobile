@@ -193,6 +193,19 @@ class SlicerService : Service() {
         refreshObjects()
     }
 
+    /** Fuer den Viewport, der direkt auf der Session arbeitet (E-03). */
+    val coreOrNull: PsmCore? get() = core
+
+    /** Verzeichnis mit den GLES-Shadern aus PrusaSlicer. */
+    fun shaderDir(): String =
+        File(ResourceInstaller.ensureInstalled(this), "shaders/ES").absolutePath
+
+    /** Steigt bei jeder Modelaenderung - der Viewport baut dann neu auf. */
+    private val _sceneRevision = MutableStateFlow(0)
+    val sceneRevision: StateFlow<Int> = _sceneRevision.asStateFlow()
+
+    private fun bumpScene() { _sceneRevision.value = _sceneRevision.value + 1 }
+
     fun refreshQuickSettings() {
         val c = core ?: return
         _quick.value = QuickSettings(
@@ -243,6 +256,7 @@ class SlicerService : Service() {
         val c = core ?: return
         // IntArray kennt kein mapNotNull - erst in eine Liste ueberfuehren.
         _objects.value = c.listObjects().toList().mapNotNull { c.objectInfo(it) }
+        bumpScene()
     }
 
     fun loadModel(path: String) {

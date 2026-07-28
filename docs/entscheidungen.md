@@ -143,6 +143,42 @@ oeffentlich verlinkt wird.
 
 ---
 
+## E-12 - Uebernehmen statt nachbauen (Grundregel)
+
+**Entscheidung**: Fuer jedes Stueck Oberflaeche gilt die Frage: laesst es
+sich als Daten oder Logik uebernehmen? Wenn ja, wird es **extrahiert und
+nie abgetippt**. Nur echte wx-Widgets werden nachgebaut - und dann so nah
+am Original wie moeglich.
+
+**Anlass**: Die erste Fassung der Oberflaeche hatte handverlesene
+Einstellungen, erfundene deutsche Beschriftungen und Material-Icons. Das
+war Nachbau, obwohl PrusaSlicer all das mitliefert.
+
+**Was uebernommen wird** (`build/scripts/extract-ui.py`):
+
+| Quelle | Ergebnis |
+| --- | --- |
+| `GUI/Tab.cpp` | 20 Einstellungsseiten, Gruppen, 247 Parameter in Originalreihenfolge |
+| `GUI/GLCanvas3D.cpp` | 15 Werkzeuge mit Reihenfolge, Icon-Datei und Tooltip |
+| `localization/de/PrusaSlicer_de.po` | 5867 deutsche Beschriftungen, woertlich |
+| `resources/icons/*.svg` | die Original-Icons |
+| `libslic3r/PrintConfig` | Typ, Grenzen, Einheit, Enum-Werte und **Modus** je Parameter |
+
+Der Modus (`comSimple` / `comAdvanced` / `comExpert`) steht bereits an
+jeder Option. Welche Einstellung auf welcher Stufe erscheint, ist damit
+keine Entwurfsentscheidung mehr, sondern uebernommene Information.
+
+**Was nicht uebernehmbar ist**: die wxWidgets-Widgets selbst. Es gibt
+keinen Android-Port von wxWidgets. Gezeichnet wird deshalb mit Compose -
+aber nach den uebernommenen Strukturen, nicht nach eigenem Entwurf.
+
+**Konsequenz**: Der Extraktor meldet ausdruecklich, was er nicht
+aufloesen konnte (aktuell 25 Stellen, an denen PrusaSlicer Optionen ueber
+Variablen einfuegt). Diese Luecken sind sichtbar und nicht stillschweigend
+verloren.
+
+---
+
 ## E-09 - Netzwerk bleibt in der nativen Schicht, kein libcurl
 
 **Entscheidung**: CURL und OpenSSL werden **nicht** fuer Android/iOS

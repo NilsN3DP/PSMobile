@@ -17,6 +17,7 @@
 #include <string>
 
 #include "psmobile_core.h"
+#include "psm_viewport.h"
 
 #define LOG_TAG "psmobile"
 
@@ -371,6 +372,84 @@ JNIEXPORT jint JNICALL JNI_FN(nativeGcodeExport)(JNIEnv *env, jclass, jlong h, j
 JNIEXPORT jlong JNICALL JNI_FN(nativeEstimateMemory)(JNIEnv *, jclass, jlong h)
 {
     return static_cast<jlong>(psm_estimate_slice_memory(sess(h)));
+}
+
+/* --- Viewport --------------------------------------------------------- */
+/*
+ * Diese Aufrufe kommen vom GL-Thread des GLSurfaceView, nicht vom
+ * UI-Thread. Pro Bild geht genau ein Aufruf hinunter (nativeVpRender) -
+ * Geometrie wandert nie durch JNI, die liest der Viewport direkt aus der
+ * Session. Siehe docs/entscheidungen.md, E-03.
+ */
+
+#define JNI_VP(name) Java_de_psmobile_core_PsmViewport_##name
+
+static inline psm_viewport *vp(jlong h) { return reinterpret_cast<psm_viewport *>(h); }
+
+JNIEXPORT jlong JNICALL JNI_VP(nativeCreate)(JNIEnv *env, jclass, jlong session, jstring shaderDir)
+{
+    const std::string dir = jstr(env, shaderDir);
+    return reinterpret_cast<jlong>(psm_viewport_create(sess(session), dir.c_str()));
+}
+
+JNIEXPORT void JNICALL JNI_VP(nativeDestroy)(JNIEnv *, jclass, jlong h)
+{
+    psm_viewport_destroy(vp(h));
+}
+
+JNIEXPORT void JNICALL JNI_VP(nativeResize)(JNIEnv *, jclass, jlong h, jint w, jint hgt)
+{
+    psm_viewport_resize(vp(h), w, hgt);
+}
+
+JNIEXPORT void JNICALL JNI_VP(nativeRender)(JNIEnv *, jclass, jlong h)
+{
+    psm_viewport_render(vp(h));
+}
+
+JNIEXPORT void JNICALL JNI_VP(nativeInvalidate)(JNIEnv *, jclass, jlong h)
+{
+    psm_viewport_invalidate(vp(h));
+}
+
+JNIEXPORT void JNICALL JNI_VP(nativeOrbit)(JNIEnv *, jclass, jlong h, jfloat dx, jfloat dy)
+{
+    psm_viewport_orbit(vp(h), dx, dy);
+}
+
+JNIEXPORT void JNICALL JNI_VP(nativePan)(JNIEnv *, jclass, jlong h, jfloat dx, jfloat dy)
+{
+    psm_viewport_pan(vp(h), dx, dy);
+}
+
+JNIEXPORT void JNICALL JNI_VP(nativeZoom)(JNIEnv *, jclass, jlong h, jfloat factor)
+{
+    psm_viewport_zoom(vp(h), factor);
+}
+
+JNIEXPORT void JNICALL JNI_VP(nativeResetView)(JNIEnv *, jclass, jlong h)
+{
+    psm_viewport_reset_view(vp(h));
+}
+
+JNIEXPORT void JNICALL JNI_VP(nativeViewPreset)(JNIEnv *, jclass, jlong h, jint which)
+{
+    psm_viewport_view_preset(vp(h), which);
+}
+
+JNIEXPORT jint JNICALL JNI_VP(nativePick)(JNIEnv *, jclass, jlong h, jfloat x, jfloat y)
+{
+    return psm_viewport_pick(vp(h), x, y);
+}
+
+JNIEXPORT void JNICALL JNI_VP(nativeSetSelection)(JNIEnv *, jclass, jlong h, jint id)
+{
+    psm_viewport_set_selection(vp(h), id);
+}
+
+JNIEXPORT jstring JNICALL JNI_VP(nativeLastError)(JNIEnv *env, jclass, jlong h)
+{
+    return env->NewStringUTF(psm_viewport_last_error(vp(h)));
 }
 
 } /* extern "C" */

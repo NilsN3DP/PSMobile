@@ -39,6 +39,12 @@ set(PSM_CORE_SOURCES
     core/src/psmobile_presets.cpp
 )
 
+# Der Viewport liegt in derselben Bibliothek wie der Kern: er liest das
+# Modell direkt aus der Session, ohne Umweg ueber das ABI (E-03).
+if (ANDROID)
+    list(APPEND PSM_CORE_SOURCES viewport/src/psm_viewport.cpp)
+endif ()
+
 # Die JNI-Bruecke wird mit einkompiliert statt als eigene .so gebaut.
 # So liefert die App genau eine Bibliothek aus und Gradle braucht kein NDK.
 if (ANDROID)
@@ -49,6 +55,7 @@ add_library(psmobile_core SHARED ${PSM_CORE_SOURCES})
 
 target_include_directories(psmobile_core
     PUBLIC  ${CMAKE_CURRENT_SOURCE_DIR}/core/include
+            ${CMAKE_CURRENT_SOURCE_DIR}/viewport/include
     PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/core/src
 )
 
@@ -72,7 +79,8 @@ if (NOT MSVC)
 endif ()
 
 if (ANDROID)
-    target_link_libraries(psmobile_core PRIVATE log)
+    # GLESv2 statt v3: die Shader aus PrusaSlicer sind GLSL ES 1.00.
+    target_link_libraries(psmobile_core PRIVATE log GLESv2 EGL)
     target_link_options(psmobile_core PRIVATE
         # 16-KB-Seitengroesse ist ab Android 15 Pflicht
         "-Wl,-z,max-page-size=16384"

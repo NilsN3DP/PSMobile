@@ -54,14 +54,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.foundation.Canvas
+import de.psmobile.core.PsmViewport
 import de.psmobile.core.PsmCore
 import de.psmobile.slicing.SlicerService
 import de.psmobile.ui.theme.PrusaColors
@@ -117,7 +116,9 @@ private fun SlicerContent(
     val objects by service.objects.collectAsState()
     val progress by service.progress.collectAsState()
     val presets by service.presets.collectAsState()
+    val sceneRevision by service.sceneRevision.collectAsState()
     var selectedId by remember { mutableStateOf<Int?>(null) }
+    val sceneController = remember { SceneController() }
 
     val selected = objects.firstOrNull { it.id == selectedId } ?: objects.firstOrNull()
 
@@ -137,10 +138,22 @@ private fun SlicerContent(
             onDuplicate = { selected?.let { service.duplicate(it.id) } },
         )
 
-        Scene(
-            objectCount = objects.size,
-            modifier = Modifier.weight(1f).fillMaxHeight(),
-        )
+        // Echter GLES-Viewport auf Basis der Shader aus PrusaSlicer.
+        Box(Modifier.weight(1f).fillMaxHeight()) {
+            SceneView(
+                core = service.coreOrNull,
+                shaderDir = remember(service) { service.shaderDir() },
+                selectedId = selected?.id,
+                onSelect = { id -> selectedId = if (id >= 0) id else null },
+                invalidateKey = sceneRevision,
+                controller = sceneController,
+                modifier = Modifier.fillMaxSize(),
+            )
+            ViewBar(
+                sceneController,
+                Modifier.align(Alignment.BottomCenter).padding(bottom = 12.dp),
+            )
+        }
 
         Sidebar(
             service = service,
@@ -224,69 +237,40 @@ private fun ToolButton(
     }
 }
 
-/* ------------------------------------------------------------------ */
-/* 3D-Flaeche                                                          */
-/* ------------------------------------------------------------------ */
-
+/**
+ * Ansichtsleiste ueber dem Bett - Gegenstueck zur Ansichts-Werkzeugleiste
+ * unten im Slicer. Wichtig auf dem Tablet: nach ein paar Wischern ist man
+ * schnell unter dem Bett, und ohne festen Blickwinkel findet man nicht
+ * zurueck.
+ */
 @Composable
-private fun Scene(objectCount: Int, modifier: Modifier = Modifier) {
-    Box(modifier.background(PrusaColors.SceneGradient), contentAlignment = Alignment.Center) {
-        // Bis der echte GLES-Viewport steht (M4), wird das Druckbett als
-        // Platzhalter perspektivisch gezeichnet. So stimmt der Bildeindruck
-        // schon, und die Flaeche ist nicht bloss leer.
-        Canvas(Modifier.fillMaxSize()) {
-            val w = size.width
-            val h = size.height
-            val cx = w / 2f
-            val cy = h * 0.62f
-            val halfW = w * 0.34f
-            val depth = h * 0.20f
-            val skew = halfW * 0.42f
-
-            val fl = Offset(cx - halfW, cy + depth)
-            val fr = Offset(cx + halfW, cy + depth)
-            val br = Offset(cx + halfW - skew, cy - depth)
-            val bl = Offset(cx - halfW + skew, cy - depth)
-
-            val bed = androidx.compose.ui.graphics.Path().apply {
-                moveTo(fl.x, fl.y); lineTo(fr.x, fr.y)
-                lineTo(br.x, br.y); lineTo(bl.x, bl.y); close()
+private fun ViewBar(controller: SceneController, modifier: Modifier = Modifier) {
+    Row(
+        modifier
+            .clip(RoundedCornerShape(6.dp))
+            .background(PrusaColors.Panel.copy(alpha = 0.88f))
+            .padding(horizontal = 4.dp, vertical = 4.dp),
+        horizontalArrangement = Arrangement.spacedBy(2.dp),
+    ) {
+        val views = listOf(
+            "Iso" to PsmViewport.View.ISO,
+            "Oben" to PsmViewport.View.TOP,
+            "Vorn" to PsmViewport.View.FRONT,
+            "Hinten" to PsmViewport.View.BACK,
+            "Links" to PsmViewport.View.LEFT,
+            "Rechts" to PsmViewport.View.RIGHT,
+        )
+        views.forEach { (label, v) ->
+            Box(
+                Modifier
+                    .height(40.dp)
+                    .clip(RoundedCornerShape(4.dp))
+                    .clickable { controller.setView(v) }
+                    .padding(horizontal = 14.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(label, color = PrusaColors.TextPrimary, fontSize = 13.sp)
             }
-            drawPath(bed, PrusaColors.BedFill)
-
-            val steps = 10
-            for (i in 1 until steps) {
-                val t = i / steps.toFloat()
-                drawLine(
-                    PrusaColors.BedGrid,
-                    Offset(fl.x + (fr.x - fl.x) * t, fl.y + (fr.y - fl.y) * t),
-                    Offset(bl.x + (br.x - bl.x) * t, bl.y + (br.y - bl.y) * t),
-                    strokeWidth = 1f,
-                )
-                drawLine(
-                    PrusaColors.BedGrid,
-                    Offset(fl.x + (bl.x - fl.x) * t, fl.y + (bl.y - fl.y) * t),
-                    Offset(fr.x + (br.x - fr.x) * t, fr.y + (br.y - fr.y) * t),
-                    strokeWidth = 1f,
-                )
-            }
-            drawPath(
-                bed, PrusaColors.BedBorder,
-                style = androidx.compose.ui.graphics.drawscope.Stroke(width = 2.5f),
-            )
-        }
-
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(
-                if (objectCount == 0) "Bett ist leer" else "$objectCount Objekt(e) auf dem Bett",
-                color = PrusaColors.TextPrimary,
-                fontWeight = FontWeight.Medium,
-            )
-            Text(
-                "3D-Ansicht folgt in M4",
-                color = PrusaColors.TextMuted,
-                style = MaterialTheme.typography.labelMedium,
-            )
         }
     }
 }

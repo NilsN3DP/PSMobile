@@ -121,6 +121,13 @@ class PsmCore private constructor(private var handle: Long) : Closeable {
 
     fun lastError(): String = if (handle == 0L) "" else nativeLastError(handle)
 
+    /**
+     * Rohzeiger auf die Session - nur fuer den Viewport, der im selben
+     * C++-Prozessraum lebt und das Modell direkt liest (E-03).
+     * Kein Aufrufer ausserhalb von PsmViewport darf das benutzen.
+     */
+    internal val nativeHandle: Long get() = handle
+
     fun clear() = check(nativeClear(requireHandle()), "Zuruecksetzen")
 
     fun loadBundledPresets() = check(nativeLoadPresets(requireHandle()), "Profile laden")
