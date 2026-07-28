@@ -19,9 +19,13 @@
         android:largeHeap="true"
         android:theme="@style/Theme.PSMobile">
 
+        <!-- singleTask: ohne das erzeugt jeder eingehende VIEW-Intent eine
+             zweite Activity-Instanz, deren onServiceConnected das Modell ein
+             zweites Mal importiert. Befund A5 in docs/09-fehlerliste.md. -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
+            android:launchMode="singleTask"
             android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|density"
             android:theme="@style/Theme.PSMobile">
             <intent-filter>

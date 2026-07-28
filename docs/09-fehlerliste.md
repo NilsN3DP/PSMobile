@@ -13,8 +13,12 @@ Legende: **A** = macht die App unbrauchbar oder verliert Daten,
 
 ## A - Muss vor jedem ernsthaften Test weg
 
-### A1 · Eingehende Datei holt die Ansicht nicht zurueck
-**Gemessen.** Ein Modell per Teilen oder Oeffnen zu schicken, waehrend
+### A1 · Eingehende Datei holt die Ansicht nicht zurueck — BEHOBEN
+Behoben im Loop-Durchlauf 01:20. Der Navigationszustand liegt jetzt als
+`SlicerService.Screen` im Service statt in einem lokalen `remember`, und
+`loadModel` ruft `showBed()`. Am Geraet nachgeprueft.
+
+**Ursprungsbefund, gemessen.** Ein Modell per Teilen oder Oeffnen zu schicken, waehrend
 der Drucker- oder Einstellungsbildschirm offen ist, laedt das Modell
 unsichtbar im Hintergrund. Der Nutzer sieht weiter die alte Seite und
 haelt die App fuer kaputt.
@@ -24,6 +28,17 @@ haelt die App fuer kaputt.
 `remember`.
 *Ansatz*: Beide Zustaende in den Service heben oder beim Import ein
 Ereignis senden, das die Oberflaeche auf das Bett zurueckstellt.
+
+### A5 · Modell wird doppelt importiert — BEHOBEN
+Beim Nachpruefen von A1 aufgefallen: Ein eingehender VIEW-Intent erzeugte
+mit dem Standard-Startmodus eine **zweite** Activity-Instanz. Deren
+`onServiceConnected` importierte das Modell ein zweites Mal - auf dem
+Bett lagen zwei identische Wuerfel.
+
+Behoben durch `android:launchMode="singleTask"` und eine Sperre, die
+denselben Intent nicht zweimal auswertet. Am Geraet nachgeprueft: nur
+noch ein Objekt, und der Emulator meldet, dass der Intent an die
+bestehende Instanz zugestellt wurde.
 
 ### A2 · Einstellungen fragen pro Bild ueber JNI ab
 `SettingsScreen` ruft `core.configMeta(key)` fuer **jeden** Parameter der

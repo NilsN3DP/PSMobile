@@ -253,6 +253,28 @@ class SlicerService : Service() {
     /** Fuer den Viewport, der direkt auf der Session arbeitet (E-03). */
     val coreOrNull: PsmCore? get() = core
 
+    /*
+     * Navigationszustand im Service, nicht in der Oberflaeche.
+     *
+     * Grund: Eine per Teilen hereinkommende Datei muss die Ansicht aufs
+     * Bett zurueckholen koennen. Lag der Zustand in einem lokalen
+     * `remember`, lud das Modell unsichtbar im Hintergrund, waehrend der
+     * Nutzer weiter den Druckerbildschirm sah - Befund A1 in
+     * docs/09-fehlerliste.md.
+     */
+    sealed interface Screen {
+        data object Bed : Screen
+        data class Settings(val tab: String) : Screen
+        data object Printers : Screen
+    }
+
+    private val _screen = MutableStateFlow<Screen>(Screen.Bed)
+    val screen: StateFlow<Screen> = _screen.asStateFlow()
+
+    fun showScreen(s: Screen) { _screen.value = s }
+
+    fun showBed() { _screen.value = Screen.Bed }
+
     /** Verzeichnis mit den GLES-Shadern aus PrusaSlicer. */
     fun shaderDir(): String =
         File(ResourceInstaller.ensureInstalled(this), "shaders/ES").absolutePath
@@ -364,6 +386,9 @@ class SlicerService : Service() {
         val c = ensureCore()
         c.loadModel(path)
         refreshObjects()
+        // Nach einem Import gehoert die Aufmerksamkeit aufs Bett - sonst
+        // laedt das Modell unsichtbar hinter einem anderen Bildschirm.
+        showBed()
     }
 
     fun removeObject(id: Int) {

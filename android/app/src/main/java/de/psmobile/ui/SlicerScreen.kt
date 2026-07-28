@@ -122,9 +122,12 @@ private fun SlicerContent(
     val sceneRevision by service.sceneRevision.collectAsState()
     var selectedId by remember { mutableStateOf<Int?>(null) }
     val sceneController = remember { SceneController() }
-    var settingsTab by remember { mutableStateOf<String?>(null) }
+    // Navigation liegt im Service, damit ein eingehendes Modell die
+    // Ansicht aufs Bett zurueckholen kann - Befund A1.
+    val screen by service.screen.collectAsState()
+    val settingsTab = (screen as? SlicerService.Screen.Settings)?.tab
     var settingsMode by remember { mutableStateOf(PsmCore.Mode.SIMPLE) }
-    var showPrinters by remember { mutableStateOf(false) }
+    val showPrinters = screen is SlicerService.Screen.Printers
     val ctx = androidx.compose.ui.platform.LocalContext.current
     val sendState by service.sendState.collectAsState()
     var linkPrinters by remember { mutableStateOf(de.psmobile.net.PrinterStore.all(ctx)) }
@@ -133,7 +136,7 @@ private fun SlicerContent(
         PrintersScreen(
             presetNames = presets.printers,
             onClose = {
-                showPrinters = false
+                service.showBed()
                 linkPrinters = de.psmobile.net.PrinterStore.all(ctx)
             },
             onPickBackupFolder = onPickBackupFolder,
@@ -149,7 +152,7 @@ private fun SlicerContent(
                 tab = tab,
                 mode = settingsMode,
                 onModeChange = { settingsMode = it },
-                onClose = { settingsTab = null; service.refreshQuickSettings() },
+                onClose = { service.showBed(); service.refreshQuickSettings() },
             )
             return
         }
@@ -201,8 +204,8 @@ private fun SlicerContent(
             progress = progress,
             onSelect = { selectedId = it },
             onShare = onShare,
-            onOpenSettings = { settingsTab = it },
-            onManagePrinters = { showPrinters = true },
+            onOpenSettings = { service.showScreen(SlicerService.Screen.Settings(it)) },
+            onManagePrinters = { service.showScreen(SlicerService.Screen.Printers) },
             linkPrinters = linkPrinters,
             sendState = sendState,
             modifier = Modifier.width(SIDEBAR_WIDTH).fillMaxHeight(),

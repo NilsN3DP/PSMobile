@@ -144,3 +144,32 @@ Benutzername und Passwort arbeitet, nicht mehr mit API-Schluessel.
   hatten, werden weiter als API-Schluessel behandelt.
 
 **Weiterhin ungetestet gegen ein echtes Geraet.**
+
+### 2026-07-29, 01:20 - Loop-Durchlauf 1: A1 und A5
+
+**Gemacht**
+- A1 behoben: Navigationszustand aus der Oberflaeche in den Service
+  gehoben (`SlicerService.Screen`). `loadModel` ruft jetzt `showBed()`,
+  damit ein hereinkommendes Modell die Ansicht zurueckholt.
+- A5 dabei entdeckt und gleich behoben: Der eingehende Intent erzeugte
+  eine zweite Activity-Instanz, die das Modell ein zweites Mal
+  importierte - zwei identische Wuerfel auf dem Bett. Jetzt
+  `launchMode=singleTask` plus eine Sperre gegen doppelte Auswertung
+  desselben Intents.
+
+**Gemessen**
+- Vorher: Druckerbildschirm blieb stehen, Modell lud unsichtbar, danach
+  lagen zwei Objekte auf dem Bett.
+- Nachher: Ansicht springt aufs Bett, genau ein Objekt.
+
+**Aufgefallen**
+- Beim ersten Testlauf waren die Taps zu frueh - die Ersteinrichtung
+  braucht nach dem Start rund 15 s, bis die Liste steht. Wer per
+  `input tap` testet, muss vorher per Screenshot pruefen, ob die
+  Oberflaeche wirklich da ist. Sonst haelt man einen Bedienfehler fuer
+  einen Programmfehler; genau das ist hier einmal passiert.
+- Ein XML-Kommentar zwischen den Attributen eines Tags ist ungueltig.
+  Der Gradle-Build meldet das nicht deutlich, er lief einfach durch.
+- Backticks in einem ssh-Kommando werden von der lokalen Shell als
+  Kommandosubstitution gelesen. Fuer Dokumentaenderungen die
+  Datei-Werkzeuge nehmen, nicht python-Heredocs ueber ssh.

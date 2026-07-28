@@ -109,6 +109,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
+        setIntent(intent)
         handleIncomingIntent(intent)
     }
 
@@ -117,7 +118,13 @@ class MainActivity : ComponentActivity() {
         super.onDestroy()
     }
 
+    /** Verhindert, dass derselbe Intent zweimal ausgewertet wird. */
+    private var handledIntent: Intent? = null
+
     private fun handleIncomingIntent(intent: Intent?) {
+        if (intent == null || intent === handledIntent) return
+        handledIntent = intent
+
         val uri: Uri? = when (intent?.action) {
             Intent.ACTION_VIEW -> intent.data
             Intent.ACTION_SEND -> intent.getParcelableExtra(Intent.EXTRA_STREAM)
