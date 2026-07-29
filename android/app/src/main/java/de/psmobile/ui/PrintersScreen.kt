@@ -60,6 +60,7 @@ fun PrintersScreen(
     presetNames: List<String>,
     onClose: () -> Unit,
     onPickBackupFolder: () -> Unit,
+    onReopenSetup: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -139,6 +140,19 @@ fun PrintersScreen(
                     },
                     colors = SwitchDefaults.colors(checkedTrackColor = PrusaColors.Orange),
                 )
+            }
+
+            // Zurueck in die Druckerauswahl. Ohne das kam man nach der
+            // Ersteinrichtung nie wieder an sie heran - Befund B2.
+            Row(verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+                Column(Modifier.weight(1f)) {
+                    Text("Druckermodelle ändern",
+                         color = PrusaColors.TextPrimary, fontSize = 14.sp)
+                    Text("Legt fest, welche Prusa-Modelle und Düsengrößen in den Profilen erscheinen.",
+                         color = PrusaColors.TextMuted, fontSize = 11.sp)
+                }
+                OutlinedButton(onClick = onReopenSetup) { Text("Auswahl öffnen") }
             }
 
             // Sicherung gesendeter Dateien

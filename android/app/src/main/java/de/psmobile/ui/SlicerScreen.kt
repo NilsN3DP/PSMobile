@@ -141,6 +141,7 @@ private fun SlicerContent(
                 linkPrinters = de.psmobile.net.PrinterStore.all(ctx)
             },
             onPickBackupFolder = onPickBackupFolder,
+            onReopenSetup = { service.reopenSetup() },
         )
         return
     }

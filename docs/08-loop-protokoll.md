@@ -234,3 +234,27 @@ gearbeitet wurde, und wurden als ein Durchlauf behandelt.
 - Ausserdem verschieben sich die Knoepfe der Seitenleiste je nach
   Zustand - "Jetzt slicen" sitzt mit sichtbarer Statistik hoeher als
   ohne. Feste Koordinaten aus einem alten Screenshot sind wertlos.
+
+### 2026-07-29, 05:15 - Durchlauf 5: B2
+
+Bewusst ein kleiner Punkt, weil um 05:30 nichts Grosses mehr angefangen
+werden soll.
+
+**Gemacht**
+- B2 behoben: Die Druckerverwaltung hat den Eintrag "Druckermodelle
+  aendern" mit der Schaltflaeche "Auswahl oeffnen". `reopenSetup()`
+  existierte schon, hing nur an nichts.
+
+**Gemessen**
+- Auswahl geht auf, Protokoll meldet "37 Druckermodelle gefunden".
+
+**Dabei gefunden: B9**
+- Die wiedergeoeffnete Auswahl steht auf "0 / 35" und ist leer, obwohl
+  Drucker installiert sind. Wer nur eine Duesengroesse ergaenzen will,
+  muss die ganze bisherige Auswahl aus dem Gedaechtnis wiederherstellen.
+  Als B9 aufgenommen, mit Ansatz - `installedPrinters()` liefert die
+  Auswahl bereits, sie muss nur als Startwert durchgereicht werden.
+
+**Aufgefallen**
+- Die Umrechnung Screenshot mal 1,28 hat diesmal auf Anhieb gestimmt.
+  Die Notiz aus dem vorigen Durchlauf hat sich sofort ausgezahlt.

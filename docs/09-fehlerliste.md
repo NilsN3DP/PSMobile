@@ -91,9 +91,28 @@ Vieleck aus `bed_shape`.
 `bed_texture` aus dem Druckerprofil laden und statt des Vielecks
 zeichnen. Das ist uebernehmbare Information - siehe E-12.
 
-### B2 · Kein Weg zurueck in die Druckerauswahl
-`SlicerService.reopenSetup()` existiert, ist aber an keine Schaltflaeche
-gehaengt. Wer einen zweiten Drucker hat, kommt nicht mehr an die Auswahl.
+### B9 · Wiedergeoeffnete Druckerauswahl ist leer
+Beim Nachpruefen von B2 aufgefallen: Oeffnet man die Druckerauswahl
+erneut, steht sie auf "0 / 35" und nichts ist angehakt - obwohl Drucker
+installiert sind. Wer nur eine Duesengroesse ergaenzen will, muss seine
+gesamte bisherige Auswahl aus dem Gedaechtnis wiederherstellen.
+
+*Ansatz*: `SetupScreen` mit `PrinterStore`-artiger Vorbelegung starten.
+Die Auswahl liegt bereits in den App-Einstellungen unter `printers`;
+`SlicerService.installedPrinters()` liefert sie. Nur als Startwert von
+`selected` durchreichen.
+
+### B2 · Kein Weg zurueck in die Druckerauswahl — BEHOBEN
+Behoben im Loop-Durchlauf 05:15. Die Druckerverwaltung hat jetzt den
+Eintrag "Druckermodelle aendern" mit der Schaltflaeche "Auswahl oeffnen",
+die `SlicerService.reopenSetup()` ruft.
+
+Am Geraet nachgeprueft: Die Auswahl geht auf, das Protokoll meldet
+"37 Druckermodelle gefunden". Dabei fiel B9 auf.
+
+*Ursprungsbefund*: `reopenSetup()` existierte, war aber an keine
+Schaltflaeche gehaengt - nach der Ersteinrichtung kam man nie wieder an
+die Auswahl heran.
 
 ### B3 · Senden geht immer an den ersten Drucker
 `linkPrinters.first()` ist fest verdrahtet. Bei mehreren Geraeten fehlt
