@@ -158,6 +158,20 @@ PSM_API psm_result psm_model_set_position(psm_session *s, psm_object_id id, floa
 PSM_API psm_result psm_model_set_rotation(psm_session *s, psm_object_id id, float rx, float ry, float rz);
 PSM_API psm_result psm_model_set_scale(psm_session *s, psm_object_id id, float sx, float sy, float sz);
 
+/**
+ * Pfad zum Druckbett fuer den gewaehlten Drucker.
+ *
+ * Prusa liefert zu jedem Druckermodell ein Bettmodell als STL und eine
+ * Textur als SVG mit; die Namen stehen im Abschnitt [printer_model:...]
+ * des Herstellerbuendels. Ohne sie zeichnen wir nur ein flaches Vieleck
+ * aus bed_shape.
+ *
+ * Geliefert wird der reine Dateiname, ohne Pfad - wo die Dateien liegen,
+ * weiss die App. Leer, wenn das Modell keines angibt.
+ */
+PSM_API psm_result psm_bed_model_file(psm_session *s, char *out, size_t out_cap);
+PSM_API psm_result psm_bed_texture_file(psm_session *s, char *out, size_t out_cap);
+
 /** Spiegelt an einer Achse: 0 = X, 1 = Y, 2 = Z. */
 PSM_API psm_result psm_model_mirror(psm_session *s, psm_object_id id, int32_t axis);
 

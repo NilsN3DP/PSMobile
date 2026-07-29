@@ -197,6 +197,8 @@ struct psm_viewport
 {
     psm_session *session = nullptr;
     std::string  shader_dir;
+    Mesh         bed_model;      /* Prusas STL, falls vorhanden */
+    bool         has_bed_model = false;
     std::string  last_error;
 
     Program prog_lit;    // gouraud_light - Modelle
@@ -259,8 +261,65 @@ void upload(Mesh &m, const std::vector<Vertex> &verts)
 }
 
 /** Baut das Druckbett aus der aktiven Konfiguration - nicht geraten. */
+/*
+ * Prusas eigenes Bettmodell laden.
+ *
+ * Zu jedem Druckermodell liefert Prusa ein STL des Betts mit; der Name
+ * steht im Herstellerbuendel und kommt ueber psm_bed_model_file. Das
+ * flache Vieleck aus bed_shape bleibt als Rueckfallebene fuer Drucker
+ * ohne Modell und fuer eigene Bettformen.
+ *
+ * @return true wenn ein Modell geladen wurde
+ */
+bool build_bed_model(psm_viewport *v)
+{
+    char path_buf[512] = { 0 };
+    if (psm_bed_model_file(v->session, path_buf, sizeof(path_buf)) != PSM_OK ||
+        path_buf[0] == 0)
+        return false;
+
+    /* Der Pfad ist bereits vollstaendig: system_printer_bed_model setzt
+     * ihn aus data_dir bzw. resources_dir zusammen, und beide haben wir
+     * beim Anlegen der Sitzung gesetzt. */
+    const std::string path = path_buf;
+
+    Slic3r::TriangleMesh mesh;
+    try {
+        if (! mesh.ReadSTLFile(path.c_str()) || mesh.empty()) {
+            psm_emit_log(PSM_LOG_WARN, "Bettmodell nicht lesbar: " + path);
+            return false;
+        }
+    } catch (const std::exception &e) {
+        psm_emit_log(PSM_LOG_WARN, std::string("Bettmodell: ") + e.what());
+        return false;
+    }
+
+    std::vector<Vertex> verts;
+    verts.reserve(mesh.its.indices.size() * 3);
+    for (const Slic3r::Vec3i32 &tri : mesh.its.indices) {
+        const Slic3r::Vec3f &a = mesh.its.vertices[tri(0)];
+        const Slic3r::Vec3f &b = mesh.its.vertices[tri(1)];
+        const Slic3r::Vec3f &c = mesh.its.vertices[tri(2)];
+        const Slic3r::Vec3f n = (b - a).cross(c - a).normalized();
+        for (const Slic3r::Vec3f &p : { a, b, c })
+            verts.push_back({ p.x(), p.y(), p.z(), n.x(), n.y(), n.z() });
+    }
+
+    upload(v->bed_model, verts);
+    psm_emit_log(PSM_LOG_INFO,
+                 "Bettmodell geladen: " + path + " (" +
+                 std::to_string(mesh.its.indices.size()) + " Dreiecke)");
+    return true;
+}
+
 void build_bed(psm_viewport *v)
 {
+    /* Erst das echte Modell versuchen, dann die Flaeche darueber legen -
+     * die Textur des Druckbereichs fehlt noch, deshalb bleibt das Raster
+     * als Orientierung sichtbar. */
+    v->bed_model.destroy();
+    v->has_bed_model = build_bed_model(v);
+
     Slic3r::Points pts;
     try {
         pts = Slic3r::get_bed_shape(v->session->config);
@@ -490,8 +549,18 @@ PSM_API void psm_viewport_render(psm_viewport *v)
      * Auch in der Vorschau: der Desktop zeigt es dort ebenfalls, und ohne
      * Bezugsflaeche schwebt das Teil im Nichts. */
     glDisable(GL_CULL_FACE);
-    draw(v->prog_flat, v->bed_fill, GL_TRIANGLES, view, proj, col_bed);
-    draw(v->prog_flat, v->bed_grid, GL_LINES, view, proj, col_grid);
+    if (v->has_bed_model) {
+        /* Prusas eigenes Bettmodell. Deutlich heller als der
+         * Hintergrund, sonst sieht man nur seinen Umriss - die
+         * Beleuchtung des gouraud_light-Shaders zieht die Farbe an den
+         * abgewandten Flaechen ohnehin stark herunter. */
+        static const float col_model[4] = { 0.55f, 0.56f, 0.58f, 1.f };
+        draw(v->prog_lit, v->bed_model, GL_TRIANGLES, view, proj, col_model);
+    } else {
+        draw(v->prog_flat, v->bed_fill, GL_TRIANGLES, view, proj, col_bed);
+    }
+    if (! v->has_bed_model)
+        draw(v->prog_flat, v->bed_grid, GL_LINES, view, proj, col_grid);
     glEnable(GL_CULL_FACE);
 
     /* In der Vorschau zeichnet libvgcode die Werkzeugwege - dieselbe

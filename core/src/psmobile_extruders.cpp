@@ -325,6 +325,49 @@ PSM_API psm_result psm_config_set_at(psm_session *s, const char *key, int32_t in
 }
 
 /* ------------------------------------------------------------------ */
+/* Druckbett                                                           */
+/* ------------------------------------------------------------------ */
+
+/*
+ * PrusaSlicer loest beides selbst auf - system_printer_bed_model und
+ * system_printer_bed_texture suchen im Herstellerbuendel den Abschnitt
+ * des Druckermodells und geben dessen Eintraege zurueck. Wir reichen sie
+ * nur nach oben durch; nachbauen waere hier besonders albern, weil die
+ * Zuordnung Drucker auf Bettmodell reine Herstellerdaten sind.
+ */
+PSM_API psm_result psm_bed_model_file(psm_session *s, char *out, size_t out_cap)
+{
+    if (s == nullptr || out == nullptr)
+        return PSM_ERR_INVALID_ARG;
+    if (! s->presets)
+        return PSM_ERR_NOT_FOUND;
+    try {
+        const Preset &p = s->presets->printers.get_edited_preset();
+        copy_str(out, out_cap, Slic3r::PresetUtils::system_printer_bed_model(p));
+        return PSM_OK;
+    } catch (const std::exception &e) {
+        s->set_error(e.what());
+        return PSM_ERR_GENERIC;
+    }
+}
+
+PSM_API psm_result psm_bed_texture_file(psm_session *s, char *out, size_t out_cap)
+{
+    if (s == nullptr || out == nullptr)
+        return PSM_ERR_INVALID_ARG;
+    if (! s->presets)
+        return PSM_ERR_NOT_FOUND;
+    try {
+        const Preset &p = s->presets->printers.get_edited_preset();
+        copy_str(out, out_cap, Slic3r::PresetUtils::system_printer_bed_texture(p));
+        return PSM_OK;
+    } catch (const std::exception &e) {
+        s->set_error(e.what());
+        return PSM_ERR_GENERIC;
+    }
+}
+
+/* ------------------------------------------------------------------ */
 /* Extruder: Filament und Farbe je Kopf                                */
 /* ------------------------------------------------------------------ */
 
