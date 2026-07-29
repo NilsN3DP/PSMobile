@@ -679,7 +679,14 @@ PSM_API psm_result psm_config_get(psm_session *s, const char *key, char *out, si
             return PSM_ERR_INVALID_ARG;
         if (! s->config.has(key))
             return PSM_ERR_NOT_FOUND;
-        copy_str(out, out_cap, s->config.opt_serialize(key));
+        /* Bei Zeichenketten den rohen Wert: opt_serialize maskiert
+         * Zeilenumbrueche zu "\n", was in Start- und End-G-code die
+         * ganze Sequenz in eine Zeile zwingt. */
+        const Slic3r::ConfigOption *opt = s->config.option(key);
+        if (const auto *str = dynamic_cast<const Slic3r::ConfigOptionString *>(opt))
+            copy_str(out, out_cap, str->value);
+        else
+            copy_str(out, out_cap, s->config.opt_serialize(key));
         return PSM_OK;
     PSM_GUARD_END(s)
 }
@@ -740,6 +747,16 @@ PSM_API psm_result psm_config_set(psm_session *s, const char *key, const char *v
 
         Slic3r::PresetCollection *c = owning_collection(s, key);
         if (c != nullptr && c->get_edited_preset().config.has(key)) {
+            /* Gegenstueck zum Lesen: eine Zeichenkette wird direkt
+             * zugewiesen, damit echte Zeilenumbrueche erhalten bleiben.
+             * set_deserialize wuerde "\n" als zwei Zeichen lesen. */
+            Slic3r::ConfigOption *dst = c->get_edited_preset().config.option(key);
+            if (auto *str = dynamic_cast<Slic3r::ConfigOptionString *>(dst)) {
+                str->value = value;
+                c->update_dirty();
+                s->config = s->presets->full_config();
+                return PSM_OK;
+            }
             if (! c->get_edited_preset().config.set_deserialize_nothrow(key, value, subs)) {
                 s->set_error(std::string("ungueltiger Wert fuer ") + key + ": " + value);
                 return PSM_ERR_INVALID_ARG;

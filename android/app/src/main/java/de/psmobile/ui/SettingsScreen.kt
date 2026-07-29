@@ -67,6 +67,7 @@ fun SettingsScreen(
     onModeChange: (PsmCore.Mode) -> Unit,
     configRevision: Int,
     onClose: () -> Unit,
+    onTabChange: (String) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -85,7 +86,51 @@ fun SettingsScreen(
     }
     var pageIndex by remember(tab) { mutableStateOf(0) }
 
-    Row(modifier.fillMaxSize().background(PrusaColors.Background)) {
+    Column(modifier.fillMaxSize().background(PrusaColors.Background)) {
+
+    // --- Reiter wie oben im Desktop-Fenster ---------------------------
+    //
+    // Vorher kam man hier nur ueber ein kleines Zahnrad neben dem
+    // jeweiligen Auswahlfeld hinein und musste zum Bett zurueck, um den
+    // Bereich zu wechseln. Am Desktop sind es Reiter; hier auch.
+    Row(
+        Modifier.fillMaxWidth().background(PrusaColors.Panel),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            "‹  ${PsUi.tr("Back")}",
+            color = PrusaColors.Orange,
+            fontSize = 15.sp,
+            modifier = Modifier
+                .clickable(onClick = onClose)
+                .padding(horizontal = 16.dp, vertical = 14.dp),
+        )
+        listOf(
+            "print"    to "Print settings",
+            "filament" to "Filament settings",
+            "printer"  to "Printer settings",
+        ).forEach { (key, label) ->
+            val active = key == tab
+            Box(
+                Modifier
+                    .height(52.dp)
+                    .clickable(enabled = !active) { onTabChange(key) }
+                    .background(if (active) PrusaColors.Background else PrusaColors.Panel)
+                    .padding(horizontal = 20.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    PsUi.tr(label),
+                    color = if (active) PrusaColors.Orange else PrusaColors.TextMuted,
+                    fontSize = 14.sp,
+                    fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal,
+                )
+            }
+        }
+    }
+    HorizontalDivider(color = PrusaColors.Divider)
+
+    Row(Modifier.fillMaxSize()) {
 
         // --- Seitenliste, wie der Baum links im Desktop-Dialog ---------
         Column(
@@ -93,15 +138,6 @@ fun SettingsScreen(
                 .background(PrusaColors.Panel)
                 .verticalScroll(rememberScrollState()),
         ) {
-            Row(
-                Modifier.fillMaxWidth().height(52.dp)
-                    .clickable(onClick = onClose)
-                    .padding(horizontal = 12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text("‹  ${PsUi.tr("Back")}", color = PrusaColors.Orange, fontSize = 15.sp)
-            }
-            HorizontalDivider(color = PrusaColors.Divider)
 
             pages.forEachIndexed { i, page ->
                 val active = i == pageIndex
@@ -198,12 +234,23 @@ fun SettingsScreen(
                         )
                     }
                     items(visible, key = { it.second.key }) { (opt, meta) ->
+                        // Auch die Filamentwerte sind Vektoren mit einem
+                        // Eintrag je Extruder, weil full_config() ueber alle
+                        // Duesen zusammensetzt. Der Filamenttab bearbeitet
+                        // aber genau ein Filament - ohne Index staende in
+                        // "Diameter" beim XL-5T "1.75,1.75,1.75,1.75,1.75".
+                        val index = when {
+                            page.extruder >= 0 -> page.extruder
+                            tab == "filament"  -> 0
+                            else               -> -1
+                        }
                         SettingRow(core, meta, configRevision,
-                                   extruder = page.extruder, multiline = opt.code)
+                                   extruder = index, multiline = opt.code)
                     }
                 }
             }
         }
+    }
     }
 }
 

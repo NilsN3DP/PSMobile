@@ -161,6 +161,7 @@ private fun SlicerContent(
                 onModeChange = { settingsMode = it },
                 configRevision = configRevision,
                 onClose = { service.showBed(); service.refreshQuickSettings() },
+                onTabChange = { service.showScreen(SlicerService.Screen.Settings(it)) },
             )
             return
         }

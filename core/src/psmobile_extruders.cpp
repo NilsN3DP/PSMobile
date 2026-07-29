@@ -247,6 +247,21 @@ PSM_API psm_result psm_preset_select_keeping(psm_session *s, psm_preset_type typ
 /* Werte mit einem Eintrag je Extruder                                 */
 /* ------------------------------------------------------------------ */
 
+/*
+ * Text so, wie er im Feld stehen soll.
+ *
+ * serialize() maskiert bei ConfigOptionString die Zeilenumbrueche zu
+ * "\n". Fuer Start- und End-G-code ist das falsch - dort stuende sonst
+ * die ganze Sequenz woertlich in einer Zeile. PrusaSlicer zeigt in
+ * seinen Codefeldern ebenfalls den rohen Wert.
+ */
+static std::string display_value(const ConfigOption *opt)
+{
+    if (const auto *str = dynamic_cast<const ConfigOptionString *>(opt))
+        return str->value;
+    return opt->serialize();
+}
+
 PSM_API psm_result psm_config_get_at(psm_session *s, const char *key, int32_t index,
                                      char *out, size_t out_cap)
 {
@@ -261,7 +276,7 @@ PSM_API psm_result psm_config_get_at(psm_session *s, const char *key, int32_t in
          * genau einmal und wird unveraendert durchgereicht. */
         const auto *vec = dynamic_cast<const ConfigOptionVectorBase *>(opt);
         if (vec == nullptr || static_cast<size_t>(index) >= vec->size()) {
-            copy_str(out, out_cap, opt->serialize());
+            copy_str(out, out_cap, display_value(opt));
             return PSM_OK;
         }
         copy_str(out, out_cap, vec->vserialize()[static_cast<size_t>(index)]);
