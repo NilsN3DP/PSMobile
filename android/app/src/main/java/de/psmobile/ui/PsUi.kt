@@ -17,8 +17,28 @@ object PsUi {
     private const val TAG = "PsUi"
     private const val ROOT = "psui"
 
-    data class Group(val title: String, val options: List<String>)
-    data class Page(val title: String, val icon: String, val groups: List<Group>)
+    /**
+     * Ein Parameter auf einer Seite.
+     *
+     * code markiert die mehrzeiligen G-code-Felder - im Original
+     * option.opt.is_code, das ein Textfeld ueber mehrere Zeilen statt
+     * einer Eingabezeile bedeutet.
+     */
+    data class Option(val key: String, val code: Boolean = false)
+
+    data class Group(val title: String, val options: List<Option>)
+
+    /**
+     * perExtruder markiert die Extruderseite. PrusaSlicer legt davon zur
+     * Laufzeit eine je Duese an ("Extruder 1" bis "Extruder 5"); der
+     * Titel traegt hier {n} als Platzhalter fuer die Nummer.
+     */
+    data class Page(
+        val title: String,
+        val icon: String,
+        val groups: List<Group>,
+        val perExtruder: Boolean = false,
+    )
     data class Tool(val name: String, val icon: String, val tooltip: String)
 
     /** Einstellungsseiten je Bereich: "print", "filament", "printer". */
@@ -92,12 +112,16 @@ object PsUi {
                     Page(
                         title = p.getString("title"),
                         icon = p.optString("icon"),
+                        perExtruder = p.optBoolean("per_extruder"),
                         groups = (0 until groups.length()).map { j ->
                             val g = groups.getJSONObject(j)
                             val opts = g.getJSONArray("options")
                             Group(
                                 title = g.optString("title"),
-                                options = (0 until opts.length()).map { opts.getString(it) },
+                                options = (0 until opts.length()).map { k ->
+                                    val o = opts.getJSONObject(k)
+                                    Option(o.getString("key"), o.optBoolean("code"))
+                                },
                             )
                         },
                     )

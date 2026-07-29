@@ -244,6 +244,72 @@ PSM_API psm_result psm_preset_select_keeping(psm_session *s, psm_preset_type typ
 }
 
 /* ------------------------------------------------------------------ */
+/* Werte mit einem Eintrag je Extruder                                 */
+/* ------------------------------------------------------------------ */
+
+PSM_API psm_result psm_config_get_at(psm_session *s, const char *key, int32_t index,
+                                     char *out, size_t out_cap)
+{
+    if (s == nullptr || key == nullptr || out == nullptr || index < 0)
+        return PSM_ERR_INVALID_ARG;
+    try {
+        const ConfigOption *opt = s->config.option(key);
+        if (opt == nullptr)
+            return PSM_ERR_NOT_FOUND;
+
+        /* Nur Vektoren haben Eintraege je Extruder; alles andere gibt es
+         * genau einmal und wird unveraendert durchgereicht. */
+        const auto *vec = dynamic_cast<const ConfigOptionVectorBase *>(opt);
+        if (vec == nullptr || static_cast<size_t>(index) >= vec->size()) {
+            copy_str(out, out_cap, opt->serialize());
+            return PSM_OK;
+        }
+        copy_str(out, out_cap, vec->vserialize()[static_cast<size_t>(index)]);
+        return PSM_OK;
+    } catch (const std::exception &e) {
+        s->set_error(e.what());
+        return PSM_ERR_GENERIC;
+    }
+}
+
+PSM_API psm_result psm_config_set_at(psm_session *s, const char *key, int32_t index,
+                                     const char *value)
+{
+    if (s == nullptr || key == nullptr || value == nullptr || index < 0)
+        return PSM_ERR_INVALID_ARG;
+    try {
+        const ConfigOption *opt = s->config.option(key);
+        if (opt == nullptr) {
+            s->set_error(std::string("unbekannter Parameter: ") + key);
+            return PSM_ERR_NOT_FOUND;
+        }
+        const auto *vec = dynamic_cast<const ConfigOptionVectorBase *>(opt);
+        if (vec == nullptr)
+            return psm_config_set(s, key, value);
+
+        /* Die ganze Reihe holen, den einen Eintrag ersetzen, zurueck-
+         * schreiben. So bleibt es bei einem einzigen Weg ins bearbeitete
+         * Preset - psm_config_set kuemmert sich um Sammlung und Dirty-
+         * Kennzeichnung. */
+        std::vector<std::string> values = vec->vserialize();
+        if (static_cast<size_t>(index) >= values.size())
+            values.resize(static_cast<size_t>(index) + 1,
+                          values.empty() ? std::string() : values.back());
+        values[static_cast<size_t>(index)] = value;
+
+        std::string joined;
+        for (size_t i = 0; i < values.size(); ++i) {
+            if (i) joined += ',';
+            joined += values[i];
+        }
+        return psm_config_set(s, key, joined.c_str());
+    } catch (const std::exception &e) {
+        s->set_error(e.what());
+        return PSM_ERR_GENERIC;
+    }
+}
+
+/* ------------------------------------------------------------------ */
 /* Extruder: Filament und Farbe je Kopf                                */
 /* ------------------------------------------------------------------ */
 

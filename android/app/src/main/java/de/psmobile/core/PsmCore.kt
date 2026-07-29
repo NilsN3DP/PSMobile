@@ -79,6 +79,8 @@ class PsmCore private constructor(private var handle: Long) : Closeable {
         @JvmStatic private external fun nativeGcodeExport(h: Long, path: String): Int
         @JvmStatic private external fun nativeEstimateMemory(h: Long): Long
         @JvmStatic private external fun nativeGcodeSuggestedName(h: Long): String
+        @JvmStatic private external fun nativeConfigGetAt(h: Long, key: String, index: Int): String?
+        @JvmStatic private external fun nativeConfigSetAt(h: Long, key: String, index: Int, value: String): Int
         @JvmStatic private external fun nativeExtruderCount(h: Long): Int
         @JvmStatic private external fun nativeExtruderFilament(h: Long, idx: Int): String
         @JvmStatic private external fun nativeExtruderFilamentSet(h: Long, idx: Int, name: String): Int
@@ -293,6 +295,16 @@ class PsmCore private constructor(private var handle: Long) : Closeable {
      * geslict wurde.
      */
     fun suggestedGcodeName(): String = nativeGcodeSuggestedName(requireHandle())
+
+    /**
+     * Ein einzelner Eintrag eines Parameters, der je Extruder einen hat -
+     * retract_length, nozzle_diameter und die uebrige Extruderseite.
+     * Bei Parametern ohne Vektor dasselbe wie get/set.
+     */
+    fun getAt(key: String, index: Int): String? = nativeConfigGetAt(requireHandle(), key, index)
+
+    fun setAt(key: String, index: Int, value: String) =
+        check(nativeConfigSetAt(requireHandle(), key, index, value), "Wert je Extruder")
 
     /* --- Extruder ---------------------------------------------------- */
 

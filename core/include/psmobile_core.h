@@ -282,6 +282,23 @@ PSM_API psm_result psm_preset_select_keeping(psm_session *s, psm_preset_type typ
                                              const char *const *values,
                                              size_t count);
 
+/*
+ * Werte, die je Extruder einen Eintrag haben.
+ *
+ * retract_length, nozzle_diameter, extruder_offset und die uebrigen
+ * Parameter der Extruderseite sind Vektoren. psm_config_get liefert
+ * dafuer die ganze Reihe ("0.8,0.8,0.8"), was sich nicht bearbeiten
+ * laesst. Diese beiden greifen einen einzelnen Eintrag heraus - genau
+ * wie append_single_option_line(key, "", extruder_idx) am Desktop.
+ *
+ * Bei Parametern ohne Vektor verhalten sie sich wie psm_config_get/set.
+ */
+PSM_API psm_result psm_config_get_at(psm_session *s, const char *key, int32_t index,
+                                     char *out, size_t out_cap);
+
+PSM_API psm_result psm_config_set_at(psm_session *s, const char *key, int32_t index,
+                                     const char *value);
+
 /* ------------------------------------------------------------------ */
 /* Extruder: Filament und Farbe je Kopf                                */
 /* ------------------------------------------------------------------ */

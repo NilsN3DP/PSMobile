@@ -373,6 +373,24 @@ JNIEXPORT jint JNICALL JNI_FN(nativePresetSelect)(JNIEnv *env, jclass, jlong h,
  * Eintrag.
  */
 
+JNIEXPORT jstring JNICALL JNI_FN(nativeConfigGetAt)(JNIEnv *env, jclass, jlong h,
+                                                    jstring key, jint index)
+{
+    const std::string k = jstr(env, key);
+    char buf[1024] = { 0 };
+    if (psm_config_get_at(sess(h), k.c_str(), index, buf, sizeof(buf)) != PSM_OK)
+        return nullptr;
+    return env->NewStringUTF(buf);
+}
+
+JNIEXPORT jint JNICALL JNI_FN(nativeConfigSetAt)(JNIEnv *env, jclass, jlong h,
+                                                 jstring key, jint index, jstring value)
+{
+    const std::string k = jstr(env, key);
+    const std::string v = jstr(env, value);
+    return psm_config_set_at(sess(h), k.c_str(), index, v.c_str());
+}
+
 JNIEXPORT jint JNICALL JNI_FN(nativeExtruderCount)(JNIEnv *, jclass, jlong h)
 {
     return psm_extruder_count(sess(h));
