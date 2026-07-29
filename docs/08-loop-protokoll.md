@@ -258,3 +258,57 @@ werden soll.
 **Aufgefallen**
 - Die Umrechnung Screenshot mal 1,28 hat diesmal auf Anhieb gestimmt.
   Die Notiz aus dem vorigen Durchlauf hat sich sofort ausgezahlt.
+
+### 2026-07-29, 05:45 - Durchlauf 6, letzter der Nacht: B9
+
+Nach 5:30, deshalb bewusst nur der Zehnzeiler, dessen Ansatz im vorigen
+Durchlauf schon notiert war.
+
+**Gemacht**
+- B9 behoben: `SetupScreen` nimmt eine Vorauswahl entgegen,
+  MainActivity reicht `installedPrinters()` durch.
+
+**Gemessen**
+- Nach Einrichtung mit MK4S und 0.4er Duese zeigt die wiedergeoeffnete
+  Auswahl "1 / 35", die MK4S ist angehakt und aufgeklappt, die 0.4er
+  Duese markiert. Vorher "0 / 35" und alles leer.
+
+---
+
+## Gesamtbilanz der Nacht, 29.07.2026
+
+Sechs Durchlaeufe zwischen 01:14 und 05:50.
+
+**Behoben, alle am Geraet nachgeprueft**
+
+| Befund | Was es war |
+| --- | --- |
+| A1 | Eingehende Datei holte die Ansicht nicht zurueck |
+| A2 | Einstellungen fragten pro Bild ueber JNI ab |
+| A3 | Werte veralteten beim Profilwechsel und wurden falsch zurueckgeschrieben |
+| A4 | Sprachwahl wurde nicht gemerkt |
+| A5 | Modell wurde doppelt importiert |
+| B2 | Kein Weg zurueck in die Druckerauswahl |
+| B5 | Alter G-Code ueberlebte "Bett leeren" - haette einen falschen Druck ausloesen koennen |
+| B9 | Wiedergeoeffnete Druckerauswahl war leer |
+
+**Die Stufe A ist damit vollstaendig abgearbeitet.** A5 und B9 wurden
+erst beim Nachpruefen anderer Befunde entdeckt - Nachpruefen lohnt sich.
+
+**Offen**: B1 (echtes Bettmodell statt flachem Vieleck; Modelle und
+Texturen liegen bereits in den Assets), B3, B4, B6, B7, B8 sowie vier
+C-Befunde. Dazu die Arbeitsliste in `07-stopp-punkte.md`, allen voran
+Objekt skalieren und drehen.
+
+**Was diese Nacht nicht leisten konnte**: PrusaLink ist gebaut, aber nie
+gegen ein echtes Geraet gelaufen. Im Emulator gibt es keinen Drucker.
+Das ist der groesste verbleibende Unsicherheitsfaktor und braucht einen
+MK4S im Netz.
+
+**Drei Lehren fuers Verfahren**
+1. Vor jedem `input tap` einen Screenshot pruefen. Zweimal hat ein
+   Bedienfehler wie ein Programmfehler ausgesehen.
+2. Geraetekoordinate = abgelesener Wert mal 1,28. Screenshots kommen in
+   2000x1250 an, das Geraet hat 2560x1600.
+3. `adb install -r` tauscht die DEX nicht zuverlaessig. Immer erst
+   deinstallieren.

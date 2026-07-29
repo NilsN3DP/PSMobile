@@ -95,6 +95,7 @@ class MainActivity : ComponentActivity() {
                         busy = busy,
                         onConfirm = { svc.completeSetup(it) },
                         onLanguageChange = { svc.uiLanguage = it },
+                        preselected = svc.installedPrinters(),
                     )
                 } else {
                     SlicerScreen(

@@ -55,10 +55,15 @@ fun SetupScreen(
     busy: Boolean,
     onConfirm: (List<String>) -> Unit,
     onLanguageChange: (String) -> Unit,
+    /** Bisher installierte Modelle, Format "vendor:model:variant". */
+    preselected: Set<String> = emptySet(),
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
-    var selected by remember { mutableStateOf(setOf<String>()) }
+    // Mit der bisherigen Wahl starten. Sonst muesste man beim blossen
+    // Ergaenzen einer Duesengroesse alles aus dem Gedaechtnis neu
+    // zusammenklicken - Befund B9.
+    var selected by remember(preselected) { mutableStateOf(preselected) }
     var showSla by remember { mutableStateOf(false) }
     var langMenu by remember { mutableStateOf(false) }
     var lang by remember { mutableStateOf(PsUi.language) }

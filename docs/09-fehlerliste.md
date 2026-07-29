@@ -91,7 +91,15 @@ Vieleck aus `bed_shape`.
 `bed_texture` aus dem Druckerprofil laden und statt des Vielecks
 zeichnen. Das ist uebernehmbare Information - siehe E-12.
 
-### B9 · Wiedergeoeffnete Druckerauswahl ist leer
+### B9 · Wiedergeoeffnete Druckerauswahl ist leer — BEHOBEN
+Behoben im Loop-Durchlauf 05:45. SetupScreen nimmt eine Vorauswahl
+entgegen, MainActivity reicht installedPrinters() durch.
+
+Am Geraet nachgeprueft: Nach Einrichtung mit MK4S und 0.4er Duese zeigt
+die wiedergeoeffnete Auswahl "1 / 35", die MK4S ist angehakt und
+aufgeklappt, die 0.4er Duese markiert.
+
+*Ursprungsbefund:*
 Beim Nachpruefen von B2 aufgefallen: Oeffnet man die Druckerauswahl
 erneut, steht sie auf "0 / 35" und nichts ist angehakt - obwohl Drucker
 installiert sind. Wer nur eine Duesengroesse ergaenzen will, muss seine
