@@ -312,3 +312,74 @@ MK4S im Netz.
    2000x1250 an, das Geraet hat 2560x1600.
 3. `adb install -r` tauscht die DEX nicht zuverlaessig. Immer erst
    deinstallieren.
+
+---
+
+## Lauf vom 29.07.2026 — G-Code-Vorschau und Funktionsvergleich
+
+**Ergebnis: der Preview-Tab des Desktops laeuft auf dem Geraet.**
+Kein Nachbau — es ist PrusaSlicers eigener Renderer libvgcode, ueber
+`convert(Print) -> Viewer::load() -> Viewer::render()`.
+
+Vier Huerden, alle in `entscheidungen.md` und im Commit dokumentiert:
+
+1. **Falscher GLAD-Loader.** libvgcode waehlt zwischen `glad/src/gl.c`
+   und `gles2.c` anhand von `SLIC3R_OPENGL_ES`. Diese Option haengt bei
+   PrusaSlicer an `SLIC3R_GUI` und ist damit zwangsweise OFF. Der Code
+   wurde also mit `ENABLE_OPENGL_ES` uebersetzt, brachte aber den
+   Desktop-Loader mit → `gladLoaderLoadGLES2` fehlte beim Linken.
+   Loesung: `set(SLIC3R_OPENGL_ES ON)` als *gewoehnliche* Variable direkt
+   vor `add_subdirectory`, danach `unset`. Sie ueberdeckt den Cache nur
+   dort.
+2. **Fehlendes `glad/egl.h`.** Der GLES2-Loader zieht ein selbst erzeugtes
+   EGL-Header herein, das in PrusaSlicers Baum nicht mitgeliefert ist.
+   `GLAD_GLES2_USE_SYSTEM_EGL=1` nimmt stattdessen das EGL des NDK.
+3. **SIGSEGV auf dem GL-Thread.** `psm_viewport_load_preview` holte die
+   Extruderzahl ueber `opt_int("extruders_count")`. Diesen Schluessel gibt
+   es nur als Hilfsoption der Tab-GUI, **nicht in PrintConfig** —
+   `option()` lieferte null, `opt_int` dereferenzierte es. Die Zahl ist
+   die Laenge von `nozzle_diameter`; genau so leitet PrusaSlicer sie ab.
+   *Lehre: `opt_int`/`opt_float` auf einem fremden Schluessel ist immer
+   ein Absturzkandidat. Erst `config.opt<T>(key)` holen und auf null
+   pruefen.*
+4. **Bett fehlte in der Vorschau.** libvgcode zeichnet nur Werkzeugwege.
+   Das Bett wird jetzt in beiden Modi vor dem Rest gezeichnet.
+
+Dazu die beiden Reiter „3D editor view / Preview" unten links am Bett wie
+am Desktop, und ein senkrechter Schichtregler mit zwei Griffen nach dem
+Vorbild des `DoubleSlider`. Am Geraet geprueft: 20-mm-Wuerfel, 100
+Schichten, Regler auf Schicht 49 schneidet den Wuerfel auf und zeigt das
+Infill.
+
+### Neuer Stolperstein fuers Verfahren
+
+**Immer beide ABIs bauen, bevor gestaged wird.** `build-core.sh` baut nur
+die ABI aus `ANDROID_ABI`, `stage-native.sh` kopiert aber beide. Ein
+arm64-Lauf mit anschliessendem Staging hat die *alte* x86_64-Bibliothek
+in die APK gelegt — der Emulator warf `UnsatisfiedLinkError` fuer eine
+JNI-Funktion, die es im Quelltext laengst gab. Das sah nach einem
+JNI-Fehler aus und war reine Bau-Reihenfolge.
+
+Ausserdem: der Emulator ist waehrend des Tests einmal host-seitig
+abgestuerzt (`adb devices` leer). Neustart mit
+`emulator -avd PSM_Tablet -no-snapshot-load`, die App-Daten ueberleben.
+
+### Funktionsvergleich angelegt
+
+`docs/10-funktionsvergleich.md` stellt Desktop und PSMobile gegenueber,
+alles am Quelltext nachgeprueft. Die drei wichtigsten Befunde:
+
+* **Die Einstellungen sind echt**, nicht dekorativ: `psm_config_set`
+  schreibt in genau die `DynamicPrintConfig`, die beim Slicen an
+  `Print::apply` geht. Aber 247 von 573 Optionen sind erreichbar, ein
+  Presetwechsel wirft alle Aenderungen weg, nichts ueberlebt einen
+  Neustart, und es gibt keine Abhaengigkeitslogik (`toggle_print`).
+* **Retraction fehlt komplett** — sie liegt auf der Seite „Extruder N",
+  die `Tab.cpp` zur Laufzeit baut und die `extract-ui.py` deshalb nicht
+  sieht. Von allen Luecken die schmerzhafteste.
+* **Multicolor geht noch nicht.** MMU-Drucker sind waehlbar und slicen
+  auch, aber es gibt nur einen Filamentplatz in der UI und keine
+  Extruderzuweisung je Objekt. Ergebnis: einfarbiges Teil mit Wipe Tower.
+
+Daraus vier neue Aufgaben: #19 Extruder-Seite, #20 Custom G-code und
+Machine limits, #21 Presetaenderungen behalten, #22 Multicolor.
