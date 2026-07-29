@@ -457,6 +457,18 @@ typedef struct {
 
 PSM_API psm_result psm_slice_stats_get(psm_session *s, psm_slice_stats *out);
 
+/**
+ * Der Dateiname, den PrusaSlicer fuer dieses Ergebnis vergeben wuerde.
+ *
+ * Nicht selbst zusammengesetzt: Print::output_filename() wertet
+ * output_filename_format aus dem Druckprofil aus. Prusas eigene Profile
+ * setzen dort etwa
+ *   {input_filename_base}_{layer_height}mm_{initial_filament_type}_{printer_model}_{print_time}.gcode
+ * womit Modellname, Schichthoehe, Material, Drucker und Druckzeit im
+ * Namen stehen. Endet auf .bgcode, wenn binary_gcode gesetzt ist.
+ */
+PSM_API psm_result psm_gcode_suggested_name(psm_session *s, char *out, size_t out_cap);
+
 /** Schreibt den G-Code direkt in eine Datei. Nie ueber den RAM -
  *  siehe Speicherstrategie in docs/02-architektur.md. */
 PSM_API psm_result psm_gcode_export(psm_session *s, const char *out_path);

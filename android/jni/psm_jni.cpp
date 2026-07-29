@@ -601,6 +601,14 @@ JNIEXPORT jint JNICALL JNI_FN(nativeGcodeExport)(JNIEnv *env, jclass, jlong h, j
     return psm_gcode_export(sess(h), p.c_str());
 }
 
+JNIEXPORT jstring JNICALL JNI_FN(nativeGcodeSuggestedName)(JNIEnv *env, jclass, jlong h)
+{
+    char buf[512] = { 0 };
+    if (psm_gcode_suggested_name(sess(h), buf, sizeof(buf)) != PSM_OK)
+        return env->NewStringUTF("");
+    return env->NewStringUTF(buf);
+}
+
 JNIEXPORT jlong JNICALL JNI_FN(nativeEstimateMemory)(JNIEnv *, jclass, jlong h)
 {
     return static_cast<jlong>(psm_estimate_slice_memory(sess(h)));

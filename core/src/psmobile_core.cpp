@@ -645,6 +645,29 @@ PSM_API psm_result psm_gcode_export(psm_session *s, const char *out_path)
     PSM_GUARD_END(s)
 }
 
+PSM_API psm_result psm_gcode_suggested_name(psm_session *s, char *out, size_t out_cap)
+{
+    PSM_GUARD_BEGIN(s)
+        if (out == nullptr || out_cap == 0)
+            return PSM_ERR_INVALID_ARG;
+        if (! s->print) {
+            s->set_error("es liegt kein Slice-Ergebnis vor");
+            return PSM_ERR_BUSY;
+        }
+        /* Print::output_filename wertet output_filename_format aus dem
+         * Druckprofil aus - Modellname, Schichthoehe, Material, Drucker
+         * und Druckzeit stehen darin bereits. Selbst zusammenbauen waere
+         * Nachbau; siehe E-12. */
+        std::string name = s->print->output_filename();
+        if (name.empty())
+            name = "print.gcode";
+        const size_t n = std::min(out_cap - 1, name.size());
+        std::memcpy(out, name.data(), n);
+        out[n] = '\0';
+        return PSM_OK;
+    PSM_GUARD_END(s)
+}
+
 /* ------------------------------------------------------------------ */
 /* Konfiguration                                                       */
 /* ------------------------------------------------------------------ */

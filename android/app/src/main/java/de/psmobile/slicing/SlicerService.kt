@@ -230,11 +230,24 @@ class SlicerService : Service() {
     fun shareableGcodeUri(): android.net.Uri? {
         val src = lastGcode ?: return null
         val outDir = File(cacheDir, "share").apply { mkdirs() }
-        val dst = File(outDir, "psmobile.gcode")
+        // Frueher hiess jede Datei "psmobile.gcode". Der Name kommt jetzt
+        // aus output_filename_format des Druckprofils, wie am Desktop -
+        // also mit Modell, Schichthoehe, Material, Drucker und Druckzeit.
+        val dst = File(outDir, suggestedGcodeName())
+        outDir.listFiles()?.forEach { if (it != dst) it.delete() }
         src.copyTo(dst, overwrite = true)
         return androidx.core.content.FileProvider.getUriForFile(
             this, "$packageName.fileprovider", dst
         )
+    }
+
+    /** Dateiname nach PrusaSlicers Vorgabe, mit Rueckfallebene. */
+    fun suggestedGcodeName(): String {
+        val raw = core?.let { runCatching { it.suggestedGcodeName() }.getOrNull() }
+        val name = raw?.takeIf { it.isNotBlank() } ?: "print.gcode"
+        // Der Name landet im Dateisystem und wird weitergereicht - alles,
+        // was dort Aerger macht, ersetzen.
+        return name.replace(Regex("[\\\\/:*?\"<>|]"), "_")
     }
 
     fun refreshPresets() {

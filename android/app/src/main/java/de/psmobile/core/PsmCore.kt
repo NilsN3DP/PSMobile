@@ -78,6 +78,7 @@ class PsmCore private constructor(private var handle: Long) : Closeable {
         @JvmStatic private external fun nativeSliceStats(h: Long): DoubleArray?
         @JvmStatic private external fun nativeGcodeExport(h: Long, path: String): Int
         @JvmStatic private external fun nativeEstimateMemory(h: Long): Long
+        @JvmStatic private external fun nativeGcodeSuggestedName(h: Long): String
         @JvmStatic private external fun nativeExtruderCount(h: Long): Int
         @JvmStatic private external fun nativeExtruderFilament(h: Long, idx: Int): String
         @JvmStatic private external fun nativeExtruderFilamentSet(h: Long, idx: Int, name: String): Int
@@ -284,6 +285,14 @@ class PsmCore private constructor(private var handle: Long) : Closeable {
         check(nativePresetSelect(requireHandle(), type.raw, name), "Preset waehlen")
 
     fun selectedPreset(type: PresetType): String = nativePresetSelected(requireHandle(), type.raw)
+
+    /**
+     * Der Dateiname, den PrusaSlicer vergeben wuerde - aus
+     * output_filename_format des Druckprofils, also mit Modellname,
+     * Schichthoehe, Material, Drucker und Druckzeit. Leer, solange nichts
+     * geslict wurde.
+     */
+    fun suggestedGcodeName(): String = nativeGcodeSuggestedName(requireHandle())
 
     /* --- Extruder ---------------------------------------------------- */
 

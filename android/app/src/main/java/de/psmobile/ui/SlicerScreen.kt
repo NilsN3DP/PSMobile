@@ -175,10 +175,8 @@ private fun SlicerContent(
     var layerLo by remember { mutableStateOf(0) }
     var layerHi by remember { mutableStateOf(0) }
 
-    // PrusaSlicer springt nach dem Slicen von selbst in die Vorschau, und
-    // sobald sich am Bett etwas aendert, wieder zurueck: das Ergebnis gilt
-    // dann nicht mehr.
-    LaunchedEffect(progress, sceneRevision) {
+    // PrusaSlicer springt nach dem Slicen von selbst in die Vorschau.
+    LaunchedEffect(progress) {
         if (progress is SlicerService.Progress.Done) {
             sceneController.enterPreview { n ->
                 layerCount = n
@@ -190,6 +188,24 @@ private fun SlicerContent(
             sceneController.enterEditor()
             previewMode = false
             layerCount = 0
+        }
+    }
+
+    // Jede Aenderung am Bett macht das Slice-Ergebnis ungueltig, also
+    // zurueck in den Editor.
+    //
+    // Das muss getrennt vom Fortschritt laufen: hingen beide an einem
+    // LaunchedEffect, sprang ein neu geladenes Objekt sofort wieder in die
+    // Vorschau des vorherigen Slices - das Objekt war dann unsichtbar.
+    var seenRevision by remember { mutableStateOf(sceneRevision) }
+    LaunchedEffect(sceneRevision) {
+        if (sceneRevision != seenRevision) {
+            seenRevision = sceneRevision
+            if (previewMode) {
+                sceneController.enterEditor()
+                previewMode = false
+                layerCount = 0
+            }
         }
     }
 
@@ -410,6 +426,22 @@ private fun ExtruderRow(
             onPick = { onColor(it); pickColor = false },
             onDismiss = { pickColor = false },
         )
+    }
+}
+
+/**
+ * Druckdauer wie am Desktop: Tage, Stunden, Minuten - nur was noetig ist.
+ * "14 min" statt "0 h 14 min", "2 h 07 min" statt "127 min".
+ */
+private fun formatDuration(seconds: Double): String {
+    val total = seconds.roundToInt().coerceAtLeast(0)
+    val d = total / 86400
+    val h = (total % 86400) / 3600
+    val m = (total % 3600) / 60
+    return when {
+        d > 0 -> "%d d %d h %02d min".format(d, h, m)
+        h > 0 -> "%d h %02d min".format(h, m)
+        else  -> "%d min".format(m)
     }
 }
 
@@ -979,8 +1011,8 @@ private fun ProgressBlock(progress: SlicerService.Progress) {
                 if (st != null) {
                     Text(
                         buildString {
-                            append("%d Layer · %d min · %.2f m".format(
-                                st.layers, (st.printTimeSeconds / 60).roundToInt(),
+                            append("%d Layer · %s · %.2f m".format(
+                                st.layers, formatDuration(st.printTimeSeconds),
                                 st.filamentMm / 1000.0))
                             if (st.filamentGrams > 0.0) append(" · %.1f g".format(st.filamentGrams))
                         },
