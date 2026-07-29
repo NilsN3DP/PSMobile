@@ -365,6 +365,145 @@ JNIEXPORT jint JNICALL JNI_FN(nativePresetSelect)(JNIEnv *env, jclass, jlong h,
     return psm_preset_select(sess(h), static_cast<psm_preset_type>(type), n.c_str());
 }
 
+/* --- Extruder, geaenderte Werte, Filamenthersteller ------------------- */
+/*
+ * Alle Listen kommen als String-Array oder als "\n"-getrennter String
+ * hoch, statt Feld fuer Feld ueber JNI. Ein MMU hat fuenf Extruder und
+ * ein Drucker gut zwei Dutzend Hersteller - das lohnt keinen Aufruf je
+ * Eintrag.
+ */
+
+JNIEXPORT jint JNICALL JNI_FN(nativeExtruderCount)(JNIEnv *, jclass, jlong h)
+{
+    return psm_extruder_count(sess(h));
+}
+
+JNIEXPORT jstring JNICALL JNI_FN(nativeExtruderFilament)(JNIEnv *env, jclass, jlong h, jint idx)
+{
+    char buf[256] = { 0 };
+    if (psm_extruder_filament_get(sess(h), idx, buf, sizeof(buf)) != PSM_OK)
+        return env->NewStringUTF("");
+    return env->NewStringUTF(buf);
+}
+
+JNIEXPORT jint JNICALL JNI_FN(nativeExtruderFilamentSet)(JNIEnv *env, jclass, jlong h,
+                                                         jint idx, jstring name)
+{
+    const std::string n = jstr(env, name);
+    return psm_extruder_filament_set(sess(h), idx, n.c_str());
+}
+
+JNIEXPORT jstring JNICALL JNI_FN(nativeExtruderColor)(JNIEnv *env, jclass, jlong h, jint idx)
+{
+    char buf[32] = { 0 };
+    if (psm_extruder_color_get(sess(h), idx, buf, sizeof(buf)) != PSM_OK)
+        return env->NewStringUTF("");
+    return env->NewStringUTF(buf);
+}
+
+JNIEXPORT jint JNICALL JNI_FN(nativeExtruderColorSet)(JNIEnv *env, jclass, jlong h,
+                                                      jint idx, jstring rgb)
+{
+    const std::string c = jstr(env, rgb);
+    return psm_extruder_color_set(sess(h), idx, c.c_str());
+}
+
+/** Je Zeile: Name \t Zahl der Filamente \t 1 oder 0 fuer eingeblendet. */
+JNIEXPORT jstring JNICALL JNI_FN(nativeFilamentVendors)(JNIEnv *env, jclass, jlong h)
+{
+    std::string out;
+    const size_t n = psm_filament_vendor_count(sess(h));
+    for (size_t i = 0; i < n; ++i) {
+        char    name[128] = { 0 };
+        int32_t count = 0, enabled = 0;
+        if (psm_filament_vendor_at(sess(h), i, name, sizeof(name), &count, &enabled) != PSM_OK)
+            continue;
+        if (! out.empty()) out += '\n';
+        out += name;
+        out += '\t';
+        out += std::to_string(count);
+        out += '\t';
+        out += std::to_string(enabled);
+    }
+    return env->NewStringUTF(out.c_str());
+}
+
+JNIEXPORT jint JNICALL JNI_FN(nativeFilamentVendorsSet)(JNIEnv *env, jclass, jlong h,
+                                                        jobjectArray names)
+{
+    std::vector<std::string> owned;
+    std::vector<const char *> ptrs;
+    const jsize n = names == nullptr ? 0 : env->GetArrayLength(names);
+    owned.reserve(static_cast<size_t>(n));
+    ptrs.reserve(static_cast<size_t>(n));
+    for (jsize i = 0; i < n; ++i) {
+        auto js = static_cast<jstring>(env->GetObjectArrayElement(names, i));
+        owned.push_back(jstr(env, js));
+        env->DeleteLocalRef(js);
+    }
+    for (const std::string &s : owned)
+        ptrs.push_back(s.c_str());
+    return psm_filament_vendors_set(sess(h), ptrs.empty() ? nullptr : ptrs.data(),
+                                    ptrs.size());
+}
+
+/** Je Zeile: Parametername \t Wert im Preset \t eingestellter Wert. */
+JNIEXPORT jstring JNICALL JNI_FN(nativePresetDirty)(JNIEnv *env, jclass, jlong h, jint type)
+{
+    const auto t = static_cast<psm_preset_type>(type);
+    std::string out;
+    const size_t n = psm_preset_dirty_count(sess(h), t);
+    for (size_t i = 0; i < n; ++i) {
+        char key[128] = { 0 }, was[512] = { 0 }, now[512] = { 0 };
+        if (psm_preset_dirty_at(sess(h), t, i, key, sizeof(key),
+                                was, sizeof(was), now, sizeof(now)) != PSM_OK)
+            continue;
+        if (! out.empty()) out += '\n';
+        out += key; out += '\t'; out += was; out += '\t'; out += now;
+    }
+    return env->NewStringUTF(out.c_str());
+}
+
+JNIEXPORT jint JNICALL JNI_FN(nativePresetDiscard)(JNIEnv *, jclass, jlong h, jint type)
+{
+    return psm_preset_discard(sess(h), static_cast<psm_preset_type>(type));
+}
+
+JNIEXPORT jint JNICALL JNI_FN(nativePresetSaveAs)(JNIEnv *env, jclass, jlong h,
+                                                  jint type, jstring name)
+{
+    const std::string n = jstr(env, name);
+    return psm_preset_save_as(sess(h), static_cast<psm_preset_type>(type), n.c_str());
+}
+
+JNIEXPORT jint JNICALL JNI_FN(nativePresetSelectKeeping)(JNIEnv *env, jclass, jlong h,
+                                                         jint type, jstring name,
+                                                         jobjectArray keys,
+                                                         jobjectArray values)
+{
+    const std::string n = jstr(env, name);
+
+    std::vector<std::string> ks, vs;
+    std::vector<const char *> kp, vp;
+    const jsize cnt = keys == nullptr ? 0 : env->GetArrayLength(keys);
+    for (jsize i = 0; i < cnt; ++i) {
+        auto jk = static_cast<jstring>(env->GetObjectArrayElement(keys, i));
+        auto jv = static_cast<jstring>(env->GetObjectArrayElement(values, i));
+        ks.push_back(jstr(env, jk));
+        vs.push_back(jstr(env, jv));
+        env->DeleteLocalRef(jk);
+        env->DeleteLocalRef(jv);
+    }
+    for (size_t i = 0; i < ks.size(); ++i) {
+        kp.push_back(ks[i].c_str());
+        vp.push_back(vs[i].c_str());
+    }
+    return psm_preset_select_keeping(sess(h), static_cast<psm_preset_type>(type), n.c_str(),
+                                     kp.empty() ? nullptr : kp.data(),
+                                     vp.empty() ? nullptr : vp.data(),
+                                     kp.size());
+}
+
 JNIEXPORT jstring JNICALL JNI_FN(nativePresetSelected)(JNIEnv *env, jclass, jlong h, jint type)
 {
     char buf[256] = { 0 };

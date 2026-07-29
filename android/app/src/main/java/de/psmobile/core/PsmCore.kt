@@ -78,6 +78,19 @@ class PsmCore private constructor(private var handle: Long) : Closeable {
         @JvmStatic private external fun nativeSliceStats(h: Long): DoubleArray?
         @JvmStatic private external fun nativeGcodeExport(h: Long, path: String): Int
         @JvmStatic private external fun nativeEstimateMemory(h: Long): Long
+        @JvmStatic private external fun nativeExtruderCount(h: Long): Int
+        @JvmStatic private external fun nativeExtruderFilament(h: Long, idx: Int): String
+        @JvmStatic private external fun nativeExtruderFilamentSet(h: Long, idx: Int, name: String): Int
+        @JvmStatic private external fun nativeExtruderColor(h: Long, idx: Int): String
+        @JvmStatic private external fun nativeExtruderColorSet(h: Long, idx: Int, rgb: String): Int
+        @JvmStatic private external fun nativeFilamentVendors(h: Long): String
+        @JvmStatic private external fun nativeFilamentVendorsSet(h: Long, names: Array<String>): Int
+        @JvmStatic private external fun nativePresetDirty(h: Long, type: Int): String
+        @JvmStatic private external fun nativePresetDiscard(h: Long, type: Int): Int
+        @JvmStatic private external fun nativePresetSaveAs(h: Long, type: Int, name: String): Int
+        @JvmStatic private external fun nativePresetSelectKeeping(
+            h: Long, type: Int, name: String,
+            keys: Array<String>, values: Array<String>): Int
     }
 
     /** Wird aus dem Slice-Thread gerufen, nicht aus dem UI-Thread. */
@@ -271,6 +284,73 @@ class PsmCore private constructor(private var handle: Long) : Closeable {
         check(nativePresetSelect(requireHandle(), type.raw, name), "Preset waehlen")
 
     fun selectedPreset(type: PresetType): String = nativePresetSelected(requireHandle(), type.raw)
+
+    /* --- Extruder ---------------------------------------------------- */
+
+    /** Zahl der Extruder. Ein MMU3 hat fuenf, ein XL-5T ebenso. */
+    fun extruderCount(): Int = nativeExtruderCount(requireHandle()).coerceAtLeast(1)
+
+    fun extruderFilament(index: Int): String = nativeExtruderFilament(requireHandle(), index)
+
+    fun setExtruderFilament(index: Int, name: String) =
+        check(nativeExtruderFilamentSet(requireHandle(), index, name), "Filament je Extruder")
+
+    /** "#RRGGBB", oder leer wenn die Farbe des Filaments gelten soll. */
+    fun extruderColor(index: Int): String = nativeExtruderColor(requireHandle(), index)
+
+    fun setExtruderColor(index: Int, rgb: String) =
+        check(nativeExtruderColorSet(requireHandle(), index, rgb), "Farbe je Extruder")
+
+    /* --- Filamenthersteller ------------------------------------------ */
+
+    data class FilamentVendor(val name: String, val filaments: Int, val enabled: Boolean)
+
+    fun filamentVendors(): List<FilamentVendor> =
+        nativeFilamentVendors(requireHandle())
+            .lineSequence()
+            .filter { it.isNotBlank() }
+            .mapNotNull { line ->
+                val f = line.split('\t')
+                if (f.size < 3) null
+                else FilamentVendor(f[0], f[1].toIntOrNull() ?: 0, f[2] == "1")
+            }
+            .toList()
+
+    /** Leere Liste blendet wieder alle ein. */
+    fun setFilamentVendors(names: List<String>) =
+        check(nativeFilamentVendorsSet(requireHandle(), names.toTypedArray()),
+              "Hersteller waehlen")
+
+    /* --- Geaenderte Werte gegenueber dem Preset ----------------------- */
+
+    data class Change(val key: String, val was: String, val now: String)
+
+    /**
+     * Was gegenueber dem gewaehlten Preset abweicht - genau die Liste, die
+     * der Desktop im Dialog "Unsaved Changes" zeigt.
+     */
+    fun changes(type: PresetType): List<Change> =
+        nativePresetDirty(requireHandle(), type.raw)
+            .lineSequence()
+            .filter { it.isNotBlank() }
+            .mapNotNull { line ->
+                val f = line.split('\t')
+                if (f.size < 3) null else Change(f[0], f[1], f[2])
+            }
+            .toList()
+
+    fun discardChanges(type: PresetType) =
+        check(nativePresetDiscard(requireHandle(), type.raw), "Aenderungen verwerfen")
+
+    fun savePresetAs(type: PresetType, name: String) =
+        check(nativePresetSaveAs(requireHandle(), type.raw, name), "Preset speichern")
+
+    /** Preset wechseln und die genannten Werte danach wieder eintragen. */
+    fun selectPresetKeeping(type: PresetType, name: String, keep: List<Change>) =
+        check(nativePresetSelectKeeping(requireHandle(), type.raw, name,
+                                        keep.map { it.key }.toTypedArray(),
+                                        keep.map { it.now }.toTypedArray()),
+              "Preset wechseln")
 
     operator fun get(key: String): String? = nativeConfigGet(requireHandle(), key)
 

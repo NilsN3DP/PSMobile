@@ -66,6 +66,7 @@ endif ()
 set(PSM_CORE_SOURCES
     core/src/psmobile_core.cpp
     core/src/psmobile_presets.cpp
+    core/src/psmobile_extruders.cpp
 )
 
 # Der Viewport liegt in derselben Bibliothek wie der Kern: er liest das

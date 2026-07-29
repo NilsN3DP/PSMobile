@@ -71,6 +71,14 @@ class SlicerService : Service() {
     private val _objects = MutableStateFlow<List<PsmCore.ObjectInfo>>(emptyList())
     val objects: StateFlow<List<PsmCore.ObjectInfo>> = _objects.asStateFlow()
 
+    /** Ein Extruder mit seinem Filament und seiner Farbe. */
+    data class Extruder(
+        val index: Int,
+        val filament: String = "",
+        /** "#RRGGBB", leer wenn die Farbe des Filaments gilt. */
+        val color: String = "",
+    )
+
     /** Auswaehlbare Profile je Typ, plus die aktuelle Auswahl. */
     data class Presets(
         val printers: List<String> = emptyList(),
@@ -79,6 +87,12 @@ class SlicerService : Service() {
         val selectedPrinter: String = "",
         val selectedPrint: String = "",
         val selectedFilament: String = "",
+        /**
+         * Ein Eintrag je Extruder. Bei einem Kopf genau einer, beim MMU3
+         * und beim XL-5T fuenf - jeder mit eigenem Filament und eigener
+         * Farbe.
+         */
+        val extruders: List<Extruder> = emptyList(),
     )
 
     private val _presets = MutableStateFlow(Presets())
@@ -232,7 +246,32 @@ class SlicerService : Service() {
             selectedPrinter = c.selectedPreset(PsmCore.PresetType.PRINTER),
             selectedPrint = c.selectedPreset(PsmCore.PresetType.PRINT),
             selectedFilament = c.selectedPreset(PsmCore.PresetType.FILAMENT),
+            extruders = (0 until c.extruderCount()).map { i ->
+                Extruder(
+                    index = i,
+                    filament = runCatching { c.extruderFilament(i) }.getOrDefault(""),
+                    color = runCatching { c.extruderColor(i) }.getOrDefault(""),
+                )
+            },
         )
+    }
+
+    /** Filament eines einzelnen Kopfes - fuer MMU und XL. */
+    fun setExtruderFilament(index: Int, name: String) {
+        val c = core ?: return
+        runCatching { c.setExtruderFilament(index, name) }
+            .onFailure { Log.w(TAG, "Filament fuer Extruder $index: ${it.message}") }
+        refreshPresets()
+        refreshQuickSettings()
+        bumpConfig()
+    }
+
+    fun setExtruderColor(index: Int, rgb: String) {
+        val c = core ?: return
+        runCatching { c.setExtruderColor(index, rgb) }
+            .onFailure { Log.w(TAG, "Farbe fuer Extruder $index: ${it.message}") }
+        refreshPresets()
+        bumpConfig()
     }
 
     /**
@@ -250,6 +289,10 @@ class SlicerService : Service() {
         refreshQuickSettings()   // ein anderes Profil bringt andere Werte mit
         refreshObjects()
         bumpConfig()
+        // Ein anderer Drucker heisst ein anderes Bett. Ohne bumpScene baut
+        // der Viewport es nie neu und man sieht beim Wechsel vom MK4S auf
+        // den XL weiter das kleine Rechteck.
+        if (type == PsmCore.PresetType.PRINTER) bumpScene()
     }
 
     /** Fuer den Viewport, der direkt auf der Session arbeitet (E-03). */

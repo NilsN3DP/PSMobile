@@ -661,6 +661,46 @@ PSM_API psm_result psm_config_get(psm_session *s, const char *key, char *out, si
     PSM_GUARD_END(s)
 }
 
+namespace {
+
+/*
+ * Welche Preset-Sammlung besitzt einen Parameter?
+ *
+ * PrusaSlicer teilt die Parameter fest auf Druck, Filament und Drucker
+ * auf; die Listen dazu liefert Preset selbst. Ohne diese Zuordnung
+ * wuesste psm_config_set nicht, in welches bearbeitete Preset der Wert
+ * gehoert.
+ */
+Slic3r::PresetCollection *owning_collection(psm_session *s, const std::string &key)
+{
+    if (! s->presets)
+        return nullptr;
+
+    using Slic3r::Preset;
+    static const std::set<std::string> print_keys(
+        Preset::print_options().begin(),    Preset::print_options().end());
+    static const std::set<std::string> filament_keys(
+        Preset::filament_options().begin(), Preset::filament_options().end());
+    static const std::set<std::string> printer_keys(
+        Preset::printer_options().begin(),  Preset::printer_options().end());
+
+    if (print_keys.count(key))    return &s->presets->prints;
+    if (filament_keys.count(key)) return &s->presets->filaments;
+    if (printer_keys.count(key))  return &s->presets->printers;
+    return nullptr;
+}
+
+} /* namespace */
+
+/*
+ * Ein geaenderter Wert geht ins bearbeitete Preset seiner Sammlung, nicht
+ * in eine losgeloeste Kopie. Nur so weiss PrusaSlicer, was gegenueber dem
+ * gewaehlten Preset abweicht - und nur so kann die App beim Profilwechsel
+ * fragen, statt die Aenderungen stillschweigend wegzuwerfen.
+ *
+ * s->config bleibt die zusammengesetzte flache Sicht; sie geht beim
+ * Slicen an Print::apply und beantwortet psm_config_get.
+ */
 PSM_API psm_result psm_config_set(psm_session *s, const char *key, const char *value)
 {
     PSM_GUARD_BEGIN(s)
@@ -670,9 +710,25 @@ PSM_API psm_result psm_config_set(psm_session *s, const char *key, const char *v
             s->set_error(std::string("unbekannter Parameter: ") + key);
             return PSM_ERR_NOT_FOUND;
         }
+
         /* set_deserialize_nothrow nimmt eine nicht-konstante Referenz -
          * der Kontext muss also ein benanntes Objekt sein. */
         Slic3r::ConfigSubstitutionContext subs(Slic3r::ForwardCompatibilitySubstitutionRule::Disable);
+
+        Slic3r::PresetCollection *c = owning_collection(s, key);
+        if (c != nullptr && c->get_edited_preset().config.has(key)) {
+            if (! c->get_edited_preset().config.set_deserialize_nothrow(key, value, subs)) {
+                s->set_error(std::string("ungueltiger Wert fuer ") + key + ": " + value);
+                return PSM_ERR_INVALID_ARG;
+            }
+            c->update_dirty();
+            s->config = s->presets->full_config();
+            return PSM_OK;
+        }
+
+        /* Ohne geladene Presets, und fuer die wenigen Werte ausserhalb der
+         * drei Sammlungen (Projektkonfiguration), bleibt es beim direkten
+         * Schreiben. */
         if (! s->config.set_deserialize_nothrow(key, value, subs)) {
             s->set_error(std::string("ungueltiger Wert fuer ") + key + ": " + value);
             return PSM_ERR_INVALID_ARG;

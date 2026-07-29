@@ -237,6 +237,119 @@ PSM_API psm_result psm_preset_selected(psm_session *s, psm_preset_type type,
                                        char *out, size_t out_cap);
 
 /* ------------------------------------------------------------------ */
+/* Geaenderte Werte gegenueber dem gewaehlten Preset                    */
+/* ------------------------------------------------------------------ */
+
+/*
+ * PrusaSlicer haelt Aenderungen nicht in einer eigenen Kopie, sondern im
+ * "edited preset" jeder Sammlung. Der Unterschied zum gewaehlten Preset
+ * ist die Liste der geaenderten Werte, und genau die zeigt der Desktop
+ * beim Profilwechsel im Dialog "Unsaved Changes" an.
+ *
+ * Wir uebernehmen den Mechanismus unveraendert - psm_config_set schreibt
+ * ins edited preset, nicht in eine losgeloeste Konfiguration.
+ */
+
+/** Zahl der gegenueber dem gewaehlten Preset geaenderten Werte. */
+PSM_API size_t psm_preset_dirty_count(psm_session *s, psm_preset_type type);
+
+/**
+ * Ein geaenderter Wert. Alle out-Zeiger duerfen null sein.
+ *
+ * @param out_key   Parametername
+ * @param out_old   Wert im Preset
+ * @param out_new   aktuell eingestellter Wert
+ */
+PSM_API psm_result psm_preset_dirty_at(psm_session *s, psm_preset_type type, size_t index,
+                                       char *out_key, size_t key_cap,
+                                       char *out_old, size_t old_cap,
+                                       char *out_new, size_t new_cap);
+
+/** Verwirft alle Aenderungen und stellt das gewaehlte Preset wieder her. */
+PSM_API psm_result psm_preset_discard(psm_session *s, psm_preset_type type);
+
+/** Speichert den aktuellen Stand als eigenes Preset unter neuem Namen. */
+PSM_API psm_result psm_preset_save_as(psm_session *s, psm_preset_type type, const char *name);
+
+/**
+ * Waehlt ein Preset und traegt die uebergebenen Werte danach wieder ein -
+ * das "Transfer" aus PrusaSlicers Dialog. Schluessel und Werte kommen
+ * paarweise aus psm_preset_dirty_at.
+ */
+PSM_API psm_result psm_preset_select_keeping(psm_session *s, psm_preset_type type,
+                                             const char *name,
+                                             const char *const *keys,
+                                             const char *const *values,
+                                             size_t count);
+
+/* ------------------------------------------------------------------ */
+/* Extruder: Filament und Farbe je Kopf                                */
+/* ------------------------------------------------------------------ */
+
+/*
+ * Ein MMU3 hat fuenf Filamentwege, ein XL bis zu fuenf Werkzeugkoepfe.
+ * Beide brauchen je Extruder ein eigenes Filament und eine eigene Farbe,
+ * sonst ist der Drucker zwar gewaehlt, druckt aber einfarbig.
+ *
+ * Das Filament je Extruder liegt in PresetBundle::extruders_filaments,
+ * die Farbe in der Druckeroption extruder_colour. Beides ist
+ * PrusaSlicers eigener Weg.
+ */
+
+/** Zahl der Extruder = Laenge von nozzle_diameter. */
+PSM_API int32_t psm_extruder_count(psm_session *s);
+
+/** Filament des n-ten Extruders. */
+PSM_API psm_result psm_extruder_filament_get(psm_session *s, int32_t extruder,
+                                             char *out, size_t out_cap);
+
+/** Setzt das Filament des n-ten Extruders. */
+PSM_API psm_result psm_extruder_filament_set(psm_session *s, int32_t extruder,
+                                             const char *name);
+
+/**
+ * Farbe des n-ten Extruders als "#RRGGBB". Leer, wenn keine gesetzt ist -
+ * dann gilt die Farbe des Filaments.
+ */
+PSM_API psm_result psm_extruder_color_get(psm_session *s, int32_t extruder,
+                                          char *out, size_t out_cap);
+
+/** Setzt die Farbe. Leerer String loescht sie wieder. */
+PSM_API psm_result psm_extruder_color_set(psm_session *s, int32_t extruder,
+                                          const char *rgb);
+
+/* ------------------------------------------------------------------ */
+/* Filamenthersteller                                                  */
+/* ------------------------------------------------------------------ */
+
+/*
+ * Zum gewaehlten Drucker passen schnell mehrere hundert Filamente. Der
+ * Desktop laesst deshalb im Assistenten nach Hersteller waehlen
+ * (PageMaterials, Spalte "vendor"); das Feld dafuer ist filament_vendor
+ * im Profil selbst.
+ */
+
+/** Zahl der Hersteller unter den zum Drucker passenden Filamenten. */
+PSM_API size_t psm_filament_vendor_count(psm_session *s);
+
+/**
+ * Ein Hersteller. out_filaments erhaelt die Zahl seiner passenden
+ * Filamente, out_enabled ob er gerade eingeblendet ist. Beide duerfen
+ * null sein.
+ */
+PSM_API psm_result psm_filament_vendor_at(psm_session *s, size_t index,
+                                          char *out, size_t out_cap,
+                                          int32_t *out_filaments,
+                                          int32_t *out_enabled);
+
+/**
+ * Blendet genau die genannten Hersteller ein. Eine leere Liste zeigt
+ * wieder alle.
+ */
+PSM_API psm_result psm_filament_vendors_set(psm_session *s,
+                                            const char *const *names, size_t count);
+
+/* ------------------------------------------------------------------ */
 /* Einzelparameter                                                     */
 /* ------------------------------------------------------------------ */
 

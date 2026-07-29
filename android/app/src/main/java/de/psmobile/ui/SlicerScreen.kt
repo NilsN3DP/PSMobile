@@ -352,6 +352,153 @@ private fun ToolButton(tool: PsUi.Tool, enabled: Boolean, onClick: () -> Unit) {
  * zurueck.
  */
 /**
+ * Ein Extruder in der Seitenleiste: Nummer, Farbfeld, Filamentauswahl.
+ *
+ * Am Desktop steht das in der Sidebar untereinander, ein Kombifeld je
+ * Extruder mit einem Farbquadrat davor. Genauso hier, nur mit Zielen in
+ * Fingergroesse.
+ */
+@Composable
+private fun ExtruderRow(
+    extruder: SlicerService.Extruder,
+    filaments: List<String>,
+    onFilament: (String) -> Unit,
+    onColor: (String) -> Unit,
+    onEdit: () -> Unit,
+) {
+    var pickColor by remember { mutableStateOf(false) }
+
+    Row(
+        Modifier.fillMaxWidth().padding(bottom = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Text(
+            "${extruder.index + 1}",
+            color = PrusaColors.TextMuted,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.width(14.dp),
+        )
+
+        Box(
+            Modifier
+                .size(32.dp)
+                .clip(RoundedCornerShape(4.dp))
+                .background(parseColor(extruder.color) ?: PrusaColors.PanelRaised)
+                .border(
+                    1.dp,
+                    if (extruder.color.isEmpty()) PrusaColors.Divider else Color.White.copy(alpha = 0.45f),
+                    RoundedCornerShape(4.dp),
+                )
+                .clickable { pickColor = true },
+            contentAlignment = Alignment.Center,
+        ) {
+            // Ohne eigene Farbe gilt die des Filaments - das sagt der Strich.
+            if (extruder.color.isEmpty())
+                Text("–", color = PrusaColors.TextMuted, fontSize = 13.sp)
+        }
+
+        Box(Modifier.weight(1f)) {
+            PresetCombo(filaments, extruder.filament, onEdit = onEdit, onSelect = onFilament)
+        }
+    }
+
+    if (pickColor) {
+        ColorPickerDialog(
+            current = extruder.color,
+            onPick = { onColor(it); pickColor = false },
+            onDismiss = { pickColor = false },
+        )
+    }
+}
+
+/** "#RRGGBB" nach Compose-Color. Null, wenn nichts oder Unsinn drinsteht. */
+private fun parseColor(rgb: String): Color? {
+    val hex = rgb.removePrefix("#")
+    if (hex.length != 6) return null
+    val v = hex.toLongOrNull(16) ?: return null
+    return Color(0xFF000000L or v)
+}
+
+/**
+ * Farbwahl fuer einen Extruder.
+ *
+ * Die Vorschlaege sind die Filamentfarben, die Prusa in seinen eigenen
+ * Profilen verwendet - damit trifft man die uebliche Rolle meist mit
+ * einem Tipp. Freie Eingabe als Hex bleibt daneben moeglich.
+ */
+@Composable
+private fun ColorPickerDialog(
+    current: String,
+    onPick: (String) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val swatches = listOf(
+        "#FF8000", "#ED6B21", "#DD2222", "#B02020", "#F062A0", "#A349A4",
+        "#5B31A8", "#2850C8", "#17A9E0", "#0FB0A0", "#22A03C", "#8ACB2E",
+        "#F2E200", "#C8A020", "#7A5230", "#FFFFFF", "#B0B0B0", "#1A1A1A",
+    )
+    var manual by remember { mutableStateOf(current) }
+
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = PrusaColors.Panel,
+        title = { Text("Farbe des Extruders", color = PrusaColors.TextPrimary, fontSize = 17.sp) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                // Sechs je Reihe: bei 48 dp Zielgroesse passt das in die
+                // Dialogbreite, ohne dass man zielen muss.
+                swatches.chunked(6).forEach { row ->
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        row.forEach { hex ->
+                            Box(
+                                Modifier
+                                    .size(44.dp)
+                                    .clip(RoundedCornerShape(4.dp))
+                                    .background(parseColor(hex) ?: Color.Gray)
+                                    .border(
+                                        if (hex.equals(current, true)) 3.dp else 1.dp,
+                                        if (hex.equals(current, true)) PrusaColors.Orange
+                                        else PrusaColors.Divider,
+                                        RoundedCornerShape(4.dp),
+                                    )
+                                    .clickable { onPick(hex) },
+                            )
+                        }
+                    }
+                }
+
+                androidx.compose.material3.OutlinedTextField(
+                    value = manual,
+                    onValueChange = { manual = it },
+                    label = { Text("Eigener Wert, z. B. #3399FF") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+        },
+        confirmButton = {
+            androidx.compose.material3.TextButton(
+                onClick = { onPick(manual.trim()) },
+                enabled = manual.isBlank() || parseColor(manual.trim()) != null,
+            ) { Text("Übernehmen", color = PrusaColors.Orange) }
+        },
+        dismissButton = {
+            Row {
+                // Ohne eigene Farbe gilt wieder die des Filaments.
+                androidx.compose.material3.TextButton(onClick = { onPick("") }) {
+                    Text("Vom Filament", color = PrusaColors.TextMuted)
+                }
+                androidx.compose.material3.TextButton(onClick = onDismiss) {
+                    Text("Abbrechen", color = PrusaColors.TextMuted)
+                }
+            }
+        },
+    )
+}
+
+/**
  * Umschalter zwischen Bett und Werkzeugwegen.
  *
  * Am Desktop sind das die beiden Reiter unten links am Bett
@@ -588,10 +735,26 @@ private fun Sidebar(
                 service.selectPreset(PsmCore.PresetType.PRINT, it)
             }
 
-            SectionLabel(PsUi.tr("Filament"))
-            PresetCombo(presets.filaments, presets.selectedFilament,
-                        onEdit = { onOpenSettings("filament") }) {
-                service.selectPreset(PsmCore.PresetType.FILAMENT, it)
+            // Ein Kopf sieht aus wie bisher, ab zwei wird je Extruder
+            // gewaehlt. Ein MMU3 hat fuenf Wege, ein XL bis zu fuenf
+            // Koepfe - ohne eigene Wahl je Kopf bekaemen alle dasselbe.
+            if (presets.extruders.size <= 1) {
+                SectionLabel(PsUi.tr("Filament"))
+                PresetCombo(presets.filaments, presets.selectedFilament,
+                            onEdit = { onOpenSettings("filament") }) {
+                    service.selectPreset(PsmCore.PresetType.FILAMENT, it)
+                }
+            } else {
+                SectionLabel(PsUi.tr("Filament") + " · ${presets.extruders.size} Extruder")
+                presets.extruders.forEach { ex ->
+                    ExtruderRow(
+                        extruder = ex,
+                        filaments = presets.filaments,
+                        onFilament = { service.setExtruderFilament(ex.index, it) },
+                        onColor = { service.setExtruderColor(ex.index, it) },
+                        onEdit = { onOpenSettings("filament") },
+                    )
+                }
             }
 
             HorizontalDivider(Modifier.padding(vertical = 4.dp), color = PrusaColors.Divider)
