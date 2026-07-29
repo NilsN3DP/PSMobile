@@ -40,6 +40,27 @@ void axis_color(int axis, bool active, float out[4]);
 
 void build_arrow(std::vector<Vertex> &out, const Vec3 &origin,
                  const Vec3 &dir, float length);
+/**
+ * Kreis als Band, das immer zur Kamera zeigt.
+ *
+ * Eine Linie ist auf einem 2560 Punkte breiten Schirm ein Haar - man
+ * sieht sie kaum und trifft sie nicht. Deshalb wird jedes Segment zu
+ * zwei Dreiecken aufgezogen, deren Breite senkrecht zur Blickrichtung
+ * steht. Dieselbe Technik, mit der man ueberall dicke Linien zeichnet.
+ *
+ * @param to_camera Richtung vom Kreis zur Kamera, normiert
+ */
+void build_ring_band(std::vector<Vertex> &out, const Vec3 &origin,
+                     int axis, float radius, float width,
+                     const Vec3 &to_camera, int segments);
+
+/** Gerades Band von a nach b, ebenfalls zur Kamera gedreht. */
+void build_line_band(std::vector<Vertex> &out, const Vec3 &a, const Vec3 &b,
+                     float width, const Vec3 &to_camera);
+
+/** Kleine Kugel als sichtbarer Anfasspunkt. */
+void build_ball(std::vector<Vertex> &out, const Vec3 &center, float radius);
+
 void build_circle(std::vector<Vertex> &out, const Vec3 &origin,
                   int axis, float radius, int segments);
 void build_box(std::vector<Vertex> &out, const Vec3 &center, float half);

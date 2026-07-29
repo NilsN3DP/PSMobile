@@ -142,6 +142,68 @@ void build_circle(std::vector<Vertex> &out, const Vec3 &origin,
     }
 }
 
+void build_line_band(std::vector<Vertex> &out, const Vec3 &a, const Vec3 &b,
+                     float width, const Vec3 &to_camera)
+{
+    const Vec3 dir = b - a;
+    if (dir.squaredNorm() < 1e-9f)
+        return;
+    /* Senkrecht zur Linie und zur Blickrichtung - so ist das Band von
+     * der Kamera aus immer gleich breit, egal wie es im Raum liegt. */
+    Vec3 side = dir.normalized().cross(to_camera);
+    if (side.squaredNorm() < 1e-6f)
+        return;                      /* Linie zeigt genau zur Kamera */
+    side = side.normalized() * (width * 0.5f);
+
+    const Vec3 &n = to_camera;
+    const Vec3 p[4] = { a - side, a + side, b + side, b - side };
+    for (int i : { 0, 1, 2, 0, 2, 3 })
+        out.push_back({ p[i].x(), p[i].y(), p[i].z(), n.x(), n.y(), n.z() });
+}
+
+void build_ring_band(std::vector<Vertex> &out, const Vec3 &origin,
+                     int axis, float radius, float width,
+                     const Vec3 &to_camera, int segments)
+{
+    const Vec3 nrm = axis_vector(axis);
+    Vec3 up = std::abs(nrm.z()) > 0.9f ? Vec3(1.f, 0.f, 0.f) : Vec3(0.f, 0.f, 1.f);
+    const Vec3 e1 = nrm.cross(up).normalized();
+    const Vec3 e2 = nrm.cross(e1).normalized();
+
+    Vec3 prev = origin + e1 * radius;
+    for (int i = 1; i <= segments; ++i) {
+        const float a = TWO_PI * static_cast<float>(i) / static_cast<float>(segments);
+        const Vec3 p = origin + e1 * (std::cos(a) * radius) + e2 * (std::sin(a) * radius);
+        build_line_band(out, prev, p, width, to_camera);
+        prev = p;
+    }
+}
+
+void build_ball(std::vector<Vertex> &out, const Vec3 &center, float radius)
+{
+    /*
+     * Grob aufgeloest - die Kugeln sind nur ein paar Dutzend Bildpunkte
+     * gross, mehr als sechs mal acht Segmente sieht niemand.
+     */
+    constexpr int RINGS = 6, SECTORS = 8;
+    const auto at = [](int r, int s) {
+        const float phi   = static_cast<float>(M_PI) * static_cast<float>(r) / RINGS;
+        const float theta = TWO_PI * static_cast<float>(s) / SECTORS;
+        return Vec3(std::sin(phi) * std::cos(theta),
+                    std::sin(phi) * std::sin(theta),
+                    std::cos(phi));
+    };
+
+    for (int r = 0; r < RINGS; ++r)
+        for (int s = 0; s < SECTORS; ++s) {
+            const Vec3 n[4] = { at(r, s), at(r, s + 1), at(r + 1, s + 1), at(r + 1, s) };
+            for (int i : { 0, 1, 2, 0, 2, 3 }) {
+                const Vec3 p = center + n[i] * radius;
+                out.push_back({ p.x(), p.y(), p.z(), n[i].x(), n[i].y(), n[i].z() });
+            }
+        }
+}
+
 void build_box(std::vector<Vertex> &out, const Vec3 &center, float half)
 {
     const float h = half;

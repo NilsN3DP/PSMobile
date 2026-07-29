@@ -128,6 +128,12 @@ private fun SlicerContent(
     val configRevision by service.configRevision.collectAsState()
     var selectedId by remember { mutableStateOf<Int?>(null) }
     val sceneController = remember { SceneController() }
+    // Nach einem Zug am Griff oder einer Spreizgeste aendert der Viewport
+    // das Modell direkt. Ohne diese Rueckmeldung zeigten Objektliste und
+    // Zahlenfelder weiter die alten Werte.
+    LaunchedEffect(sceneController) {
+        sceneController.onScaled = { service.refreshObjects() }
+    }
     // Navigation liegt im Service, damit ein eingehendes Modell die
     // Ansicht aufs Bett zurueckholen kann - Befund A1.
     val screen by service.screen.collectAsState()

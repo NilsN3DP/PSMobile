@@ -707,14 +707,23 @@ PSM_API void psm_viewport_render(psm_viewport *v)
      * Auch in der Vorschau: der Desktop zeigt es dort ebenfalls, und ohne
      * Bezugsflaeche schwebt das Teil im Nichts. */
     glDisable(GL_CULL_FACE);
-    if (v->has_bed_model) {
+
+    /*
+     * Blickt die Kamera von unten aufs Bett, zeigt der Desktop das Blech
+     * gar nicht und die Textur nur durchscheinend - sonst haette man die
+     * Unterseite der Heizplatte vor dem Objekt. Bed3D::render_system
+     * macht genau das ueber sein Flag "bottom".
+     */
+    const bool bottom = v->eye().z() < 0.f;
+
+    if (v->has_bed_model && ! bottom) {
         /* Prusas eigenes Bettmodell. Deutlich heller als der
          * Hintergrund, sonst sieht man nur seinen Umriss - die
          * Beleuchtung des gouraud_light-Shaders zieht die Farbe an den
          * abgewandten Flaechen ohnehin stark herunter. */
         static const float col_model[4] = { 0.55f, 0.56f, 0.58f, 1.f };
         draw(v->prog_lit, v->bed_model, GL_TRIANGLES, view, proj, col_model);
-    } else {
+    } else if (! bottom) {
         draw(v->prog_flat, v->bed_fill, GL_TRIANGLES, view, proj, col_bed);
     }
     /* Danach die Textur des Druckbereichs darauf. Sie ist teilweise
@@ -729,7 +738,9 @@ PSM_API void psm_viewport_render(psm_viewport *v)
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, v->bed_tex);
         if (v->prog_bed.u_texture >= 0)     glUniform1i(v->prog_bed.u_texture, 0);
-        if (v->prog_bed.u_transparent >= 0) glUniform1i(v->prog_bed.u_transparent, 0);
+        /* Von unten durchscheinend, sonst deckend - wie im Original. */
+        if (v->prog_bed.u_transparent >= 0)
+            glUniform1i(v->prog_bed.u_transparent, bottom ? 1 : 0);
         /* svg_source schaltet im Shader den radialen Verlauf hinter der
          * Grafik ein - genau dafuer ist die SVG gemacht. */
         if (v->prog_bed.u_svg_source >= 0)  glUniform1i(v->prog_bed.u_svg_source, 1);
@@ -740,7 +751,7 @@ PSM_API void psm_viewport_render(psm_viewport *v)
         glBindTexture(GL_TEXTURE_2D, 0);
         glDepthMask(GL_TRUE);
         glDisable(GL_BLEND);
-    } else if (! v->has_bed_model) {
+    } else if (! v->has_bed_model && ! bottom) {
         /* Ohne Modell und ohne Textur bleibt das Raster als Orientierung. */
         draw(v->prog_flat, v->bed_grid, GL_LINES, view, proj, col_grid);
     }
@@ -782,9 +793,10 @@ PSM_API void psm_viewport_render(psm_viewport *v)
             if (a == 3) { col[0] = 0.93f; col[1] = 0.42f; col[2] = 0.13f; col[3] = 1.f; }
             else        psm::axis_color(a, a == v->gizmo_hover, col);
 
-            const GLenum mode = (v->gizmo == PSM_GIZMO_ROTATE) ? GL_LINES : GL_TRIANGLES;
-            draw(v->gizmo == PSM_GIZMO_ROTATE ? v->prog_flat : v->prog_lit,
-                 v->gizmo_solid[a], mode, view, proj, col);
+            /* Alles Dreiecke - die Baender ersetzen die frueheren
+             * Haarlinien. Flach schattiert, damit die Achsenfarbe
+             * eindeutig bleibt. */
+            draw(v->prog_flat, v->gizmo_solid[a], GL_TRIANGLES, view, proj, col);
         }
         glEnable(GL_DEPTH_TEST);
     }
@@ -1039,47 +1051,66 @@ void build_gizmo(psm_viewport *v)
     const float len = psm::handle_length_px() *
                       psm::screen_scale(vp, origin, v->width, v->height);
 
+    /*
+     * Blickrichtung, damit die Baender immer zur Kamera zeigen. Ohne das
+     * waeren die Kreise aus manchen Winkeln unsichtbar duenn.
+     */
+    const Vec3 eye_v = v->eye();
+    const psm::Vec3 to_cam =
+        psm::Vec3(eye_v.x() - origin.x(), eye_v.y() - origin.y(),
+                  eye_v.z() - origin.z()).normalized();
+
+    /* Alles in Bildpunkten gedacht, dann in Millimeter umgerechnet. */
+    const float mm    = len / psm::handle_length_px();
+    const float band  = 7.f  * mm;   /* Breite der Baender */
+    const float ball  = 13.f * mm;   /* Radius der Anfasskugeln */
+
     std::vector<psm::Vertex> lines;
 
     switch (v->gizmo) {
         case PSM_GIZMO_MOVE:
             for (int a = 0; a < 3; ++a) {
+                const psm::Vec3 dir = psm::axis_vector(a);
+                std::vector<psm::Vertex> geo;
+                /* Schaft als Band statt als Haarlinie. */
+                psm::build_line_band(geo, origin, origin + dir * (len * 0.78f),
+                                     band, to_cam);
+                /* Spitze - build_arrow liefert ab Index 2 die Dreiecke. */
                 std::vector<psm::Vertex> arrow;
-                psm::build_arrow(arrow, origin, psm::axis_vector(a), len);
-                /* Die ersten beiden Eckpunkte sind der Schaft, der Rest
-                 * die Spitze - Linien und Dreiecke gehen getrennt. */
-                lines.push_back(arrow[0]);
-                lines.push_back(arrow[1]);
-                upload_psm(v->gizmo_solid[a],
-                           std::vector<psm::Vertex>(arrow.begin() + 2, arrow.end()));
+                psm::build_arrow(arrow, origin, dir, len);
+                geo.insert(geo.end(), arrow.begin() + 2, arrow.end());
+                upload_psm(v->gizmo_solid[a], geo);
             }
             v->gizmo_axis_count = 3;
             break;
 
         case PSM_GIZMO_ROTATE:
             for (int a = 0; a < 3; ++a) {
-                std::vector<psm::Vertex> ring;
-                psm::build_circle(ring, origin, a, len, 48);
-                upload_psm(v->gizmo_solid[a], ring);
+                std::vector<psm::Vertex> geo;
+                psm::build_ring_band(geo, origin, a, len, band, to_cam, 64);
+                /* Sichtbare Anfasspunkte: ohne sie sieht man den Kreis,
+                 * weiss aber nicht, wo man ihn greifen kann. */
+                for (const psm::Anchor &an :
+                         psm::gizmo_anchors(PSM_GIZMO_ROTATE, origin, mm))
+                    if (an.axis == a)
+                        psm::build_ball(geo, an.world, ball);
+                upload_psm(v->gizmo_solid[a], geo);
             }
             v->gizmo_axis_count = 3;
             break;
 
         case PSM_GIZMO_SCALE: {
-            const float half = len * 0.075f;
             for (int a = 0; a < 3; ++a) {
                 const psm::Vec3 tip = origin + psm::axis_vector(a) * len;
-                lines.push_back({ origin.x(), origin.y(), origin.z(), 0.f, 0.f, 1.f });
-                lines.push_back({ tip.x(), tip.y(), tip.z(), 0.f, 0.f, 1.f });
-
-                std::vector<psm::Vertex> box;
-                psm::build_box(box, tip, half);
-                upload_psm(v->gizmo_solid[a], box);
+                std::vector<psm::Vertex> geo;
+                psm::build_line_band(geo, origin, tip, band, to_cam);
+                psm::build_box(geo, tip, ball);
+                upload_psm(v->gizmo_solid[a], geo);
             }
             /* Der Griff fuer gleichmaessiges Skalieren. */
             const psm::Vec3 d = psm::Vec3(1.f, 1.f, 1.f).normalized();
             std::vector<psm::Vertex> box;
-            psm::build_box(box, origin + d * (len * 0.75f), half * 1.2f);
+            psm::build_box(box, origin + d * (len * 0.75f), ball * 1.25f);
             upload_psm(v->gizmo_solid[3], box);
             v->gizmo_axis_count = 4;
             break;
@@ -1307,7 +1338,24 @@ PSM_API int psm_viewport_gizmo_drag(psm_viewport *v, int axis,
                 return 0;
             const float a0 = std::atan2(from_y - ctr.y(), from_x - ctr.x());
             const float a1 = std::atan2(to_y   - ctr.y(), to_x   - ctr.x());
-            float deg = (a1 - a0) * 180.f / static_cast<float>(M_PI);
+
+            /*
+             * Zwei Vorzeichen sind hier zu beachten, sonst dreht das
+             * Objekt der Fingerbewegung entgegen:
+             *
+             *  - Der Bildschirm zaehlt y nach unten, atan2 nach oben.
+             *    Deshalb das Minus.
+             *  - Blickt man von der Rueckseite auf den Kreis, laeuft er
+             *    aus Sicht des Fingers andersherum. Das Skalarprodukt
+             *    von Achse und Blickrichtung sagt, welche Seite es ist.
+             */
+            const Vec3 eye_v = v->eye();
+            const psm::Vec3 to_cam =
+                psm::Vec3(eye_v.x() - origin.x(), eye_v.y() - origin.y(),
+                          eye_v.z() - origin.z()).normalized();
+            const float facing = psm::axis_vector(axis).dot(to_cam) < 0.f ? -1.f : 1.f;
+
+            float deg = -(a1 - a0) * 180.f / static_cast<float>(M_PI) * facing;
 
             Slic3r::Vec3d rot = inst->get_rotation();
             double cur = rot(axis) * 180.0 / M_PI + static_cast<double>(deg);
