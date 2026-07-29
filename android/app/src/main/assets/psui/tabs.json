@@ -28,7 +28,24 @@
     },
     {
      "title": "Horizontal shells",
-     "options": []
+     "options": [
+      {
+       "key": "top_solid_layers",
+       "line": "Solid layers"
+      },
+      {
+       "key": "bottom_solid_layers",
+       "line": "Solid layers"
+      },
+      {
+       "key": "top_solid_min_thickness",
+       "line": "Minimum shell thickness"
+      },
+      {
+       "key": "bottom_solid_min_thickness",
+       "line": "Minimum shell thickness"
+      }
+     ]
     },
     {
      "title": "Quality (slower slicing)",
@@ -860,7 +877,32 @@
     },
     {
      "title": "Temperature",
-     "options": []
+     "options": [
+      {
+       "key": "first_layer_temperature",
+       "line": "Nozzle"
+      },
+      {
+       "key": "temperature",
+       "line": "Nozzle"
+      },
+      {
+       "key": "first_layer_bed_temperature",
+       "line": "Bed"
+      },
+      {
+       "key": "bed_temperature",
+       "line": "Bed"
+      },
+      {
+       "key": "chamber_temperature",
+       "line": "Chamber"
+      },
+      {
+       "key": "chamber_minimal_temperature",
+       "line": "Chamber"
+      }
+     ]
     }
    ]
   },
@@ -888,6 +930,14 @@
     {
      "title": "Fan settings",
      "options": [
+      {
+       "key": "min_fan_speed",
+       "line": "Fan speed"
+      },
+      {
+       "key": "max_fan_speed",
+       "line": "Fan speed"
+      },
       {
        "key": "bridge_fan_speed"
       },
@@ -1479,6 +1529,14 @@
       },
       {
        "key": "travel_lift_before_obstacle"
+      },
+      {
+       "key": "retract_lift_above",
+       "line": "Only lift"
+      },
+      {
+       "key": "retract_lift_below",
+       "line": "Only lift"
       }
      ]
     },

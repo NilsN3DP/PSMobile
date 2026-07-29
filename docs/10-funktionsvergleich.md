@@ -1,165 +1,237 @@
-# Funktionsvergleich PrusaSlicer 2.9.6 (Desktop) ↔ PSMobile
+# Funktionsvergleich PrusaSlicer 2.9.6 ↔ PSMobile
 
-Stand: 29.07.2026. Alles hier ist am Quelltext oder am Geraet nachgeprueft,
-nicht geschaetzt. Zahlen stammen aus:
+Stand: 29.07.2026, nach dem Lauf mit den Einstellungsseiten.
+SLA bleibt ausserhalb des Umfangs; alle Zahlen unten sind reine FFF.
 
-* `android/app/src/main/assets/psui/tabs.json` (extrahierte Einstellungen)
-* `grep -c "def = this->add(" src/libslic3r/PrintConfig.cpp` → 573 Optionen
-* Logcat der laufenden App
+## Wie gemessen wird
 
----
+Nicht nach Augenmass. `build/scripts/gap-report.py` stellt gegenueber:
 
-## 1. Was vollstaendig da ist
+1. **Parameter** — alle Optionen aus `libslic3r/PrintConfig.cpp` gegen
+   die Schluessel in unserer `tabs.json`.
+2. **Werkzeuge am Modell** — das `EType`-Enum aus `GLGizmosManager.hpp`.
+3. **Menuebefehle** — die `append_menu_item`-Aufrufe aus `MainFrame.cpp`.
 
-| Bereich | Zustand |
-|---|---|
-| Slicing-Kern | libslic3r 2.9.6 unveraendert. Gleiche Eingabe → gleicher G-Code wie am Desktop. |
-| Modellimport | ueber `FileReader::load_model`: STL, OBJ, 3MF, AMF, SVG, ZIP. **STEP fehlt** (`SLIC3R_ENABLE_FORMAT_STEP=OFF`, OCCT nicht gebaut). |
-| Herstellerprofile | 221 Drucker, 520 Druckprofile, 5762 Filamente geladen; nach Ersteinrichtung gefiltert auf das Gewaehlte. |
-| Ersteinrichtung | Drucker + Duesenvariante, wie der Configuration Assistant. MMU-Modelle sind in der Liste. |
-| Presets waehlen | Drucker / Druck / Filament, mit Kompatibilitaetsfilter. |
-| Einstellungen | 247 Parameter auf 20 Seiten, Simple/Advanced/Expert aus `PrintConfig`. |
-| Sprachen | 21, 103.446 Strings aus den `.po` von Prusa. Englisch ist Standard. |
-| 3D-Ansicht | GLES 2.0 mit PrusaSlicers eigenen ES-Shadern, Auswahl, Verschieben, Ansichtsknoepfe. |
-| Anordnen | `psm_arrange` = die Arrange-Logik des Originals. |
-| Slicen | Fortschritt, Abbruch, Statistik. |
-| G-Code | Export und Teilen. |
-| PrusaLink | Senden mit Digest-Auth, Druckerverwaltung, Backup auf Netzlaufwerk. **Nie gegen einen echten Drucker getestet.** |
-| G-Code-Vorschau | libvgcode, seit 29.07. Reiter "3D editor view / Preview" plus Schichtregler. |
-
-## 2. Was fehlt
-
-### 2.1 Bearbeitung am Modell — die groesste Luecke
-
-| Desktop | PSMobile |
-|---|---|
-| Verschieben-Gizmo | Nur Ziehen mit dem Finger, keine Zahleneingabe |
-| Skalieren-Gizmo | fehlt (ABI `psm_model_set_scale` existiert) |
-| Drehen-Gizmo | fehlt (ABI `psm_model_set_rotation` existiert) |
-| Flach legen | fehlt |
-| Schneiden (Cut) | fehlt (`libslic3r/CutUtils` ist wx-frei) |
-| Messen | fehlt |
-| Text / SVG praegen | fehlt |
-| Bemalen: Stuetzen, Naht, MMU-Farbe | fehlt komplett |
-| Variable Schichthoehe | fehlt |
-| Modifikatoren, Negativvolumen, Stuetzblocker/-erzwinger | fehlt |
-| Objektbaum mit Instanzen und Einstellungen je Objekt | nur flache Liste |
-| Rueckgaengig / Wiederholen | fehlt — `slic3r/Utils/UndoRedo.*` ist wx-frei und portierbar |
-
-### 2.2 Projekte
-
-3MF-Projekt speichern und laden fehlt. Damit gibt es keine Moeglichkeit,
-einen Stand aufzuheben. `libslic3r/Format/3mf.hpp` kann beides und haengt
-an keiner GUI.
-
-### 2.3 Fehlende Einstellungsseiten
-
-247 von 573 Optionen sind erreichbar. Nicht extrahierbar waren die Seiten,
-die `Tab.cpp` zur Laufzeit aufbaut:
-
-* **Drucker → Extruder 1..N** — hier liegt die gesamte **Retraction**
-  (Laenge, Geschwindigkeit, Lift Z, Wipe, Retract on layer change).
-  Das ist die schmerzhafteste Luecke.
-* **Custom G-code** — Start, Ende, vor/nach Schichtwechsel, Werkzeugwechsel,
-  zwischen Objekten, Farbwechsel, Pause. Auch bei Filament.
-* **Machine limits** — Beschleunigung, Ruck, Maximalgeschwindigkeiten.
-* **Bed shape** — Bettform und -groesse.
-* **Notes**, **Dependencies** — leer.
-
-### 2.4 Verhalten der Einstellungen
-
-Siehe Abschnitt 3.
-
-### 2.5 Multimaterial
-
-Siehe Abschnitt 4.
-
-### 2.6 Sonstiges
-
-* SLA vollstaendig (Kern koennte es, UI nicht)
-* Sequenzieller Druck: Vorschau und Kollisionspruefung
-* Prusa Connect, Physical Printers
-* Konfigurations-Schnappschuesse
-* Suchfeld in den Einstellungen (`Ctrl+F` am Desktop)
-* Systeminfo, Update-Pruefung
+Der Bericht laesst sich jederzeit erneut fahren; er ist die Grundlage
+fuer alles hier.
 
 ---
 
-## 3. Sind die Einstellungen echt oder Schmuck?
-
-**Echt.** Der Weg ist durchgehend:
+## 1. Parameter
 
 ```
-SettingsScreen  →  core[key] = value  →  psm_config_set
-                →  s->config (DynamicPrintConfig)
-                →  print->apply(model, config)   (psmobile_core.cpp:515)
+PrintConfig definiert insgesamt   560
+davon SLA                         190
+FFF-relevant                      370
+in PSMobile erreichbar            317
+fehlend                            53
 ```
 
-`psm_config_set` schreibt in genau die `DynamicPrintConfig`, die beim Slicen
-an `Print::apply` geht. Ein geaenderter Wert landet im G-Code. Unbekannte
-Schluessel und ungueltige Werte werden abgelehnt (`set_deserialize_nothrow`),
-es gibt also keine stillschweigend verschluckten Eingaben.
+Zum Vergleich: am Morgen des 29.07. waren es 247. Der Sprung kam nicht
+durch Abtippen, sondern weil `extract-ui.py` drei Muster in `Tab.cpp`
+nicht kannte. Alle drei sind inzwischen abgedeckt:
 
-Aber es fehlen drei Dinge, die der Desktop kann:
+| Muster im Original | Was dadurch fehlte |
+|---|---|
+| `option = optgroup->get_option("k"); … append_single_option_line(option)` | saemtliche Custom-G-code-Felder |
+| Seiten aus `build_extruder_pages` / `build_kinematics_page` / `build_unregular_pages` | die gesamte Retraction, Machine limits |
+| `line.append_option(optgroup->get_option("k"))` — zwei Werte unter einer Beschriftung | `top_solid_layers`, `first_layer_temperature`, `bed_temperature`, Luefterdrehzahlen |
 
-1. **Ein Presetwechsel wirft alle Aenderungen weg.**
-   `psm_preset_select` endet mit `s->config = s->presets->full_config()`
-   (`psmobile_presets.cpp:452`). Am Desktop bleiben Aenderungen als
-   "modified" stehen, werden orange markiert und man wird gefragt.
-   Bei uns sind sie kommentarlos weg.
+### Die verbleibenden 53, einzeln eingeordnet
 
-2. **Nichts ueberlebt einen App-Neustart.**
-   In den SharedPreferences liegen nur `printers` und `lang`. Weder die
-   Presetauswahl noch geaenderte Werte werden gespeichert.
+**a) Artefakte der Messung, keine echten Optionen (3)**
 
-3. **Keine Abhaengigkeitslogik.**
-   Der Desktop graut ueber `toggle_print` Felder aus, die im aktuellen
-   Zustand wirkungslos sind (z. B. alle Stuetzenparameter, wenn Stuetzen
-   aus sind). Bei uns ist alles immer bedienbar. Der Wert wird zwar
-   gesetzt, tut aber nichts — das kann verwirren.
+`machine_max_feedrate_`, `machine_max_acceleration_`, `machine_max_jerk_`
 
-Dazu fehlt der "geaendert"-Marker und "als Preset speichern".
+PrintConfig baut diese Namen selbst in einer Achsenschleife zusammen.
+Der Bericht sieht den Praefix. Die echten Schluessel (`…_x`, `…_y`,
+`…_z`, `…_e`) sind vorhanden. Nichts zu tun.
+
+**b) Interne Buchfuehrung, am Desktop nirgends bedienbar (20)**
+
+`printer_technology`, `printer_model`, `printer_vendor`,
+`printer_variant`, `print_settings_id`, `printer_settings_id`,
+`filament_settings_id`, `physical_printer_settings_id`, `preset_name`,
+`preset_names`, `profile_vendor`, `profile_version`, `inherits`,
+`inherits_cummulative`, `compatible_printers_condition_cummulative`,
+`compatible_prints_condition_cummulative`, `default_filament_profile`,
+`default_print_profile`, `extrusion_axis`, `filament_vendor`
+
+Diese Werte stehen in den Profildateien und werden vom Programm
+gepflegt, nicht vom Nutzer. `filament_vendor` benutzen wir bereits — zur
+Gruppierung der Materialliste, nicht als Einstellzeile. Nichts zu tun.
+
+**c) In 2.9 abgeloest oder nur noch fuer die Kommandozeile (4)**
+
+`colorprint_heights` (durch Custom-G-code-Eintraege ersetzt),
+`infill_only_where_needed` (entfernt), `thumbnails_format` (in
+`thumbnails` aufgegangen), `duplicate_distance` (nur CLI).
+Nichts zu tun.
+
+**d) Am Desktop nicht sichtbar (4)**
+
+`seam_preferred_direction`, `seam_preferred_direction_jitter` (im
+Quelltext auskommentiert), `solid_layers`, `solid_min_thickness`
+(Sammelwerte, die auf top/bottom durchschlagen). Nichts zu tun.
+
+**e) Eigene Dialoge am Desktop — echte Luecken (14)**
+
+| Schluessel | Dialog im Original | Aufwand |
+|---|---|---|
+| `bed_shape`, `bed_custom_texture`, `bed_custom_model` | `BedShapeDialog` — Form, Groesse, eigene Textur und Modell | mittel |
+| `wiping_volumes_matrix`, `wiping_volumes_use_custom_matrix` | `WipingDialog` — Reinigungsmengen als Matrix Filament×Filament | mittel, fuer MMU wichtig |
+| `filament_ramming_parameters` | `RammingDialog` — Rammkurve als Diagramm | hoch |
+| `gcode_substitutions` | `SubstitutionManager` — Suchen-und-Ersetzen im Ausgabe-G-code | gering |
+| `print_host`, `host_type`, `printhost_apikey`, `printhost_port`, `printhost_cafile`, `printhost_user`, `printhost_password`, `printhost_ssl_ignore_revoke`, `printhost_authorization_type` | `PhysicalPrinterDialog` | teilweise vorhanden |
+
+Zum letzten Punkt: wir haben eine eigene PrusaLink-Verwaltung mit
+Adresse, Benutzer und Passwort. Sie speichert aber in den
+SharedPreferences statt im Druckerprofil, kennt keine anderen
+Host-Typen (OctoPrint, Repetier, FlashAir, AstroBox, MKS) und
+unterstuetzt kein Zertifikat.
+
+**f) Am Objekt statt im Profil (4)**
+
+`extruder`, `extruder_colour`, `wipe_into_infill`, `wipe_into_objects`
+
+Die gehoeren in den Objektbaum, nicht auf eine Profilseite.
+`extruder_colour` ist ueber die Extruderfarben in der Seitenleiste
+bereits erreichbar; `extruder` je Objekt und je Teil ist Aufgabe 26 und
+die eigentliche Sperre fuer echtes Multicolor.
+
+### Fazit Parameter
+
+Von 370 sind **317 erreichbar**, **31 brauchen nichts** (Gruppen a–d),
+**14 sind echte Luecken** in Form von fuenf Spezialdialogen und
+**4 gehoeren an den Objektbaum**.
 
 ---
 
-## 4. Multicolor / Multimaterial?
+## 2. Seiten
 
-**Nein, noch nicht — trotz gruener Vorzeichen.**
+Der Druckerbaum stimmt seit heute mit dem Desktop ueberein — geprueft
+gegen das Belegfoto eines XL-5T:
 
-Was da ist:
+```
+General | Custom G-code | Machine limits | Single extruder MM setup
+        | Extruder 1 … 5 | Notes | Dependencies
+```
 
-* MMU3-Druckermodelle stehen in der Ersteinrichtung
-  (CORE One MMU3, MK4S MMU3, …) und lassen sich waehlen.
-* Die Druckseite **Multiple Extruders** mit 28 Parametern ist vorhanden:
-  Wipe Tower, Ooze Prevention, Extruder fuer Perimeter/Infill/Stuetzen.
-* `update_multi_material_filament_presets()` wird beim Presetwechsel
-  aufgerufen, die Filamentliste wird also auf die Extruderzahl gedehnt.
+Die Extruderseiten entstehen zur Laufzeit, eine je Eintrag in
+`nozzle_diameter`, genau wie `TabPrinter::build_extruder_pages`.
 
-Was fehlt, und ohne das bleibt es einfarbig:
-
-1. **Nur ein Filamentplatz in der UI.** Bei fuenf Extrudern bekommen alle
-   fuenf dasselbe Filament. Es gibt keinen Weg, Slot 2 anders zu belegen.
-2. **Keine Extruderzuweisung je Objekt oder je Teil.** Am Desktop ist das
-   die Spalte im Objektbaum. Ohne sie druckt alles aus Extruder 1.
-3. **Kein MMU-Bemalen.**
-4. **Kein Farbwechsel (M600) im Schichtregler** — am Desktop das "+" am
-   Regler in der Vorschau.
-
-Ein MMU-Drucker laesst sich also auswaehlen und slicen; das Ergebnis ist
-ein einfarbiges Teil mit Wipe Tower. Fuer echtes Multicolor braucht es
-Punkt 1 und 2, danach 4 und zuletzt 3.
+Druck (10 Seiten) und Filament (6 Seiten) sind ebenfalls vollstaendig.
+Was auf den Seiten *Dependencies* steht, ist noch leer: dort gehoert der
+Abhaengigkeitsbaum hin, den der Desktop als eigenes Widget zeichnet.
 
 ---
 
-## 5. Reihenfolge nach Nutzen pro Aufwand
+## 3. Werkzeuge am Modell
 
-1. **Extruder-Seite mit Retraction** — die Parameter existieren in
-   `PrintConfig`, nur die Seite fehlt. Kann `extract-ui.py` nachgereicht
-   bekommen, indem die Extruderseite statisch erzeugt wird.
-2. **Custom G-code + Machine limits + Bed shape** — dieselbe Mechanik.
-3. **Skalieren und Drehen** — ABI liegt bereit, es fehlt nur die UI.
-4. **Rueckgaengig/Wiederholen** — `UndoRedo.*` ist wx-frei.
-5. **3MF-Projekt speichern/laden**.
-6. **Presetaenderungen behalten und speichern** + Neustartfestigkeit.
-7. **Mehrere Filamentplaetze + Extruder je Objekt** → Multicolor.
-8. **Schneiden**, dann die Bemal-Werkzeuge (aufwendig, viel eigene GL-Arbeit).
+PrusaSlicer kennt dreizehn (ohne die beiden SLA-Werkzeuge):
+
+| Werkzeug | PSMobile | Bemerkung |
+|---|---|---|
+| Verschieben | teilweise | nur Ziehen mit dem Finger, keine Zahleneingabe |
+| Skalieren | fehlt | ABI `psm_model_set_scale` liegt bereit |
+| Drehen | fehlt | ABI `psm_model_set_rotation` liegt bereit |
+| Flach legen | fehlt | Flaeche antippen, Objekt richtet sich danach |
+| Schneiden | fehlt | `libslic3r/CutUtils` ist GUI-frei, portierbar |
+| Vereinfachen | fehlt | `libslic3r/QuadricEdgeCollapse`, GUI-frei |
+| Stuetzen bemalen | fehlt | braucht `TriangleSelector` plus eigenen Pinsel |
+| Naht bemalen | fehlt | dito |
+| Fuzzy Skin bemalen | fehlt | dito |
+| MMU-Farbe bemalen | fehlt | dito, das teuerste Stueck |
+| Messen | fehlt | |
+| Text praegen | fehlt | braucht Schriftbehandlung |
+| SVG praegen | fehlt | |
+
+**Neu in dieser Runde entdeckt:** *Vereinfachen* und *Fuzzy Skin
+bemalen* standen in keiner meiner frueheren Listen. Vereinfachen ist
+davon das guenstigste — reine Geometrie, kein wx.
+
+---
+
+## 4. Menuebefehle
+
+`MainFrame.cpp` hat 68 Eintraege. Nach Bereichen:
+
+**Datei — vorhanden:** Modell importieren (STL/3MF/OBJ/AMF), G-code
+exportieren, G-code senden, Slicen.
+
+**Datei — fehlt:** Neues Projekt, Projekt oeffnen, Projekt speichern,
+Projekt speichern unter, STL in imperialen Einheiten importieren,
+ZIP-Archiv importieren, Konfiguration importieren/exportieren,
+Konfigurationsbuendel importieren/exportieren, Platte als STL/OBJ
+exportieren (mit und ohne Stuetzen), Werkzeugwege als OBJ exportieren,
+ASCII-G-code nach binaer wandeln und zurueck, STL reparieren.
+
+**Bearbeiten — fehlt vollstaendig:** Alles auswaehlen, Auswahl
+aufheben, Auswahl loeschen (nur ueber die Werkzeugleiste), Alles
+loeschen (vorhanden), Rueckgaengig, Wiederholen, Kopieren, Einfuegen,
+Neu von Datei laden, Suchen.
+
+**Ansicht — vorhanden:** Iso, Oben, Unten, Vorn, Hinten, Links, Rechts,
+3D-Editor, Vorschau.
+
+**Fenster — fehlt:** Reiter direkt anspringen (seit heute ueber die
+Reiterleiste da), Formenbibliothek, Warteschlange fuer Druckerhosts,
+Profile vergleichen.
+
+Von den 68 sind rund **20 sinnvoll uebertragbar**; der Rest ist
+Desktop-Eigenheit (Neue Instanz, Konfigurationsordner zeigen,
+Tastenkuerzel) oder gehoert zu SLA.
+
+---
+
+## 5. Hauptbildschirm
+
+Das Belegfoto der Desktop-Seitenleiste zeigt: Druckprofil, Filament (bei
+MMU fuenf Zeilen mit Farbe), Drucker, dann **Supports**, **Infill**,
+**Brim** als direkte Bedienelemente, darunter die Objektliste und
+"Slice now".
+
+Bei uns sind Profile und Filamente je Extruder seit heute da. Es fehlen:
+
+* Die drei Schnellzugriffe Supports, Infill, Brim
+* Ein Baum statt einer flachen Objektliste
+* Betthaftung, Schalenstaerke und Infill-Muster nach dem Vorbild von
+  EasyPrint (Belegbild): Infill mit Bild, Decke/Wand/Boden je in
+  Millimetern und Schichten
+
+---
+
+## 6. Was seit dem letzten Bericht dazugekommen ist
+
+* G-Code-Vorschau ueber libvgcode, mit Schichtregler
+* Material und Farbe je Extruder, samt Farbwaehler
+* Alle Einstellungsseiten des Druckers inklusive Retraction
+* Reiterleiste Druck / Filament / Drucker
+* Aenderungen leben im `edited preset`, damit ein Profilwechsel sie
+  nicht mehr kommentarlos wegwirft
+* G-Code-Dateiname aus `output_filename_format`; dabei kam heraus, dass
+  bgcode laengst lief
+
+**Behobene Fehler:** Bett wechselte beim Druckerwechsel nicht mit;
+neu geladenes Objekt war unsichtbar; `\n` stand woertlich in den
+G-code-Feldern; Filamentwerte zeigten die ganze Reihe ueber alle Duesen.
+
+---
+
+## 7. Reihenfolge
+
+1. **Objekt-Schnelleinstellungen** mit Zwei-Finger-Skalierung — Aufgabe 25
+2. **Schnellzugriffe Infill, Schalen, Stuetzen** im Hauptschirm — 34
+3. **Abhaengigkeiten ausgrauen** mit Begruendung — 27
+4. **Objektbaum mit Extruder je Teil** — 26, danach ist Multicolor echt
+5. **Filamentauswahl mit Suche und Herstellern** — 33
+6. **Profiländerungen behalten und speichern**, Nachfrage beim Wechsel — 21
+7. **Projekte** neu, oeffnen, speichern als 3MF — 35
+8. **Rueckgaengig und Wiederholen** — GUI-frei, guenstig
+9. **Vereinfachen, Schneiden, Flach legen** — GUI-freie Geometrie
+10. **Bettform, Reinigungsmengen, G-code-Ersetzungen** — die drei
+    guenstigen Spezialdialoge
+11. **Mehrfachauswahl und Dateiliste** — 39
+12. **Reinigungsturm verschieben** — 36
+13. **Zwei Oberflaechen Einfach/Experte** — 41, zum Schluss
+14. Die Bemal-Werkzeuge — das teure Ende
