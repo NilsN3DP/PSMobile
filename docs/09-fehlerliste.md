@@ -62,10 +62,19 @@ mitziehen. Vorher blieb 0,2 stehen.
 und schrieb den alten Wert beim naechsten Antippen in die neue
 Konfiguration zurueck.
 
-### A4 · Sprache wird nicht gemerkt
-Die Ersteinrichtung ruft `PsUi.setLanguage`, schreibt die Wahl aber nie
-nach `SlicerService.uiLanguage`. Nach dem Neustart ist wieder Englisch
-eingestellt.
+### A4 · Sprache wird nicht gemerkt — BEHOBEN
+Behoben im Loop-Durchlauf 04:45. Die Ersteinrichtung meldet die Wahl
+ueber `onLanguageChange` nach oben, MainActivity schreibt sie nach
+`SlicerService.uiLanguage`.
+
+Am Geraet nachgeprueft: Deutsch in der Ersteinrichtung gewaehlt,
+eingerichtet, App beendet und neu gestartet - die Seitenleiste zeigt
+"DRUCKER / DRUCKEINSTELLUNGEN / FILAMENT" statt Englisch.
+
+*Ursprungsbefund*: `PsUi.setLanguage` wurde gerufen, die Wahl aber nie
+gespeichert.
+
+**Damit ist die Stufe A vollstaendig abgearbeitet.**
 
 ---
 
@@ -93,10 +102,19 @@ die Auswahl.
 ### B4 · Schalter "nur eingerichtete Drucker" filtert nichts
 Wird gespeichert, aber `refreshPresets()` wertet ihn nicht aus.
 
-### B5 · Alter G-Code ueberlebt das Leeren des Bettes
-`psm_session_clear` setzt `gcode_tmp_path` nicht zurueck. Nach "Bett
-leeren" bietet die Oberflaeche weiter Export und Senden an - mit dem
-G-Code des vorherigen Modells. Das kann einen falschen Druck ausloesen.
+### B5 · Alter G-Code ueberlebt das Leeren des Bettes — BEHOBEN
+Behoben im Loop-Durchlauf 04:45. `psm_session_clear` loescht die Datei
+und leert den Pfad; `SlicerService.clearBed` setzt zusaetzlich
+`lastGcode` und die Sendemeldung zurueck.
+
+Am Geraet nachgeprueft: Wuerfel geslict (100 Layer, 3,7 g), dann Bett
+geleert. Danach sind Objekt, Statistik und der Knopf "G-Code
+exportieren" verschwunden, "Jetzt slicen" ist ausgegraut, und
+`last.gcode` ist von der Platte geloescht.
+
+*Ursprungsbefund*: Nach dem Leeren bot die Oberflaeche weiter Export und
+Senden an - mit dem G-Code des vorherigen Modells. Das haette einen
+falschen Druck ausloesen koennen.
 
 ### B6 · Geaenderte Einstellungen sind nicht als geaendert erkennbar
 PrusaSlicer haengt "(modified)" an den Profilnamen, sobald ein Wert

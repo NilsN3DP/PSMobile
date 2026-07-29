@@ -199,3 +199,38 @@ beheben waere halbe Arbeit gewesen.
 **Aufgefallen**
 - Nichts Neues. Der Durchlauf lief ohne Umweg durch, weil diesmal vor
   jedem Tippen ein Screenshot geprueft wurde - die Lehre aus Durchlauf 1.
+
+### 2026-07-29, 02:15 bis 04:50 - Durchlaeufe 3 und 4: A4 und B5
+
+Durchlauf 3 wurde unterbrochen, die Aenderungen blieben uncommitted
+liegen. Durchlauf 4 hat sie zu Ende geprueft. Fuenf Loop-Ausloesungen
+kamen dabei gleichzeitig herein - sie hatten sich aufgestaut, waehrend
+gearbeitet wurde, und wurden als ein Durchlauf behandelt.
+
+**Gemacht**
+- A4: Die Ersteinrichtung meldet die Sprachwahl ueber `onLanguageChange`
+  nach oben, MainActivity schreibt sie nach `SlicerService.uiLanguage`.
+- B5: `psm_session_clear` loescht den fertigen G-Code und leert den Pfad;
+  `clearBed` setzt zusaetzlich `lastGcode` und die Sendemeldung zurueck.
+
+**Gemessen**
+- A4: Deutsch gewaehlt, App beendet und neu gestartet - Seitenleiste
+  zeigt "DRUCKER / DRUCKEINSTELLUNGEN / FILAMENT". Vorher wieder
+  Englisch.
+- B5: Wuerfel geslict (100 Layer, 3,7 g), dann Bett geleert. Objekt,
+  Statistik und "G-Code exportieren" verschwinden, "Jetzt slicen" wird
+  ausgegraut, und `last.gcode` ist von der Platte weg.
+
+**Damit ist die Stufe A vollstaendig abgearbeitet.**
+
+**Fehlschlaege, zweimal derselbe**
+- Zweimal blind getippt und dabei das falsche Ziel getroffen: einmal
+  "Drucker verwalten" statt "Jetzt slicen", einmal "Anordnen" statt
+  "Bett leeren". Beide Male sah es nach einem Programmfehler aus, war
+  aber ein Bedienfehler.
+- Ursache der zweiten Verwechslung: **Screenshots kommen in 2000x1250
+  an, das Geraet hat 2560x1600.** Geraetekoordinate = abgelesener Wert
+  mal 1,28. Wer das vergisst, tippt rund 100 px zu tief.
+- Ausserdem verschieben sich die Knoepfe der Seitenleiste je nach
+  Zustand - "Jetzt slicen" sitzt mit sichtbarer Statistik hoeher als
+  ohne. Feste Koordinaten aus einem alten Screenshot sind wertlos.

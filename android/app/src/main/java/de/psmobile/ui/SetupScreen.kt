@@ -54,6 +54,7 @@ fun SetupScreen(
     models: List<PsmCore.PrinterModel>,
     busy: Boolean,
     onConfirm: (List<String>) -> Unit,
+    onLanguageChange: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -106,6 +107,9 @@ fun SetupScreen(
                                     langMenu = false
                                     lang = code
                                     PsUi.setLanguage(context, code)
+                                    // Ohne das steht nach dem Neustart
+                                    // wieder Englisch. Befund A4.
+                                    onLanguageChange(code)
                                 },
                             )
                         }

@@ -404,6 +404,9 @@ private fun Sidebar(
             )
         }
 
+        // An `progress` haengen statt an einem eigenen Zustand: nach
+        // "Bett leeren" faellt progress auf Idle zurueck, damit
+        // verschwinden Senden und Export mit. Befund B5.
         if (progress is SlicerService.Progress.Done && linkPrinters.isNotEmpty()) {
             // Direkt an den ersten eingerichteten Drucker.
             val target = linkPrinters.first()

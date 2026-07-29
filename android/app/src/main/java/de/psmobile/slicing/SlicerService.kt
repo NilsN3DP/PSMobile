@@ -324,6 +324,10 @@ class SlicerService : Service() {
         runCatching { core?.clear() }.onFailure { Log.w(TAG, "Bett leeren", it) }
         refreshObjects()
         _progress.value = Progress.Idle
+        // Auch auf dieser Seite den alten G-Code vergessen - sonst bleiben
+        // "Exportieren" und "Senden" bedienbar. Befund B5.
+        lastGcode = null
+        _sendState.value = null
     }
 
     fun arrange() {

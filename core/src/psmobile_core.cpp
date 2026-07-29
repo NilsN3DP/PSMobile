@@ -192,6 +192,16 @@ PSM_API psm_result psm_session_clear(psm_session *s)
         s->teardown_print();
         s->state = PSM_STATE_IDLE;
         s->stats = psm_slice_stats{};
+
+        /* Den fertigen G-Code mit vergessen. Sonst bietet die Oberflaeche
+         * nach dem Leeren weiter Export und Senden an - mit dem G-Code des
+         * vorherigen Modells. Das kann einen falschen Druck ausloesen.
+         * Befund B5 in docs/09-fehlerliste.md. */
+        if (! s->gcode_tmp_path.empty()) {
+            boost::system::error_code ec;
+            boost::filesystem::remove(s->gcode_tmp_path, ec);
+            s->gcode_tmp_path.clear();
+        }
         return PSM_OK;
     PSM_GUARD_END(s)
 }

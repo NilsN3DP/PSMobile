@@ -94,6 +94,7 @@ class MainActivity : ComponentActivity() {
                         models = models,
                         busy = busy,
                         onConfirm = { svc.completeSetup(it) },
+                        onLanguageChange = { svc.uiLanguage = it },
                     )
                 } else {
                     SlicerScreen(
