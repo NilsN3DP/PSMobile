@@ -78,6 +78,8 @@ class PsmCore private constructor(private var handle: Long) : Closeable {
         @JvmStatic private external fun nativeSliceStats(h: Long): DoubleArray?
         @JvmStatic private external fun nativeGcodeExport(h: Long, path: String): Int
         @JvmStatic private external fun nativeEstimateMemory(h: Long): Long
+        @JvmStatic private external fun nativeMirror(h: Long, id: Int, axis: Int): Int
+        @JvmStatic private external fun nativeSetInstances(h: Long, id: Int, n: Int): Int
         @JvmStatic private external fun nativeGcodeSuggestedName(h: Long): String
         @JvmStatic private external fun nativeConfigGetAt(h: Long, key: String, index: Int): String?
         @JvmStatic private external fun nativeConfigSetAt(h: Long, key: String, index: Int, value: String): Int
@@ -287,6 +289,15 @@ class PsmCore private constructor(private var handle: Long) : Closeable {
         check(nativePresetSelect(requireHandle(), type.raw, name), "Preset waehlen")
 
     fun selectedPreset(type: PresetType): String = nativePresetSelected(requireHandle(), type.raw)
+
+    enum class Axis(val raw: Int) { X(0), Y(1), Z(2) }
+
+    fun mirror(id: Int, axis: Axis) =
+        check(nativeMirror(requireHandle(), id, axis.raw), "Spiegeln")
+
+    /** Zahl der Kopien auf dem Bett. */
+    fun setInstances(id: Int, count: Int) =
+        check(nativeSetInstances(requireHandle(), id, count), "Kopien")
 
     /**
      * Der Dateiname, den PrusaSlicer vergeben wuerde - aus

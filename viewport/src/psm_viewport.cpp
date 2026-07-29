@@ -693,6 +693,46 @@ PSM_API int psm_viewport_drag_selected(psm_viewport *v,
     return 1;
 }
 
+PSM_API int psm_viewport_scale_selected(psm_viewport *v, float factor)
+{
+    if (v == nullptr || v->selection == PSM_INVALID_ID)
+        return 0;
+    /* Unsinnige Faktoren abweisen, statt das Objekt zu zerstoeren. */
+    if (! (factor > 0.f) || factor > 100.f)
+        return 0;
+
+    Slic3r::ModelObject *obj = nullptr;
+    for (Slic3r::ModelObject *o : v->session->model.objects)
+        if (static_cast<psm_object_id>(o->id().id) == v->selection) {
+            obj = o;
+            break;
+        }
+    if (obj == nullptr || obj->instances.empty())
+        return 0;
+
+    Slic3r::ModelInstance *inst = obj->instances.front();
+    Slic3r::Vec3d sc = inst->get_scaling_factor();
+
+    /* Grenzen wie am Desktop: unter einem Prozent ist nichts mehr zu
+     * sehen, ueber dem Hundertfachen passt nichts mehr aufs Bett. */
+    const double f = std::clamp(static_cast<double>(factor),
+                                0.01 / sc.x(), 100.0 / sc.x());
+    sc *= f;
+    inst->set_scaling_factor(sc);
+    obj->invalidate_bounding_box();
+
+    /* Nach dem Skalieren wieder aufsetzen - sonst schwebt das Objekt
+     * beim Verkleinern und steckt beim Vergroessern im Bett. */
+    const Slic3r::BoundingBoxf3 bb = obj->instance_bounding_box(0, false);
+    Slic3r::Vec3d off = inst->get_offset();
+    off.z() -= bb.min.z();
+    inst->set_offset(off);
+    obj->invalidate_bounding_box();
+
+    v->dirty = true;
+    return 1;
+}
+
 /* --- Vorschau ------------------------------------------------------ */
 
 PSM_API void psm_viewport_set_mode(psm_viewport *v, psm_view_mode mode)

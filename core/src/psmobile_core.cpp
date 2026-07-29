@@ -12,6 +12,7 @@
 #include "psmobile_session.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <chrono>
 #include <cstring>
 #include <memory>
@@ -382,6 +383,48 @@ PSM_API psm_result psm_model_set_scale(psm_session *s, psm_object_id id, float s
         Slic3r::ModelObject *o = find_object(s, id);
         if (o == nullptr) return PSM_ERR_NOT_FOUND;
         first_instance(o)->set_scaling_factor(Slic3r::Vec3d(sx, sy, sz));
+        o->invalidate_bounding_box();
+        return PSM_OK;
+    PSM_GUARD_END(s)
+}
+
+PSM_API psm_result psm_model_mirror(psm_session *s, psm_object_id id, int32_t axis)
+{
+    PSM_GUARD_BEGIN(s)
+        if (axis < 0 || axis > 2) return PSM_ERR_INVALID_ARG;
+        Slic3r::ModelObject *o = find_object(s, id);
+        if (o == nullptr) return PSM_ERR_NOT_FOUND;
+        Slic3r::ModelInstance *inst = first_instance(o);
+        if (inst == nullptr) return PSM_ERR_NOT_FOUND;
+
+        Slic3r::Vec3d m = inst->get_mirror();
+        m(axis) = -m(axis);
+        inst->set_mirror(m);
+        o->invalidate_bounding_box();
+        return PSM_OK;
+    PSM_GUARD_END(s)
+}
+
+PSM_API psm_result psm_model_set_instances(psm_session *s, psm_object_id id, int32_t count)
+{
+    PSM_GUARD_BEGIN(s)
+        if (count < 1) return PSM_ERR_INVALID_ARG;
+        Slic3r::ModelObject *o = find_object(s, id);
+        if (o == nullptr) return PSM_ERR_NOT_FOUND;
+
+        while (static_cast<int32_t>(o->instances.size()) > count)
+            o->delete_last_instance();
+
+        /* Neue Kopien leicht versetzt ablegen, sonst stecken sie
+         * ineinander. Das Anordnen raeumt danach sauber auf. */
+        while (static_cast<int32_t>(o->instances.size()) < count) {
+            Slic3r::ModelInstance *src = o->instances.front();
+            Slic3r::ModelInstance *dst = o->add_instance(*src);
+            Slic3r::Vec3d off = dst->get_offset();
+            const double step = o->bounding_box_exact().size().x() + 5.0;
+            off.x() += step * static_cast<double>(o->instances.size() - 1);
+            dst->set_offset(off);
+        }
         o->invalidate_bounding_box();
         return PSM_OK;
     PSM_GUARD_END(s)

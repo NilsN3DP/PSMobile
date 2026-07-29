@@ -36,6 +36,7 @@ class PsmViewport private constructor(private var handle: Long) {
         @JvmStatic private external fun nativeLoadPreview(h: Long): Int
         @JvmStatic private external fun nativeLayerCount(h: Long): Int
         @JvmStatic private external fun nativeSetLayerRange(h: Long, lo: Int, hi: Int)
+        @JvmStatic private external fun nativeScaleSelected(h: Long, factor: Float): Int
     }
 
     fun resize(w: Int, h: Int) = nativeResize(handle, w, h)
@@ -57,6 +58,12 @@ class PsmViewport private constructor(private var handle: Long) {
     /** @return true wenn das ausgewaehlte Objekt bewegt wurde */
     fun dragSelected(fx: Float, fy: Float, tx: Float, ty: Float): Boolean =
         nativeDragSelected(handle, fx, fy, tx, ty) != 0
+
+    /**
+     * Skaliert das ausgewaehlte Objekt gleichmaessig und setzt es wieder
+     * aufs Bett. Fuer die Spreizgeste im Skalieren-Werkzeug.
+     */
+    fun scaleSelected(factor: Float): Boolean = nativeScaleSelected(handle, factor) != 0
 
     /** Vorbereiten zeigt die Modelle, Vorschau die Werkzeugwege des Slicers. */
     enum class Mode(val raw: Int) { EDITOR(0), PREVIEW(1) }

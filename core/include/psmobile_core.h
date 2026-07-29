@@ -158,6 +158,16 @@ PSM_API psm_result psm_model_set_position(psm_session *s, psm_object_id id, floa
 PSM_API psm_result psm_model_set_rotation(psm_session *s, psm_object_id id, float rx, float ry, float rz);
 PSM_API psm_result psm_model_set_scale(psm_session *s, psm_object_id id, float sx, float sy, float sz);
 
+/** Spiegelt an einer Achse: 0 = X, 1 = Y, 2 = Z. */
+PSM_API psm_result psm_model_mirror(psm_session *s, psm_object_id id, int32_t axis);
+
+/**
+ * Setzt die Zahl der Kopien auf dem Bett. PrusaSlicer nennt das
+ * Instanzen: dieselbe Geometrie, mehrfach platziert, ohne den Speicher
+ * zu vervielfachen.
+ */
+PSM_API psm_result psm_model_set_instances(psm_session *s, psm_object_id id, int32_t count);
+
 /** Legt das Objekt flach auf das Bett (kleinster Z-Punkt auf 0). */
 PSM_API psm_result psm_model_drop_to_bed(psm_session *s, psm_object_id id);
 

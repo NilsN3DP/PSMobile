@@ -171,6 +171,9 @@ private fun SlicerContent(
 
     // Zustand der G-Code-Vorschau. Der Viewport haelt die Werkzeugwege, hier
     // steht nur, was die Bedienelemente davon zeigen muessen.
+    // Solange das Skalieren-Werkzeug an ist, greift die Spreizgeste das
+    // Objekt statt der Kamera.
+    var scaleTool by remember { mutableStateOf(false) }
     var previewMode by remember { mutableStateOf(false) }
     var layerCount by remember { mutableStateOf(0) }
     var layerLo by remember { mutableStateOf(0) }
@@ -293,6 +296,11 @@ private fun SlicerContent(
             onManagePrinters = { service.showScreen(SlicerService.Screen.Printers) },
             linkPrinters = linkPrinters,
             sendState = sendState,
+            scaleTool = scaleTool,
+            onScaleToolChange = { on ->
+                scaleTool = on
+                sceneController.scaleTool = on
+            },
             modifier = Modifier.width(SIDEBAR_WIDTH).fillMaxHeight(),
         )
     }
@@ -741,6 +749,8 @@ private fun Sidebar(
     onManagePrinters: () -> Unit,
     linkPrinters: List<de.psmobile.net.PrusaLink.Printer>,
     sendState: String?,
+    scaleTool: Boolean,
+    onScaleToolChange: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val isRunning = progress is SlicerService.Progress.Running
@@ -805,6 +815,18 @@ private fun Sidebar(
                         service.removeObject(obj.id)
                     }
                 }
+            }
+
+            // Bedienelemente zum ausgewaehlten Objekt, direkt unter der
+            // Liste - am Desktop das Objektmanipulator-Feld rechts unten.
+            selected?.let { obj ->
+                HorizontalDivider(Modifier.padding(vertical = 4.dp), color = PrusaColors.Divider)
+                ObjectPanel(
+                    service = service,
+                    obj = obj,
+                    scaleToolActive = scaleTool,
+                    onScaleToolChange = onScaleToolChange,
+                )
             }
         }
 

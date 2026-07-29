@@ -77,6 +77,19 @@ class SceneController {
     }
 
     fun setLayerRange(lo: Int, hi: Int) = run { it.setLayerRange(lo, hi) }
+
+    /**
+     * Solange das Skalieren-Werkzeug aktiv ist, greift die Spreizgeste
+     * das ausgewaehlte Objekt statt der Kamera.
+     *
+     * Das Umschalten liegt hier und nicht im Viewport, weil es eine
+     * Frage der Bedienung ist, nicht der Darstellung - der Viewport
+     * kennt nur "skaliere um diesen Faktor".
+     */
+    var scaleTool: Boolean = false
+
+    /** Wird bei jeder Skalierung gerufen, damit die Anzeige nachzieht. */
+    var onScaled: (() -> Unit)? = null
 }
 
 @Composable
@@ -96,13 +109,22 @@ fun SceneView(
     AndroidView(
         modifier = modifier,
         factory = { ctx ->
-            SceneGLView(ctx, core, shaderDir, holder, onSelect).also {
+            SceneGLView(ctx, core, shaderDir, holder, onSelect, controller).also {
                 controller.view = it
                 controller.holder = holder
             }
         },
         update = { view ->
             // Modell hat sich geaendert oder Auswahl gewechselt: neu zeichnen.
+            //
+            // invalidateKey muss hier gelesen werden. Compose entscheidet
+            // anhand der von der Lambda erfassten Werte, ob update erneut
+            // laeuft - ein Parameter, der nur in der Signatur steht, aendert
+            // daran nichts. Vorher zeichnete der Viewport nur neu, wenn sich
+            // die Auswahl aenderte: ein skaliertes oder gedrehtes Objekt
+            // blieb auf dem Bett in seiner alten Groesse stehen.
+            @Suppress("UNUSED_EXPRESSION") invalidateKey
+
             view.selectedId = selectedId ?: -1
             view.queueEvent {
                 holder.viewport?.setSelection(selectedId ?: -1)
@@ -136,6 +158,7 @@ private class SceneGLView(
     private val shaderDir: String,
     private val holder: ViewportHolder,
     private val onSelect: (Int) -> Unit,
+    private val controller: SceneController,
 ) : GLSurfaceView(context) {
 
     private var lastX = 0f
@@ -206,7 +229,18 @@ private class SceneGLView(
                     val s = span(event)
                     if (lastSpan > 0f && s > 0f) {
                         val f = s / lastSpan
-                        if (abs(f - 1f) > 0.002f) queueEvent { vp.zoom(f) }
+                        if (abs(f - 1f) > 0.002f) {
+                            // Im Skalieren-Werkzeug greift das Spreizen das
+                            // Objekt, sonst die Kamera. Das Schieben mit
+                            // zwei Fingern bleibt in beiden Faellen gleich.
+                            if (controller.scaleTool && selectedId >= 0) {
+                                queueEvent {
+                                    if (vp.scaleSelected(f)) post { controller.onScaled?.invoke() }
+                                }
+                            } else {
+                                queueEvent { vp.zoom(f) }
+                            }
+                        }
                     }
                     lastSpan = s
 

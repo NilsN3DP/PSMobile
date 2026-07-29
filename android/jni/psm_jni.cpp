@@ -619,6 +619,16 @@ JNIEXPORT jint JNICALL JNI_FN(nativeGcodeExport)(JNIEnv *env, jclass, jlong h, j
     return psm_gcode_export(sess(h), p.c_str());
 }
 
+JNIEXPORT jint JNICALL JNI_FN(nativeMirror)(JNIEnv *, jclass, jlong h, jint id, jint axis)
+{
+    return psm_model_mirror(sess(h), static_cast<psm_object_id>(id), axis);
+}
+
+JNIEXPORT jint JNICALL JNI_FN(nativeSetInstances)(JNIEnv *, jclass, jlong h, jint id, jint n)
+{
+    return psm_model_set_instances(sess(h), static_cast<psm_object_id>(id), n);
+}
+
 JNIEXPORT jstring JNICALL JNI_FN(nativeGcodeSuggestedName)(JNIEnv *env, jclass, jlong h)
 {
     char buf[512] = { 0 };
@@ -716,6 +726,11 @@ JNIEXPORT void JNICALL JNI_VP(nativeSetSelection)(JNIEnv *, jclass, jlong h, jin
  * G-Code-Vorschau. nativeLoadPreview muss auf dem GL-Thread laufen, weil
  * libvgcode dabei seine Puffer und Shader anlegt.
  */
+
+JNIEXPORT jint JNICALL JNI_VP(nativeScaleSelected)(JNIEnv *, jclass, jlong h, jfloat factor)
+{
+    return psm_viewport_scale_selected(vp(h), factor);
+}
 
 JNIEXPORT void JNICALL JNI_VP(nativeSetMode)(JNIEnv *, jclass, jlong h, jint mode)
 {

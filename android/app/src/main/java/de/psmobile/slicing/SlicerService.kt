@@ -451,6 +451,70 @@ class SlicerService : Service() {
         _progress.value = Progress.Failed(t.message ?: "Import fehlgeschlagen")
     }
 
+    /* --- Objekt bearbeiten ------------------------------------------- */
+    /*
+     * Alle Handgriffe gehen ueber denselben Weg: aendern, Objektliste neu
+     * lesen, Szene fuer ungueltig erklaeren. refreshObjects erledigt das
+     * Zweite und Dritte bereits.
+     */
+
+    private fun withObject(id: Int, what: String, block: (PsmCore) -> Unit) {
+        val c = core ?: return
+        runCatching { block(c) }.onFailure { Log.w(TAG, "$what: ${it.message}") }
+        refreshObjects()
+    }
+
+    /** Gleichmaessig auf einen Faktor setzen (1.0 = Originalgroesse). */
+    fun setUniformScale(id: Int, factor: Float) =
+        withObject(id, "Skalieren") { it.setScale(id, factor, factor, factor); it.dropToBed(id) }
+
+    /** Laengste Kante auf ein Mass bringen. */
+    fun scaleToSize(id: Int, mm: Float) =
+        withObject(id, "Auf Mass skalieren") { it.scaleToFit(id, mm); it.dropToBed(id) }
+
+    /** So gross wie das Bett es zulaesst. */
+    fun scaleToBed(id: Int) = withObject(id, "Aufs Bett einpassen") { c ->
+        // Die kleinere Bettkante minus etwas Rand ist das, was sicher passt.
+        val shape = c["bed_shape"].orEmpty()
+        val pts = shape.split(',').mapNotNull { p ->
+            p.split('x').mapNotNull { it.trim().toFloatOrNull() }.takeIf { it.size == 2 }
+        }
+        val w = pts.maxOfOrNull { it[0] } ?: 200f
+        val d = pts.maxOfOrNull { it[1] } ?: 200f
+        c.scaleToFit(id, minOf(w, d) * 0.9f)
+        c.dropToBed(id)
+    }
+
+    fun setRotationAxis(id: Int, axis: Int, degrees: Float) =
+        withObject(id, "Drehen") { c ->
+            val o = c.objectInfo(id) ?: return@withObject
+            val r = o.rotation
+            val x = if (axis == 0) degrees else r.first
+            val y = if (axis == 1) degrees else r.second
+            val z = if (axis == 2) degrees else r.third
+            c.setRotation(id, x, y, z)
+            c.dropToBed(id)
+        }
+
+    /** Um einen Betrag weiterdrehen, fuer die Vierteldrehungen. */
+    fun rotateBy(id: Int, axis: Int, degrees: Float) =
+        withObject(id, "Weiterdrehen") { c ->
+            val o = c.objectInfo(id) ?: return@withObject
+            val r = o.rotation
+            val cur = when (axis) { 0 -> r.first; 1 -> r.second; else -> r.third }
+            val next = ((cur + degrees) % 360f + 360f) % 360f
+            val x = if (axis == 0) next else r.first
+            val y = if (axis == 1) next else r.second
+            val z = if (axis == 2) next else r.third
+            c.setRotation(id, x, y, z)
+            c.dropToBed(id)
+        }
+
+    fun mirror(id: Int, axis: PsmCore.Axis) = withObject(id, "Spiegeln") { it.mirror(id, axis) }
+
+    fun setInstances(id: Int, count: Int) =
+        withObject(id, "Kopien") { it.setInstances(id, count) }
+
     fun refreshObjects() {
         val c = core ?: return
         // IntArray kennt kein mapNotNull - erst in eine Liste ueberfuehren.

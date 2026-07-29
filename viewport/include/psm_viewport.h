@@ -71,6 +71,18 @@ PSM_API int psm_viewport_drag_selected(psm_viewport *v,
                                        float from_x, float from_y,
                                        float to_x, float to_y);
 
+/*
+ * Ausgewaehltes Objekt gleichmaessig skalieren.
+ *
+ * Fuer die Spreizgeste: solange das Skalieren-Werkzeug aktiv ist,
+ * vergroessert und verkleinert sie das Objekt, statt die Kamera zu
+ * zoomen. Danach setzt der Aufruf es wieder aufs Bett - sonst schwebt es
+ * beim Verkleinern in der Luft oder steckt beim Vergroessern darin.
+ *
+ * @return 1 wenn skaliert wurde, sonst 0.
+ */
+PSM_API int psm_viewport_scale_selected(psm_viewport *v, float factor);
+
 /* --- Vorschau ------------------------------------------------------ */
 /*
  * Die G-Code-Vorschau ist derselbe Renderer wie im Vorschau-Tab des
