@@ -32,6 +32,11 @@
 #include "libslic3r/PrintConfig.hpp"
 #include "libslic3r/TriangleMesh.hpp"
 
+/* NanoSVG rastert die Bett-Textur - dieselbe Bibliothek, die
+ * PrusaSlicer in GLTexture.cpp dafuer benutzt. */
+#include <nanosvg/nanosvg.h>
+#include <nanosvg/nanosvgrast.h>
+
 /* Der Vorschau-Renderer aus PrusaSlicer, unveraendert. */
 #include <Viewer.hpp>
 #include "slic3r/GUI/LibVGCode/LibVGCodeWrapper.hpp"
@@ -55,6 +60,11 @@ struct Program {
     GLint  u_color      = -1;
     GLint  a_position   = -1;
     GLint  a_normal     = -1;
+    /* Nur der printbed-Shader: die Textur des Druckbereichs. */
+    GLint  a_tex_coord   = -1;
+    GLint  u_texture     = -1;
+    GLint  u_transparent = -1;
+    GLint  u_svg_source  = -1;
 
     void use() const { glUseProgram(id); }
 
@@ -134,6 +144,10 @@ bool link_program(Program &prg, const std::string &dir, const std::string &name,
     prg.u_color      = glGetUniformLocation(prg.id, "uniform_color");
     prg.a_position   = glGetAttribLocation(prg.id, "v_position");
     prg.a_normal     = glGetAttribLocation(prg.id, "v_normal");
+    prg.a_tex_coord   = glGetAttribLocation(prg.id, "v_tex_coord");
+    prg.u_texture     = glGetUniformLocation(prg.id, "texture");
+    prg.u_transparent = glGetUniformLocation(prg.id, "transparent_background");
+    prg.u_svg_source  = glGetUniformLocation(prg.id, "svg_source");
     return true;
 }
 
@@ -199,10 +213,13 @@ struct psm_viewport
     std::string  shader_dir;
     Mesh         bed_model;      /* Prusas STL, falls vorhanden */
     bool         has_bed_model = false;
+    GLuint       bed_tex = 0;    /* gerasterte SVG des Druckbereichs */
+    bool         has_bed_texture = false;
     std::string  last_error;
 
     Program prog_lit;    // gouraud_light - Modelle
     Program prog_flat;   // flat          - Bett und Raster
+    Program prog_bed;    // printbed      - Bettflaeche mit Textur
 
     std::vector<Mesh> meshes;
     Mesh bed_fill;
@@ -294,6 +311,28 @@ bool build_bed_model(psm_viewport *v)
         return false;
     }
 
+    /*
+     * Das STL ist um seinen eigenen Ursprung modelliert. PrusaSlicer legt
+     * es in Bed3D::init_internal_model_from_file so ab, dass der Ursprung
+     * in die Mitte der Bettflaeche faellt, und schiebt es 0,03 mm nach
+     * unten, damit es nicht mit der Textur um dieselben Pixel streitet.
+     */
+    float cx = 0.f, cy = 0.f;
+    try {
+        const Slic3r::Points pts = Slic3r::get_bed_shape(v->session->config);
+        if (pts.size() >= 3) {
+            Slic3r::BoundingBoxf bb;
+            for (const Slic3r::Point &p : pts)
+                bb.merge(Slic3r::Vec2d(Slic3r::unscale<double>(p.x()),
+                                       Slic3r::unscale<double>(p.y())));
+            cx = static_cast<float>((bb.min.x() + bb.max.x()) * 0.5);
+            cy = static_cast<float>((bb.min.y() + bb.max.y()) * 0.5);
+        }
+    } catch (...) {
+        /* Ohne Bettform bleibt es beim Ursprung. */
+    }
+    const float cz = -0.03f;
+
     std::vector<Vertex> verts;
     verts.reserve(mesh.its.indices.size() * 3);
     for (const Slic3r::Vec3i32 &tri : mesh.its.indices) {
@@ -302,7 +341,8 @@ bool build_bed_model(psm_viewport *v)
         const Slic3r::Vec3f &c = mesh.its.vertices[tri(2)];
         const Slic3r::Vec3f n = (b - a).cross(c - a).normalized();
         for (const Slic3r::Vec3f &p : { a, b, c })
-            verts.push_back({ p.x(), p.y(), p.z(), n.x(), n.y(), n.z() });
+            verts.push_back({ p.x() + cx, p.y() + cy, p.z() + cz,
+                              n.x(), n.y(), n.z() });
     }
 
     upload(v->bed_model, verts);
@@ -312,11 +352,68 @@ bool build_bed_model(psm_viewport *v)
     return true;
 }
 
+/*
+ * Textur des Druckbereichs.
+ *
+ * Prusa legt zu jedem Drucker eine SVG bei (mk4s.svg, xl.svg ...). Sie
+ * wird mit NanoSVG gerastert - derselbe Weg wie in GLTexture.cpp - und
+ * als Textur auf die Bettflaeche gelegt. Der Shader printbed.fs mischt
+ * sie mit seinem eigenen Farbverlauf, deshalb reicht der Alphakanal.
+ *
+ * Aufgeloest wird auf 1024 Punkte in der laengeren Kante: darunter
+ * franst die Beschriftung auf dem Bett aus, darueber bringt es auf einem
+ * Tablet nichts mehr.
+ */
+bool build_bed_texture(psm_viewport *v, const Slic3r::BoundingBoxf &bb)
+{
+    char path_buf[512] = { 0 };
+    if (psm_bed_texture_file(v->session, path_buf, sizeof(path_buf)) != PSM_OK ||
+        path_buf[0] == 0)
+        return false;
+
+    NSVGimage *img = nsvgParseFromFile(path_buf, "px", 96.0f);
+    if (img == nullptr || img->width <= 0.f || img->height <= 0.f) {
+        if (img != nullptr) nsvgDelete(img);
+        psm_emit_log(PSM_LOG_WARN, std::string("Bett-Textur nicht lesbar: ") + path_buf);
+        return false;
+    }
+
+    const int   longest = 1024;
+    const float scale   = static_cast<float>(longest) /
+                          std::max(img->width, img->height);
+    const int   tw = std::max(1, static_cast<int>(img->width  * scale));
+    const int   th = std::max(1, static_cast<int>(img->height * scale));
+
+    std::vector<unsigned char> pixels(static_cast<size_t>(tw) * th * 4, 0);
+    NSVGrasterizer *rast = nsvgCreateRasterizer();
+    if (rast == nullptr) {
+        nsvgDelete(img);
+        return false;
+    }
+    nsvgRasterize(rast, img, 0.f, 0.f, scale, pixels.data(), tw, th, tw * 4);
+    nsvgDeleteRasterizer(rast);
+    nsvgDelete(img);
+
+    if (v->bed_tex == 0)
+        glGenTextures(1, &v->bed_tex);
+    glBindTexture(GL_TEXTURE_2D, v->bed_tex);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, tw, th, 0, GL_RGBA,
+                 GL_UNSIGNED_BYTE, pixels.data());
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glBindTexture(GL_TEXTURE_2D, 0);
+
+    psm_emit_log(PSM_LOG_INFO,
+                 std::string("Bett-Textur geladen: ") + path_buf + " (" +
+                 std::to_string(tw) + "x" + std::to_string(th) + ")");
+    return true;
+}
+
 void build_bed(psm_viewport *v)
 {
-    /* Erst das echte Modell versuchen, dann die Flaeche darueber legen -
-     * die Textur des Druckbereichs fehlt noch, deshalb bleibt das Raster
-     * als Orientierung sichtbar. */
+    /* Erst das echte Modell, dann die texturierte Flaeche darueber. */
     v->bed_model.destroy();
     v->has_bed_model = build_bed_model(v);
 
@@ -340,15 +437,41 @@ void build_bed(psm_viewport *v)
     }
 
     /* Flaeche als Faecher ab dem ersten Punkt. Fuer die rechteckigen und
-     * konvexen Betten der Prusa-Drucker ist das ausreichend. */
+     * konvexen Betten der Prusa-Drucker ist das ausreichend.
+     *
+     * In den beiden ersten Normalenfeldern stehen die Texturkoordinaten:
+     * der printbed-Shader kennt kein v_normal, dafuer ein v_tex_coord an
+     * genau dieser Stelle im Puffer. So braucht es keinen zweiten
+     * Eckpunkttyp.
+     *
+     * Grundlage ist Bed3D::init_triangles - (p - min) durch die Groesse.
+     * Dort steht ein negatives V, was unter GL_REPEAT auf 1-v hinauslaeuft.
+     *
+     * Beides zusammen ergab bei uns eine um 180 Grad verdrehte Grafik:
+     * die Beschriftung des Betts stand auf dem Kopf und seitenverkehrt.
+     * Unsere Draufsicht blickt mit umgekehrter Y-Richtung auf das Bett,
+     * deshalb wird hier zusaetzlich U gespiegelt und V gerade gelassen -
+     * zusammen genau die Drehung um 180 Grad, die fehlte. Am Geraet
+     * gegengeprueft: die Aufschrift liest sich jetzt richtig herum.
+     */
+    const float bw = static_cast<float>(bb.size().x());
+    const float bh = static_cast<float>(bb.size().y());
+    const auto uv = [&](const Eigen::Vector2f &p) {
+        return Eigen::Vector2f(
+            bw > 0.f ? 1.f - (p.x() - static_cast<float>(bb.min.x())) / bw : 0.f,
+            bh > 0.f ? (p.y() - static_cast<float>(bb.min.y())) / bh : 0.f);
+    };
+
     std::vector<Vertex> fill;
     for (size_t i = 1; i + 1 < poly.size(); ++i) {
-        const Eigen::Vector2f &a = poly[0], &b = poly[i], &c = poly[i + 1];
-        fill.push_back({ a.x(), a.y(), 0.f, 0.f, 0.f, 1.f });
-        fill.push_back({ b.x(), b.y(), 0.f, 0.f, 0.f, 1.f });
-        fill.push_back({ c.x(), c.y(), 0.f, 0.f, 0.f, 1.f });
+        for (const Eigen::Vector2f &p : { poly[0], poly[i], poly[i + 1] }) {
+            const Eigen::Vector2f t = uv(p);
+            fill.push_back({ p.x(), p.y(), 0.f, t.x(), t.y(), 0.f });
+        }
     }
     upload(v->bed_fill, fill);
+
+    v->has_bed_texture = build_bed_texture(v, bb);
 
     /* Raster im 10-mm-Abstand, wie im Slicer. */
     std::vector<Vertex> grid;
@@ -450,6 +573,13 @@ void draw(const Program &p, const Mesh &m, GLenum mode,
         glVertexAttribPointer(static_cast<GLuint>(p.a_normal), 3, GL_FLOAT, GL_FALSE,
                               sizeof(Vertex), reinterpret_cast<void *>(sizeof(float) * 3));
     }
+    /* Der printbed-Shader liest an derselben Stelle zwei statt drei
+     * Werte - dort stehen die Texturkoordinaten. */
+    if (p.a_tex_coord >= 0) {
+        glEnableVertexAttribArray(static_cast<GLuint>(p.a_tex_coord));
+        glVertexAttribPointer(static_cast<GLuint>(p.a_tex_coord), 2, GL_FLOAT, GL_FALSE,
+                              sizeof(Vertex), reinterpret_cast<void *>(sizeof(float) * 3));
+    }
 
     glDrawArrays(mode, 0, m.vertex_count);
 
@@ -477,6 +607,11 @@ PSM_API psm_viewport *psm_viewport_create(psm_session *session, const char *shad
     v->shader_dir = shader_dir;
 
     std::string err;
+    /* printbed ist nicht lebensnotwendig - ohne ihn bleibt das Bett
+     * einfarbig. Deshalb getrennt und ohne Abbruch. */
+    if (! link_program(v->prog_bed, v->shader_dir, "printbed", err))
+        psm_emit_log(PSM_LOG_WARN, "Bett-Shader: " + err);
+
     if (! link_program(v->prog_lit, v->shader_dir, "gouraud_light", err) ||
         ! link_program(v->prog_flat, v->shader_dir, "flat", err)) {
         v->last_error = err;
@@ -503,6 +638,8 @@ PSM_API void psm_viewport_destroy(psm_viewport *v)
     v->bed_grid.destroy();
     v->prog_lit.destroy();
     v->prog_flat.destroy();
+    v->prog_bed.destroy();
+    if (v->bed_tex != 0) { glDeleteTextures(1, &v->bed_tex); v->bed_tex = 0; }
     delete v;
 }
 
@@ -559,8 +696,33 @@ PSM_API void psm_viewport_render(psm_viewport *v)
     } else {
         draw(v->prog_flat, v->bed_fill, GL_TRIANGLES, view, proj, col_bed);
     }
-    if (! v->has_bed_model)
+    /* Danach die Textur des Druckbereichs darauf. Sie ist teilweise
+     * durchsichtig, deshalb Blending an und Tiefenschreiben aus - sonst
+     * verdeckt ihr unsichtbarer Rand die Objekte dahinter. */
+    if (v->has_bed_texture && v->prog_bed.id != 0) {
+        glEnable(GL_BLEND);
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+        glDepthMask(GL_FALSE);
+
+        v->prog_bed.use();
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, v->bed_tex);
+        if (v->prog_bed.u_texture >= 0)     glUniform1i(v->prog_bed.u_texture, 0);
+        if (v->prog_bed.u_transparent >= 0) glUniform1i(v->prog_bed.u_transparent, 0);
+        /* svg_source schaltet im Shader den radialen Verlauf hinter der
+         * Grafik ein - genau dafuer ist die SVG gemacht. */
+        if (v->prog_bed.u_svg_source >= 0)  glUniform1i(v->prog_bed.u_svg_source, 1);
+
+        static const float white[4] = { 1.f, 1.f, 1.f, 1.f };
+        draw(v->prog_bed, v->bed_fill, GL_TRIANGLES, view, proj, white);
+
+        glBindTexture(GL_TEXTURE_2D, 0);
+        glDepthMask(GL_TRUE);
+        glDisable(GL_BLEND);
+    } else if (! v->has_bed_model) {
+        /* Ohne Modell und ohne Textur bleibt das Raster als Orientierung. */
         draw(v->prog_flat, v->bed_grid, GL_LINES, view, proj, col_grid);
+    }
     glEnable(GL_CULL_FACE);
 
     /* In der Vorschau zeichnet libvgcode die Werkzeugwege - dieselbe

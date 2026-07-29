@@ -9,6 +9,13 @@
 cmake_minimum_required(VERSION 3.22)
 project(PSMobile CXX C)
 
+# PSM_DEPS_ROOT kommt vom Bauskript. Auf CMAKE_PREFIX_PATH ist hier
+# kein Verlass: PrusaSlicers eigenes CMakeLists raeumt sie beim
+# Einbinden ab, danach sucht jedes find_library im Nichts.
+if (NOT PSM_DEPS_ROOT)
+    set(PSM_DEPS_ROOT "${CMAKE_PREFIX_PATH}")
+endif ()
+
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
@@ -96,6 +103,25 @@ target_include_directories(psmobile_core
 # slic3r-arrange-wrapper liegt neben libslic3r und wird von ihr nicht
 # mitgezogen - Auto-Arrange braucht es aber.
 target_link_libraries(psmobile_core PRIVATE libslic3r slic3r-arrange-wrapper libvgcode)
+
+# NanoSVG rastert die Bett-Textur. Die Bibliothek liegt bereits im
+# Abhaengigkeitsbaum, weil PrusaSlicer sie selbst braucht - wir binden nur
+# den Rasterer dazu.
+#
+# NO_CMAKE_FIND_ROOT_PATH ist noetig: das NDK-Toolchain setzt die
+# Suchmodi auf ONLY und wuerde die angegebenen Pfade unter
+# CMAKE_FIND_ROOT_PATH neu verwurzeln - dann sucht es im Nirgendwo.
+# Derselbe Stolperstein wie beim Bauen der Abhaengigkeiten.
+message(STATUS "PSM: CMAKE_PREFIX_PATH=[]")
+find_library(PSM_NANOSVG     NAMES nanosvg
+             PATHS "${PSM_DEPS_ROOT}/lib" NO_DEFAULT_PATH NO_CMAKE_FIND_ROOT_PATH)
+find_library(PSM_NANOSVGRAST NAMES nanosvgrast
+             PATHS "${PSM_DEPS_ROOT}/lib" NO_DEFAULT_PATH NO_CMAKE_FIND_ROOT_PATH)
+if (PSM_NANOSVG AND PSM_NANOSVGRAST)
+    target_link_libraries(psmobile_core PRIVATE "${PSM_NANOSVGRAST}" "${PSM_NANOSVG}")
+else ()
+    message(FATAL_ERROR "NanoSVG nicht gefunden - ohne sie fehlt die Bett-Textur")
+endif ()
 
 # LibVGCodeWrapper.cpp erwartet die Include-Wurzel von PrusaSlicer
 target_include_directories(psmobile_core PRIVATE "${PSM_PS_DIR}/src")
