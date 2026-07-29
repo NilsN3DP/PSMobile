@@ -451,6 +451,19 @@ class SlicerService : Service() {
         _progress.value = Progress.Failed(t.message ?: "Import fehlgeschlagen")
     }
 
+    /**
+     * Einen einzelnen Parameter setzen - fuer die Schnellzugriffe in der
+     * Seitenleiste. Derselbe Weg wie auf den Einstellungsseiten, also
+     * landet der Wert im bearbeiteten Preset.
+     */
+    fun setConfig(key: String, value: String) {
+        val c = core ?: return
+        runCatching { c[key] = value }
+            .onFailure { Log.w(TAG, "$key=$value abgelehnt: ${it.message}") }
+        refreshQuickSettings()
+        bumpConfig()
+    }
+
     /* --- Objekt bearbeiten ------------------------------------------- */
     /*
      * Alle Handgriffe gehen ueber denselben Weg: aendern, Objektliste neu

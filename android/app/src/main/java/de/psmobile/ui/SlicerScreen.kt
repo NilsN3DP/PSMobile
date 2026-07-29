@@ -297,6 +297,7 @@ private fun SlicerContent(
             linkPrinters = linkPrinters,
             sendState = sendState,
             scaleTool = scaleTool,
+            configRevision = configRevision,
             onScaleToolChange = { on ->
                 scaleTool = on
                 sceneController.scaleTool = on
@@ -751,6 +752,7 @@ private fun Sidebar(
     sendState: String?,
     scaleTool: Boolean,
     onScaleToolChange: (Boolean) -> Unit,
+    configRevision: Int,
     modifier: Modifier = Modifier,
 ) {
     val isRunning = progress is SlicerService.Progress.Running
@@ -802,10 +804,12 @@ private fun Sidebar(
 
             HorizontalDivider(Modifier.padding(vertical = 4.dp), color = PrusaColors.Divider)
 
-            // Die frueheren "Schnelleinstellungen" waren handverlesen und
-            // damit Nachbau. Ersetzt durch den vollstaendigen Einstellungs-
-            // bildschirm hinter dem Zahnrad - Struktur und Stufen kommen
-            // aus PrusaSlicer selbst. Siehe E-12.
+            // Die Handvoll Werte, die man staendig anfasst - dieselbe
+            // Auswahl wie in FrequentlyChangedParameters.cpp, also nicht
+            // handverlesen. Alles andere steht hinter den Reitern.
+            service.coreOrNull?.let { c ->
+                QuickSettings(service, c, configRevision)
+            }
 
             if (objects.isNotEmpty()) {
                 HorizontalDivider(Modifier.padding(vertical = 4.dp), color = PrusaColors.Divider)
