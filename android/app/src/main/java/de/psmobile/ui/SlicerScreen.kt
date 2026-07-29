@@ -45,7 +45,9 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -55,6 +57,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
@@ -163,6 +168,31 @@ private fun SlicerContent(
 
     val selected = objects.firstOrNull { it.id == selectedId } ?: objects.firstOrNull()
 
+    // Zustand der G-Code-Vorschau. Der Viewport haelt die Werkzeugwege, hier
+    // steht nur, was die Bedienelemente davon zeigen muessen.
+    var previewMode by remember { mutableStateOf(false) }
+    var layerCount by remember { mutableStateOf(0) }
+    var layerLo by remember { mutableStateOf(0) }
+    var layerHi by remember { mutableStateOf(0) }
+
+    // PrusaSlicer springt nach dem Slicen von selbst in die Vorschau, und
+    // sobald sich am Bett etwas aendert, wieder zurueck: das Ergebnis gilt
+    // dann nicht mehr.
+    LaunchedEffect(progress, sceneRevision) {
+        if (progress is SlicerService.Progress.Done) {
+            sceneController.enterPreview { n ->
+                layerCount = n
+                layerLo = 0
+                layerHi = (n - 1).coerceAtLeast(0)
+                previewMode = n > 0
+            }
+        } else if (previewMode) {
+            sceneController.enterEditor()
+            previewMode = false
+            layerCount = 0
+        }
+    }
+
     Row(
         Modifier
             .fillMaxSize()
@@ -197,6 +227,41 @@ private fun SlicerContent(
                 sceneController,
                 Modifier.align(Alignment.BottomCenter).padding(bottom = 12.dp),
             )
+
+            // Die zwei Reiter des Desktops: "3D editor view" und "Preview".
+            ViewModeTabs(
+                preview = previewMode,
+                previewEnabled = layerCount > 0 || progress is SlicerService.Progress.Done,
+                onSelect = { wantPreview ->
+                    if (wantPreview) {
+                        sceneController.enterPreview { n ->
+                            layerCount = n
+                            layerLo = 0
+                            layerHi = (n - 1).coerceAtLeast(0)
+                            previewMode = n > 0
+                        }
+                    } else {
+                        sceneController.enterEditor()
+                        previewMode = false
+                    }
+                },
+                modifier = Modifier.align(Alignment.BottomStart).padding(12.dp),
+            )
+
+            if (previewMode && layerCount > 1) {
+                LayerSlider(
+                    count = layerCount,
+                    low = layerLo,
+                    high = layerHi,
+                    onChange = { lo, hi ->
+                        layerLo = lo; layerHi = hi
+                        sceneController.setLayerRange(lo, hi)
+                    },
+                    modifier = Modifier
+                        .align(Alignment.CenterEnd)
+                        .padding(end = 12.dp, top = 56.dp, bottom = 72.dp),
+                )
+            }
         }
 
         Sidebar(
@@ -286,6 +351,167 @@ private fun ToolButton(tool: PsUi.Tool, enabled: Boolean, onClick: () -> Unit) {
  * schnell unter dem Bett, und ohne festen Blickwinkel findet man nicht
  * zurueck.
  */
+/**
+ * Umschalter zwischen Bett und Werkzeugwegen.
+ *
+ * Am Desktop sind das die beiden Reiter unten links am Bett
+ * ("3D editor view" / "Preview"), umgesetzt als wxNotebook. Ein Notebook
+ * gibt es hier nicht, die Beschriftungen und die Position aber schon.
+ */
+@Composable
+private fun ViewModeTabs(
+    preview: Boolean,
+    previewEnabled: Boolean,
+    onSelect: (Boolean) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier
+            .clip(RoundedCornerShape(6.dp))
+            .background(PrusaColors.Panel.copy(alpha = 0.88f))
+            .padding(4.dp),
+        horizontalArrangement = Arrangement.spacedBy(2.dp),
+    ) {
+        listOf(
+            PsUi.tr("3D editor view") to false,
+            PsUi.tr("Preview") to true,
+        ).forEach { (label, isPreview) ->
+            val on = preview == isPreview
+            val enabled = !isPreview || previewEnabled
+            Text(
+                label,
+                color = when {
+                    on       -> Color.White
+                    !enabled -> PrusaColors.TextMuted.copy(alpha = 0.4f)
+                    else     -> PrusaColors.TextMuted
+                },
+                fontSize = 13.sp,
+                fontWeight = if (on) FontWeight.SemiBold else FontWeight.Normal,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(4.dp))
+                    .background(if (on) PrusaColors.Orange else Color.Transparent)
+                    .clickable(enabled = enabled && !on) { onSelect(isPreview) }
+                    .padding(horizontal = 14.dp, vertical = 10.dp),
+            )
+        }
+    }
+}
+
+/**
+ * Senkrechter Schichtregler rechts am Bett, mit zwei Griffen wie
+ * PrusaSlicers DoubleSlider: der obere begrenzt die sichtbare Hoehe, der
+ * untere blendet alles darunter aus.
+ *
+ * Das Original ist ein selbst gezeichnetes wx-Control, also gibt es nichts
+ * zu uebernehmen - nachgebaut mit Griffen in Fingergroesse statt der
+ * 12 px am Desktop.
+ */
+@Composable
+private fun LayerSlider(
+    count: Int,
+    low: Int,
+    high: Int,
+    onChange: (Int, Int) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val track = 6.dp
+    val thumb = 28.dp
+    val labelWidth = 44.dp    // Platz fuer bis zu vier Ziffern links der Schiene
+
+    val density = LocalDensity.current
+    val thumbPx = with(density) { thumb.toPx() }
+    var height by remember { mutableStateOf(1f) }
+    // Welchen Griff der Finger gepackt hat - waehrend eines Zuges fest,
+    // sonst springt der Regler bei eng beieinander liegenden Griffen.
+    var dragTop by remember { mutableStateOf(true) }
+
+    // Die Schiene ist oben und unten um einen halben Griff eingerueckt,
+    // sonst raecht sich der Griff an den Enden ueber den Rand hinaus.
+    val usable = (height - thumbPx).coerceAtLeast(1f)
+    val last = (count - 1).coerceAtLeast(1)
+
+    /** Bildschirm-y (0 = oben) auf Schichtnummer. Schicht 0 liegt unten. */
+    fun toLayer(y: Float): Int =
+        ((1f - ((y - thumbPx / 2f) / usable).coerceIn(0f, 1f)) * last).roundToInt()
+
+    /** Schichtnummer auf die Mitte ihres Griffs in Pixeln. */
+    fun toCenter(layer: Int): Float =
+        thumbPx / 2f + (1f - layer.toFloat() / last) * usable
+
+    Box(
+        modifier
+            .width(labelWidth + thumb + 8.dp)
+            .fillMaxHeight()
+            .onSizeChanged { height = it.height.toFloat().coerceAtLeast(1f) }
+            .pointerInput(count) {
+                detectDragGestures(
+                    onDragStart = { p ->
+                        val l = toLayer(p.y)
+                        dragTop = kotlin.math.abs(l - high) <= kotlin.math.abs(l - low)
+                        if (dragTop) onChange(low, l.coerceAtLeast(low))
+                        else onChange(l.coerceAtMost(high), high)
+                    },
+                ) { change, _ ->
+                    val l = toLayer(change.position.y)
+                    if (dragTop) onChange(low, l.coerceAtLeast(low))
+                    else onChange(l.coerceAtMost(high), high)
+                    change.consume()
+                }
+            },
+    ) {
+        with(density) {
+            val topC = toCenter(high)
+            val botC = toCenter(low)
+
+            // Schiene, an beiden Enden um den halben Griff eingerueckt.
+            Box(
+                Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(top = (thumbPx / 2f).toDp(), end = (thumb - track) / 2)
+                    .width(track)
+                    .height(usable.toDp())
+                    .clip(RoundedCornerShape(track / 2))
+                    .background(PrusaColors.Panel.copy(alpha = 0.88f)),
+            )
+
+            // Der sichtbare Bereich zwischen beiden Griffen.
+            Box(
+                Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(top = topC.toDp(), end = (thumb - track) / 2)
+                    .width(track)
+                    .height((botC - topC).coerceAtLeast(0f).toDp())
+                    .background(PrusaColors.Orange),
+            )
+
+            listOf(high to topC, low to botC).forEach { (layer, centerPx) ->
+                // Beschriftung links neben die Schiene, damit der Griff selbst
+                // mittig darauf sitzt und nichts am Rand abgeschnitten wird.
+                Text(
+                    "$layer",
+                    color = Color.White,
+                    fontSize = 11.sp,
+                    modifier = Modifier
+                        .align(Alignment.TopStart)
+                        .padding(top = (centerPx - 9.dp.toPx()).coerceAtLeast(0f).toDp())
+                        .clip(RoundedCornerShape(4.dp))
+                        .background(PrusaColors.Panel.copy(alpha = 0.88f))
+                        .padding(horizontal = 5.dp, vertical = 2.dp),
+                )
+                Box(
+                    Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(top = (centerPx - thumbPx / 2f).coerceAtLeast(0f).toDp())
+                        .size(thumb)
+                        .clip(RoundedCornerShape(thumb / 2))
+                        .background(PrusaColors.Orange)
+                        .border(2.dp, Color.White, RoundedCornerShape(thumb / 2)),
+                )
+            }
+        }
+    }
+}
+
 @Composable
 private fun ViewBar(controller: SceneController, modifier: Modifier = Modifier) {
     Row(

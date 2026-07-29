@@ -46,6 +46,37 @@ class SceneController {
 
     fun setView(preset: PsmViewport.View) = run { it.setView(preset) }
     fun resetView() = run { it.resetView() }
+
+    /** true solange die Werkzeugwege gezeigt werden statt der Modelle. */
+    var inPreview: Boolean = false
+        private set
+
+    /**
+     * Schaltet auf die G-Code-Vorschau um. Das Laden passiert auf dem
+     * GL-Thread, weil libvgcode dabei Puffer und Shader anlegt - deshalb
+     * kommt die Schichtzahl erst per Rueckruf zurueck.
+     *
+     * @param onReady Schichtzahl, oder 0 wenn nichts geladen werden konnte
+     */
+    fun enterPreview(onReady: (Int) -> Unit) {
+        val v = view ?: return
+        v.queueEvent {
+            val vp = holder?.viewport
+            val layers = if (vp != null && vp.loadPreview()) {
+                vp.mode = PsmViewport.Mode.PREVIEW
+                vp.layerCount()
+            } else 0
+            v.post { inPreview = layers > 0; onReady(layers) }
+        }
+        v.requestRender()
+    }
+
+    fun enterEditor() {
+        inPreview = false
+        run { it.mode = PsmViewport.Mode.EDITOR }
+    }
+
+    fun setLayerRange(lo: Int, hi: Int) = run { it.setLayerRange(lo, hi) }
 }
 
 @Composable
@@ -155,7 +186,12 @@ private class SceneGLView(
                 pointers = 1; moved = false
                 downTime = System.currentTimeMillis()
                 val x = event.x; val y = event.y
-                queueEvent { dragObject = vp.pick(x, y) == selectedId && selectedId >= 0 }
+                queueEvent {
+                    // In der Vorschau gibt es nichts anzufassen - dort dreht
+                    // jede Fingerbewegung nur die Kamera.
+                    dragObject = vp.mode == PsmViewport.Mode.EDITOR &&
+                        selectedId >= 0 && vp.pick(x, y) == selectedId
+                }
             }
 
             MotionEvent.ACTION_POINTER_DOWN -> {
@@ -204,10 +240,12 @@ private class SceneGLView(
                 if (!moved && quick) {
                     val x = event.x; val y = event.y
                     queueEvent {
-                        val id = vp.pick(x, y)
-                        vp.setSelection(id)
-                        selectedId = id
-                        post { onSelect(id) }
+                        if (vp.mode == PsmViewport.Mode.EDITOR) {
+                            val id = vp.pick(x, y)
+                            vp.setSelection(id)
+                            selectedId = id
+                            post { onSelect(id) }
+                        }
                     }
                     requestRender()
                 }

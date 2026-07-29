@@ -32,6 +32,10 @@
 #include "libslic3r/PrintConfig.hpp"
 #include "libslic3r/TriangleMesh.hpp"
 
+/* Der Vorschau-Renderer aus PrusaSlicer, unveraendert. */
+#include <Viewer.hpp>
+#include "slic3r/GUI/LibVGCode/LibVGCodeWrapper.hpp"
+
 namespace {
 
 using Mat4 = Eigen::Matrix4f;
@@ -213,6 +217,12 @@ struct psm_viewport
 
     Slic3r::BoundingBoxf3 scene_bbox;
     psm_object_id selection = PSM_INVALID_ID;
+
+    /* Vorschau */
+    psm_view_mode           mode = PSM_VIEW_EDITOR;
+    libvgcode::Viewer       gcode_viewer;
+    bool                    gcode_viewer_ready = false;
+    bool                    gcode_loaded = false;
 
     Vec3 eye() const
     {
@@ -476,11 +486,24 @@ PSM_API void psm_viewport_render(psm_viewport *v)
     static const float col_obj[4]   = { 1.00f, 0.49f, 0.22f, 1.f };  // Prusa-Orange
     static const float col_sel[4]   = { 0.20f, 0.80f, 0.30f, 1.f };
 
-    /* Bett ohne Rueckseitenaussonderung - man schaut auch von unten. */
+    /* Bett ohne Rueckseitenaussonderung - man schaut auch von unten.
+     * Auch in der Vorschau: der Desktop zeigt es dort ebenfalls, und ohne
+     * Bezugsflaeche schwebt das Teil im Nichts. */
     glDisable(GL_CULL_FACE);
     draw(v->prog_flat, v->bed_fill, GL_TRIANGLES, view, proj, col_bed);
     draw(v->prog_flat, v->bed_grid, GL_LINES, view, proj, col_grid);
     glEnable(GL_CULL_FACE);
+
+    /* In der Vorschau zeichnet libvgcode die Werkzeugwege - dieselbe
+     * Kamera, damit der Wechsel nicht springt. Es setzt seinen eigenen
+     * GL-Zustand, deshalb kommt es nach dem Bett. */
+    if (v->mode == PSM_VIEW_PREVIEW && v->gcode_loaded) {
+        libvgcode::Mat4x4 vm{}, pm{};
+        std::memcpy(vm.data(), view.data(), sizeof(float) * 16);
+        std::memcpy(pm.data(), proj.data(), sizeof(float) * 16);
+        v->gcode_viewer.render(vm, pm);
+        return;
+    }
 
     for (const Mesh &m : v->meshes)
         draw(v->prog_lit, m, GL_TRIANGLES, view, proj,
@@ -668,6 +691,77 @@ PSM_API int psm_viewport_drag_selected(psm_viewport *v,
 
     v->dirty = true;
     return 1;
+}
+
+/* --- Vorschau ------------------------------------------------------ */
+
+PSM_API void psm_viewport_set_mode(psm_viewport *v, psm_view_mode mode)
+{
+    if (v != nullptr)
+        v->mode = mode;
+}
+
+PSM_API psm_view_mode psm_viewport_get_mode(psm_viewport *v)
+{
+    return v == nullptr ? PSM_VIEW_EDITOR : v->mode;
+}
+
+PSM_API int psm_viewport_load_preview(psm_viewport *v)
+{
+    if (v == nullptr || v->session == nullptr || ! v->session->print)
+        return 0;
+
+    try {
+        if (! v->gcode_viewer_ready) {
+            /* libvgcode laedt seine GL-Funktionen selbst. Die Zeichenkette
+             * ist die Kontextversion; unter GLES erwartet es "3.0". */
+            v->gcode_viewer.init("3.0");
+            v->gcode_viewer_ready = true;
+        }
+
+        const Slic3r::Print &print = *v->session->print;
+
+        /* Die Zahl der Extruder steht nirgends als eigener Wert - sie ist
+         * die Laenge von nozzle_diameter. Genau so leitet PrusaSlicer sie
+         * ab. "extruders_count" gibt es nur als Hilfsoption der Tab-GUI
+         * und nicht in PrintConfig; opt_int haette dort null geliefert. */
+        const auto *nozzles =
+            v->session->config.opt<Slic3r::ConfigOptionFloats>("nozzle_diameter");
+        const size_t extruders =
+            (nozzles != nullptr && ! nozzles->values.empty()) ? nozzles->values.size() : 1;
+
+        /* Umwandlung aus PrusaSlicer selbst - siehe E-12. */
+        libvgcode::GCodeInputData data = libvgcode::convert(
+            print,
+            /* Werkzeugfarben  */ std::vector<std::string>{},
+            /* Farbwechsel     */ std::vector<std::string>{},
+            /* Custom-G-Code   */ std::vector<Slic3r::CustomGCode::Item>{},
+            extruders);
+
+        v->gcode_viewer.load(std::move(data));
+        v->gcode_loaded = true;
+        return 1;
+    } catch (const std::exception &e) {
+        v->last_error = std::string("Vorschau: ") + e.what();
+        psm_emit_log(PSM_LOG_ERROR, v->last_error);
+        return 0;
+    }
+}
+
+PSM_API int32_t psm_viewport_layer_count(psm_viewport *v)
+{
+    if (v == nullptr || ! v->gcode_loaded)
+        return 0;
+    return static_cast<int32_t>(v->gcode_viewer.get_layers_count());
+}
+
+PSM_API void psm_viewport_set_layer_range(psm_viewport *v, int32_t first, int32_t last)
+{
+    if (v == nullptr || ! v->gcode_loaded)
+        return;
+    v->gcode_viewer.set_layers_view_range(
+        static_cast<libvgcode::Interval::value_type>(std::max(first, 0)),
+        static_cast<libvgcode::Interval::value_type>(std::max(last, 0)));
 }
 
 PSM_API const char *psm_viewport_last_error(psm_viewport *v)

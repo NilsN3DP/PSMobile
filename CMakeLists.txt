@@ -33,6 +33,35 @@ endif ()
 
 add_subdirectory("${PSM_PS_DIR}" "${CMAKE_CURRENT_BINARY_DIR}/prusaslicer" EXCLUDE_FROM_ALL)
 
+# --- G-Code-Vorschau ------------------------------------------------------
+# libvgcode ist der Renderer des Vorschau-Tabs aus PrusaSlicer. Es haengt an
+# keiner GUI, wird von PrusaSlicer aber nur unter SLIC3R_GUI eingebunden -
+# deshalb hier selbst hinzufuegen.
+#
+# ENABLE_OPENGL_ES schaltet auf GLADs GLES2-Pfad. Prusa hat das fuer
+# Raspberry Pi und WebAssembly gebaut; wir erben es.
+# SLIC3R_OPENGL_ES entscheidet in libvgcode/CMakeLists.txt, welcher GLAD-
+# Loader uebersetzt wird - gl.c oder gles2.c. PrusaSlicer erzwingt die
+# Option auf OFF, weil sie an SLIC3R_GUI haengt. Als gewoehnliche Variable
+# ueberdeckt der Wert den Cache-Eintrag nur hier. Ohne das uebersetzt
+# libvgcode zwar mit ENABLE_OPENGL_ES, bringt aber den Desktop-Loader mit,
+# und gladLoaderLoadGLES2 fehlt beim Linken.
+set(SLIC3R_OPENGL_ES ON)
+add_subdirectory("${PSM_PS_DIR}/src/libvgcode"
+                 "${CMAKE_CURRENT_BINARY_DIR}/libvgcode" EXCLUDE_FROM_ALL)
+unset(SLIC3R_OPENGL_ES)
+if (TARGET libvgcode)
+    target_compile_definitions(libvgcode PUBLIC ENABLE_OPENGL_ES)
+    # GLADs GLES2-Loader zieht sonst ein selbst erzeugtes glad/egl.h herein,
+    # das in PrusaSlicers Baum nicht mitgeliefert ist. Das NDK bringt EGL
+    # selbst mit, also den Systempfad nehmen.
+    target_compile_definitions(libvgcode PRIVATE GLAD_GLES2_USE_SYSTEM_EGL=1)
+    target_link_libraries(libvgcode PUBLIC EGL GLESv2)
+    target_include_directories(libvgcode PUBLIC
+        "${PSM_PS_DIR}/src/libvgcode/include"
+        "${PSM_PS_DIR}/src/libvgcode/glad/include")
+endif ()
+
 # --- C-ABI ----------------------------------------------------------------
 set(PSM_CORE_SOURCES
     core/src/psmobile_core.cpp
@@ -43,6 +72,10 @@ set(PSM_CORE_SOURCES
 # Modell direkt aus der Session, ohne Umweg ueber das ABI (E-03).
 if (ANDROID)
     list(APPEND PSM_CORE_SOURCES viewport/src/psm_viewport.cpp)
+    # Wandelt ein Print-Ergebnis in die Eingabedaten von libvgcode um.
+    # Liegt bei PrusaSlicer unter GUI/, ist aber wx- und GUI-frei.
+    list(APPEND PSM_CORE_SOURCES
+        "${PSM_PS_DIR}/src/slic3r/GUI/LibVGCode/LibVGCodeWrapper.cpp")
 endif ()
 
 # Die JNI-Bruecke wird mit einkompiliert statt als eigene .so gebaut.
@@ -61,7 +94,14 @@ target_include_directories(psmobile_core
 
 # slic3r-arrange-wrapper liegt neben libslic3r und wird von ihr nicht
 # mitgezogen - Auto-Arrange braucht es aber.
-target_link_libraries(psmobile_core PRIVATE libslic3r slic3r-arrange-wrapper)
+target_link_libraries(psmobile_core PRIVATE libslic3r slic3r-arrange-wrapper libvgcode)
+
+# LibVGCodeWrapper.cpp erwartet die Include-Wurzel von PrusaSlicer
+target_include_directories(psmobile_core PRIVATE "${PSM_PS_DIR}/src")
+
+# Der Wrapper enthaelt eine Enum-Umwandlung, die wx ueber GUI_Preview.hpp
+# hereinzieht. Wir brauchen sie nicht - siehe patches/.
+target_compile_definitions(psmobile_core PRIVATE PSM_NO_GUI_TYPES)
 
 # Nur die psm_*-Symbole nach aussen. Haelt die .so klein und verhindert,
 # dass Slic3r-Symbole mit denen anderer Bibliotheken kollidieren.

@@ -71,6 +71,33 @@ PSM_API int psm_viewport_drag_selected(psm_viewport *v,
                                        float from_x, float from_y,
                                        float to_x, float to_y);
 
+/* --- Vorschau ------------------------------------------------------ */
+/*
+ * Die G-Code-Vorschau ist derselbe Renderer wie im Vorschau-Tab des
+ * Desktops: libvgcode aus PrusaSlicer, mit dessen eigener Umwandlung
+ * von Print nach GCodeInputData. Nichts davon ist nachgebaut.
+ */
+
+typedef enum {
+    PSM_VIEW_EDITOR  = 0,   /* Bett und Modelle */
+    PSM_VIEW_PREVIEW = 1    /* Werkzeugwege */
+} psm_view_mode;
+
+PSM_API void psm_viewport_set_mode(psm_viewport *v, psm_view_mode mode);
+PSM_API psm_view_mode psm_viewport_get_mode(psm_viewport *v);
+
+/**
+ * Uebernimmt das Ergebnis des letzten Slice-Laufs in die Vorschau.
+ * Muss auf dem GL-Thread laufen. Ohne fertigen Slice passiert nichts.
+ * @return 1 bei Erfolg.
+ */
+PSM_API int psm_viewport_load_preview(psm_viewport *v);
+
+PSM_API int32_t psm_viewport_layer_count(psm_viewport *v);
+
+/** Sichtbaren Layerbereich setzen, wie der Slider im Desktop. */
+PSM_API void psm_viewport_set_layer_range(psm_viewport *v, int32_t first, int32_t last);
+
 /** Letzte Fehlermeldung des Viewports, etwa beim Laden der Shader. */
 PSM_API const char *psm_viewport_last_error(psm_viewport *v);
 

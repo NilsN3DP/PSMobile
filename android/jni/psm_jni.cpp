@@ -547,6 +547,36 @@ JNIEXPORT void JNICALL JNI_VP(nativeSetSelection)(JNIEnv *, jclass, jlong h, jin
     psm_viewport_set_selection(vp(h), id);
 }
 
+/*
+ * G-Code-Vorschau. nativeLoadPreview muss auf dem GL-Thread laufen, weil
+ * libvgcode dabei seine Puffer und Shader anlegt.
+ */
+
+JNIEXPORT void JNICALL JNI_VP(nativeSetMode)(JNIEnv *, jclass, jlong h, jint mode)
+{
+    psm_viewport_set_mode(vp(h), static_cast<psm_view_mode>(mode));
+}
+
+JNIEXPORT jint JNICALL JNI_VP(nativeGetMode)(JNIEnv *, jclass, jlong h)
+{
+    return static_cast<jint>(psm_viewport_get_mode(vp(h)));
+}
+
+JNIEXPORT jint JNICALL JNI_VP(nativeLoadPreview)(JNIEnv *, jclass, jlong h)
+{
+    return psm_viewport_load_preview(vp(h));
+}
+
+JNIEXPORT jint JNICALL JNI_VP(nativeLayerCount)(JNIEnv *, jclass, jlong h)
+{
+    return psm_viewport_layer_count(vp(h));
+}
+
+JNIEXPORT void JNICALL JNI_VP(nativeSetLayerRange)(JNIEnv *, jclass, jlong h, jint lo, jint hi)
+{
+    psm_viewport_set_layer_range(vp(h), lo, hi);
+}
+
 JNIEXPORT jstring JNICALL JNI_VP(nativeLastError)(JNIEnv *env, jclass, jlong h)
 {
     return env->NewStringUTF(psm_viewport_last_error(vp(h)));

@@ -31,6 +31,11 @@ class PsmViewport private constructor(private var handle: Long) {
         @JvmStatic private external fun nativeDragSelected(
             h: Long, fx: Float, fy: Float, tx: Float, ty: Float): Int
         @JvmStatic private external fun nativeLastError(h: Long): String
+        @JvmStatic private external fun nativeSetMode(h: Long, mode: Int)
+        @JvmStatic private external fun nativeGetMode(h: Long): Int
+        @JvmStatic private external fun nativeLoadPreview(h: Long): Int
+        @JvmStatic private external fun nativeLayerCount(h: Long): Int
+        @JvmStatic private external fun nativeSetLayerRange(h: Long, lo: Int, hi: Int)
     }
 
     fun resize(w: Int, h: Int) = nativeResize(handle, w, h)
@@ -52,6 +57,26 @@ class PsmViewport private constructor(private var handle: Long) {
     /** @return true wenn das ausgewaehlte Objekt bewegt wurde */
     fun dragSelected(fx: Float, fy: Float, tx: Float, ty: Float): Boolean =
         nativeDragSelected(handle, fx, fy, tx, ty) != 0
+
+    /** Vorbereiten zeigt die Modelle, Vorschau die Werkzeugwege des Slicers. */
+    enum class Mode(val raw: Int) { EDITOR(0), PREVIEW(1) }
+
+    var mode: Mode
+        get() = if (nativeGetMode(handle) == 1) Mode.PREVIEW else Mode.EDITOR
+        set(value) = nativeSetMode(handle, value.raw)
+
+    /**
+     * Uebernimmt das Ergebnis des letzten Slice-Laufs in die Vorschau.
+     * Nur auf dem GL-Thread aufrufen - legt Puffer und Shader an.
+     *
+     * @return true wenn Daten geladen wurden
+     */
+    fun loadPreview(): Boolean = nativeLoadPreview(handle) != 0
+
+    fun layerCount(): Int = nativeLayerCount(handle)
+
+    /** Beide Grenzen einschliesslich, 0-basiert. */
+    fun setLayerRange(lo: Int, hi: Int) = nativeSetLayerRange(handle, lo, hi)
 
     val lastError: String get() = if (handle == 0L) "" else nativeLastError(handle)
 
