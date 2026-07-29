@@ -174,6 +174,8 @@ private fun SlicerContent(
     // Solange das Skalieren-Werkzeug an ist, greift die Spreizgeste das
     // Objekt statt der Kamera.
     var scaleTool by remember { mutableStateOf(false) }
+    // Welche Griffe am Objekt stehen.
+    var gizmo by remember { mutableStateOf(de.psmobile.core.PsmViewport.Gizmo.NONE) }
     var previewMode by remember { mutableStateOf(false) }
     var layerCount by remember { mutableStateOf(0) }
     var layerLo by remember { mutableStateOf(0) }
@@ -297,6 +299,11 @@ private fun SlicerContent(
             linkPrinters = linkPrinters,
             sendState = sendState,
             scaleTool = scaleTool,
+            gizmo = gizmo,
+            onGizmoChange = { g ->
+                gizmo = g
+                sceneController.setGizmo(g)
+            },
             configRevision = configRevision,
             onScaleToolChange = { on ->
                 scaleTool = on
@@ -752,6 +759,8 @@ private fun Sidebar(
     sendState: String?,
     scaleTool: Boolean,
     onScaleToolChange: (Boolean) -> Unit,
+    gizmo: de.psmobile.core.PsmViewport.Gizmo,
+    onGizmoChange: (de.psmobile.core.PsmViewport.Gizmo) -> Unit,
     configRevision: Int,
     modifier: Modifier = Modifier,
 ) {
@@ -828,6 +837,8 @@ private fun Sidebar(
                 ObjectPanel(
                     service = service,
                     obj = obj,
+                    gizmo = gizmo,
+                    onGizmoChange = onGizmoChange,
                     scaleToolActive = scaleTool,
                     onScaleToolChange = onScaleToolChange,
                 )

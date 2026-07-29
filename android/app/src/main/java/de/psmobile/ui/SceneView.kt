@@ -34,6 +34,15 @@ import kotlin.math.hypot
  * Griff auf den Viewport von aussen, etwa fuer die Ansichtsknoepfe.
  * Alle GL-Aufrufe werden auf den GL-Thread eingereiht.
  */
+/*
+ * Trefferradius fuer die Griffe am Objekt, in Bildpunkten.
+ *
+ * Der Desktop kommt mit fuenf Pixeln aus, weil dort ein Mauszeiger
+ * zielt. Ein Finger deckt gut neun Millimeter ab; bei rund 300 dpi sind
+ * das etwa 110 Punkte, davon nehmen wir die Haelfte als Radius.
+ */
+private const val HANDLE_RADIUS_PX = 56f
+
 class SceneController {
     internal var view: GLSurfaceView? = null
     internal var holder: ViewportHolder? = null
@@ -90,6 +99,12 @@ class SceneController {
 
     /** Wird bei jeder Skalierung gerufen, damit die Anzeige nachzieht. */
     var onScaled: (() -> Unit)? = null
+
+    /**
+     * Welche Griffe am Objekt gezeigt werden. Das Umschalten geht ueber
+     * den GL-Thread, weil der Viewport die Geometrie dabei neu baut.
+     */
+    fun setGizmo(g: PsmViewport.Gizmo) = run { it.setGizmo(g) }
 }
 
 @Composable
@@ -169,6 +184,13 @@ private class SceneGLView(
     private var downTime = 0L
     @Volatile private var dragObject = false
     @Volatile var selectedId = -1
+    /*
+     * Welcher Griff angefasst wurde. Bleibt fuer die Dauer des Zuges
+     * fest - laesst man ihn beim Ziehen los, springt das Objekt sonst
+     * auf eine andere Achse, sobald der Finger einem anderen Griff
+     * naeher kommt.
+     */
+    @Volatile private var gizmoAxis = -1
 
     init {
         // GLES 2.0: genau dafuer sind die Shader aus PrusaSlicer geschrieben.
@@ -210,9 +232,17 @@ private class SceneGLView(
                 downTime = System.currentTimeMillis()
                 val x = event.x; val y = event.y
                 queueEvent {
+                    // Zuerst die Griffe: sie liegen ueber dem Objekt und
+                    // haben Vorrang vor Auswahl und Kameradrehung.
+                    gizmoAxis =
+                        if (vp.mode == PsmViewport.Mode.EDITOR && selectedId >= 0)
+                            vp.gizmoPick(x, y, HANDLE_RADIUS_PX)
+                        else -1
+
                     // In der Vorschau gibt es nichts anzufassen - dort dreht
                     // jede Fingerbewegung nur die Kamera.
-                    dragObject = vp.mode == PsmViewport.Mode.EDITOR &&
+                    dragObject = gizmoAxis < 0 &&
+                        vp.mode == PsmViewport.Mode.EDITOR &&
                         selectedId >= 0 && vp.pick(x, y) == selectedId
                 }
             }
@@ -257,11 +287,17 @@ private class SceneGLView(
                         val fx = lastX; val fy = lastY
                         val tx = event.x; val ty = event.y
                         queueEvent {
-                            // Auf einem ausgewaehlten Objekt verschiebt der
-                            // Finger das Objekt, sonst dreht er die Kamera.
-                            // Genau die Regel aus dem Gestenkonzept.
-                            if (!dragObject || !vp.dragSelected(fx, fy, tx, ty))
-                                vp.orbit(dx, dy)
+                            // Reihenfolge: Griff, dann Objekt, dann Kamera.
+                            // Genau die Regel aus dem Gestenkonzept, um den
+                            // Griff erweitert.
+                            val handled = when {
+                                gizmoAxis >= 0 ->
+                                    vp.gizmoDrag(gizmoAxis, fx, fy, tx, ty, snap = true)
+                                dragObject -> vp.dragSelected(fx, fy, tx, ty)
+                                else -> false
+                            }
+                            if (handled) post { controller.onScaled?.invoke() }
+                            else vp.orbit(dx, dy)
                         }
                         requestRender()
                     }
@@ -284,6 +320,7 @@ private class SceneGLView(
                     requestRender()
                 }
                 pointers = 0
+                gizmoAxis = -1
             }
 
             MotionEvent.ACTION_POINTER_UP -> {

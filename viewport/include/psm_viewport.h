@@ -83,6 +83,48 @@ PSM_API int psm_viewport_drag_selected(psm_viewport *v,
  */
 PSM_API int psm_viewport_scale_selected(psm_viewport *v, float factor);
 
+/* --- Griffe am Objekt ---------------------------------------------- */
+/*
+ * PrusaSlicers Gizmo-Klassen haengen an wx und an dessen eigenem
+ * Auswahlmechanismus; sie sind nicht uebernehmbar. Aussehen und
+ * Bedienlogik folgen dem Original, der Code ist neu - einer der wenigen
+ * Punkte, an denen E-12 den Nachbau vorsieht.
+ */
+typedef enum {
+    PSM_GIZMO_NONE   = 0,
+    PSM_GIZMO_MOVE   = 1,   /* drei Pfeile entlang der Achsen */
+    PSM_GIZMO_ROTATE = 2,   /* drei Kreise um die Achsen */
+    PSM_GIZMO_SCALE  = 3    /* Wuerfel an den Achsenenden */
+} psm_gizmo_mode;
+
+PSM_API void psm_viewport_set_gizmo(psm_viewport *v, psm_gizmo_mode mode);
+PSM_API psm_gizmo_mode psm_viewport_get_gizmo(const psm_viewport *v);
+
+/**
+ * Sucht den Griff unter dem Finger.
+ *
+ * Nicht ueber GL-Picking, sondern indem die Ankerpunkte der Griffe auf
+ * den Bildschirm projiziert werden und der naechste innerhalb des
+ * Schwellwerts gewinnt. Auf dem Tablet muss der grosszuegig sein - der
+ * Desktop kommt mit fuenf Pixeln aus, ein Finger nicht.
+ *
+ * @param radius_px Trefferradius in Bildpunkten
+ * @return 0 = X, 1 = Y, 2 = Z, 3 = gleichmaessig (nur Skalieren),
+ *         -1 = keiner
+ */
+PSM_API int psm_viewport_gizmo_pick(psm_viewport *v, float x, float y, float radius_px);
+
+/**
+ * Wendet einen Zug auf den zuvor gegriffenen Griff an.
+ *
+ * @param axis   Ergebnis von psm_viewport_gizmo_pick
+ * @param snap   1 = auf sinnvolle Schritte rasten (15 Grad, 1 mm)
+ * @return 1 wenn sich etwas geaendert hat
+ */
+PSM_API int psm_viewport_gizmo_drag(psm_viewport *v, int axis,
+                                    float from_x, float from_y,
+                                    float to_x, float to_y, int snap);
+
 /* --- Vorschau ------------------------------------------------------ */
 /*
  * Die G-Code-Vorschau ist derselbe Renderer wie im Vorschau-Tab des

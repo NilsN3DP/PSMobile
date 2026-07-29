@@ -79,7 +79,8 @@ set(PSM_CORE_SOURCES
 # Der Viewport liegt in derselben Bibliothek wie der Kern: er liest das
 # Modell direkt aus der Session, ohne Umweg ueber das ABI (E-03).
 if (ANDROID)
-    list(APPEND PSM_CORE_SOURCES viewport/src/psm_viewport.cpp)
+    list(APPEND PSM_CORE_SOURCES viewport/src/psm_viewport.cpp
+                                 viewport/src/psm_gizmo.cpp)
     # Wandelt ein Print-Ergebnis in die Eingabedaten von libvgcode um.
     # Liegt bei PrusaSlicer unter GUI/, ist aber wx- und GUI-frei.
     list(APPEND PSM_CORE_SOURCES

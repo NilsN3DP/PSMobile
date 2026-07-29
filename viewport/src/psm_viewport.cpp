@@ -15,6 +15,7 @@
  */
 
 #include "psm_viewport.h"
+#include "psm_gizmo_internal.hpp"
 #include "psmobile_session.hpp"
 
 #include <GLES2/gl2.h>
@@ -225,6 +226,14 @@ struct psm_viewport
     Mesh bed_fill;
     Mesh bed_grid;
 
+    /* Griffe am ausgewaehlten Objekt */
+    psm_gizmo_mode gizmo = PSM_GIZMO_NONE;
+    bool  gizmo_dirty = true;
+    int   gizmo_hover = -1;          /* gerade angefasster Griff */
+    Mesh  gizmo_lines;               /* Schaefte und Kreise */
+    Mesh  gizmo_solid[4];            /* Spitzen bzw. Wuerfel je Achse */
+    int   gizmo_axis_count = 0;
+
     bool  dirty = true;
     int   width = 1, height = 1;
 
@@ -245,10 +254,17 @@ struct psm_viewport
 
     Vec3 eye() const
     {
+        /*
+         * Bei yaw = 0 steht die Kamera VOR dem Bett, also bei -Y, und
+         * blickt nach +Y. Das Vorzeichen war lange falsch herum: "Vorn"
+         * zeigte die Rueckseite, "Hinten" die Vorderseite, und in der
+         * Draufsicht lag die Y-Achse gespiegelt - weshalb Bettmodell und
+         * Aufschrift verdreht wirkten.
+         */
         return target + Vec3(
-            distance * std::cos(pitch) * std::sin(yaw),
-            distance * std::cos(pitch) * std::cos(yaw),
-            distance * std::sin(pitch));
+             distance * std::cos(pitch) * std::sin(yaw),
+            -distance * std::cos(pitch) * std::cos(yaw),
+             distance * std::sin(pitch));
     }
 
     Mat4 view() const { return look_at(eye(), target, Vec3(0.f, 0.f, 1.f)); }
@@ -444,22 +460,21 @@ void build_bed(psm_viewport *v)
      * genau dieser Stelle im Puffer. So braucht es keinen zweiten
      * Eckpunkttyp.
      *
-     * Grundlage ist Bed3D::init_triangles - (p - min) durch die Groesse.
-     * Dort steht ein negatives V, was unter GL_REPEAT auf 1-v hinauslaeuft.
+     * Die Zuordnung ist die aus Bed3D::init_triangles - (p - min) durch
+     * die Groesse, mit gespiegeltem V, weil Bilder von oben nach unten
+     * laufen und das Bett von unten nach oben.
      *
-     * Beides zusammen ergab bei uns eine um 180 Grad verdrehte Grafik:
-     * die Beschriftung des Betts stand auf dem Kopf und seitenverkehrt.
-     * Unsere Draufsicht blickt mit umgekehrter Y-Richtung auf das Bett,
-     * deshalb wird hier zusaetzlich U gespiegelt und V gerade gelassen -
-     * zusammen genau die Drehung um 180 Grad, die fehlte. Am Geraet
-     * gegengeprueft: die Aufschrift liest sich jetzt richtig herum.
+     * Hier stand zwischenzeitlich ein gespiegeltes U, weil die
+     * Aufschrift verdreht erschien. Das war Symptombekaempfung: in
+     * Wahrheit stand die Kamera falsch herum (siehe eye()). Seit das
+     * behoben ist, stimmt wieder die Zuordnung des Originals.
      */
     const float bw = static_cast<float>(bb.size().x());
     const float bh = static_cast<float>(bb.size().y());
     const auto uv = [&](const Eigen::Vector2f &p) {
         return Eigen::Vector2f(
-            bw > 0.f ? 1.f - (p.x() - static_cast<float>(bb.min.x())) / bw : 0.f,
-            bh > 0.f ? (p.y() - static_cast<float>(bb.min.y())) / bh : 0.f);
+            bw > 0.f ? (p.x() - static_cast<float>(bb.min.x())) / bw : 0.f,
+            bh > 0.f ? 1.f - (p.y() - static_cast<float>(bb.min.y())) / bh : 0.f);
     };
 
     std::vector<Vertex> fill;
@@ -658,6 +673,12 @@ PSM_API void psm_viewport_invalidate(psm_viewport *v)
         v->dirty = true;
 }
 
+namespace {
+/* Weiter unten definiert - die Griffe brauchen Helfer, die erst nach
+ * dem Zeichnen stehen. */
+void build_gizmo(psm_viewport *v);
+}
+
 PSM_API void psm_viewport_render(psm_viewport *v)
 {
     if (v == nullptr)
@@ -739,6 +760,34 @@ PSM_API void psm_viewport_render(psm_viewport *v)
     for (const Mesh &m : v->meshes)
         draw(v->prog_lit, m, GL_TRIANGLES, view, proj,
              m.owner == v->selection ? col_sel : col_obj);
+
+    /*
+     * Die Griffe zuletzt und ohne Tiefenpruefung: sie sollen immer
+     * sichtbar sein, auch wenn sie im Objekt stecken. Genauso macht es
+     * der Desktop, sonst verschwindet der Pfeil im Modell und man weiss
+     * nicht mehr, wo man anfassen soll.
+     */
+    if (v->gizmo != PSM_GIZMO_NONE && v->selection != PSM_INVALID_ID) {
+        if (v->gizmo_dirty)
+            build_gizmo(v);
+
+        glDisable(GL_DEPTH_TEST);
+        static const float col_line[4] = { 0.75f, 0.75f, 0.78f, 1.f };
+        draw(v->prog_flat, v->gizmo_lines, GL_LINES, view, proj, col_line);
+
+        for (int a = 0; a < v->gizmo_axis_count; ++a) {
+            float col[4];
+            /* Der vierte Griff ist "gleichmaessig" und bekommt keine
+             * Achsenfarbe, sondern das Prusa-Orange. */
+            if (a == 3) { col[0] = 0.93f; col[1] = 0.42f; col[2] = 0.13f; col[3] = 1.f; }
+            else        psm::axis_color(a, a == v->gizmo_hover, col);
+
+            const GLenum mode = (v->gizmo == PSM_GIZMO_ROTATE) ? GL_LINES : GL_TRIANGLES;
+            draw(v->gizmo == PSM_GIZMO_ROTATE ? v->prog_flat : v->prog_lit,
+                 v->gizmo_solid[a], mode, view, proj, col);
+        }
+        glEnable(GL_DEPTH_TEST);
+    }
 }
 
 /* --- Kamera ------------------------------------------------------- */
@@ -924,6 +973,128 @@ PSM_API int psm_viewport_drag_selected(psm_viewport *v,
     return 1;
 }
 
+/* ------------------------------------------------------------------ */
+
+namespace {
+
+/** Das ausgewaehlte Objekt, oder null. */
+Slic3r::ModelObject *selected_object(psm_viewport *v)
+{
+    if (v == nullptr || v->selection == PSM_INVALID_ID)
+        return nullptr;
+    for (Slic3r::ModelObject *o : v->session->model.objects)
+        if (static_cast<psm_object_id>(o->id().id) == v->selection)
+            return o;
+    return nullptr;
+}
+
+/** Mittelpunkt des ausgewaehlten Objekts - dort sitzen die Griffe. */
+bool selected_center(psm_viewport *v, Slic3r::Vec3d &out)
+{
+    Slic3r::ModelObject *o = selected_object(v);
+    if (o == nullptr || o->instances.empty())
+        return false;
+    out = o->instance_bounding_box(0, false).center();
+    return true;
+}
+
+/*
+ * psm::Vertex und der Eckpunkttyp hier sind absichtlich gleich
+ * aufgebaut: die Griffe entstehen in einer eigenen Uebersetzungseinheit
+ * ohne GL-Kenntnis und werden hier nur hochgeladen.
+ */
+static_assert(sizeof(psm::Vertex) == sizeof(Vertex),
+              "Eckpunkttypen von Viewport und Griffen sind auseinandergelaufen");
+
+void upload_psm(Mesh &m, const std::vector<psm::Vertex> &verts)
+{
+    upload(m, *reinterpret_cast<const std::vector<Vertex> *>(&verts));
+}
+
+/*
+ * Baut die Griffe neu.
+ *
+ * Das passiert bei jeder Kamerabewegung, weil die Griffe feste
+ * Bildschirmgroesse haben - ein paar hundert Eckpunkte, das faellt
+ * nicht ins Gewicht.
+ */
+void build_gizmo(psm_viewport *v)
+{
+    for (Mesh &m : v->gizmo_solid)
+        m.destroy();
+    v->gizmo_lines.destroy();
+    v->gizmo_axis_count = 0;
+    v->gizmo_dirty = false;
+
+    if (v->gizmo == PSM_GIZMO_NONE)
+        return;
+
+    Slic3r::Vec3d c;
+    if (! selected_center(v, c))
+        return;
+
+    const psm::Vec3 origin(static_cast<float>(c.x()), static_cast<float>(c.y()),
+                           static_cast<float>(c.z()));
+    const psm::Mat4 vp = v->projection() * v->view();
+    const float len = psm::handle_length_px() *
+                      psm::screen_scale(vp, origin, v->width, v->height);
+
+    std::vector<psm::Vertex> lines;
+
+    switch (v->gizmo) {
+        case PSM_GIZMO_MOVE:
+            for (int a = 0; a < 3; ++a) {
+                std::vector<psm::Vertex> arrow;
+                psm::build_arrow(arrow, origin, psm::axis_vector(a), len);
+                /* Die ersten beiden Eckpunkte sind der Schaft, der Rest
+                 * die Spitze - Linien und Dreiecke gehen getrennt. */
+                lines.push_back(arrow[0]);
+                lines.push_back(arrow[1]);
+                upload_psm(v->gizmo_solid[a],
+                           std::vector<psm::Vertex>(arrow.begin() + 2, arrow.end()));
+            }
+            v->gizmo_axis_count = 3;
+            break;
+
+        case PSM_GIZMO_ROTATE:
+            for (int a = 0; a < 3; ++a) {
+                std::vector<psm::Vertex> ring;
+                psm::build_circle(ring, origin, a, len, 48);
+                upload_psm(v->gizmo_solid[a], ring);
+            }
+            v->gizmo_axis_count = 3;
+            break;
+
+        case PSM_GIZMO_SCALE: {
+            const float half = len * 0.075f;
+            for (int a = 0; a < 3; ++a) {
+                const psm::Vec3 tip = origin + psm::axis_vector(a) * len;
+                lines.push_back({ origin.x(), origin.y(), origin.z(), 0.f, 0.f, 1.f });
+                lines.push_back({ tip.x(), tip.y(), tip.z(), 0.f, 0.f, 1.f });
+
+                std::vector<psm::Vertex> box;
+                psm::build_box(box, tip, half);
+                upload_psm(v->gizmo_solid[a], box);
+            }
+            /* Der Griff fuer gleichmaessiges Skalieren. */
+            const psm::Vec3 d = psm::Vec3(1.f, 1.f, 1.f).normalized();
+            std::vector<psm::Vertex> box;
+            psm::build_box(box, origin + d * (len * 0.75f), half * 1.2f);
+            upload_psm(v->gizmo_solid[3], box);
+            v->gizmo_axis_count = 4;
+            break;
+        }
+
+        default:
+            break;
+    }
+
+    if (! lines.empty())
+        upload_psm(v->gizmo_lines, lines);
+}
+
+} // namespace
+
 PSM_API int psm_viewport_scale_selected(psm_viewport *v, float factor)
 {
     if (v == nullptr || v->selection == PSM_INVALID_ID)
@@ -1038,6 +1209,159 @@ PSM_API void psm_viewport_set_layer_range(psm_viewport *v, int32_t first, int32_
 PSM_API const char *psm_viewport_last_error(psm_viewport *v)
 {
     return v == nullptr ? "" : v->last_error.c_str();
+}
+
+/* ------------------------------------------------------------------ */
+/* Griffe am Objekt                                                    */
+/* ------------------------------------------------------------------ */
+
+PSM_API void psm_viewport_set_gizmo(psm_viewport *v, psm_gizmo_mode mode)
+{
+    if (v == nullptr || v->gizmo == mode)
+        return;
+    v->gizmo = mode;
+    v->gizmo_dirty = true;
+}
+
+PSM_API psm_gizmo_mode psm_viewport_get_gizmo(const psm_viewport *v)
+{
+    return v == nullptr ? PSM_GIZMO_NONE : v->gizmo;
+}
+
+PSM_API int psm_viewport_gizmo_pick(psm_viewport *v, float x, float y,
+                                    float radius_px)
+{
+    if (v == nullptr || v->gizmo == PSM_GIZMO_NONE)
+        return -1;
+    Slic3r::Vec3d c;
+    if (! selected_center(v, c))
+        return -1;
+
+    const psm::Vec3 origin(static_cast<float>(c.x()), static_cast<float>(c.y()),
+                           static_cast<float>(c.z()));
+    const psm::Mat4 vp = v->projection() * v->view();
+    const float mm = psm::screen_scale(vp, origin, v->width, v->height);
+
+    return psm::pick_anchor(psm::gizmo_anchors(v->gizmo, origin, mm), vp,
+                            v->width, v->height, x, y, radius_px);
+}
+
+PSM_API int psm_viewport_gizmo_drag(psm_viewport *v, int axis,
+                                    float from_x, float from_y,
+                                    float to_x, float to_y, int snap)
+{
+    if (v == nullptr || axis < 0 || v->gizmo == PSM_GIZMO_NONE)
+        return 0;
+    Slic3r::ModelObject *obj = selected_object(v);
+    if (obj == nullptr || obj->instances.empty())
+        return 0;
+    Slic3r::ModelInstance *inst = obj->instances.front();
+
+    Slic3r::Vec3d c;
+    if (! selected_center(v, c))
+        return 0;
+    const psm::Vec3 origin(static_cast<float>(c.x()), static_cast<float>(c.y()),
+                           static_cast<float>(c.z()));
+    const psm::Mat4 vp = v->projection() * v->view();
+    const float mm = psm::screen_scale(vp, origin, v->width, v->height);
+
+    switch (v->gizmo) {
+        case PSM_GIZMO_MOVE: {
+            /*
+             * Der Bildschirmversatz wird auf die Achse projiziert: nur
+             * der Anteil in Achsenrichtung zaehlt, alles quer dazu wird
+             * verworfen. Sonst laeuft das Objekt bei schraeger Kamera
+             * seitlich weg.
+             */
+            const psm::Vec3 a = psm::axis_vector(axis);
+            psm::Vec2 s0, s1;
+            if (! psm::project_point(vp, origin, v->width, v->height, s0) ||
+                ! psm::project_point(vp, origin + a * (10.f * mm),
+                                     v->width, v->height, s1))
+                return 0;
+            const psm::Vec2 dir = s1 - s0;
+            const float len2 = dir.squaredNorm();
+            if (len2 < 0.01f)
+                return 0;
+
+            const psm::Vec2 drag(to_x - from_x, to_y - from_y);
+            float along = drag.dot(dir) / len2 * 10.f * mm;
+            if (snap != 0)
+                along = std::round(along);
+
+            Slic3r::Vec3d off = inst->get_offset();
+            off(axis) += static_cast<double>(along);
+            inst->set_offset(off);
+            break;
+        }
+
+        case PSM_GIZMO_ROTATE: {
+            /*
+             * Der Winkel ergibt sich aus der Drehung des Fingers um den
+             * Bildschirmmittelpunkt des Objekts. Das ist die Zuordnung,
+             * die sich am natuerlichsten anfuehlt - unabhaengig davon,
+             * wie flach der Kreis gerade steht.
+             */
+            psm::Vec2 ctr;
+            if (! psm::project_point(vp, origin, v->width, v->height, ctr))
+                return 0;
+            const float a0 = std::atan2(from_y - ctr.y(), from_x - ctr.x());
+            const float a1 = std::atan2(to_y   - ctr.y(), to_x   - ctr.x());
+            float deg = (a1 - a0) * 180.f / static_cast<float>(M_PI);
+
+            Slic3r::Vec3d rot = inst->get_rotation();
+            double cur = rot(axis) * 180.0 / M_PI + static_cast<double>(deg);
+            if (snap != 0)
+                cur = std::round(cur / 15.0) * 15.0;   /* wie am Desktop */
+            rot(axis) = cur * M_PI / 180.0;
+            inst->set_rotation(rot);
+            break;
+        }
+
+        case PSM_GIZMO_SCALE: {
+            /* Abstand vom Mittelpunkt vorher zu nachher - vergroessert
+             * sich der Abstand, waechst das Objekt. */
+            psm::Vec2 ctr;
+            if (! psm::project_point(vp, origin, v->width, v->height, ctr))
+                return 0;
+            const float d0 = std::hypot(from_x - ctr.x(), from_y - ctr.y());
+            const float d1 = std::hypot(to_x - ctr.x(), to_y - ctr.y());
+            if (d0 < 1.f)
+                return 0;
+            const double f = static_cast<double>(d1 / d0);
+
+            Slic3r::Vec3d sc = inst->get_scaling_factor();
+            if (axis == 3) {
+                sc *= f;                       /* gleichmaessig */
+            } else {
+                sc(axis) *= f;                 /* nur diese Achse */
+            }
+            for (int i = 0; i < 3; ++i)
+                sc(i) = std::clamp(sc(i), 0.01, 100.0);
+            inst->set_scaling_factor(sc);
+            break;
+        }
+
+        default:
+            return 0;
+    }
+
+    obj->invalidate_bounding_box();
+
+    /* Nach Drehen und Skalieren wieder aufsetzen - sonst schwebt oder
+     * versinkt das Objekt. Beim Verschieben nicht, sonst liesse sich die
+     * Hoehe nie aendern. */
+    if (v->gizmo != PSM_GIZMO_MOVE) {
+        const Slic3r::BoundingBoxf3 bb = obj->instance_bounding_box(0, false);
+        Slic3r::Vec3d off = inst->get_offset();
+        off.z() -= bb.min.z();
+        inst->set_offset(off);
+        obj->invalidate_bounding_box();
+    }
+
+    v->dirty = true;
+    v->gizmo_dirty = true;
+    return 1;
 }
 
 } /* extern "C" */

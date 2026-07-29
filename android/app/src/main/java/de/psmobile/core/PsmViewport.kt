@@ -37,6 +37,12 @@ class PsmViewport private constructor(private var handle: Long) {
         @JvmStatic private external fun nativeLayerCount(h: Long): Int
         @JvmStatic private external fun nativeSetLayerRange(h: Long, lo: Int, hi: Int)
         @JvmStatic private external fun nativeScaleSelected(h: Long, factor: Float): Int
+        @JvmStatic private external fun nativeSetGizmo(h: Long, mode: Int)
+        @JvmStatic private external fun nativeGizmoPick(
+            h: Long, x: Float, y: Float, radius: Float): Int
+        @JvmStatic private external fun nativeGizmoDrag(
+            h: Long, axis: Int, fx: Float, fy: Float,
+            tx: Float, ty: Float, snap: Int): Int
     }
 
     fun resize(w: Int, h: Int) = nativeResize(handle, w, h)
@@ -64,6 +70,25 @@ class PsmViewport private constructor(private var handle: Long) {
      * aufs Bett. Fuer die Spreizgeste im Skalieren-Werkzeug.
      */
     fun scaleSelected(factor: Float): Boolean = nativeScaleSelected(handle, factor) != 0
+
+    /* --- Griffe am Objekt -------------------------------------------- */
+
+    enum class Gizmo(val raw: Int) { NONE(0), MOVE(1), ROTATE(2), SCALE(3) }
+
+    fun setGizmo(g: Gizmo) = nativeSetGizmo(handle, g.raw)
+
+    /**
+     * Welcher Griff liegt unter dem Finger?
+     *
+     * @return 0 = X, 1 = Y, 2 = Z, 3 = gleichmaessig, -1 = keiner
+     */
+    fun gizmoPick(x: Float, y: Float, radiusPx: Float): Int =
+        nativeGizmoPick(handle, x, y, radiusPx)
+
+    /** @return true wenn sich etwas geaendert hat */
+    fun gizmoDrag(axis: Int, fx: Float, fy: Float, tx: Float, ty: Float,
+                  snap: Boolean): Boolean =
+        nativeGizmoDrag(handle, axis, fx, fy, tx, ty, if (snap) 1 else 0) != 0
 
     /** Vorbereiten zeigt die Modelle, Vorschau die Werkzeugwege des Slicers. */
     enum class Mode(val raw: Int) { EDITOR(0), PREVIEW(1) }

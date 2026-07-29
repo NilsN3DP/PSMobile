@@ -732,6 +732,26 @@ JNIEXPORT jint JNICALL JNI_VP(nativeScaleSelected)(JNIEnv *, jclass, jlong h, jf
     return psm_viewport_scale_selected(vp(h), factor);
 }
 
+/* --- Griffe --------------------------------------------------------- */
+
+JNIEXPORT void JNICALL JNI_VP(nativeSetGizmo)(JNIEnv *, jclass, jlong h, jint mode)
+{
+    psm_viewport_set_gizmo(vp(h), static_cast<psm_gizmo_mode>(mode));
+}
+
+JNIEXPORT jint JNICALL JNI_VP(nativeGizmoPick)(JNIEnv *, jclass, jlong h,
+                                               jfloat x, jfloat y, jfloat radius)
+{
+    return psm_viewport_gizmo_pick(vp(h), x, y, radius);
+}
+
+JNIEXPORT jint JNICALL JNI_VP(nativeGizmoDrag)(JNIEnv *, jclass, jlong h, jint axis,
+                                               jfloat fx, jfloat fy,
+                                               jfloat tx, jfloat ty, jint snap)
+{
+    return psm_viewport_gizmo_drag(vp(h), axis, fx, fy, tx, ty, snap);
+}
+
 JNIEXPORT void JNICALL JNI_VP(nativeSetMode)(JNIEnv *, jclass, jlong h, jint mode)
 {
     psm_viewport_set_mode(vp(h), static_cast<psm_view_mode>(mode));

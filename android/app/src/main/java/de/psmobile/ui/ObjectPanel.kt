@@ -56,6 +56,8 @@ import kotlin.math.roundToInt
 fun ObjectPanel(
     service: SlicerService,
     obj: PsmCore.ObjectInfo,
+    gizmo: de.psmobile.core.PsmViewport.Gizmo,
+    onGizmoChange: (de.psmobile.core.PsmViewport.Gizmo) -> Unit,
     scaleToolActive: Boolean,
     onScaleToolChange: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
@@ -65,6 +67,31 @@ fun ObjectPanel(
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         SectionLabelPublic(PsUi.tr("Object manipulation"))
+
+        // Welche Griffe am Objekt stehen. Wie am Desktop die Gizmo-Leiste
+        // links, hier als Zeile - auf dem Tablet ist waagerecht billiger
+        // als eine weitere senkrechte Leiste.
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            listOf(
+                de.psmobile.core.PsmViewport.Gizmo.NONE   to PsUi.tr("None"),
+                de.psmobile.core.PsmViewport.Gizmo.MOVE   to PsUi.tr("Move"),
+                de.psmobile.core.PsmViewport.Gizmo.ROTATE to PsUi.tr("Rotate"),
+                de.psmobile.core.PsmViewport.Gizmo.SCALE  to PsUi.tr("Scale"),
+            ).forEach { (g, label) ->
+                val on = g == gizmo
+                Box(
+                    Modifier.weight(1f).height(40.dp)
+                        .clip(RoundedCornerShape(4.dp))
+                        .background(if (on) PrusaColors.Orange else PrusaColors.PanelRaised)
+                        .clickable { onGizmoChange(g) },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(label, color = if (on) Color.White else PrusaColors.TextPrimary,
+                         fontSize = 12.sp,
+                         fontWeight = if (on) FontWeight.SemiBold else FontWeight.Normal)
+                }
+            }
+        }
 
         // --- Groesse ---------------------------------------------------
         //
