@@ -112,7 +112,9 @@ fun SceneView(
     core: PsmCore?,
     shaderDir: String,
     selectedId: Int?,
+    selectedIds: Set<Int> = selectedId?.let { setOf(it) } ?: emptySet(),
     onSelect: (Int) -> Unit,
+    onSurfaceTap: ((PsmViewport.SurfaceHit) -> Unit)? = null,
     invalidateKey: Any,
     controller: SceneController,
     modifier: Modifier = Modifier,
@@ -141,8 +143,9 @@ fun SceneView(
             @Suppress("UNUSED_EXPRESSION") invalidateKey
 
             view.selectedId = selectedId ?: -1
+            view.surfaceTap = onSurfaceTap
             view.queueEvent {
-                holder.viewport?.setSelection(selectedId ?: -1)
+                holder.viewport?.setSelections(selectedIds, selectedId)
                 holder.viewport?.invalidate()
             }
             view.requestRender()
@@ -184,6 +187,7 @@ private class SceneGLView(
     private var downTime = 0L
     @Volatile private var dragObject = false
     @Volatile var selectedId = -1
+    @Volatile var surfaceTap: ((PsmViewport.SurfaceHit) -> Unit)? = null
     /*
      * Welcher Griff angefasst wurde. Bleibt fuer die Dauer des Zuges
      * fest - laesst man ihn beim Ziehen los, springt das Objekt sonst
@@ -232,6 +236,11 @@ private class SceneGLView(
                 downTime = System.currentTimeMillis()
                 val x = event.x; val y = event.y
                 queueEvent {
+                    // Alle MOVE-Ereignisse bis ACTION_UP sind genau ein
+                    // Undo-Schritt. Eine reine Kamerageste erzeugt keinen
+                    // Snapshot, weil der Core erst bei einer Modelländerung
+                    // tatsächlich einen Checkpoint anlegt.
+                    core.beginHistory("Touch-Geste")
                     // Zuerst die Griffe: sie liegen ueber dem Objekt und
                     // haben Vorrang vor Auswahl und Kameradrehung.
                     gizmoAxis =
@@ -241,7 +250,8 @@ private class SceneGLView(
 
                     // In der Vorschau gibt es nichts anzufassen - dort dreht
                     // jede Fingerbewegung nur die Kamera.
-                    dragObject = gizmoAxis < 0 &&
+                    dragObject = surfaceTap == null &&
+                        gizmoAxis < 0 &&
                         vp.mode == PsmViewport.Mode.EDITOR &&
                         selectedId >= 0 && vp.pick(x, y) == selectedId
                 }
@@ -311,21 +321,35 @@ private class SceneGLView(
                     val x = event.x; val y = event.y
                     queueEvent {
                         if (vp.mode == PsmViewport.Mode.EDITOR) {
-                            val id = vp.pick(x, y)
-                            vp.setSelection(id)
-                            selectedId = id
-                            post { onSelect(id) }
+                            val callback = surfaceTap
+                            if (callback != null) {
+                                vp.surfacePick(x, y)?.let { hit ->
+                                    post { callback(hit) }
+                                }
+                            } else {
+                                val id = vp.pick(x, y)
+                                vp.setSelection(id)
+                                selectedId = id
+                                post { onSelect(id) }
+                            }
                         }
                     }
                     requestRender()
                 }
                 pointers = 0
                 gizmoAxis = -1
+                queueEvent { core.endHistory() }
             }
 
             MotionEvent.ACTION_POINTER_UP -> {
                 pointers = event.pointerCount - 1
                 lastSpan = 0f
+            }
+
+            MotionEvent.ACTION_CANCEL -> {
+                pointers = 0
+                gizmoAxis = -1
+                queueEvent { core.endHistory() }
             }
         }
         return true

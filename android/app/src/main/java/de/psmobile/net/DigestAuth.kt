@@ -1,7 +1,9 @@
 package de.psmobile.net
 
 import java.security.MessageDigest
-import kotlin.random.Random
+import java.security.SecureRandom
+import java.util.Locale
+import java.util.concurrent.atomic.AtomicInteger
 
 /**
  * HTTP-Digest-Authentifizierung nach RFC 7616.
@@ -22,7 +24,7 @@ object DigestAuth {
         val algorithm: String,
     ) {
         /** Zaehler der Anfragen mit dieser nonce, wie es qop=auth verlangt. */
-        var counter: Int = 0
+        internal val counter = AtomicInteger(0)
     }
 
     /**
@@ -44,13 +46,20 @@ object DigestAuth {
 
         val realm = params["realm"] ?: return null
         val nonce = params["nonce"] ?: return null
+        val qop = params["qop"]?.split(',')?.map { it.trim().lowercase() }
+            ?.firstOrNull { it == "auth" }
+        if (params["qop"] != null && qop == null)
+            return null
+        val algorithm = (params["algorithm"] ?: "MD5").uppercase(Locale.ROOT)
+        if (algorithm != "MD5")
+            return null
+
         return Challenge(
             realm = realm,
             nonce = nonce,
-            qop = params["qop"]?.split(',')?.map { it.trim() }
-                ?.firstOrNull { it == "auth" } ?: params["qop"],
+            qop = qop,
             opaque = params["opaque"],
-            algorithm = params["algorithm"] ?: "MD5",
+            algorithm = algorithm,
         )
     }
 
@@ -67,9 +76,10 @@ object DigestAuth {
         method: String,
         uri: String,
     ): String {
-        val cnonce = Random.nextBytes(8).joinToString("") { "%02x".format(it) }
-        c.counter += 1
-        val nc = "%08x".format(c.counter)
+        require(c.algorithm == "MD5") { "Nicht unterstützter Digest-Algorithmus: ${c.algorithm}" }
+        val random = ByteArray(8).also { SecureRandom().nextBytes(it) }
+        val cnonce = random.joinToString("") { "%02x".format(it) }
+        val nc = "%08x".format(c.counter.incrementAndGet())
 
         val ha1 = md5("$username:${c.realm}:$password")
         val ha2 = md5("$method:$uri")

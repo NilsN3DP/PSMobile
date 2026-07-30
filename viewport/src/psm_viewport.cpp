@@ -245,6 +245,7 @@ struct psm_viewport
 
     Slic3r::BoundingBoxf3 scene_bbox;
     psm_object_id selection = PSM_INVALID_ID;
+    std::vector<psm_object_id> selections;
 
     /* Vorschau */
     psm_view_mode           mode = PSM_VIEW_EDITOR;
@@ -516,7 +517,7 @@ void build_meshes(psm_viewport *v)
     v->meshes.clear();
     v->scene_bbox = Slic3r::BoundingBoxf3();
 
-    for (const Slic3r::ModelObject *obj : v->session->model.objects) {
+    for (const Slic3r::ModelObject *obj : v->session->model().objects) {
         for (size_t inst = 0; inst < obj->instances.size(); ++inst) {
             const Slic3r::Transform3d inst_m = obj->instances[inst]->get_matrix();
 
@@ -683,6 +684,7 @@ PSM_API void psm_viewport_render(psm_viewport *v)
 {
     if (v == nullptr)
         return;
+    std::lock_guard<std::recursive_mutex> data_lock(v->session->data_mtx);
 
     if (v->dirty) {
         build_bed(v);
@@ -770,7 +772,9 @@ PSM_API void psm_viewport_render(psm_viewport *v)
 
     for (const Mesh &m : v->meshes)
         draw(v->prog_lit, m, GL_TRIANGLES, view, proj,
-             m.owner == v->selection ? col_sel : col_obj);
+             std::find(v->selections.begin(), v->selections.end(), m.owner)
+                    != v->selections.end()
+                 ? col_sel : col_obj);
 
     /*
      * Die Griffe zuletzt und ohne Tiefenpruefung: sie sollen immer
@@ -914,8 +918,202 @@ PSM_API psm_object_id psm_viewport_pick(psm_viewport *v, float x, float y)
 
 PSM_API void psm_viewport_set_selection(psm_viewport *v, psm_object_id id)
 {
-    if (v != nullptr)
+    if (v != nullptr) {
         v->selection = id;
+        v->selections.clear();
+        if (id != PSM_INVALID_ID)
+            v->selections.push_back(id);
+    }
+}
+
+PSM_API void psm_viewport_set_selections(psm_viewport *v,
+                                         const psm_object_id *ids,
+                                         size_t count,
+                                         psm_object_id primary)
+{
+    if (v == nullptr)
+        return;
+    v->selection = primary;
+    v->selections.clear();
+    if (ids != nullptr)
+        v->selections.assign(ids, ids + count);
+    if (primary != PSM_INVALID_ID &&
+        std::find(v->selections.begin(), v->selections.end(), primary)
+            == v->selections.end())
+        v->selections.push_back(primary);
+}
+
+PSM_API int psm_viewport_pick_surface(psm_viewport *v, float x, float y,
+                                      psm_surface_hit *out)
+{
+    if (v == nullptr || out == nullptr || v->session == nullptr)
+        return 0;
+
+    const Mat4 inv_view_proj = (v->projection() * v->view()).inverse();
+    const float nx = 2.f * x / static_cast<float>(v->width) - 1.f;
+    const float ny = 1.f - 2.f * y / static_cast<float>(v->height);
+    Eigen::Vector4f near4 =
+        inv_view_proj * Eigen::Vector4f(nx, ny, -1.f, 1.f);
+    Eigen::Vector4f far4 =
+        inv_view_proj * Eigen::Vector4f(nx, ny, 1.f, 1.f);
+    near4 /= near4.w();
+    far4 /= far4.w();
+
+    const Slic3r::Vec3d ray_origin(
+        near4.x(), near4.y(), near4.z());
+    const Slic3r::Vec3d ray_direction =
+        Slic3r::Vec3d(far4.x() - near4.x(),
+                      far4.y() - near4.y(),
+                      far4.z() - near4.z()).normalized();
+
+    double best_distance = std::numeric_limits<double>::max();
+    bool found = false;
+    psm_surface_hit best{};
+    best.object_id = PSM_INVALID_ID;
+
+    std::lock_guard<std::recursive_mutex> data_lock(
+        v->session->data_mtx);
+    for (const Slic3r::ModelObject *object :
+         v->session->model().objects) {
+        const psm_object_id object_id =
+            static_cast<psm_object_id>(object->id().id);
+        /*
+         * Ist bereits ein Objekt gewaehlt, gehoert der Flächenpinsel
+         * ausschliesslich dazu. Beim Messen ohne Auswahl darf dagegen
+         * die gesamte Platte getroffen werden.
+         */
+        if (v->selection != PSM_INVALID_ID &&
+            object_id != v->selection)
+            continue;
+
+        for (size_t instance_index = 0;
+             instance_index < object->instances.size();
+             ++instance_index) {
+            const Slic3r::ModelInstance *instance =
+                object->instances[instance_index];
+            for (size_t volume_index = 0;
+                 volume_index < object->volumes.size();
+                 ++volume_index) {
+                const Slic3r::ModelVolume *volume =
+                    object->volumes[volume_index];
+                if (! volume->is_model_part())
+                    continue;
+
+                const Slic3r::Transform3d to_world =
+                    instance->get_matrix() * volume->get_matrix();
+                const Slic3r::Transform3d to_local =
+                    to_world.inverse();
+                const Slic3r::Vec3d local_origin =
+                    to_local * ray_origin;
+                const Slic3r::Vec3d local_direction =
+                    (to_local.linear() * ray_direction).normalized();
+                const auto &mesh = volume->mesh().its;
+
+                /*
+                 * Erst gegen den lokalen Volumenquader. Bei Texten,
+                 * Modifiern und großen Baugruppen spart das hunderttausende
+                 * Dreieckstests pro Fingertipp.
+                 */
+                const Slic3r::BoundingBoxf3 bbox =
+                    volume->mesh().bounding_box();
+                double box_min = 0.0;
+                double box_max = std::numeric_limits<double>::max();
+                bool box_hit = bbox.defined;
+                for (int axis = 0; box_hit && axis < 3; ++axis) {
+                    if (std::abs(local_direction(axis)) < 1e-12) {
+                        if (local_origin(axis) < bbox.min(axis) ||
+                            local_origin(axis) > bbox.max(axis))
+                            box_hit = false;
+                    } else {
+                        double enter =
+                            (bbox.min(axis) - local_origin(axis)) /
+                            local_direction(axis);
+                        double leave =
+                            (bbox.max(axis) - local_origin(axis)) /
+                            local_direction(axis);
+                        if (enter > leave)
+                            std::swap(enter, leave);
+                        box_min = std::max(box_min, enter);
+                        box_max = std::min(box_max, leave);
+                        if (box_min > box_max)
+                            box_hit = false;
+                    }
+                }
+                if (! box_hit)
+                    continue;
+
+                for (size_t facet_index = 0;
+                     facet_index < mesh.indices.size();
+                     ++facet_index) {
+                    const Slic3r::Vec3i32 &face =
+                        mesh.indices[facet_index];
+                    const Slic3r::Vec3d a =
+                        mesh.vertices[face(0)].cast<double>();
+                    const Slic3r::Vec3d b =
+                        mesh.vertices[face(1)].cast<double>();
+                    const Slic3r::Vec3d c =
+                        mesh.vertices[face(2)].cast<double>();
+
+                    /* Möller-Trumbore, zweiseitig. */
+                    const Slic3r::Vec3d e1 = b - a;
+                    const Slic3r::Vec3d e2 = c - a;
+                    const Slic3r::Vec3d p =
+                        local_direction.cross(e2);
+                    const double det = e1.dot(p);
+                    if (std::abs(det) < 1e-12)
+                        continue;
+                    const double inv_det = 1.0 / det;
+                    const Slic3r::Vec3d tvec = local_origin - a;
+                    const double u = tvec.dot(p) * inv_det;
+                    if (u < 0.0 || u > 1.0)
+                        continue;
+                    const Slic3r::Vec3d q = tvec.cross(e1);
+                    const double w =
+                        local_direction.dot(q) * inv_det;
+                    if (w < 0.0 || u + w > 1.0)
+                        continue;
+                    const double local_t = e2.dot(q) * inv_det;
+                    if (local_t <= 1e-8)
+                        continue;
+
+                    const Slic3r::Vec3d local_hit =
+                        local_origin + local_direction * local_t;
+                    const Slic3r::Vec3d world_hit =
+                        to_world * local_hit;
+                    const double distance =
+                        (world_hit - ray_origin).norm();
+                    if (distance >= best_distance)
+                        continue;
+
+                    Slic3r::Vec3d normal =
+                        (to_world.linear().inverse().transpose() *
+                         e1.cross(e2)).normalized();
+                    if (normal.dot(ray_direction) > 0.0)
+                        normal = -normal;
+
+                    best_distance = distance;
+                    best.object_id = object_id;
+                    best.volume_index =
+                        static_cast<int32_t>(volume_index);
+                    best.facet_index =
+                        static_cast<int32_t>(facet_index);
+                    best.instance_index =
+                        static_cast<int32_t>(instance_index);
+                    for (int axis = 0; axis < 3; ++axis) {
+                        best.position[axis] =
+                            static_cast<float>(world_hit(axis));
+                        best.normal[axis] =
+                            static_cast<float>(normal(axis));
+                    }
+                    found = true;
+                }
+            }
+        }
+    }
+
+    if (found)
+        *out = best;
+    return found ? 1 : 0;
 }
 
 namespace {
@@ -954,9 +1152,10 @@ PSM_API int psm_viewport_drag_selected(psm_viewport *v,
 {
     if (v == nullptr || v->selection == PSM_INVALID_ID)
         return 0;
+    std::lock_guard<std::recursive_mutex> data_lock(v->session->data_mtx);
 
     Slic3r::ModelObject *obj = nullptr;
-    for (Slic3r::ModelObject *o : v->session->model.objects)
+    for (Slic3r::ModelObject *o : v->session->model().objects)
         if (static_cast<psm_object_id>(o->id().id) == v->selection) {
             obj = o;
             break;
@@ -974,6 +1173,7 @@ PSM_API int psm_viewport_drag_selected(psm_viewport *v,
         ! ray_to_plane(v, to_x,   to_y,   plane_z, b))
         return 0;
 
+    v->session->history_checkpoint("Objekt per Touch verschieben");
     Slic3r::ModelInstance *inst = obj->instances.front();
     Slic3r::Vec3d off = inst->get_offset();
     off.x() += b.x() - a.x();
@@ -982,6 +1182,7 @@ PSM_API int psm_viewport_drag_selected(psm_viewport *v,
     obj->invalidate_bounding_box();
 
     v->dirty = true;
+    v->session->mark_design_changed();
     return 1;
 }
 
@@ -994,7 +1195,7 @@ Slic3r::ModelObject *selected_object(psm_viewport *v)
 {
     if (v == nullptr || v->selection == PSM_INVALID_ID)
         return nullptr;
-    for (Slic3r::ModelObject *o : v->session->model.objects)
+    for (Slic3r::ModelObject *o : v->session->model().objects)
         if (static_cast<psm_object_id>(o->id().id) == v->selection)
             return o;
     return nullptr;
@@ -1133,9 +1334,10 @@ PSM_API int psm_viewport_scale_selected(psm_viewport *v, float factor)
     /* Unsinnige Faktoren abweisen, statt das Objekt zu zerstoeren. */
     if (! (factor > 0.f) || factor > 100.f)
         return 0;
+    std::lock_guard<std::recursive_mutex> data_lock(v->session->data_mtx);
 
     Slic3r::ModelObject *obj = nullptr;
-    for (Slic3r::ModelObject *o : v->session->model.objects)
+    for (Slic3r::ModelObject *o : v->session->model().objects)
         if (static_cast<psm_object_id>(o->id().id) == v->selection) {
             obj = o;
             break;
@@ -1143,6 +1345,7 @@ PSM_API int psm_viewport_scale_selected(psm_viewport *v, float factor)
     if (obj == nullptr || obj->instances.empty())
         return 0;
 
+    v->session->history_checkpoint("Objekt per Geste skalieren");
     Slic3r::ModelInstance *inst = obj->instances.front();
     Slic3r::Vec3d sc = inst->get_scaling_factor();
 
@@ -1163,6 +1366,7 @@ PSM_API int psm_viewport_scale_selected(psm_viewport *v, float factor)
     obj->invalidate_bounding_box();
 
     v->dirty = true;
+    v->session->mark_design_changed();
     return 1;
 }
 
@@ -1181,10 +1385,14 @@ PSM_API psm_view_mode psm_viewport_get_mode(psm_viewport *v)
 
 PSM_API int psm_viewport_load_preview(psm_viewport *v)
 {
-    if (v == nullptr || v->session == nullptr || ! v->session->print)
+    if (v == nullptr || v->session == nullptr ||
+        ! v->session->result_is_current())
         return 0;
 
     try {
+        std::lock_guard<std::mutex> print_lock(v->session->print_mtx);
+        if (! v->session->print)
+            return 0;
         if (! v->gcode_viewer_ready) {
             /* libvgcode laedt seine GL-Funktionen selbst. Die Zeichenkette
              * ist die Kontextversion; unter GLES erwartet es "3.0". */
@@ -1199,7 +1407,7 @@ PSM_API int psm_viewport_load_preview(psm_viewport *v)
          * ab. "extruders_count" gibt es nur als Hilfsoption der Tab-GUI
          * und nicht in PrintConfig; opt_int haette dort null geliefert. */
         const auto *nozzles =
-            v->session->config.opt<Slic3r::ConfigOptionFloats>("nozzle_diameter");
+            v->session->slice_config.opt<Slic3r::ConfigOptionFloats>("nozzle_diameter");
         const size_t extruders =
             (nozzles != nullptr && ! nozzles->values.empty()) ? nozzles->values.size() : 1;
 
@@ -1264,6 +1472,7 @@ PSM_API int psm_viewport_gizmo_pick(psm_viewport *v, float x, float y,
 {
     if (v == nullptr || v->gizmo == PSM_GIZMO_NONE)
         return -1;
+    std::lock_guard<std::recursive_mutex> data_lock(v->session->data_mtx);
     Slic3r::Vec3d c;
     if (! selected_center(v, c))
         return -1;
@@ -1283,6 +1492,7 @@ PSM_API int psm_viewport_gizmo_drag(psm_viewport *v, int axis,
 {
     if (v == nullptr || axis < 0 || v->gizmo == PSM_GIZMO_NONE)
         return 0;
+    std::lock_guard<std::recursive_mutex> data_lock(v->session->data_mtx);
     Slic3r::ModelObject *obj = selected_object(v);
     if (obj == nullptr || obj->instances.empty())
         return 0;
@@ -1320,6 +1530,7 @@ PSM_API int psm_viewport_gizmo_drag(psm_viewport *v, int axis,
             if (snap != 0)
                 along = std::round(along);
 
+            v->session->history_checkpoint("Objekt am Griff verschieben");
             Slic3r::Vec3d off = inst->get_offset();
             off(axis) += static_cast<double>(along);
             inst->set_offset(off);
@@ -1361,6 +1572,7 @@ PSM_API int psm_viewport_gizmo_drag(psm_viewport *v, int axis,
             double cur = rot(axis) * 180.0 / M_PI + static_cast<double>(deg);
             if (snap != 0)
                 cur = std::round(cur / 15.0) * 15.0;   /* wie am Desktop */
+            v->session->history_checkpoint("Objekt am Griff drehen");
             rot(axis) = cur * M_PI / 180.0;
             inst->set_rotation(rot);
             break;
@@ -1378,6 +1590,7 @@ PSM_API int psm_viewport_gizmo_drag(psm_viewport *v, int axis,
                 return 0;
             const double f = static_cast<double>(d1 / d0);
 
+            v->session->history_checkpoint("Objekt am Griff skalieren");
             Slic3r::Vec3d sc = inst->get_scaling_factor();
             if (axis == 3) {
                 sc *= f;                       /* gleichmaessig */
@@ -1409,6 +1622,7 @@ PSM_API int psm_viewport_gizmo_drag(psm_viewport *v, int axis,
 
     v->dirty = true;
     v->gizmo_dirty = true;
+    v->session->mark_design_changed();
     return 1;
 }
 

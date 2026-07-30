@@ -16,6 +16,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -56,6 +58,7 @@ import kotlin.math.roundToInt
 fun ObjectPanel(
     service: SlicerService,
     obj: PsmCore.ObjectInfo,
+    beds: List<PsmCore.Bed>,
     gizmo: de.psmobile.core.PsmViewport.Gizmo,
     onGizmoChange: (de.psmobile.core.PsmViewport.Gizmo) -> Unit,
     scaleToolActive: Boolean,
@@ -80,14 +83,14 @@ fun ObjectPanel(
             ).forEach { (g, label) ->
                 val on = g == gizmo
                 Box(
-                    Modifier.weight(1f).height(40.dp)
-                        .clip(RoundedCornerShape(4.dp))
+                    Modifier.weight(1f).height(48.dp)
+                        .clip(RoundedCornerShape(9.dp))
                         .background(if (on) PrusaColors.Orange else PrusaColors.PanelRaised)
                         .clickable { onGizmoChange(g) },
                     contentAlignment = Alignment.Center,
                 ) {
                     Text(label, color = if (on) Color.White else PrusaColors.TextPrimary,
-                         fontSize = 12.sp,
+                         fontSize = 13.sp,
                          fontWeight = if (on) FontWeight.SemiBold else FontWeight.Normal)
                 }
             }
@@ -102,10 +105,10 @@ fun ObjectPanel(
             Text(PsUi.tr("Scale"), color = PrusaColors.TextMuted,
                  fontSize = 12.sp, modifier = Modifier.width(64.dp))
             NumberField(
-                value = "%.1f".format(scale * 100f),
+                value = NumberCodec.oneDecimal(scale * 100f),
                 unit = "%",
                 onCommit = { v ->
-                    v.toFloatOrNull()?.let { pct ->
+                    NumberCodec.parseFloat(v)?.let { pct ->
                         if (pct > 0f) service.setUniformScale(obj.id, pct / 100f)
                     }
                 },
@@ -113,12 +116,16 @@ fun ObjectPanel(
             )
             Spacer(Modifier.width(8.dp))
             NumberField(
-                value = "%.1f".format(obj.sizeMm.first),
+                value = NumberCodec.oneDecimal(
+                    maxOf(obj.sizeMm.first, obj.sizeMm.second, obj.sizeMm.third)
+                ),
                 unit = "mm",
                 onCommit = { v ->
                     // Ueber die laengste Kante skalieren, wie "Auf Bett
                     // einpassen" - nur mit eigenem Zielmass.
-                    v.toFloatOrNull()?.let { mm -> if (mm > 0f) service.scaleToSize(obj.id, mm) }
+                    NumberCodec.parseFloat(v)?.let { mm ->
+                        if (mm > 0f) service.scaleToSize(obj.id, mm)
+                    }
                 },
                 modifier = Modifier.weight(1f),
             )
@@ -129,17 +136,18 @@ fun ObjectPanel(
         // sein, sonst wirkt der Viewport kaputt.
         Row(
             Modifier.fillMaxWidth()
-                .clip(RoundedCornerShape(4.dp))
+                .height(50.dp)
+                .clip(RoundedCornerShape(9.dp))
                 .background(if (scaleToolActive) PrusaColors.Orange else PrusaColors.PanelRaised)
                 .clickable { onScaleToolChange(!scaleToolActive) }
-                .padding(horizontal = 10.dp, vertical = 10.dp),
+                .padding(horizontal = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
                 if (scaleToolActive) "Mit zwei Fingern skalieren · an"
                 else                 "Mit zwei Fingern skalieren",
                 color = if (scaleToolActive) Color.White else PrusaColors.TextMuted,
-                fontSize = 12.sp,
+                fontSize = 13.sp,
                 fontWeight = if (scaleToolActive) FontWeight.SemiBold else FontWeight.Normal,
             )
         }
@@ -160,7 +168,9 @@ fun ObjectPanel(
                     value = deg.roundToInt().toString(),
                     unit = label,
                     onCommit = { v ->
-                        v.toFloatOrNull()?.let { service.setRotationAxis(obj.id, axis, it) }
+                        NumberCodec.parseFloat(v)?.let {
+                            service.setRotationAxis(obj.id, axis, it)
+                        }
                     },
                     modifier = Modifier.weight(1f).padding(end = 6.dp),
                 )
@@ -197,11 +207,40 @@ fun ObjectPanel(
             }
         }
 
+        if (beds.size > 1) {
+            var moveMenu by remember { mutableStateOf(false) }
+            val active = beds.firstOrNull { it.active }?.index ?: 0
+            Box(Modifier.fillMaxWidth()) {
+                SmallButton("Auf anderes Bett verschieben", Modifier.fillMaxWidth()) {
+                    moveMenu = true
+                }
+                DropdownMenu(
+                    expanded = moveMenu,
+                    onDismissRequest = { moveMenu = false },
+                ) {
+                    beds.filter { it.index != active }.forEach { bed ->
+                        DropdownMenuItem(
+                            text = {
+                                Text(
+                                    "Bett ${bed.index + 1} · ${bed.objectCount} Objekte",
+                                    color = PrusaColors.TextPrimary,
+                                )
+                            },
+                            onClick = {
+                                moveMenu = false
+                                service.moveObjectToBed(obj.id, bed.index)
+                            },
+                        )
+                    }
+                }
+            }
+        }
+
         // --- Kopien ----------------------------------------------------
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text("Kopien", color = PrusaColors.TextMuted,
                  fontSize = 12.sp, modifier = Modifier.width(64.dp))
-            SmallButton("−", Modifier.width(48.dp)) {
+            SmallButton("−", Modifier.width(52.dp)) {
                 if (obj.instances > 1) service.setInstances(obj.id, obj.instances - 1)
             }
             Text(
@@ -211,7 +250,7 @@ fun ObjectPanel(
                 textAlign = TextAlign.Center,
                 modifier = Modifier.width(44.dp),
             )
-            SmallButton("+", Modifier.width(48.dp)) {
+            SmallButton("+", Modifier.width(52.dp)) {
                 service.setInstances(obj.id, obj.instances + 1)
             }
         }
@@ -223,7 +262,7 @@ private fun SectionLabelPublic(text: String) {
     Text(
         text.uppercase(),
         color = PrusaColors.TextMuted,
-        fontSize = 11.sp,
+        fontSize = 12.sp,
         fontWeight = FontWeight.SemiBold,
         modifier = Modifier.padding(top = 4.dp),
     )
@@ -246,11 +285,11 @@ private fun NumberField(
     var text by remember(value) { mutableStateOf(value) }
 
     Row(
-        modifier.height(40.dp)
-            .clip(RoundedCornerShape(4.dp))
+        modifier.height(48.dp)
+            .clip(RoundedCornerShape(8.dp))
             .background(PrusaColors.PanelRaised)
-            .border(1.dp, PrusaColors.Divider, RoundedCornerShape(4.dp))
-            .padding(horizontal = 8.dp),
+            .border(1.dp, PrusaColors.Divider, RoundedCornerShape(8.dp))
+            .padding(horizontal = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         BasicTextField(
@@ -258,30 +297,31 @@ private fun NumberField(
             onValueChange = { text = it },
             singleLine = true,
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-            textStyle = TextStyle(color = PrusaColors.TextPrimary, fontSize = 13.sp),
+            textStyle = TextStyle(color = PrusaColors.TextPrimary, fontSize = 14.sp),
             cursorBrush = SolidColor(PrusaColors.Orange),
             modifier = Modifier.weight(1f).onFocusChanged { state ->
                 // Beim Verlassen uebernehmen. Waehrend des Tippens gibt es
                 // Zwischenstaende wie "1." oder "-", die keine Zahl sind -
                 // und ein Wert, der bei jedem Anschlag springt.
-                if (!state.isFocused && text != value && text.toFloatOrNull() != null)
+                if (!state.isFocused && text != value &&
+                    NumberCodec.parseFloat(text) != null)
                     onCommit(text)
             },
         )
-        Text(unit, color = PrusaColors.TextMuted, fontSize = 11.sp)
+        Text(unit, color = PrusaColors.TextMuted, fontSize = 12.sp)
     }
 }
 
 @Composable
 private fun SmallButton(label: String, modifier: Modifier = Modifier, onClick: () -> Unit) {
     Box(
-        modifier.height(40.dp)
-            .clip(RoundedCornerShape(4.dp))
+        modifier.height(48.dp)
+            .clip(RoundedCornerShape(8.dp))
             .background(PrusaColors.PanelRaised)
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
-        Text(label, color = PrusaColors.TextPrimary, fontSize = 12.sp,
+        Text(label, color = PrusaColors.TextPrimary, fontSize = 13.sp,
              textAlign = TextAlign.Center)
     }
 }

@@ -17,7 +17,7 @@ class PsmCore private constructor(private var handle: Long) : Closeable {
 
     companion object {
         private const val TAG = "PsmCore"
-        const val ABI_VERSION = 1
+        const val ABI_VERSION = 4
 
         init {
             System.loadLibrary("psmobile_core")
@@ -53,10 +53,33 @@ class PsmCore private constructor(private var handle: Long) : Closeable {
         @JvmStatic private external fun nativeConfigMeta(h: Long, key: String): String?
         @JvmStatic private external fun nativeConfigEnumAt(h: Long, key: String, index: Int): String?
         @JvmStatic private external fun nativeLoadModel(h: Long, path: String): IntArray?
+        @JvmStatic private external fun nativeLoadProject(h: Long, path: String): String?
+        @JvmStatic private external fun nativeSaveProject(h: Long, path: String): Int
+        @JvmStatic private external fun nativeHistoryBegin(h: Long, label: String): Int
+        @JvmStatic private external fun nativeHistoryEnd(h: Long): Int
+        @JvmStatic private external fun nativeUndoCount(h: Long): Int
+        @JvmStatic private external fun nativeRedoCount(h: Long): Int
+        @JvmStatic private external fun nativeUndoLabel(h: Long): String
+        @JvmStatic private external fun nativeRedoLabel(h: Long): String
+        @JvmStatic private external fun nativeUndo(h: Long): Int
+        @JvmStatic private external fun nativeRedo(h: Long): Int
+        @JvmStatic private external fun nativeHistoryClear(h: Long): Int
+        @JvmStatic private external fun nativeBeds(h: Long): IntArray?
+        @JvmStatic private external fun nativeBedSelect(h: Long, index: Int): Int
+        @JvmStatic private external fun nativeBedAdd(h: Long): Int
+        @JvmStatic private external fun nativeBedRemove(h: Long, index: Int): Int
+        @JvmStatic private external fun nativeBedClear(h: Long): Int
+        @JvmStatic private external fun nativeBedMoveObject(h: Long, id: Int, target: Int): Int
         @JvmStatic private external fun nativeRemoveModel(h: Long, id: Int): Int
         @JvmStatic private external fun nativeListObjects(h: Long): IntArray?
         @JvmStatic private external fun nativeObjectInfo(h: Long, id: Int): FloatArray?
         @JvmStatic private external fun nativeObjectName(h: Long, id: Int): String
+        @JvmStatic private external fun nativeObjectExtruder(h: Long, id: Int): Int
+        @JvmStatic private external fun nativeObjectExtruderSet(h: Long, id: Int, extruder: Int): Int
+        @JvmStatic private external fun nativeVolumeCount(h: Long, id: Int): Int
+        @JvmStatic private external fun nativeVolumeInfo(h: Long, id: Int, index: Int): String?
+        @JvmStatic private external fun nativeVolumeExtruderSet(
+            h: Long, id: Int, index: Int, extruder: Int): Int
         @JvmStatic private external fun nativeSetPosition(h: Long, id: Int, x: Float, y: Float, z: Float): Int
         @JvmStatic private external fun nativeSetRotation(h: Long, id: Int, x: Float, y: Float, z: Float): Int
         @JvmStatic private external fun nativeSetScale(h: Long, id: Int, x: Float, y: Float, z: Float): Int
@@ -64,12 +87,61 @@ class PsmCore private constructor(private var handle: Long) : Closeable {
         @JvmStatic private external fun nativeDuplicate(h: Long, id: Int): Int
         @JvmStatic private external fun nativeArrange(h: Long, gapMm: Float): Int
         @JvmStatic private external fun nativeScaleToFit(h: Long, id: Int, sizeMm: Float): Int
+        @JvmStatic private external fun nativeFitToBed(h: Long, id: Int, fillRatio: Float): Int
+        @JvmStatic private external fun nativeSplitObjects(h: Long, id: Int): IntArray?
+        @JvmStatic private external fun nativeSplitVolumes(h: Long, id: Int): Int
+        @JvmStatic private external fun nativeCutZ(
+            h: Long, id: Int, z: Float,
+            upper: Boolean, lower: Boolean, parts: Boolean): IntArray?
+        @JvmStatic private external fun nativeSimplify(h: Long, id: Int, ratio: Float): IntArray?
+        @JvmStatic private external fun nativeAddPrimitiveVolume(
+            h: Long, id: Int, type: Int, shape: Int,
+            sx: Float, sy: Float, sz: Float): Int
+        @JvmStatic private external fun nativeAddTextVolume(
+            h: Long, id: Int, text: String, fontPath: String,
+            size: Float, depth: Float, type: Int): Int
+        @JvmStatic private external fun nativeAddSvgVolume(
+            h: Long, id: Int, path: String,
+            depth: Float, type: Int): Int
+        @JvmStatic private external fun nativeRemoveVolume(h: Long, id: Int, index: Int): Int
+        @JvmStatic private external fun nativeLayOnFacet(
+            h: Long, id: Int, volume: Int, facet: Int): Int
+        @JvmStatic private external fun nativePaintFacet(
+            h: Long, id: Int, volume: Int, facet: Int,
+            tool: Int, state: Int, radiusMm: Float): Int
+        @JvmStatic private external fun nativeClearPaint(h: Long, id: Int, tool: Int): Int
+        @JvmStatic private external fun nativeLayerProfile(h: Long, id: Int): DoubleArray?
+        @JvmStatic private external fun nativeLayerProfileSet(
+            h: Long, id: Int, values: DoubleArray?): Int
+        @JvmStatic private external fun nativeObjectColour(h: Long, id: Int): String
+        @JvmStatic private external fun nativeObjectColourSet(
+            h: Long, id: Int, value: String): Int
+        @JvmStatic private external fun nativeObjectWipe(h: Long, id: Int): IntArray?
+        @JvmStatic private external fun nativeObjectWipeSet(
+            h: Long, id: Int, infill: Boolean, objects: Boolean): Int
+        @JvmStatic private external fun nativeCustomGcodeCount(h: Long): Int
+        @JvmStatic private external fun nativeCustomGcodeAt(h: Long, index: Int): Array<String>?
+        @JvmStatic private external fun nativeCustomGcodeAdd(
+            h: Long, z: Double, type: Int, extruder: Int,
+            color: String, extra: String): Int
+        @JvmStatic private external fun nativeCustomGcodeUpdate(
+            h: Long, index: Int, z: Double, type: Int, extruder: Int,
+            color: String, extra: String): Int
+        @JvmStatic private external fun nativeCustomGcodeRemove(h: Long, index: Int): Int
+        @JvmStatic private external fun nativeCustomGcodeClear(h: Long): Int
+        @JvmStatic private external fun nativeWipeTower(h: Long): FloatArray?
+        @JvmStatic private external fun nativeWipeTowerSet(
+            h: Long, x: Float, y: Float, rotation: Float): Int
         @JvmStatic private external fun nativePresetCount(h: Long, type: Int): Int
         @JvmStatic private external fun nativePresetNameAt(h: Long, type: Int, index: Int): String
         @JvmStatic private external fun nativePresetSelect(h: Long, type: Int, name: String): Int
         @JvmStatic private external fun nativePresetSelected(h: Long, type: Int): String
         @JvmStatic private external fun nativeConfigGet(h: Long, key: String): String?
         @JvmStatic private external fun nativeConfigSet(h: Long, key: String, value: String): Int
+        @JvmStatic private external fun nativePresetConfigGet(
+            h: Long, type: Int, key: String): String?
+        @JvmStatic private external fun nativePresetConfigSet(
+            h: Long, type: Int, key: String, value: String): Int
         @JvmStatic private external fun nativeSliceStart(h: Long, listener: ProgressListener?): Long
         @JvmStatic private external fun nativeSliceReleaseBridge(bridge: Long)
         @JvmStatic private external fun nativeSliceCancel(h: Long)
@@ -77,10 +149,16 @@ class PsmCore private constructor(private var handle: Long) : Closeable {
         @JvmStatic private external fun nativeSliceWait(h: Long, timeoutMs: Int): Int
         @JvmStatic private external fun nativeSliceStats(h: Long): DoubleArray?
         @JvmStatic private external fun nativeGcodeExport(h: Long, path: String): Int
+        @JvmStatic private external fun nativePlateExport(h: Long, path: String, format: Int): Int
+        @JvmStatic private external fun nativeRepairStl(
+            h: Long, input: String, output: String): Int
+        @JvmStatic private external fun nativeConvertGcode(
+            h: Long, input: String, output: String, binary: Boolean): Int
         @JvmStatic private external fun nativeEstimateMemory(h: Long): Long
         @JvmStatic private external fun nativeMirror(h: Long, id: Int, axis: Int): Int
         @JvmStatic private external fun nativeSetInstances(h: Long, id: Int, n: Int): Int
         @JvmStatic private external fun nativeGcodeSuggestedName(h: Long): String
+        @JvmStatic private external fun nativeConfigEnabled(h: Long, key: String): String
         @JvmStatic private external fun nativeConfigGetAt(h: Long, key: String, index: Int): String?
         @JvmStatic private external fun nativeConfigSetAt(h: Long, key: String, index: Int, value: String): Int
         @JvmStatic private external fun nativeExtruderCount(h: Long): Int
@@ -106,18 +184,38 @@ class PsmCore private constructor(private var handle: Long) : Closeable {
 
     enum class PresetType(val raw: Int) { PRINT(0), FILAMENT(1), PRINTER(2) }
 
-    enum class SliceState { IDLE, RUNNING, DONE, FAILED, CANCELLED }
+    enum class SliceState { IDLE, RUNNING, DONE, FAILED, CANCELLED, STALE }
 
     data class ObjectInfo(
         val id: Int,
         val name: String,
         val position: Triple<Float, Float, Float>,
+        /** Grad, obwohl das plattformneutrale C-ABI Radiant verwendet. */
         val rotation: Triple<Float, Float, Float>,
         val scale: Triple<Float, Float, Float>,
         val sizeMm: Triple<Float, Float, Float>,
         val triangles: Int,
         val instances: Int,
         val outsideBed: Boolean,
+        val extruder: Int,
+        val colour: String,
+        val wipeIntoInfill: Boolean,
+        val wipeIntoObjects: Boolean,
+    )
+
+    enum class VolumeType {
+        MODEL_PART, NEGATIVE, MODIFIER, SUPPORT_BLOCKER, SUPPORT_ENFORCER, UNKNOWN
+    }
+
+    data class VolumeInfo(
+        val index: Int,
+        val name: String,
+        val type: VolumeType,
+        val triangles: Int,
+        /** Effektiv verwendeter Extruder; 0 bedeutet Standard. */
+        val extruder: Int,
+        /** 0 bedeutet, dass die Auswahl vom Objekt geerbt wird. */
+        val explicitExtruder: Int,
     )
 
     data class SliceStats(
@@ -128,6 +226,26 @@ class PsmCore private constructor(private var handle: Long) : Closeable {
         val layers: Int,
         val objects: Int,
     )
+
+    data class ProjectImport(
+        val configLoaded: Boolean,
+        val postProcessRemoved: Boolean,
+        val objectCount: Int,
+        val bedCount: Int,
+        val requestedPrinter: String,
+        val selectedPrinter: String,
+        val requestedPrint: String,
+        val selectedPrint: String,
+    ) {
+        /**
+         * true bedeutet: Das unveraenderte, im Projekt genannte Profil
+         * war installiert. false ist kein Verlust – dann wurde die
+         * eingebettete Konfiguration als projektlokales Profil aktiviert.
+         */
+        val exactInstalledPrinter: Boolean
+            get() = requestedPrinter.isNotBlank() &&
+                requestedPrinter == selectedPrinter
+    }
 
     class PsmException(message: String) : RuntimeException(message)
 
@@ -164,6 +282,12 @@ class PsmCore private constructor(private var handle: Long) : Closeable {
         val isSla: Boolean,
         /** Duesengroessen, z. B. 0.25, 0.4, HF0.4 */
         val variants: List<String>,
+    )
+
+    data class Bed(
+        val index: Int,
+        val objectCount: Int,
+        val active: Boolean,
     )
 
     /**
@@ -241,43 +365,418 @@ class PsmCore private constructor(private var handle: Long) : Closeable {
         nativeLoadModel(requireHandle(), path)
             ?: throw PsmException("Laden fehlgeschlagen: ${lastError()}")
 
+    fun loadProject(path: String): ProjectImport {
+        val fields = nativeLoadProject(requireHandle(), path)?.split('\t')
+            ?: throw PsmException("Projektimport fehlgeschlagen: ${lastError()}")
+        if (fields.size < 8)
+            throw PsmException("Projektimport lieferte unvollstaendige Metadaten")
+        return ProjectImport(
+            configLoaded = fields[0] == "1",
+            postProcessRemoved = fields[1] == "1",
+            objectCount = fields[2].toIntOrNull() ?: 0,
+            bedCount = fields[3].toIntOrNull() ?: 1,
+            requestedPrinter = fields[4],
+            selectedPrinter = fields[5],
+            requestedPrint = fields[6],
+            selectedPrint = fields[7],
+        )
+    }
+
+    fun saveProject(path: String) =
+        check(nativeSaveProject(requireHandle(), path), "Projekt speichern")
+
+    data class HistoryState(
+        val undoCount: Int,
+        val redoCount: Int,
+        val undoLabel: String,
+        val redoLabel: String,
+    ) {
+        val canUndo: Boolean get() = undoCount > 0
+        val canRedo: Boolean get() = redoCount > 0
+    }
+
+    fun historyState(): HistoryState = HistoryState(
+        undoCount = nativeUndoCount(requireHandle()),
+        redoCount = nativeRedoCount(requireHandle()),
+        undoLabel = nativeUndoLabel(requireHandle()),
+        redoLabel = nativeRedoLabel(requireHandle()),
+    )
+
+    fun beginHistory(label: String) =
+        check(nativeHistoryBegin(requireHandle(), label), "Historie beginnen")
+
+    fun endHistory() =
+        check(nativeHistoryEnd(requireHandle()), "Historie beenden")
+
+    fun undo() = check(nativeUndo(requireHandle()), "Rückgängig")
+
+    fun redo() = check(nativeRedo(requireHandle()), "Wiederholen")
+
+    fun clearHistory() =
+        check(nativeHistoryClear(requireHandle()), "Historie leeren")
+
+    fun beds(): List<Bed> {
+        val values = nativeBeds(requireHandle()) ?: return emptyList()
+        if (values.isEmpty()) return emptyList()
+        val active = values[0]
+        return values.drop(1).mapIndexed { index, objectCount ->
+            Bed(index, objectCount, index == active)
+        }
+    }
+
+    fun selectBed(index: Int) =
+        check(nativeBedSelect(requireHandle(), index), "Druckbett waehlen")
+
+    fun addBed(): Int {
+        val index = nativeBedAdd(requireHandle())
+        if (index < 0)
+            throw PsmException("Druckbett anlegen fehlgeschlagen: ${lastError()}")
+        return index
+    }
+
+    fun removeBed(index: Int) =
+        check(nativeBedRemove(requireHandle(), index), "Druckbett entfernen")
+
+    fun clearBed() =
+        check(nativeBedClear(requireHandle()), "Druckbett leeren")
+
+    fun moveObjectToBed(id: Int, target: Int): Int {
+        val newId = nativeBedMoveObject(requireHandle(), id, target)
+        if (newId < 0)
+            throw PsmException("Objekt verschieben fehlgeschlagen: ${lastError()}")
+        return newId
+    }
+
     fun removeModel(id: Int) = check(nativeRemoveModel(requireHandle(), id), "Entfernen")
 
     fun listObjects(): IntArray = nativeListObjects(requireHandle()) ?: IntArray(0)
 
     fun objectInfo(id: Int): ObjectInfo? {
         val v = nativeObjectInfo(requireHandle(), id) ?: return null
+        val wipe = nativeObjectWipe(handle, id) ?: IntArray(2)
         return ObjectInfo(
             id = id,
             name = nativeObjectName(handle, id),
             position = Triple(v[0], v[1], v[2]),
-            rotation = Triple(v[3], v[4], v[5]),
+            rotation = Triple(
+                Angles.radiansToDegrees(v[3]),
+                Angles.radiansToDegrees(v[4]),
+                Angles.radiansToDegrees(v[5]),
+            ),
             scale = Triple(v[6], v[7], v[8]),
             sizeMm = Triple(v[12] - v[9], v[13] - v[10], v[14] - v[11]),
             triangles = v[15].toInt(),
             instances = v[16].toInt(),
             outsideBed = v[17] != 0f,
+            extruder = nativeObjectExtruder(handle, id).coerceAtLeast(0),
+            colour = nativeObjectColour(handle, id),
+            wipeIntoInfill = wipe.getOrElse(0) { 0 } != 0,
+            wipeIntoObjects = wipe.getOrElse(1) { 0 } != 0,
         )
     }
+
+    fun volumes(id: Int): List<VolumeInfo> =
+        (0 until nativeVolumeCount(requireHandle(), id)).mapNotNull { index ->
+            val fields = nativeVolumeInfo(requireHandle(), id, index)?.split('\t')
+                ?: return@mapNotNull null
+            if (fields.size < 5) return@mapNotNull null
+            val type = when (fields[0].toIntOrNull()) {
+                0 -> VolumeType.MODEL_PART
+                1 -> VolumeType.NEGATIVE
+                2 -> VolumeType.MODIFIER
+                3 -> VolumeType.SUPPORT_BLOCKER
+                4 -> VolumeType.SUPPORT_ENFORCER
+                else -> VolumeType.UNKNOWN
+            }
+            VolumeInfo(
+                index = index,
+                name = fields.drop(4).joinToString("\t"),
+                type = type,
+                triangles = fields[1].toIntOrNull() ?: 0,
+                extruder = fields[2].toIntOrNull() ?: 0,
+                explicitExtruder = fields[3].toIntOrNull() ?: 0,
+            )
+        }
+
+    fun setObjectExtruder(id: Int, extruder: Int) =
+        check(nativeObjectExtruderSet(requireHandle(), id, extruder),
+              "Objekt-Extruder")
+
+    fun setVolumeExtruder(id: Int, volumeIndex: Int, extruder: Int) =
+        check(nativeVolumeExtruderSet(requireHandle(), id, volumeIndex, extruder),
+              "Volumen-Extruder")
 
     fun setPosition(id: Int, x: Float, y: Float, z: Float) =
         check(nativeSetPosition(requireHandle(), id, x, y, z), "Verschieben")
 
+    /** Android arbeitet konsequent in Grad; erst an der C-Grenze wird umgerechnet. */
     fun setRotation(id: Int, x: Float, y: Float, z: Float) =
-        check(nativeSetRotation(requireHandle(), id, x, y, z), "Drehen")
+        check(
+            nativeSetRotation(
+                requireHandle(), id,
+                Angles.degreesToRadians(x),
+                Angles.degreesToRadians(y),
+                Angles.degreesToRadians(z),
+            ),
+            "Drehen",
+        )
 
     fun setScale(id: Int, x: Float, y: Float, z: Float) =
         check(nativeSetScale(requireHandle(), id, x, y, z), "Skalieren")
 
     fun dropToBed(id: Int) = check(nativeDropToBed(requireHandle(), id), "Aufs Bett legen")
 
-    fun duplicate(id: Int): Int = nativeDuplicate(requireHandle(), id)
+    fun duplicate(id: Int): Int {
+        val copy = nativeDuplicate(requireHandle(), id)
+        if (copy < 0)
+            throw PsmException("Duplizieren fehlgeschlagen: ${lastError()}")
+        return copy
+    }
 
     /** @param gapMm 0 = Abstand aus der Druckerkonfiguration übernehmen */
     fun arrange(gapMm: Float = 0f) = check(nativeArrange(requireHandle(), gapMm), "Anordnen")
 
     fun scaleToFit(id: Int, sizeMm: Float) =
         check(nativeScaleToFit(requireHandle(), id, sizeMm), "Auf Größe skalieren")
+
+    fun fitToBed(id: Int, fillRatio: Float = 0.9f) =
+        check(nativeFitToBed(requireHandle(), id, fillRatio), "Aufs Bett einpassen")
+
+    data class SimplifyResult(val before: Int, val after: Int)
+
+    enum class PrimitiveShape(val raw: Int) {
+        BOX(0), CYLINDER(1), SPHERE(2)
+    }
+
+    enum class PaintTool(val raw: Int) {
+        SUPPORT(0), SEAM(1), FUZZY(2), MMU(3)
+    }
+
+    fun splitObjects(id: Int): IntArray =
+        nativeSplitObjects(requireHandle(), id)
+            ?: throw PsmException("In Objekte teilen fehlgeschlagen: ${lastError()}")
+
+    fun splitVolumes(id: Int): Int {
+        val count = nativeSplitVolumes(requireHandle(), id)
+        if (count < 0)
+            throw PsmException("In Volumen teilen fehlgeschlagen: ${lastError()}")
+        return count
+    }
+
+    fun cutZ(
+        id: Int,
+        zMm: Float,
+        keepUpper: Boolean = true,
+        keepLower: Boolean = true,
+        keepAsParts: Boolean = false,
+    ): IntArray = nativeCutZ(
+        requireHandle(), id, zMm, keepUpper, keepLower, keepAsParts
+    ) ?: throw PsmException("Schneiden fehlgeschlagen: ${lastError()}")
+
+    fun simplify(id: Int, ratio: Float): SimplifyResult {
+        val values = nativeSimplify(requireHandle(), id, ratio)
+            ?: throw PsmException("Vereinfachen fehlgeschlagen: ${lastError()}")
+        return SimplifyResult(
+            values.getOrElse(0) { 0 },
+            values.getOrElse(1) { 0 },
+        )
+    }
+
+    fun addPrimitiveVolume(
+        id: Int,
+        type: VolumeType,
+        shape: PrimitiveShape,
+        sizeX: Float,
+        sizeY: Float,
+        sizeZ: Float,
+    ): Int {
+        val rawType = when (type) {
+            VolumeType.NEGATIVE -> 1
+            VolumeType.MODIFIER -> 2
+            VolumeType.SUPPORT_BLOCKER -> 3
+            VolumeType.SUPPORT_ENFORCER -> 4
+            else -> throw IllegalArgumentException("Kein erzeugbarer Volumentyp: $type")
+        }
+        val index = nativeAddPrimitiveVolume(
+            requireHandle(), id, rawType, shape.raw,
+            sizeX, sizeY, sizeZ,
+        )
+        if (index < 0)
+            throw PsmException("Volumen anlegen fehlgeschlagen: ${lastError()}")
+        return index
+    }
+
+    fun addTextVolume(
+        id: Int,
+        text: String,
+        fontPath: String,
+        sizeMm: Float,
+        depthMm: Float,
+        type: VolumeType,
+    ): Int {
+        val index = nativeAddTextVolume(
+            requireHandle(), id, text, fontPath,
+            sizeMm, depthMm, volumeTypeRaw(type),
+        )
+        if (index < 0)
+            throw PsmException("Text prägen fehlgeschlagen: ${lastError()}")
+        return index
+    }
+
+    fun addSvgVolume(
+        id: Int,
+        path: String,
+        depthMm: Float,
+        type: VolumeType,
+    ): Int {
+        val index = nativeAddSvgVolume(
+            requireHandle(), id, path, depthMm, volumeTypeRaw(type)
+        )
+        if (index < 0)
+            throw PsmException("SVG prägen fehlgeschlagen: ${lastError()}")
+        return index
+    }
+
+    private fun volumeTypeRaw(type: VolumeType): Int = when (type) {
+        VolumeType.MODEL_PART -> 0
+        VolumeType.NEGATIVE -> 1
+        VolumeType.MODIFIER -> 2
+        VolumeType.SUPPORT_BLOCKER -> 3
+        VolumeType.SUPPORT_ENFORCER -> 4
+        VolumeType.UNKNOWN ->
+            throw IllegalArgumentException("Unbekannter Volumentyp")
+    }
+
+    fun removeVolume(id: Int, index: Int) =
+        check(nativeRemoveVolume(requireHandle(), id, index), "Volumen entfernen")
+
+    fun layOnFacet(id: Int, volume: Int, facet: Int) =
+        check(nativeLayOnFacet(requireHandle(), id, volume, facet), "Auf Fläche legen")
+
+    fun paintFacet(
+        id: Int,
+        volume: Int,
+        facet: Int,
+        tool: PaintTool,
+        state: Int,
+        radiusMm: Float = 3f,
+    ) =
+        check(
+            nativePaintFacet(
+                requireHandle(), id, volume, facet,
+                tool.raw, state, radiusMm,
+            ),
+            "Fläche bemalen",
+        )
+
+    fun clearPaint(id: Int, tool: PaintTool) =
+        check(nativeClearPaint(requireHandle(), id, tool.raw), "Bemalung löschen")
+
+    fun layerProfile(id: Int): List<Pair<Double, Double>> {
+        val values = nativeLayerProfile(requireHandle(), id) ?: return emptyList()
+        return values.toList().chunked(2).mapNotNull {
+            if (it.size == 2) it[0] to it[1] else null
+        }
+    }
+
+    fun setLayerProfile(id: Int, values: List<Pair<Double, Double>>) =
+        check(
+            nativeLayerProfileSet(
+                requireHandle(), id,
+                values.takeIf { it.isNotEmpty() }?.flatMap { (z, h) ->
+                    listOf(z, h)
+                }?.toDoubleArray(),
+            ),
+            "Variable Schichthöhe",
+        )
+
+    fun setObjectColour(id: Int, colour: String) =
+        check(nativeObjectColourSet(requireHandle(), id, colour), "Objektfarbe")
+
+    fun setObjectWipe(id: Int, intoInfill: Boolean, intoObjects: Boolean) =
+        check(
+            nativeObjectWipeSet(
+                requireHandle(), id, intoInfill, intoObjects
+            ),
+            "Wischoptionen",
+        )
+
+    enum class CustomGcodeType(val raw: Int) {
+        COLOR_CHANGE(0), PAUSE(1), TOOL_CHANGE(2), TEMPLATE(3), CUSTOM(4);
+
+        companion object {
+            fun fromRaw(raw: Int): CustomGcodeType =
+                entries.firstOrNull { it.raw == raw } ?: CUSTOM
+        }
+    }
+
+    data class CustomGcode(
+        val printZ: Double,
+        val type: CustomGcodeType,
+        val extruder: Int = 0,
+        val colour: String = "",
+        val extra: String = "",
+    )
+
+    fun customGcodes(): List<CustomGcode> =
+        (0 until nativeCustomGcodeCount(requireHandle())).mapNotNull { index ->
+            val fields = nativeCustomGcodeAt(handle, index) ?: return@mapNotNull null
+            if (fields.size < 5) return@mapNotNull null
+            CustomGcode(
+                printZ = fields[0].toDoubleOrNull() ?: 0.0,
+                type = CustomGcodeType.fromRaw(fields[1].toIntOrNull() ?: 4),
+                extruder = fields[2].toIntOrNull() ?: 0,
+                colour = fields[3],
+                extra = fields[4],
+            )
+        }
+
+    fun addCustomGcode(value: CustomGcode) =
+        check(
+            nativeCustomGcodeAdd(
+                requireHandle(), value.printZ, value.type.raw,
+                value.extruder, value.colour, value.extra,
+            ),
+            "Custom G-Code hinzufügen",
+        )
+
+    fun updateCustomGcode(index: Int, value: CustomGcode) =
+        check(
+            nativeCustomGcodeUpdate(
+                requireHandle(), index, value.printZ, value.type.raw,
+                value.extruder, value.colour, value.extra,
+            ),
+            "Custom G-Code ändern",
+        )
+
+    fun removeCustomGcode(index: Int) =
+        check(nativeCustomGcodeRemove(requireHandle(), index), "Custom G-Code entfernen")
+
+    fun clearCustomGcode() =
+        check(nativeCustomGcodeClear(requireHandle()), "Custom G-Code leeren")
+
+    data class WipeTower(
+        val x: Float,
+        val y: Float,
+        val rotationDegrees: Float,
+    )
+
+    fun wipeTower(): WipeTower {
+        val values = nativeWipeTower(requireHandle()) ?: FloatArray(3)
+        return WipeTower(
+            values.getOrElse(0) { 0f },
+            values.getOrElse(1) { 0f },
+            values.getOrElse(2) { 0f },
+        )
+    }
+
+    fun setWipeTower(value: WipeTower) =
+        check(
+            nativeWipeTowerSet(
+                requireHandle(), value.x, value.y, value.rotationDegrees
+            ),
+            "Wipe-Tower positionieren",
+        )
 
     fun presetNames(type: PresetType): List<String> {
         val h = requireHandle()
@@ -289,6 +788,18 @@ class PsmCore private constructor(private var handle: Long) : Closeable {
         check(nativePresetSelect(requireHandle(), type.raw, name), "Preset waehlen")
 
     fun selectedPreset(type: PresetType): String = nativePresetSelected(requireHandle(), type.raw)
+
+    /**
+     * Ob ein Parameter im aktuellen Zustand ueberhaupt wirkt, und was
+     * ihn sperrt. Die Regeln stammen woertlich aus PrusaSlicers
+     * ConfigManipulation - siehe build/scripts/extract-toggles.py.
+     */
+    data class Enablement(val enabled: Boolean, val blockedBy: String)
+
+    fun enablement(key: String): Enablement {
+        val f = nativeConfigEnabled(requireHandle(), key).split('\t')
+        return Enablement(f.getOrNull(0) != "0", f.getOrNull(1).orEmpty())
+    }
 
     enum class Axis(val raw: Int) { X(0), Y(1), Z(2) }
 
@@ -389,6 +900,15 @@ class PsmCore private constructor(private var handle: Long) : Closeable {
     operator fun set(key: String, value: String) =
         check(nativeConfigSet(requireHandle(), key, value), "Parameter $key setzen")
 
+    fun presetValue(type: PresetType, key: String): String? =
+        nativePresetConfigGet(requireHandle(), type.raw, key)
+
+    fun setPresetValue(type: PresetType, key: String, value: String) =
+        check(
+            nativePresetConfigSet(requireHandle(), type.raw, key, value),
+            "Parameter $key im ${type.name.lowercase()}-Profil setzen",
+        )
+
     fun startSlice(listener: ProgressListener?) {
         releaseBridge()
         sliceBridge = nativeSliceStart(requireHandle(), listener)
@@ -405,6 +925,7 @@ class PsmCore private constructor(private var handle: Long) : Closeable {
         2 -> SliceState.DONE
         3 -> SliceState.FAILED
         4 -> SliceState.CANCELLED
+        5 -> SliceState.STALE
         else -> SliceState.IDLE
     }
 
@@ -421,6 +942,20 @@ class PsmCore private constructor(private var handle: Long) : Closeable {
     }
 
     fun exportGcode(path: String) = check(nativeGcodeExport(requireHandle(), path), "G-Code-Export")
+
+    enum class PlateFormat(val raw: Int) { STL(0), OBJ(1) }
+
+    fun exportPlate(path: String, format: PlateFormat) =
+        check(nativePlateExport(requireHandle(), path, format.raw), "Platte exportieren")
+
+    fun repairStl(input: String, output: String) =
+        check(nativeRepairStl(requireHandle(), input, output), "STL reparieren")
+
+    fun convertGcode(input: String, output: String, toBinary: Boolean) =
+        check(
+            nativeConvertGcode(requireHandle(), input, output, toBinary),
+            "G-Code konvertieren",
+        )
 
     /**
      * Geschaetzter Spitzenspeicher in Bytes. Die App vergleicht das gegen

@@ -1,0 +1,600 @@
+{
+  "schema": 1,
+  "updated": "2026-07-30",
+  "features": [
+    {
+      "id": "android.kotlin_build",
+      "title": "Android-App und JVM-Unit-Tests",
+      "platform": "android",
+      "status": "built",
+      "evidence": [
+        "android/app/build.gradle.kts",
+        "android/app/src/test"
+      ],
+      "blocked_by": []
+    },
+    {
+      "id": "android.native_core",
+      "title": "PrusaSlicer-FFF-Kern über C-ABI/JNI",
+      "platform": "android",
+      "status": "emulator_tested",
+      "evidence": [
+        "core/include/psmobile_core.h",
+        "android/jni/psm_jni.cpp",
+        "core/test/psm_contract_tests.cpp",
+        "docs/release/android-v1-gate.md"
+      ],
+      "verification": [
+        "docs/release/android-v1-gate.md"
+      ],
+      "blocked_by": []
+    },
+    {
+      "id": "android.native_rebuild",
+      "title": "Aktuelle native Bibliotheken für arm64-v8a und x86_64",
+      "platform": "android",
+      "status": "built",
+      "evidence": [
+        "build/scripts/build-core.sh",
+        "build/scripts/native-fingerprint.py",
+        "build/scripts/stage-native.sh"
+      ],
+      "blocked_by": []
+    },
+    {
+      "id": "android.model_import",
+      "title": "STL, 3MF, OBJ und AMF als 3D-Objekte importieren",
+      "platform": "android",
+      "status": "device_tested",
+      "evidence": [
+        "android/app/src/main/java/de/psmobile/MainActivity.kt",
+        "core/src/psmobile_core.cpp",
+        "docs/08-loop-protokoll.md"
+      ],
+      "verification": [
+        "docs/08-loop-protokoll.md"
+      ],
+      "blocked_by": []
+    },
+    {
+      "id": "android.project_3mf_import",
+      "title": "3MF wahlweise als Objekte oder vollständiges Projekt öffnen",
+      "platform": "android",
+      "status": "emulator_tested",
+      "evidence": [
+        "android/app/src/main/java/de/psmobile/MainActivity.kt",
+        "core/src/psmobile_core.cpp",
+        "core/include/psmobile_core.h",
+        "docs/release/android-v1-gate.md"
+      ],
+      "verification": [
+        "docs/release/android-v1-gate.md"
+      ],
+      "blocked_by": [
+        "android.device_release_gate"
+      ],
+      "desktop_menu": [
+        "&Open Project",
+        "Import Config from &Project"
+      ]
+    },
+    {
+      "id": "android.project_printer_selection",
+      "title": "Drucker- und Druckprofil aus einem 3MF-Projekt übernehmen",
+      "platform": "android",
+      "status": "emulator_tested",
+      "evidence": [
+        "core/src/psmobile_core.cpp",
+        "android/app/src/main/java/de/psmobile/core/PsmCore.kt",
+        "docs/release/android-v1-gate.md"
+      ],
+      "verification": [
+        "docs/release/android-v1-gate.md"
+      ],
+      "blocked_by": [
+        "android.installed_profile_fixture"
+      ]
+    },
+    {
+      "id": "android.installed_profile_fixture",
+      "title": "3MF mit exakt installiertem Druckerprofil prüfen",
+      "platform": "android",
+      "status": "not_started",
+      "evidence": [
+        "docs/release/android-v1-gate.md"
+      ],
+      "blocked_by": []
+    },
+    {
+      "id": "android.project_fixture_tests",
+      "title": "Vertragstests mit echten Einbett-/Mehrbett-3MF-Projekten",
+      "platform": "android",
+      "status": "emulator_tested",
+      "evidence": [
+        "core/test/psm_contract_tests.cpp",
+        "build/scripts/make-test-project-3mf.py",
+        "docs/release/android-v1-gate.md"
+      ],
+      "verification": [
+        "docs/release/android-v1-gate.md"
+      ],
+      "blocked_by": []
+    },
+    {
+      "id": "android.multibed",
+      "title": "Mehrere Druckbetten mit direkter Auswahl",
+      "platform": "android",
+      "status": "emulator_tested",
+      "evidence": [
+        "core/src/psmobile_session.hpp",
+        "core/src/psmobile_core.cpp",
+        "android/app/src/main/java/de/psmobile/ui/SlicerScreen.kt",
+        "docs/release/android-v1-gate.md"
+      ],
+      "verification": [
+        "docs/release/android-v1-gate.md"
+      ],
+      "blocked_by": [
+        "android.device_release_gate"
+      ]
+    },
+    {
+      "id": "android.transform",
+      "title": "Verschieben, numerisch drehen und skalieren",
+      "platform": "android",
+      "status": "built",
+      "evidence": [
+        "android/app/src/main/java/de/psmobile/ui/ObjectPanel.kt",
+        "android/app/src/main/java/de/psmobile/core/Angles.kt",
+        "core/src/psmobile_core.cpp"
+      ],
+      "blocked_by": [
+        "android.device_release_gate"
+      ],
+      "desktop_gizmos": [
+        "Scale",
+        "Rotate"
+      ]
+    },
+    {
+      "id": "android.viewport_move",
+      "title": "Objekt im Viewport verschieben",
+      "platform": "android",
+      "status": "device_tested",
+      "evidence": [
+        "viewport/src/psm_gizmo.cpp",
+        "docs/08-loop-protokoll.md"
+      ],
+      "verification": [
+        "docs/08-loop-protokoll.md"
+      ],
+      "blocked_by": []
+    },
+    {
+      "id": "android.geometry_fit",
+      "title": "Transformierte Größe und Auf-Bett-Einpassen im Core",
+      "platform": "android",
+      "status": "emulator_tested",
+      "evidence": [
+        "core/src/psmobile_core.cpp",
+        "core/test/psm_contract_tests.cpp",
+        "docs/release/android-v1-gate.md"
+      ],
+      "verification": [
+        "docs/release/android-v1-gate.md"
+      ],
+      "blocked_by": []
+    },
+    {
+      "id": "android.viewport",
+      "title": "3D-Viewport, Bett, Auswahl und Kamera",
+      "platform": "android",
+      "status": "device_tested",
+      "evidence": [
+        "viewport/src/psm_viewport.cpp",
+        "docs/08-loop-protokoll.md"
+      ],
+      "verification": [
+        "docs/08-loop-protokoll.md"
+      ],
+      "blocked_by": [],
+      "desktop_menu": [
+        "3&D",
+        "Iso",
+        "Top",
+        "Bottom",
+        "Front",
+        "Rear",
+        "Left",
+        "Right"
+      ]
+    },
+    {
+      "id": "android.gcode_preview",
+      "title": "G-Code-Vorschau mit Layerbereich",
+      "platform": "android",
+      "status": "device_tested",
+      "evidence": [
+        "viewport/src/psm_viewport.cpp",
+        "docs/08-loop-protokoll.md"
+      ],
+      "verification": [
+        "docs/08-loop-protokoll.md"
+      ],
+      "blocked_by": [],
+      "desktop_menu": [
+        "G-code preview",
+        "&G-code Preview",
+        "Pre&view"
+      ]
+    },
+    {
+      "id": "android.settings",
+      "title": "Druck-, Filament- und Druckereinstellungen",
+      "platform": "android",
+      "status": "device_tested",
+      "evidence": [
+        "android/app/src/main/java/de/psmobile/ui/SettingsScreen.kt",
+        "android/app/src/main/assets/psui/tabs.json",
+        "docs/08-loop-protokoll.md"
+      ],
+      "verification": [
+        "docs/08-loop-protokoll.md"
+      ],
+      "blocked_by": [],
+      "desktop_menu": [
+        "P&rint Settings Tab",
+        "&Filament Settings Tab",
+        "Print&er Settings Tab"
+      ]
+    },
+    {
+      "id": "android.setting_dependencies",
+      "title": "Abhängige Einstellungen aktivieren und ausgrauen",
+      "platform": "android",
+      "status": "built",
+      "evidence": [
+        "core/src/psmobile_toggles.cpp",
+        "core/src/psmobile_toggles_generated.cpp",
+        "build/scripts/extract-toggles.py"
+      ],
+      "blocked_by": [
+        "android.device_release_gate"
+      ]
+    },
+    {
+      "id": "android.slice_snapshot",
+      "title": "Thread-sicherer Slice-Snapshot und Stale-Schutz",
+      "platform": "android",
+      "status": "emulator_tested",
+      "evidence": [
+        "core/src/psmobile_session.hpp",
+        "core/src/psmobile_core.cpp",
+        "android/app/src/main/java/de/psmobile/slicing/SlicerService.kt",
+        "docs/release/android-v1-gate.md"
+      ],
+      "verification": [
+        "docs/release/android-v1-gate.md"
+      ],
+      "blocked_by": [
+        "android.device_release_gate"
+      ],
+      "desktop_menu": [
+        "(Re)Slice No&w"
+      ]
+    },
+    {
+      "id": "android.foreground_slice",
+      "title": "Started Foreground-Service mit Abbruchaktion",
+      "platform": "android",
+      "status": "built",
+      "evidence": [
+        "android/app/src/main/AndroidManifest.xml",
+        "android/app/src/main/java/de/psmobile/slicing/SlicerService.kt"
+      ],
+      "blocked_by": [
+        "android.device_release_gate"
+      ]
+    },
+    {
+      "id": "android.gcode_export",
+      "title": "G-Code exportieren und teilen",
+      "platform": "android",
+      "status": "device_tested",
+      "evidence": [
+        "android/app/src/main/java/de/psmobile/slicing/SlicerService.kt",
+        "docs/08-loop-protokoll.md"
+      ],
+      "verification": [
+        "docs/08-loop-protokoll.md"
+      ],
+      "blocked_by": [],
+      "desktop_menu": [
+        "Export &G-code"
+      ]
+    },
+    {
+      "id": "android.prusalink",
+      "title": "PrusaLink-Zielwahl, Probe und Upload",
+      "platform": "android",
+      "status": "coded",
+      "evidence": [
+        "android/app/src/main/java/de/psmobile/net/PrusaLink.kt",
+        "android/app/src/main/java/de/psmobile/ui/SlicerScreen.kt",
+        "android/app/src/test/java/de/psmobile/net/DigestAuthTest.kt"
+      ],
+      "blocked_by": [
+        "android.prusalink_hardware_test"
+      ],
+      "desktop_menu": [
+        "S&end G-code"
+      ]
+    },
+    {
+      "id": "android.prusalink_hardware_test",
+      "title": "PrusaLink gegen API-Key- und Digest-Drucker testen",
+      "platform": "android",
+      "status": "not_started",
+      "evidence": [
+        "docs/release/android-v1-gate.md"
+      ],
+      "blocked_by": []
+    },
+    {
+      "id": "android.credentials",
+      "title": "Druckerzugänge per Android Keystore verschlüsseln",
+      "platform": "android",
+      "status": "built",
+      "evidence": [
+        "android/app/src/main/java/de/psmobile/net/SecretStore.kt",
+        "android/app/src/main/res/xml/backup_rules.xml",
+        "android/app/src/main/res/xml/data_extraction_rules.xml"
+      ],
+      "blocked_by": [
+        "android.device_release_gate"
+      ]
+    },
+    {
+      "id": "android.project_save",
+      "title": "Projekt neu anlegen, speichern und speichern unter",
+      "platform": "android",
+      "status": "emulator_tested",
+      "evidence": [
+        "core/src/psmobile_core.cpp",
+        "core/test/psm_contract_tests.cpp",
+        "android/app/src/main/java/de/psmobile/MainActivity.kt",
+        "android/app/src/main/java/de/psmobile/ui/SlicerScreen.kt",
+        "docs/release/android-v1-gate.md"
+      ],
+      "verification": [
+        "docs/release/android-v1-gate.md"
+      ],
+      "blocked_by": [
+        "android.device_release_gate"
+      ],
+      "desktop_menu": [
+        "&New Project",
+        "&Save Project",
+        "Save Project &as"
+      ]
+    },
+    {
+      "id": "android.project_save_roundtrip",
+      "title": "Mehrbett-3MF speichern, sicher filtern und wieder öffnen",
+      "platform": "android",
+      "status": "emulator_tested",
+      "evidence": [
+        "core/src/psmobile_core.cpp",
+        "core/test/psm_contract_tests.cpp",
+        "docs/release/android-v1-gate.md"
+      ],
+      "verification": [
+        "docs/release/android-v1-gate.md"
+      ],
+      "blocked_by": []
+    },
+    {
+      "id": "android.undo_redo",
+      "title": "Undo und Redo für Bett-, Objekt- und Volumenaktionen",
+      "platform": "android",
+      "status": "emulator_tested",
+      "evidence": [
+        "core/src/psmobile_session.hpp",
+        "core/src/psmobile_core.cpp",
+        "viewport/src/psm_viewport.cpp",
+        "core/test/psm_contract_tests.cpp",
+        "android/app/src/main/java/de/psmobile/ui/SlicerScreen.kt",
+        "docs/release/android-v1-gate.md"
+      ],
+      "verification": [
+        "docs/release/android-v1-gate.md"
+      ],
+      "blocked_by": [
+        "android.device_release_gate"
+      ],
+      "desktop_menu": [
+        "&Undo",
+        "&Redo"
+      ]
+    },
+    {
+      "id": "android.clipboard",
+      "title": "Objekt-Zwischenablage über mehrere Druckbetten",
+      "platform": "android",
+      "status": "emulator_tested",
+      "evidence": [
+        "core/src/psmobile_core.cpp",
+        "core/test/psm_contract_tests.cpp",
+        "android/app/src/main/java/de/psmobile/slicing/SlicerService.kt",
+        "android/app/src/main/java/de/psmobile/ui/SlicerScreen.kt",
+        "docs/release/android-v1-gate.md"
+      ],
+      "verification": [
+        "docs/release/android-v1-gate.md"
+      ],
+      "blocked_by": [
+        "android.device_release_gate"
+      ]
+    },
+    {
+      "id": "android.multiselect",
+      "title": "Mehrfachauswahl und Auswahlbefehle",
+      "platform": "android",
+      "status": "not_started",
+      "evidence": [
+        "docs/10-funktionsvergleich.md"
+      ],
+      "blocked_by": []
+    },
+    {
+      "id": "android.object_tree",
+      "title": "Objekt-/Volumenbaum mit Extruder je Teil",
+      "platform": "android",
+      "status": "emulator_tested",
+      "evidence": [
+        "core/include/psmobile_core.h",
+        "core/src/psmobile_core.cpp",
+        "core/test/psm_contract_tests.cpp",
+        "android/app/src/main/java/de/psmobile/ui/SlicerScreen.kt",
+        "docs/release/android-v1-gate.md"
+      ],
+      "verification": [
+        "docs/release/android-v1-gate.md"
+      ],
+      "blocked_by": [
+        "android.device_release_gate"
+      ],
+      "desktop_menu": [
+        "Delete",
+        "Add instance"
+      ]
+    },
+    {
+      "id": "android.geometry_tools",
+      "title": "Flach legen, schneiden und vereinfachen",
+      "platform": "android",
+      "status": "not_started",
+      "evidence": [
+        "docs/10-funktionsvergleich.md"
+      ],
+      "blocked_by": [],
+      "desktop_gizmos": [
+        "Flatten",
+        "Cut",
+        "Simplify"
+      ]
+    },
+    {
+      "id": "android.paint_tools",
+      "title": "Supports, Naht, Fuzzy Skin und MMU-Farbe bemalen",
+      "platform": "android",
+      "status": "not_started",
+      "evidence": [
+        "docs/10-funktionsvergleich.md"
+      ],
+      "blocked_by": [],
+      "desktop_gizmos": [
+        "FdmSupports",
+        "Seam",
+        "FuzzySkin",
+        "MmSegmentation"
+      ]
+    },
+    {
+      "id": "android.measure_emboss",
+      "title": "Messen, Text und SVG prägen",
+      "platform": "android",
+      "status": "not_started",
+      "evidence": [
+        "docs/10-funktionsvergleich.md"
+      ],
+      "blocked_by": [],
+      "desktop_gizmos": [
+        "Measure",
+        "Emboss",
+        "Svg"
+      ]
+    },
+    {
+      "id": "android.special_dialogs",
+      "title": "Bettform, Wischmatrix, Ramming und G-Code-Ersetzungen",
+      "platform": "android",
+      "status": "not_started",
+      "evidence": [
+        "docs/10-funktionsvergleich.md"
+      ],
+      "blocked_by": []
+    },
+    {
+      "id": "android.tablet_touch_ui",
+      "title": "Responsive Tablet-Oberfläche mit Touch-Inspektor",
+      "platform": "android",
+      "status": "emulator_tested",
+      "evidence": [
+        "android/app/src/main/java/de/psmobile/ui/SlicerScreen.kt",
+        "android/app/src/main/java/de/psmobile/ui/ObjectPanel.kt",
+        "android/app/src/main/java/de/psmobile/ui/QuickSettings.kt",
+        "android/app/src/main/java/de/psmobile/ui/SettingsScreen.kt",
+        "android/app/src/main/java/de/psmobile/ui/SetupScreen.kt",
+        "android/app/src/main/java/de/psmobile/ui/PrintersScreen.kt",
+        "docs/release/android-v1-gate.md"
+      ],
+      "verification": [
+        "docs/release/android-v1-gate.md"
+      ],
+      "blocked_by": [
+        "android.device_release_gate"
+      ]
+    },
+    {
+      "id": "android.device_release_gate",
+      "title": "Android-Geräte-, Speicher- und Hintergrundtest",
+      "platform": "android",
+      "status": "not_started",
+      "evidence": [
+        "docs/release/android-v1-gate.md"
+      ],
+      "blocked_by": [
+        "android.installed_profile_fixture"
+      ]
+    },
+    {
+      "id": "ios.scaffold",
+      "title": "iOS-Projektgerüst",
+      "platform": "ios",
+      "status": "coded",
+      "evidence": [
+        "ios/README.md"
+      ],
+      "blocked_by": [
+        "ios.parity"
+      ]
+    },
+    {
+      "id": "ios.parity",
+      "title": "Funktionale iOS-Portierung nach stabiler Android-Version",
+      "platform": "ios",
+      "status": "not_started",
+      "evidence": [
+        "docs/03-roadmap.md"
+      ],
+      "blocked_by": [
+        "android.device_release_gate",
+        "macos.build_host"
+      ]
+    },
+    {
+      "id": "release.distribution",
+      "title": "Öffentliche Store-/F-Droid-Auslieferung",
+      "platform": "release",
+      "status": "blocked",
+      "evidence": [
+        "docs/04-lizenz-und-store.md"
+      ],
+      "blocked_by": [
+        "release.license_notices",
+        "android.device_release_gate"
+      ]
+    }
+  ]
+}

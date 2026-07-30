@@ -14,6 +14,9 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -35,6 +38,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.SolidColor
@@ -67,6 +71,7 @@ fun SettingsScreen(
     onModeChange: (PsmCore.Mode) -> Unit,
     configRevision: Int,
     onClose: () -> Unit,
+    onSettingChanged: () -> Unit = {},
     onTabChange: (String) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
@@ -86,7 +91,12 @@ fun SettingsScreen(
     }
     var pageIndex by remember(tab) { mutableStateOf(0) }
 
-    Column(modifier.fillMaxSize().background(PrusaColors.Background)) {
+    Column(
+        modifier
+            .fillMaxSize()
+            .background(PrusaColors.Background)
+            .windowInsetsPadding(WindowInsets.safeDrawing)
+    ) {
 
     // --- Reiter wie oben im Desktop-Fenster ---------------------------
     //
@@ -103,7 +113,8 @@ fun SettingsScreen(
             fontSize = 15.sp,
             modifier = Modifier
                 .clickable(onClick = onClose)
-                .padding(horizontal = 16.dp, vertical = 14.dp),
+                .height(52.dp)
+                .padding(horizontal = 18.dp, vertical = 14.dp),
         )
         listOf(
             "print"    to "Print settings",
@@ -134,7 +145,7 @@ fun SettingsScreen(
 
         // --- Seitenliste, wie der Baum links im Desktop-Dialog ---------
         Column(
-            Modifier.width(260.dp).fillMaxHeight()
+            Modifier.width(280.dp).fillMaxHeight()
                 .background(PrusaColors.Panel)
                 .verticalScroll(rememberScrollState()),
         ) {
@@ -142,7 +153,7 @@ fun SettingsScreen(
             pages.forEachIndexed { i, page ->
                 val active = i == pageIndex
                 Row(
-                    Modifier.fillMaxWidth().height(48.dp)
+                    Modifier.fillMaxWidth().height(52.dp)
                         .background(if (active) PrusaColors.PanelRaised else PrusaColors.Panel)
                         .clickable { pageIndex = i }
                         .padding(horizontal = 12.dp),
@@ -164,6 +175,31 @@ fun SettingsScreen(
                     )
                 }
             }
+            val specialActive = pageIndex == pages.size
+            Row(
+                Modifier.fillMaxWidth().height(56.dp)
+                    .background(
+                        if (specialActive) PrusaColors.PanelRaised else PrusaColors.Panel
+                    )
+                    .clickable { pageIndex = pages.size }
+                    .padding(horizontal = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Box(
+                    Modifier.size(20.dp).clip(RoundedCornerShape(5.dp))
+                        .background(PrusaColors.Orange),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text("⋯", color = PrusaColors.TextPrimary, fontSize = 14.sp)
+                }
+                Text(
+                    "Spezialdialoge",
+                    color = if (specialActive) PrusaColors.Orange else PrusaColors.TextPrimary,
+                    fontSize = 14.sp,
+                    fontWeight = if (specialActive) FontWeight.SemiBold else FontWeight.Normal,
+                    modifier = Modifier.padding(start = 10.dp),
+                )
+            }
         }
 
         // --- Parameter der gewaehlten Seite ---------------------------
@@ -184,16 +220,27 @@ fun SettingsScreen(
                 ).forEach { (m, label) ->
                     val active = m == mode
                     Box(
-                        Modifier.height(36.dp)
-                            .clip(RoundedCornerShape(4.dp))
+                        Modifier.height(48.dp)
+                            .clip(RoundedCornerShape(8.dp))
                             .background(if (active) PrusaColors.Orange else PrusaColors.PanelRaised)
                             .clickable { onModeChange(m) }
-                            .padding(horizontal = 14.dp),
+                            .padding(horizontal = 16.dp),
                         contentAlignment = Alignment.Center,
                     ) {
                         Text(PsUi.tr(label), color = PrusaColors.TextPrimary, fontSize = 13.sp)
                     }
                 }
+            }
+
+            if (pageIndex == pages.size) {
+                SpecialSettingsPanel(
+                    core = core,
+                    tab = tab,
+                    extruderCount = extruderCount,
+                    configRevision = configRevision,
+                    onChanged = onSettingChanged,
+                )
+                return@Column
             }
 
             val page = pages.getOrNull(pageIndex)
@@ -208,13 +255,23 @@ fun SettingsScreen(
             // configMeta() fuer jeden Parameter in der Komposition, also
             // bei jeder Neuzeichnung erneut - bei 40 sichtbaren Werten
             // 40 JNI-Aufrufe je Bild. Befund A2.
-            val metaByGroup = remember(page.title, mode, configRevision) {
-                page.groups.associate { g ->
-                    g.title to g.options
-                        .mapNotNull { opt -> core.configMeta(opt.key)?.let { opt to it } }
-                        .filter { (_, meta) -> meta.mode.ordinal <= mode.ordinal }
+            val metaByGroup: Map<String, List<SettingEntry>> =
+                remember(page.title, mode, configRevision) {
+                    page.groups.associate { g ->
+                        g.title to g.options
+                            .mapNotNull { opt -> core.configMeta(opt.key)?.let { opt to it } }
+                            .filter { (_, meta) -> meta.mode.ordinal <= mode.ordinal }
+                            .map { (opt, meta) ->
+                                // Ob der Wert gerade ueberhaupt wirkt. Einmal je
+                                // Seite und Konfigurationsstand, nicht je Bild -
+                                // dieselbe Ueberlegung wie bei den Metadaten.
+                                SettingEntry(
+                                    opt, meta,
+                                    runCatching { core.enablement(opt.key) }.getOrNull(),
+                                )
+                            }
+                    }
                 }
-            }
 
             LazyColumn(
                 Modifier.fillMaxSize().padding(horizontal = 16.dp),
@@ -233,7 +290,7 @@ fun SettingsScreen(
                             modifier = Modifier.padding(top = 14.dp, bottom = 4.dp),
                         )
                     }
-                    items(visible, key = { it.second.key }) { (opt, meta) ->
+                    items(visible, key = { it.meta.key }) { entry ->
                         // Auch die Filamentwerte sind Vektoren mit einem
                         // Eintrag je Extruder, weil full_config() ueber alle
                         // Duesen zusammensetzt. Der Filamenttab bearbeitet
@@ -244,8 +301,11 @@ fun SettingsScreen(
                             tab == "filament"  -> 0
                             else               -> -1
                         }
-                        SettingRow(core, meta, configRevision,
-                                   extruder = index, multiline = opt.code)
+                        SettingRow(core, entry.meta, configRevision,
+                                   extruder = index, multiline = entry.option.code,
+                                   enabled = entry.enablement?.enabled ?: true,
+                                   blockedBy = entry.enablement?.blockedBy.orEmpty(),
+                                   onChanged = onSettingChanged)
                     }
                 }
             }
@@ -272,6 +332,17 @@ private val CONTROL_WIDTH = 220.dp
  * sie einmal je Duese, und extruder sagt welche. Bei allen anderen
  * Seiten steht dort -1.
  */
+/**
+ * Ein Parameter, wie er auf der Seite steht: was tabs.json sagt, was
+ * PrintConfig dazu weiss, und ob er im aktuellen Zustand ueberhaupt
+ * wirkt. Alles drei einmal je Seite ermittelt, nicht je Bild.
+ */
+private data class SettingEntry(
+    val option: PsUi.Option,
+    val meta: PsmCore.ConfigMeta,
+    val enablement: PsmCore.Enablement?,
+)
+
 private data class RenderPage(val page: PsUi.Page, val extruder: Int = -1) {
     val title: String
         get() = if (extruder >= 0) page.title.replace("{n}", (extruder + 1).toString())
@@ -287,6 +358,9 @@ private fun SettingRow(
     configRevision: Int,
     extruder: Int = -1,
     multiline: Boolean = false,
+    enabled: Boolean = true,
+    blockedBy: String = "",
+    onChanged: () -> Unit = {},
 ) {
     // Die Revision gehoert in den Schluessel: sonst zeigt die Zeile nach
     // einem Profilwechsel den alten Wert und schreibt ihn beim naechsten
@@ -307,7 +381,7 @@ private fun SettingRow(
         value = v
         runCatching {
             if (extruder >= 0) core.setAt(meta.key, extruder, v) else core[meta.key] = v
-        }
+        }.onSuccess { onChanged() }
     }
 
     // Start- und End-G-code sind mehrzeilig. Ein einzeiliges Feld macht
@@ -317,7 +391,12 @@ private fun SettingRow(
         return
     }
 
-    Column(Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
+    Column(
+        Modifier.fillMaxWidth().padding(vertical = 6.dp)
+            // Ausgegraut statt versteckt: der Wert steht weiter da, man
+            // sieht nur, dass er gerade nichts bewirkt.
+            .alpha(if (enabled) 1f else 0.4f),
+    ) {
         Row(
             Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
@@ -340,6 +419,23 @@ private fun SettingRow(
                     else -> ValueField(value, meta.unit) { push(it) }
                 }
             }
+        }
+
+        // Warum gesperrt? Der Desktop graut aus und schweigt dazu. Auf
+        // dem Tablet, wo kein Handbuch danebenliegt, ist das die
+        // wichtigere Haelfte der Auskunft.
+        if (!enabled && blockedBy.isNotBlank()) {
+            val label = remember(blockedBy) {
+                runCatching { core.configMeta(blockedBy)?.label }
+                    .getOrNull().orEmpty().ifBlank { blockedBy }
+            }
+            Text(
+                PsUi.tr("Ohne Wirkung, solange") + " “" + PsUi.tr(label) +
+                    "” " + PsUi.tr("das nicht zulaesst"),
+                color = PrusaColors.Orange,
+                fontSize = 11.sp,
+                modifier = Modifier.fillMaxWidth().padding(top = 2.dp),
+            )
         }
 
         if (meta.tooltip.isNotBlank()) {
@@ -379,10 +475,10 @@ private fun EnumField(
 
     Box {
         Row(
-            Modifier.fillMaxWidth().height(44.dp)
-                .clip(RoundedCornerShape(4.dp))
+            Modifier.fillMaxWidth().height(48.dp)
+                .clip(RoundedCornerShape(8.dp))
                 .background(PrusaColors.PanelRaised)
-                .border(1.dp, PrusaColors.Divider, RoundedCornerShape(4.dp))
+                .border(1.dp, PrusaColors.Divider, RoundedCornerShape(8.dp))
                 .clickable { expanded = true }
                 .padding(horizontal = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -409,10 +505,10 @@ private fun EnumField(
 @Composable
 private fun ValueField(value: String, unit: String, onChange: (String) -> Unit) {
     Row(
-        Modifier.fillMaxWidth().height(44.dp)
-            .clip(RoundedCornerShape(4.dp))
+        Modifier.fillMaxWidth().height(48.dp)
+            .clip(RoundedCornerShape(8.dp))
             .background(PrusaColors.PanelRaised)
-            .border(1.dp, PrusaColors.Divider, RoundedCornerShape(4.dp))
+            .border(1.dp, PrusaColors.Divider, RoundedCornerShape(8.dp))
             .padding(horizontal = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {

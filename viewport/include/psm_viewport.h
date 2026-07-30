@@ -58,6 +58,28 @@ PSM_API psm_object_id psm_viewport_pick(psm_viewport *v, float x, float y);
 
 PSM_API void psm_viewport_set_selection(psm_viewport *v, psm_object_id id);
 
+/** Mehrfachauswahl; primary traegt Gizmos und numerische Bearbeitung. */
+PSM_API void psm_viewport_set_selections(psm_viewport *v,
+                                         const psm_object_id *ids,
+                                         size_t count,
+                                         psm_object_id primary);
+
+typedef struct {
+    psm_object_id object_id;
+    int32_t       volume_index;
+    int32_t       facet_index;
+    int32_t       instance_index;
+    float         position[3];
+    float         normal[3];
+} psm_surface_hit;
+
+/**
+ * Exakter Dreieckstreffer fuer Flachlegen, Bemalen und Messen.
+ * Anders als psm_viewport_pick prueft dieser Aufruf nicht nur Huellboxen.
+ */
+PSM_API int psm_viewport_pick_surface(psm_viewport *v, float x, float y,
+                                      psm_surface_hit *out);
+
 /*
  * Ausgewaehltes Objekt mit dem Finger verschieben.
  *

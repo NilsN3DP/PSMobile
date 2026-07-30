@@ -7,16 +7,23 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.HorizontalDivider
@@ -72,17 +79,30 @@ fun PrintersScreen(
 
     LaunchedEffect(Unit) { backupName = BackupStore.folderName(context) }
 
-    Box(modifier.fillMaxSize().background(PrusaColors.Background), Alignment.TopCenter) {
+    Box(
+        modifier
+            .fillMaxSize()
+            .background(PrusaColors.Background)
+            .windowInsetsPadding(WindowInsets.safeDrawing),
+        Alignment.TopCenter,
+    ) {
         Column(Modifier.widthIn(max = 820.dp).fillMaxSize().padding(24.dp)) {
 
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text("‹  ${PsUi.tr("Back")}",
                      color = PrusaColors.Orange, fontSize = 15.sp,
-                     modifier = Modifier.clickable(onClick = onClose))
+                     modifier = Modifier
+                         .height(52.dp)
+                         .clickable(onClick = onClose)
+                         .padding(horizontal = 12.dp, vertical = 15.dp))
                 Box(Modifier.weight(1f))
-                OutlinedButton(onClick = {
-                    editing = PrusaLink.Printer(UUID.randomUUID().toString(), "", "")
-                }) { Text(PsUi.tr("Add printer")) }
+                OutlinedButton(
+                    onClick = {
+                        editing = PrusaLink.Printer(UUID.randomUUID().toString(), "", "")
+                    },
+                    modifier = Modifier.height(52.dp),
+                    shape = RoundedCornerShape(10.dp),
+                ) { Text(PsUi.tr("Add printer")) }
             }
 
             Text("PrusaLink", color = PrusaColors.TextPrimary,
@@ -99,10 +119,11 @@ fun PrintersScreen(
                 items(printers, key = { it.id }) { p ->
                     Column(
                         Modifier.fillMaxWidth()
-                            .clip(RoundedCornerShape(4.dp))
+                            .heightIn(min = 72.dp)
+                            .clip(RoundedCornerShape(10.dp))
                             .background(PrusaColors.PanelRaised)
                             .clickable { editing = p }
-                            .padding(12.dp),
+                            .padding(14.dp),
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Column(Modifier.weight(1f)) {
@@ -218,6 +239,7 @@ private fun PrinterEditor(
     var user by remember { mutableStateOf(printer.username) }
     var pass by remember { mutableStateOf(printer.password) }
     var auth by remember { mutableStateOf(printer.auth) }
+    var allowHttp by remember { mutableStateOf(printer.allowInsecureHttp) }
     var preset by remember { mutableStateOf(printer.presetName) }
     var testResult by remember { mutableStateOf<String?>(null) }
     var testing by remember { mutableStateOf(false) }
@@ -227,18 +249,50 @@ private fun PrinterEditor(
         Alignment.Center) {
         Column(
             Modifier.widthIn(max = 560.dp).fillMaxWidth()
-                .clip(RoundedCornerShape(8.dp))
+                .fillMaxHeight()
+                .verticalScroll(rememberScrollState())
+                .clip(RoundedCornerShape(12.dp))
                 .background(PrusaColors.Panel)
-                .border(1.dp, PrusaColors.Divider, RoundedCornerShape(8.dp))
-                .padding(20.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
+                .border(1.dp, PrusaColors.Divider, RoundedCornerShape(12.dp))
+                .padding(22.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Text(if (printer.name.isBlank()) "Drucker hinzufügen" else "Drucker bearbeiten",
                  color = PrusaColors.TextPrimary, fontSize = 18.sp,
                  fontWeight = FontWeight.SemiBold)
 
             Field("Name", name) { name = it }
-            Field("Adresse (IP oder Hostname)", host) { host = it }
+            Field("Adresse (HTTPS-URL oder Hostname)", host) { host = it }
+            Row(
+                Modifier.fillMaxWidth()
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(
+                        if (allowHttp) PrusaColors.Danger.copy(alpha = 0.15f)
+                        else PrusaColors.PanelRaised
+                    )
+                    .padding(horizontal = 10.dp, vertical = 7.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        "Unsicheres HTTP erlauben",
+                        color = PrusaColors.TextPrimary,
+                        fontSize = 13.sp,
+                    )
+                    Text(
+                        "Nur für lokale Drucker ohne HTTPS. Zugangsdaten werden dabei unverschlüsselt übertragen.",
+                        color = PrusaColors.TextMuted,
+                        fontSize = 10.sp,
+                    )
+                }
+                Switch(
+                    checked = allowHttp,
+                    onCheckedChange = { allowHttp = it },
+                    colors = SwitchDefaults.colors(
+                        checkedTrackColor = PrusaColors.Danger,
+                    ),
+                )
+            }
             // PrusaLink ab 0.7 nutzt Benutzername und Passwort ueber
             // HTTP-Digest; aeltere Firmware einen API-Schluessel.
             Text("Anmeldung", color = PrusaColors.TextMuted, fontSize = 12.sp)
@@ -249,8 +303,8 @@ private fun PrinterEditor(
                 ).forEach { (mode, label) ->
                     val active = mode == auth
                     Box(
-                        Modifier.weight(1f).height(40.dp)
-                            .clip(RoundedCornerShape(4.dp))
+                        Modifier.weight(1f).height(48.dp)
+                            .clip(RoundedCornerShape(8.dp))
                             .background(if (active) PrusaColors.Orange
                                         else PrusaColors.PanelRaised)
                             .clickable { auth = mode },
@@ -277,27 +331,40 @@ private fun PrinterEditor(
                      fontSize = 13.sp)
             }
 
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedButton(
+                enabled = !testing && host.isNotBlank() && (
+                    if (auth == PrusaLink.Auth.API_KEY) key.isNotBlank()
+                    else user.isNotBlank() && pass.isNotBlank()),
+                onClick = {
+                    testing = true
+                    scope.launch {
+                        testResult = onTest(printer.copy(
+                        host = host, auth = auth, apiKey = key,
+                        username = user, password = pass,
+                        allowInsecureHttp = allowHttp))
+                        testing = false
+                    }
+                },
+                modifier = Modifier.fillMaxWidth().height(52.dp),
+                shape = RoundedCornerShape(10.dp),
+            ) { Text(if (testing) "Prüfe…" else "Verbindung testen") }
+
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                if (printer.name.isNotBlank()) {
+                    OutlinedButton(
+                        onClick = onDelete,
+                        modifier = Modifier.weight(1f).height(52.dp),
+                        shape = RoundedCornerShape(10.dp),
+                    ) { Text("Löschen") }
+                }
                 OutlinedButton(
-                    enabled = !testing && host.isNotBlank() && (
-                        if (auth == PrusaLink.Auth.API_KEY) key.isNotBlank()
-                        else user.isNotBlank() && pass.isNotBlank()),
-                    onClick = {
-                        testing = true
-                        scope.launch {
-                            testResult = onTest(printer.copy(
-                            host = host, auth = auth, apiKey = key,
-                            username = user, password = pass))
-                            testing = false
-                        }
-                    },
-                ) { Text(if (testing) "Prüfe…" else "Verbindung testen") }
-
-                Box(Modifier.weight(1f))
-
-                if (printer.name.isNotBlank())
-                    OutlinedButton(onClick = onDelete) { Text("Löschen") }
-                OutlinedButton(onClick = onCancel) { Text("Abbrechen") }
+                    onClick = onCancel,
+                    modifier = Modifier.weight(1f).height(52.dp),
+                    shape = RoundedCornerShape(10.dp),
+                ) { Text("Abbrechen") }
                 Button(
                     enabled = host.isNotBlank() && (
                         if (auth == PrusaLink.Auth.API_KEY) key.isNotBlank()
@@ -308,8 +375,11 @@ private fun PrinterEditor(
                             host = host, auth = auth, apiKey = key,
                             username = user, password = pass,
                             presetName = preset,
+                            allowInsecureHttp = allowHttp,
                         ))
                     },
+                    modifier = Modifier.weight(1f).height(52.dp),
+                    shape = RoundedCornerShape(10.dp),
                     colors = ButtonDefaults.buttonColors(
                         containerColor = PrusaColors.Orange,
                         contentColor = PrusaColors.TextPrimary,
@@ -325,10 +395,10 @@ private fun Field(label: String, value: String, onChange: (String) -> Unit) {
     Column {
         Text(label, color = PrusaColors.TextMuted, fontSize = 12.sp)
         Box(
-            Modifier.fillMaxWidth().height(44.dp)
-                .clip(RoundedCornerShape(4.dp))
+            Modifier.fillMaxWidth().height(52.dp)
+                .clip(RoundedCornerShape(8.dp))
                 .background(PrusaColors.PanelRaised)
-                .border(1.dp, PrusaColors.Divider, RoundedCornerShape(4.dp))
+                .border(1.dp, PrusaColors.Divider, RoundedCornerShape(8.dp))
                 .padding(horizontal = 10.dp),
             contentAlignment = Alignment.CenterStart,
         ) {
@@ -351,10 +421,10 @@ private fun PresetPickerCompact(
     var expanded by remember { mutableStateOf(false) }
     Box {
         Row(
-            Modifier.fillMaxWidth().height(44.dp)
-                .clip(RoundedCornerShape(4.dp))
+            Modifier.fillMaxWidth().height(52.dp)
+                .clip(RoundedCornerShape(8.dp))
                 .background(PrusaColors.PanelRaised)
-                .border(1.dp, PrusaColors.Divider, RoundedCornerShape(4.dp))
+                .border(1.dp, PrusaColors.Divider, RoundedCornerShape(8.dp))
                 .clickable { expanded = true }
                 .padding(horizontal = 10.dp),
             verticalAlignment = Alignment.CenterVertically,

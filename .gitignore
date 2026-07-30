@@ -1,16 +1,34 @@
 # Externer PrusaSlicer-Checkout - wird per bootstrap.sh geholt
 /external/
+/core/src/generated/
 
 # Build-Ausgaben
 /build-out/
 /deps-out/
 **/build/
+!/build/
+/build/*
+!/build/scripts/
+/build/scripts/*
+!/build/scripts/build-core.sh
+!/build/scripts/extract-toggles.py
+!/build/scripts/feature-report.py
+!/build/scripts/gap-report.py
+!/build/scripts/make-test-project-3mf.py
+!/build/scripts/native-fingerprint.py
+!/build/scripts/run-core-tests.sh
+!/build/scripts/stage-native.sh
+!/build/scripts/tests/
+/build/scripts/tests/*
+!/build/scripts/tests/test_feature_reports.py
 **/.cxx/
 *.o
 *.a
 *.so
 *.apk
 *.aab
+__pycache__/
+*.py[cod]
 
 # Android
 android/local.properties

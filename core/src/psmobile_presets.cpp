@@ -151,6 +151,7 @@ PSM_API psm_result psm_printer_models_scan(psm_session *s, size_t *out_count)
     if (s == nullptr)
         return PSM_ERR_INVALID_ARG;
     try {
+        std::lock_guard<std::recursive_mutex> data_lock(s->data_mtx);
         namespace fs = boost::filesystem;
         s->printer_models.clear();
 
@@ -203,6 +204,7 @@ PSM_API psm_result psm_printer_model_at(psm_session *s, size_t index, psm_printe
 {
     if (s == nullptr || out == nullptr)
         return PSM_ERR_INVALID_ARG;
+    std::lock_guard<std::recursive_mutex> data_lock(s->data_mtx);
     if (index >= s->printer_models.size())
         return PSM_ERR_INVALID_ARG;
 
@@ -222,6 +224,7 @@ PSM_API psm_result psm_printer_variant_at(psm_session *s, size_t model_index,
 {
     if (s == nullptr || out == nullptr)
         return PSM_ERR_INVALID_ARG;
+    std::lock_guard<std::recursive_mutex> data_lock(s->data_mtx);
     if (model_index >= s->printer_models.size())
         return PSM_ERR_INVALID_ARG;
     const auto &vars = s->printer_models[model_index].variants;
@@ -243,6 +246,7 @@ PSM_API psm_result psm_presets_install(psm_session *s,
     if (s == nullptr)
         return PSM_ERR_INVALID_ARG;
     try {
+        std::lock_guard<std::recursive_mutex> data_lock(s->data_mtx);
         namespace fs = boost::filesystem;
 
         /* Auswahl als Menge "vendor:model" oder "vendor:model:variant".
@@ -374,6 +378,8 @@ PSM_API psm_result psm_presets_install(psm_session *s,
 
         /* Die aktive Konfiguration ist ab jetzt die aus den Presets. */
         s->config = s->presets->full_config();
+        ++s->config_revision;
+        s->mark_design_changed();
         /* Nutzbare Anzahl melden, nicht die Rohsumme: load_presets() legt
          * immer alle Profile in die Sammlungen, sichtbar und kompatibel
          * ist aber nur ein Bruchteil. Die Rohsumme zu melden waere
@@ -401,6 +407,7 @@ PSM_API size_t psm_preset_count(psm_session *s, psm_preset_type type)
 {
     if (s == nullptr)
         return 0;
+    std::lock_guard<std::recursive_mutex> data_lock(s->data_mtx);
     PresetCollection *c = collection_for(s, type);
     if (c == nullptr)
         return 0;
@@ -414,6 +421,7 @@ PSM_API psm_result psm_preset_name_at(psm_session *s, psm_preset_type type,
     if (s == nullptr || out == nullptr)
         return PSM_ERR_INVALID_ARG;
     try {
+        std::lock_guard<std::recursive_mutex> data_lock(s->data_mtx);
         PresetCollection *c = collection_for(s, type);
         if (c == nullptr)
             return PSM_ERR_NOT_FOUND;
@@ -434,6 +442,7 @@ PSM_API psm_result psm_preset_select(psm_session *s, psm_preset_type type, const
     if (s == nullptr || name == nullptr)
         return PSM_ERR_INVALID_ARG;
     try {
+        std::lock_guard<std::recursive_mutex> data_lock(s->data_mtx);
         PresetCollection *c = collection_for(s, type);
         if (c == nullptr)
             return PSM_ERR_NOT_FOUND;
@@ -450,6 +459,8 @@ PSM_API psm_result psm_preset_select(psm_session *s, psm_preset_type type, const
         s->presets->update_compatible(PresetSelectCompatibleType::Always);
 
         s->config = s->presets->full_config();
+        ++s->config_revision;
+        s->mark_design_changed();
         return PSM_OK;
     } catch (const std::exception &e) {
         s->set_error(e.what());
@@ -462,6 +473,7 @@ PSM_API psm_result psm_preset_selected(psm_session *s, psm_preset_type type,
 {
     if (s == nullptr || out == nullptr)
         return PSM_ERR_INVALID_ARG;
+    std::lock_guard<std::recursive_mutex> data_lock(s->data_mtx);
     PresetCollection *c = collection_for(s, type);
     if (c == nullptr)
         return PSM_ERR_NOT_FOUND;
@@ -477,6 +489,7 @@ PSM_API size_t psm_config_key_count(psm_session *s)
 {
     if (s == nullptr)
         return 0;
+    std::lock_guard<std::recursive_mutex> data_lock(s->data_mtx);
     return config_keys(s).size();
 }
 
@@ -485,6 +498,7 @@ PSM_API psm_result psm_config_meta_for(psm_session *s, const char *key, psm_conf
     if (s == nullptr || key == nullptr || out == nullptr)
         return PSM_ERR_INVALID_ARG;
     try {
+        std::lock_guard<std::recursive_mutex> data_lock(s->data_mtx);
         const ConfigOptionDef *def = Slic3r::print_config_def.get(key);
         if (def == nullptr)
             return PSM_ERR_NOT_FOUND;
@@ -524,6 +538,7 @@ PSM_API psm_result psm_config_meta_at(psm_session *s, size_t index, psm_config_m
 {
     if (s == nullptr || out == nullptr)
         return PSM_ERR_INVALID_ARG;
+    std::lock_guard<std::recursive_mutex> data_lock(s->data_mtx);
     const std::vector<std::string> &keys = config_keys(s);
     if (index >= keys.size())
         return PSM_ERR_INVALID_ARG;
@@ -537,6 +552,7 @@ PSM_API psm_result psm_config_enum_value_at(psm_session *s, const char *key, siz
     if (s == nullptr || key == nullptr)
         return PSM_ERR_INVALID_ARG;
     try {
+        std::lock_guard<std::recursive_mutex> data_lock(s->data_mtx);
         const ConfigOptionDef *def = Slic3r::print_config_def.get(key);
         if (def == nullptr || ! def->enum_def)
             return PSM_ERR_NOT_FOUND;

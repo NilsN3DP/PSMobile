@@ -8,6 +8,7 @@ composeBom = "2024.12.01"
 documentfile = "1.0.1"
 coroutines = "1.9.0"
 coil = "2.7.0"
+junit = "4.13.2"
 
 [libraries]
 androidx-core-ktx           = { group = "androidx.core",              name = "core-ktx",                 version.ref = "coreKtx" }
@@ -26,6 +27,7 @@ kotlinx-coroutines-android  = { group = "org.jetbrains.kotlinx",      name = "ko
 # Fuer die Original-SVG-Icons aus PrusaSlicer - Android rendert SVG nicht selbst.
 coil-compose                = { group = "io.coil-kt",                 name = "coil-compose",             version.ref = "coil" }
 coil-svg                    = { group = "io.coil-kt",                 name = "coil-svg",                 version.ref = "coil" }
+junit                       = { group = "junit",                      name = "junit",                    version.ref = "junit" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

@@ -4,8 +4,9 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
-    <!-- Netzwerk fuer PrusaLink/PrusaConnect. Bewusst nativ ueber OkHttp
-         statt libcurl - siehe docs/entscheidungen.md, E-09. -->
+    <!-- Netzwerk fuer PrusaLink/PrusaConnect. Bewusst in der
+         Plattformschicht ueber HttpURLConnection statt libcurl im Core -
+         siehe docs/entscheidungen.md, E-09. -->
     <uses-permission android:name="android.permission.INTERNET" />
 
     <!-- OpenGL ES 3.0 ist die Basis fuer den Viewport (M4). -->
@@ -13,6 +14,9 @@
 
     <application
         android:allowBackup="true"
+        android:fullBackupContent="@xml/backup_rules"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:usesCleartextTraffic="true"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
         android:supportsRtl="true"
@@ -52,10 +56,12 @@
             weiterlaeuft, wenn der Bildschirm ausgeht - ein Slice kann auf
             dem Handy mehrere Minuten dauern.
 
-            TODO (M7): android:process=":slicer" ergaenzen, damit der
-            Low-Memory-Killer bei grossen Modellen nur den Job trifft und
-            nicht die App. Das setzt voraus, dass die Session per Messenger
-            statt per lokalem Binder angesprochen wird.
+            Der Dienst ist started + bound und ueberlebt deshalb ein
+            Activity-Unbind. Er bleibt in dieser Android-first-Phase
+            bewusst im UI-Prozess: android:process=":slicer" setzt erst
+            einen serialisierten Auftrag plus AIDL/Messenger voraus; der
+            lokale Binder und der native Session-Zeiger sind nicht
+            prozessuebergreifend.
         -->
         <service
             android:name=".slicing.SlicerService"

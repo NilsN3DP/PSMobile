@@ -21,6 +21,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 option(PSM_BUILD_TESTCLI "Testbinary fuer den Machbarkeitsbeweis M2 bauen" ON)
+option(PSM_BUILD_TESTS "C-ABI-Vertragstests bauen" ON)
 
 # --- PrusaSlicer-Kern -----------------------------------------------------
 # Der Zuschnitt entspricht docs/entscheidungen.md, E-08.
@@ -74,6 +75,8 @@ set(PSM_CORE_SOURCES
     core/src/psmobile_core.cpp
     core/src/psmobile_presets.cpp
     core/src/psmobile_extruders.cpp
+    core/src/psmobile_toggles.cpp
+    core/src/psmobile_toggles_generated.cpp
 )
 
 # Der Viewport liegt in derselben Bibliothek wie der Kern: er liest das
@@ -173,4 +176,12 @@ if (PSM_BUILD_TESTCLI)
     add_executable(psm_testcli core/test/psm_testcli.c)
     target_link_libraries(psm_testcli PRIVATE psmobile_core)
     target_include_directories(psm_testcli PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/core/include)
+endif ()
+
+if (PSM_BUILD_TESTS)
+    add_executable(psm_contract_tests core/test/psm_contract_tests.cpp)
+    target_link_libraries(psm_contract_tests PRIVATE psmobile_core)
+    target_include_directories(psm_contract_tests PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/core/include)
+    target_compile_features(psm_contract_tests PRIVATE cxx_std_17)
 endif ()

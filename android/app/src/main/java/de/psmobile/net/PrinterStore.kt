@@ -12,9 +12,9 @@ import java.util.UUID
  * Bewusst in den App-eigenen Einstellungen und nicht im Datadir von
  * libslic3r: Das sind Geraete des Nutzers, keine Slicer-Profile.
  *
- * Der API-Schluessel liegt im privaten App-Speicher. Fuer eine
- * Veroeffentlichung gehoert er in EncryptedSharedPreferences - als
- * offener Punkt in docs/07-stopp-punkte.md vermerkt.
+ * Nicht geheime Metadaten liegen als JSON in den normalen Preferences.
+ * API-Schluessel und Passwoerter liegen getrennt, per Android Keystore
+ * mit AES-GCM verschluesselt in SecretStore.
  */
 object PrinterStore {
 
@@ -27,10 +27,36 @@ object PrinterStore {
 
     fun all(c: Context): List<PrusaLink.Printer> = runCatching {
         val arr = JSONArray(prefs(c).getString(KEY_PRINTERS, "[]"))
-        (0 until arr.length()).map { i ->
+        var migrated = false
+        val printers = (0 until arr.length()).map { i ->
             val o = arr.getJSONObject(i)
+            val id = o.optString("id", UUID.randomUUID().toString())
+            val credentialRef = o.optString("credentialRef", "printer-$id")
+
+            /* Einmalige Migration der alten Klartextstruktur. Erst das
+             * Secret dauerhaft schreiben; save() entfernt die alten
+             * JSON-Felder erst danach. */
+            val legacyKey = o.optString("apiKey")
+            val legacyUser = o.optString("username", PrusaLink.DEFAULT_USER)
+            val legacyPassword = o.optString("password")
+            if ((legacyKey.isNotBlank() || legacyPassword.isNotBlank()) &&
+                SecretStore.get(c, credentialRef) == null) {
+                SecretStore.put(
+                    c,
+                    credentialRef,
+                    JSONObject().apply {
+                        put("apiKey", legacyKey)
+                        put("username", legacyUser)
+                        put("password", legacyPassword)
+                    }.toString(),
+                )
+                migrated = true
+            }
+            val secret = SecretStore.get(c, credentialRef)
+                ?.let { JSONObject(it) }
+
             PrusaLink.Printer(
-                id = o.optString("id", UUID.randomUUID().toString()),
+                id = id,
                 name = o.optString("name"),
                 host = o.optString("host"),
                 // Alte Eintraege ohne "auth" hatten nur einen API-Key.
@@ -39,36 +65,55 @@ object PrinterStore {
                 else if (!o.has("auth") && o.optString("apiKey").isNotBlank())
                     PrusaLink.Auth.API_KEY
                 else PrusaLink.Auth.USER_PASSWORD,
-                apiKey = o.optString("apiKey"),
-                username = o.optString("username", PrusaLink.DEFAULT_USER),
-                password = o.optString("password"),
+                apiKey = secret?.optString("apiKey").orEmpty(),
+                username = secret?.optString("username", PrusaLink.DEFAULT_USER)
+                    ?: PrusaLink.DEFAULT_USER,
+                password = secret?.optString("password").orEmpty(),
                 presetName = o.optString("presetName"),
                 storage = o.optString("storage", "usb"),
+                allowInsecureHttp = o.optBoolean("allowInsecureHttp", false),
             )
         }
+        if (migrated)
+            save(c, printers)
+        printers
     }.getOrDefault(emptyList())
 
     fun save(c: Context, printers: List<PrusaLink.Printer>) {
         val arr = JSONArray()
         printers.forEach { p ->
+            val credentialRef = "printer-${p.id}"
+            SecretStore.put(
+                c,
+                credentialRef,
+                JSONObject().apply {
+                    put("apiKey", p.apiKey)
+                    put("username", p.username)
+                    put("password", p.password)
+                }.toString(),
+            )
             arr.put(JSONObject().apply {
                 put("id", p.id)
                 put("name", p.name)
                 put("host", p.host)
                 put("auth", if (p.auth == PrusaLink.Auth.API_KEY) "apikey" else "userpass")
-                put("apiKey", p.apiKey)
-                put("username", p.username)
-                put("password", p.password)
+                put("credentialRef", credentialRef)
                 put("presetName", p.presetName)
                 put("storage", p.storage)
+                put("allowInsecureHttp", p.allowInsecureHttp)
             })
         }
-        prefs(c).edit { putString(KEY_PRINTERS, arr.toString()) }
+        /* Metadaten erst nach erfolgreicher Secret-Speicherung ersetzen. */
+        prefs(c).edit(commit = true) { putString(KEY_PRINTERS, arr.toString()) }
     }
 
     fun add(c: Context, p: PrusaLink.Printer) = save(c, all(c) + p)
 
-    fun remove(c: Context, id: String) = save(c, all(c).filterNot { it.id == id })
+    fun remove(c: Context, id: String) {
+        val remaining = all(c).filterNot { it.id == id }
+        save(c, remaining)
+        SecretStore.remove(c, "printer-$id")
+    }
 
     fun update(c: Context, p: PrusaLink.Printer) =
         save(c, all(c).map { if (it.id == p.id) p else it })

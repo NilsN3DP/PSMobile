@@ -1,203 +1,80 @@
 # Stopp-Punkte
 
-Stand: 2026-07-29, nach der Nachtsitzung.
+Stand: 2026-07-30. Diese Datei enthält nur Punkte, die eine Entscheidung,
+externe Voraussetzung oder einen echten Test brauchen. Der
+Funktionsstatus steht in `docs/feature-matrix.json`, die Desktop-Lücken
+in `docs/10-funktionsvergleich.md`.
 
-Das hier ist die Liste zum gemeinsamen Durchgehen. Sortiert nach
-Dringlichkeit, nicht nach Aufwand.
+## Externe Blocker
 
----
+### Android-UI-Gerätegate
 
-## 1. Entscheidungen, die ich nicht allein treffen sollte
+Beide ABIs sind mit NDK r27c gebaut, fingerprint-geprüft und im
+Debug-APK enthalten. Der C-ABI-Vertragstest lief auf dem
+x86_64-Emulator einschließlich Slicing, Stale-Schutz, Undo/Redo,
+Teil-Extruder und Mehrbett-Speichern/Wiederöffnen.
 
-### 1.1 Eigene OAuth-Client-ID fuer Prusa Connect
-**Blockiert den Connect-Upload vollstaendig.**
+Der Compose-Smoke-Test lief anschließend mit einer seitengleich
+installierten Testvariante, ohne die anders signierte vorhandene App
+oder deren Daten zu löschen. App-Start, natives Laden, beide
+3MF-Entscheidungswege, projektlokale Druckerprofilwahl, zwei direkt
+sichtbare Bettchips, Projekt-Speichern/Wiederöffnen, Undo/Redo sowie
+Objekt-/Volumenbaum mit MMU3-Teilzuweisung sind bestanden.
 
-PrusaSlicer spricht mit `account.prusa3d.com` per OAuth2/PKCE, mit der
-Client-ID `oamhmhZez7opFosnwzElIgE2oGgI2iJORSkw587O` und dem Redirect
-`prusaslicer://login`. Beides gehoert PrusaSlicer. Wir koennen es
-technisch mitbenutzen, sollten es aber nicht: gegenueber Prusas
-Auth-Server gaeben wir uns damit als PrusaSlicer aus.
+Ein normaler Slice aus der Compose-UI bis zum fertigen G-Code ist
+ebenfalls bestanden. Währenddessen meldete Android den Service als
+Foreground-Service mit einer Notification-Aktion. Offen bleiben auf
+dem Emulator Gradrotation, Stale-Meldung, Vorschau/Teilen, Screen-off
+und der tatsächlich über die Notification ausgelöste Abbruch. Die
+komplette Matrix muss außerdem auf einem kleinen und einem großen
+arm64-Gerät laufen.
 
-Der Upload selbst ist klar - zwei Aufrufe, beide aus `PrusaConnect.cpp`
-uebernommen:
-1. `POST {host}/app/users/teams/{team_id}/uploads` mit Bearer-Token
-2. `PUT {host}/app/teams/{team_id}/files/raw?upload_id=...`
+### PrusaLink-Hardware
 
-**Zu klaeren mit Prusa** (passt in dieselbe Anfrage wie die Lizenz,
-siehe `06-anfrage-prusa.md`): eigene Client-ID plus ein Redirect-Schema
-fuer die App.
+API-Key, HTTP-Digest, HTTP-Freigabe, Zielauswahl und Remote-Dateiname
+sind implementiert. Keiner dieser neuen Wege ist bereits gegen echte
+Druckerhardware verifiziert.
 
-**Ohne das** geht PrusaLink lokal sofort - der braucht nur einen
-API-Key, kein OAuth.
+### Prusa Connect
 
-### 1.2 Der Name
-"PSMobile" ist Arbeitstitel. Fuer eine Veroeffentlichung braucht es
-einen Namen ohne Prusa-Bezug. Markenrechtlich unabhaengig von der
-Lizenzfrage.
+Prusa Connect benötigt eine eigene OAuth2-/PKCE-Client-ID. Die
+PrusaSlicer-ID mit dem Redirect `prusaslicer://login` darf nicht
+übernommen werden. Das bleibt eine Anfrage an Prusa.
 
-### 1.3 Wie exakt soll die Werkzeugleiste sein?
-Uebernommen sind alle 15 Werkzeuge aus `GLCanvas3D.cpp` in
-Originalreihenfolge, mit Original-Icons und -Tooltips. Am Desktop laeuft
-sie **waagerecht ueber** dem Bett - ich habe sie **senkrecht links**
-gesetzt, weil 15 Knoepfe a 56 dp quer die halbe Bettbreite fressen.
-Das ist die eine bewusste Abweichung. Umdrehen ist eine Zeile.
+### Release und Name
 
----
+„PSMobile“ ist ein Arbeitstitel. Vor Veröffentlichung fehlen außerdem
+`LICENSE`, `THIRD-PARTY-NOTICES`, Quellcodeangebot,
+Datenschutzinformation und die Store-/AGPL-Entscheidung.
 
-## 2. Was ich nicht uebernehmen konnte
+## Entschiedene Projektregeln
 
-### 2.1 25 Parameter fehlen in den Einstellungen
-Der Extraktor liest `Tab.cpp` statisch. An 25 Stellen fuegt PrusaSlicer
-Optionen ueber Variablen ein (`optgroup->append_single_option_line(option)`)
-statt ueber einen Literalnamen. Die kann kein statischer Leser aufloesen.
+### Projekt speichern
 
-Sichtbar wird das an leeren Gruppen, etwa "Horizontale Konturhuellen".
+Die Projektleiste speichert immer ein vollständiges 3MF-Projekt mit
+allen belegten mobilen Betten. Projektlokale Konfigurationen werden
+eingebettet. Druckerzugänge und Post-Processing bleiben dauerhaft aus
+der exportierten Datei entfernt.
 
-**Optionen**: von Hand nachtragen (ueberschaubar, aber Nachbau), oder
-die Struktur zur Laufzeit aus einer laufenden PrusaSlicer-Instanz
-abgreifen (sauberer, deutlich mehr Aufwand).
+### Multicolor
 
-### 2.2 Der Drucker-Tab ist unvollstaendig
-`TabPrinter::build_fff()` liefert 4 Seiten. Die Extruder-Seiten baut
-PrusaSlicer dynamisch nach Extruderzahl (`build_extruder_pages`), die
-fehlen.
+Filamente und Farben je Extruder sowie die Extruderzuweisung je Objekt
+und druckbarem Volumen sind vorhanden. Vor den Malwerkzeugen fehlen noch
+Objektfarbe, Wipe-Flags und Erzeugungsdialoge für Modifier.
 
-### 2.3 wxWidgets-Widgets
-Grundsaetzlich nicht portierbar, siehe E-01. Betrifft Dialoge,
-Menueleiste, die dreispaltige Parametertabelle.
+### Spezialwerkzeuge
 
----
+Empfohlene Reihenfolge nach dem Gerätegate:
 
-## 3. Bekannte Fehler und Luecken
+1. Clipboard-Einfügen, Mehrfachauswahl und Dirty-Profilzustand.
+2. Flach legen, schneiden, vereinfachen.
+3. Bettform, Wischmatrix und G-Code-Ersetzungen.
+4. Support-/Naht-/Fuzzy-/MMU-Painting.
+5. Messen, Text und SVG.
 
-| Punkt | Zustand |
-| --- | --- |
-| Objekt verschieben | **Fehlt.** Auswaehlen geht, bewegen nicht. Braucht Gizmos oder wenigstens Ziehen in der Bettebene. |
-| Objekt skalieren/drehen | Fehlt, dito. |
-| Startzeit | ~14 s beim allerersten Start (Ressourcen entpacken), danach je nach Druckerauswahl 2-4 s. |
-| Filamentgewicht | Stimmt jetzt, sobald ein Filamentprofil gewaehlt ist. |
-| G-Code-Vorschau | Fehlt komplett (M6, `libvgcode`). |
-| Undo/Redo | Werkzeuge sind sichtbar, aber inaktiv. |
-| Ausschneiden/Einfuegen | dito. |
-| Layer-Editing | dito. |
-| iOS | Vorbereitet, nie gebaut - braucht den Mac. |
-| Objektliste | Zeigt nur Name und Groesse. Die Baumstruktur mit Volumen und Modifikatoren fehlt. |
+## Bewusst später
 
----
-
-## 4. Was in dieser Sitzung fertig wurde
-
-- **Viewport (M4)**: GLES-Renderer mit PrusaSlicers eigenen ES-Shadern,
-  Bett aus der Druckerkonfiguration, Auswahl in Gruen, Gesten,
-  Ansichtsleiste.
-- **Extraktor (E-12)**: 20 Einstellungsseiten, 247 Parameter,
-  15 Werkzeuge, 21 Sprachen mit 103446 Eintraegen, 37 Original-Icons.
-- **Einstellungen**: vollstaendiger Bildschirm mit Originalstruktur,
-  Original-Tooltips und dem Simple/Advanced/Expert-Filter aus
-  `PrintConfig`.
-- **Ersteinrichtung**: Druckerauswahl beim ersten Start. Mit einem
-  MK4S bleiben 10 Drucker, 6 Druckprofile und 175 Filamente uebrig
-  statt 221/520/5762.
-- **Sprache**: Englisch als Standard, 21 weitere umschaltbar.
-- **Profilfilter**: Nur zum gewaehlten Drucker passende Profile.
-
----
-
-## 5. Arbeitsliste - hier weitermachen
-
-**Diese Datei ist die Uebergabe.** Wer kalt hier hereinkommt, liest
-`README.md`, `docs/entscheidungen.md` (vor allem E-12: uebernehmen statt
-nachbauen) und dann diese Liste.
-
-### Bauen und pruefen
-
-```bash
-# Kern (Docker auf localunraid, SSH-Key ~/.ssh/unraid_aipp)
-ANDROID_ABI=x86_64 bash build/scripts/build-core.sh
-bash build/scripts/stage-native.sh x86_64
-bash build/scripts/build-apk.sh
-
-# Auf dem Emulator PSM_Tablet pruefen
-adb install -r android/app/build/outputs/apk/debug/app-debug.apk
-```
-
-Nach Aenderungen am Kern **immer** `stage-native.sh` vor `build-apk.sh` -
-sonst liegt die alte .so im APK.
-
-### Offen, nach Wert sortiert
-
-- [x] **Objekt verschieben** - Ziehen in der Bettebene, fertig.
-- [ ] **Objekt skalieren und drehen** - Gizmos oder numerische Felder in
-      der Seitenleiste, wie PrusaSlicers Object Manipulation.
-      `psm_model_set_rotation` und `psm_model_set_scale` gibt es schon im
-      ABI, es fehlt nur die Oberflaeche.
-- [x] **PrusaLink** - Verwaltung, Verbindungstest, Upload gebaut.
-      **Aber nie gegen ein echtes Geraet gelaufen** - im Emulator gibt es
-      keinen Drucker. Erster Test mit einem echten Drucker steht aus.
-- [ ] **Filter "nur eingerichtete Drucker"** - Der Schalter existiert und
-      wird gespeichert, filtert aber noch nichts. Ansatzpunkt:
-      `SlicerService.refreshPresets()` gegen
-      `PrinterStore.all(context).map { it.presetName }` filtern, wenn
-      `PrinterStore.onlyLinked(context)` gesetzt ist.
-- [x] **Gesendete Dateien sichern** - ueber das Storage Access Framework,
-      damit auch eingebundene Netzlaufwerke gehen. Ebenfalls ungetestet.
-- [ ] **API-Schluessel verschluesselt ablegen** - liegt derzeit in
-      gewoehnlichen SharedPreferences. Vor einer Veroeffentlichung auf
-      EncryptedSharedPreferences umstellen.
-- [ ] **Simple-Modus vereinfachen** - derzeit nur eine kuerzere Liste.
-      Ziel: Qualitaet, Material, Fuellung, Stuetzen, Haftung, dann
-      slicen. Der volle Baum bleibt einen Fingertipp entfernt.
-- [ ] **G-Code-Vorschau** (M6, `libvgcode`, ~5600 LOC, schon portabel).
-- [ ] **Objektliste vertiefen** - Baum mit Volumen und Modifikatoren.
-- [ ] **Die 25 fehlenden Parameter** - Entscheidung noetig, siehe 2.1.
-- [ ] **Connect-Upload** - erst wenn die Client-ID geklaert ist, siehe 1.1.
-- [ ] **Stift-Painting** - das Alleinstellungsmerkmal, siehe unten.
-
-### Fehlerjagd, sobald die Funktionen stehen
-
-Wenn die Liste oben weitgehend abgearbeitet ist, **vor** weiteren
-Funktionen einen systematischen Durchgang machen. Nicht "laeuft ja",
-sondern gezielt kaputtmachen:
-
-**Randfaelle beim Modell**
-- Datei, die kein Modell ist. Leere Datei. 0-Byte-STL.
-- Mesh mit Loechern, umgedrehten Normalen, doppelten Dreiecken.
-- Modell groesser als das Bett. Modell mit 5 Mio. Dreiecken.
-- Modell mit Umlauten und Leerzeichen im Namen.
-
-**Zustandsuebergaenge**
-- Slicen, waehrend schon geslict wird. Abbrechen mitten im Lauf.
-- Drucker wechseln, waehrend geslict wird.
-- Objekt loeschen, waehrend geslict wird.
-- App drehen, in den Hintergrund, zurueck - jeweils mit laufendem Job.
-- Zweimal hintereinander slicen (der Absturz beim Print-Abbau kam genau
-  daher).
-
-**Speicher**
-- Grosses Modell auf einem Geraet mit wenig RAM. Greift die Warnung aus
-  `psm_estimate_slice_memory`? Ueberlebt die App den Low-Memory-Killer?
-
-**Netz**
-- Drucker nicht erreichbar, falsches Passwort, Kabel waehrend des
-  Uploads gezogen, Drucker beschaeftigt, Speicher voll.
-- Sicherungsordner entzogen oder Netzlaufwerk offline.
-
-**Oberflaeche**
-- Alle 247 Parameter je Typ einmal aendern - bleibt der Wert stehen?
-  Wird er beim Slicen wirklich benutzt?
-- Sprache umschalten, waehrend die Einstellungen offen sind.
-- Ersteinrichtung ohne Auswahl abschliessen.
-
-Gefundene Fehler hier eintragen, nicht sofort alle beheben - erst
-sammeln, dann nach Schwere sortieren.
-
-### Warum Stift-Painting das Ziel ist
-
-Prusa EasyPrint ist ein Cloud-Slicer: ~60 s Rechenzeit je Platte,
-Tageslimit, grosse Modelle werden abgelehnt, kein vollstaendiger
-Einstellungsbaum. PSMobile slict auf dem Geraet - keine dieser Grenzen.
-
-Bei allen anderen Funktionen sind wir bestenfalls gleichwertig zum
-Desktop. Supports, Naht und MMU-Farben mit dem Stift aufzumalen ist die
-einzige Funktion, bei der die mobile Version **besser** ist als der
-Desktop. Darauf sollte das Projekt hinauslaufen.
+- separater Android-Slicer-Prozess: erst mit serialisierbarem Auftrag;
+- iOS: erst nach bestandenem Android-Gerätegate;
+- Prusa Connect: erst mit eigener Client-ID;
+- SLA und vollständige Desktop-Menüparität: nicht Teil von Android v1.

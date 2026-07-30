@@ -13,7 +13,9 @@
 #include <jni.h>
 #include <android/log.h>
 
+#include <algorithm>
 #include <cstring>
+#include <limits>
 #include <string>
 #include <vector>
 
@@ -87,6 +89,24 @@ std::string jstr(JNIEnv *env, jstring s)
 }
 
 inline psm_session *sess(jlong handle) { return reinterpret_cast<psm_session *>(handle); }
+
+jobjectArray string_array(JNIEnv *env, const std::vector<std::string> &values)
+{
+    jclass string_class = env->FindClass("java/lang/String");
+    if (string_class == nullptr)
+        return nullptr;
+    jobjectArray out = env->NewObjectArray(
+        static_cast<jsize>(values.size()), string_class, nullptr);
+    env->DeleteLocalRef(string_class);
+    if (out == nullptr)
+        return nullptr;
+    for (size_t i = 0; i < values.size(); ++i) {
+        jstring value = env->NewStringUTF(values[i].c_str());
+        env->SetObjectArrayElement(out, static_cast<jsize>(i), value);
+        env->DeleteLocalRef(value);
+    }
+    return out;
+}
 
 } // namespace
 
@@ -245,6 +265,143 @@ JNIEXPORT jintArray JNICALL JNI_FN(nativeLoadModel)(JNIEnv *env, jclass, jlong h
     return arr;
 }
 
+/* configGeladen\tpostProcessEntfernt\tobjekte\tbetten\tangefragterDrucker\t
+ * gewaehlterDrucker\tangefragtesDruckprofil\tgewaehltesDruckprofil */
+JNIEXPORT jstring JNICALL JNI_FN(nativeLoadProject)(JNIEnv *env, jclass, jlong h,
+                                                    jstring path)
+{
+    const std::string p = jstr(env, path);
+    psm_project_import_info info{};
+    if (psm_project_load_3mf(sess(h), p.c_str(), &info) != PSM_OK)
+        return nullptr;
+
+    const std::string out =
+        std::to_string(info.config_loaded) + "\t" +
+        std::to_string(info.post_process_removed) + "\t" +
+        std::to_string(info.object_count) + "\t" +
+        std::to_string(info.bed_count) + "\t" +
+        info.requested_printer + "\t" +
+        info.selected_printer + "\t" +
+        info.requested_print + "\t" +
+        info.selected_print;
+    return env->NewStringUTF(out.c_str());
+}
+
+JNIEXPORT jint JNICALL JNI_FN(nativeSaveProject)(JNIEnv *env, jclass, jlong h,
+                                                  jstring path)
+{
+    const std::string p = jstr(env, path);
+    return psm_project_save_3mf(sess(h), p.c_str());
+}
+
+/* --- Undo / Redo ----------------------------------------------------- */
+
+JNIEXPORT jint JNICALL JNI_FN(nativeHistoryBegin)(JNIEnv *env, jclass, jlong h,
+                                                   jstring label)
+{
+    const std::string value = jstr(env, label);
+    return psm_history_begin(sess(h), value.c_str());
+}
+
+JNIEXPORT jint JNICALL JNI_FN(nativeHistoryEnd)(JNIEnv *, jclass, jlong h)
+{
+    return psm_history_end(sess(h));
+}
+
+JNIEXPORT jint JNICALL JNI_FN(nativeUndoCount)(JNIEnv *, jclass, jlong h)
+{
+    return static_cast<jint>(psm_history_undo_count(sess(h)));
+}
+
+JNIEXPORT jint JNICALL JNI_FN(nativeRedoCount)(JNIEnv *, jclass, jlong h)
+{
+    return static_cast<jint>(psm_history_redo_count(sess(h)));
+}
+
+JNIEXPORT jstring JNICALL JNI_FN(nativeUndoLabel)(JNIEnv *env, jclass, jlong h)
+{
+    char label[256] = { 0 };
+    if (psm_history_undo_label(sess(h), label, sizeof(label)) != PSM_OK)
+        return env->NewStringUTF("");
+    return env->NewStringUTF(label);
+}
+
+JNIEXPORT jstring JNICALL JNI_FN(nativeRedoLabel)(JNIEnv *env, jclass, jlong h)
+{
+    char label[256] = { 0 };
+    if (psm_history_redo_label(sess(h), label, sizeof(label)) != PSM_OK)
+        return env->NewStringUTF("");
+    return env->NewStringUTF(label);
+}
+
+JNIEXPORT jint JNICALL JNI_FN(nativeUndo)(JNIEnv *, jclass, jlong h)
+{
+    return psm_history_undo(sess(h));
+}
+
+JNIEXPORT jint JNICALL JNI_FN(nativeRedo)(JNIEnv *, jclass, jlong h)
+{
+    return psm_history_redo(sess(h));
+}
+
+JNIEXPORT jint JNICALL JNI_FN(nativeHistoryClear)(JNIEnv *, jclass, jlong h)
+{
+    return psm_history_clear(sess(h));
+}
+
+/* --- Mehrbett -------------------------------------------------------- */
+
+JNIEXPORT jintArray JNICALL JNI_FN(nativeBeds)(JNIEnv *env, jclass, jlong h)
+{
+    const size_t count = psm_bed_count(sess(h));
+    if (count > static_cast<size_t>(std::numeric_limits<jsize>::max()))
+        return nullptr;
+    std::vector<jint> values(count + 1);
+    values[0] = static_cast<jint>(psm_bed_active(sess(h)));
+    for (size_t i = 0; i < count; ++i)
+        values[i + 1] = static_cast<jint>(psm_bed_object_count(sess(h), i));
+
+    jintArray out = env->NewIntArray(static_cast<jsize>(values.size()));
+    if (out != nullptr)
+        env->SetIntArrayRegion(out, 0, static_cast<jsize>(values.size()),
+                               values.data());
+    return out;
+}
+
+JNIEXPORT jint JNICALL JNI_FN(nativeBedSelect)(JNIEnv *, jclass, jlong h, jint index)
+{
+    return index < 0 ? PSM_ERR_INVALID_ARG :
+        psm_bed_select(sess(h), static_cast<size_t>(index));
+}
+
+JNIEXPORT jint JNICALL JNI_FN(nativeBedAdd)(JNIEnv *, jclass, jlong h)
+{
+    size_t index = 0;
+    return psm_bed_add(sess(h), &index) == PSM_OK
+        ? static_cast<jint>(index) : -1;
+}
+
+JNIEXPORT jint JNICALL JNI_FN(nativeBedRemove)(JNIEnv *, jclass, jlong h, jint index)
+{
+    return index < 0 ? PSM_ERR_INVALID_ARG :
+        psm_bed_remove(sess(h), static_cast<size_t>(index));
+}
+
+JNIEXPORT jint JNICALL JNI_FN(nativeBedClear)(JNIEnv *, jclass, jlong h)
+{
+    return psm_bed_clear(sess(h));
+}
+
+JNIEXPORT jint JNICALL JNI_FN(nativeBedMoveObject)(JNIEnv *, jclass, jlong h,
+                                                   jint id, jint target)
+{
+    if (target < 0)
+        return PSM_INVALID_ID;
+    psm_object_id new_id = PSM_INVALID_ID;
+    return psm_bed_move_object(sess(h), id, static_cast<size_t>(target),
+                               &new_id) == PSM_OK ? new_id : PSM_INVALID_ID;
+}
+
 JNIEXPORT jint JNICALL JNI_FN(nativeRemoveModel)(JNIEnv *, jclass, jlong h, jint id)
 {
     return psm_model_remove(sess(h), id);
@@ -300,6 +457,57 @@ JNIEXPORT jstring JNICALL JNI_FN(nativeObjectName)(JNIEnv *env, jclass, jlong h,
     return env->NewStringUTF(info.name);
 }
 
+JNIEXPORT jint JNICALL JNI_FN(nativeObjectExtruder)(JNIEnv *, jclass,
+                                                     jlong h, jint id)
+{
+    return psm_model_extruder_get(sess(h), id);
+}
+
+JNIEXPORT jint JNICALL JNI_FN(nativeObjectExtruderSet)(JNIEnv *, jclass,
+                                                        jlong h, jint id,
+                                                        jint extruder)
+{
+    return psm_model_extruder_set(sess(h), id, extruder);
+}
+
+JNIEXPORT jint JNICALL JNI_FN(nativeVolumeCount)(JNIEnv *, jclass,
+                                                  jlong h, jint id)
+{
+    return static_cast<jint>(psm_model_volume_count(sess(h), id));
+}
+
+/* type\ttriangleCount\teffectiveExtruder\texplicitExtruder\tname */
+JNIEXPORT jstring JNICALL JNI_FN(nativeVolumeInfo)(JNIEnv *env, jclass,
+                                                   jlong h, jint id,
+                                                   jint index)
+{
+    if (index < 0)
+        return nullptr;
+    psm_volume_info info{};
+    if (psm_model_volume_info(sess(h), id, static_cast<size_t>(index),
+                              &info) != PSM_OK)
+        return nullptr;
+    std::string name = info.name;
+    std::replace(name.begin(), name.end(), '\t', ' ');
+    std::replace(name.begin(), name.end(), '\n', ' ');
+    const std::string value =
+        std::to_string(static_cast<int>(info.type)) + "\t" +
+        std::to_string(info.triangle_count) + "\t" +
+        std::to_string(info.extruder) + "\t" +
+        std::to_string(info.explicit_extruder) + "\t" + name;
+    return env->NewStringUTF(value.c_str());
+}
+
+JNIEXPORT jint JNICALL JNI_FN(nativeVolumeExtruderSet)(JNIEnv *, jclass,
+                                                        jlong h, jint id,
+                                                        jint index,
+                                                        jint extruder)
+{
+    return index < 0 ? PSM_ERR_INVALID_ARG :
+        psm_model_volume_extruder_set(
+            sess(h), id, static_cast<size_t>(index), extruder);
+}
+
 JNIEXPORT jint JNICALL JNI_FN(nativeSetPosition)(JNIEnv *, jclass, jlong h, jint id,
                                                  jfloat x, jfloat y, jfloat z)
 {
@@ -333,12 +541,322 @@ JNIEXPORT jint JNICALL JNI_FN(nativeScaleToFit)(JNIEnv *, jclass, jlong h, jint 
     return psm_model_scale_to_fit(sess(h), id, sizeMm);
 }
 
+JNIEXPORT jint JNICALL JNI_FN(nativeFitToBed)(JNIEnv *, jclass, jlong h, jint id,
+                                              jfloat fillRatio)
+{
+    return psm_model_fit_to_bed(sess(h), id, fillRatio);
+}
+
 JNIEXPORT jint JNICALL JNI_FN(nativeDuplicate)(JNIEnv *, jclass, jlong h, jint id)
 {
     psm_object_id nid = PSM_INVALID_ID;
     if (psm_model_duplicate(sess(h), id, &nid) != PSM_OK)
         return PSM_INVALID_ID;
     return nid;
+}
+
+/* --- Erweiterte Modellwerkzeuge -------------------------------------- */
+
+JNIEXPORT jintArray JNICALL JNI_FN(nativeSplitObjects)(JNIEnv *env, jclass,
+                                                       jlong h, jint id)
+{
+    psm_object_id ids[256];
+    size_t count = 0;
+    if (psm_model_split_objects(sess(h), id, ids, 256, &count) != PSM_OK)
+        return nullptr;
+    const jsize n = static_cast<jsize>(std::min<size_t>(count, 256));
+    jintArray out = env->NewIntArray(n);
+    if (out != nullptr)
+        env->SetIntArrayRegion(
+            out, 0, n, reinterpret_cast<const jint *>(ids));
+    return out;
+}
+
+JNIEXPORT jint JNICALL JNI_FN(nativeSplitVolumes)(JNIEnv *, jclass,
+                                                   jlong h, jint id)
+{
+    size_t count = 0;
+    return psm_model_split_volumes(sess(h), id, &count) == PSM_OK
+        ? static_cast<jint>(count) : -1;
+}
+
+JNIEXPORT jintArray JNICALL JNI_FN(nativeCutZ)(JNIEnv *env, jclass,
+                                                jlong h, jint id,
+                                                jfloat z, jboolean upper,
+                                                jboolean lower,
+                                                jboolean parts)
+{
+    psm_object_id ids[16];
+    size_t count = 0;
+    if (psm_model_cut_z(sess(h), id, z,
+                        upper == JNI_TRUE, lower == JNI_TRUE,
+                        parts == JNI_TRUE, ids, 16, &count) != PSM_OK)
+        return nullptr;
+    const jsize n = static_cast<jsize>(std::min<size_t>(count, 16));
+    jintArray out = env->NewIntArray(n);
+    if (out != nullptr)
+        env->SetIntArrayRegion(
+            out, 0, n, reinterpret_cast<const jint *>(ids));
+    return out;
+}
+
+JNIEXPORT jintArray JNICALL JNI_FN(nativeSimplify)(JNIEnv *env, jclass,
+                                                    jlong h, jint id,
+                                                    jfloat ratio)
+{
+    uint32_t before = 0, after = 0;
+    if (psm_model_simplify(sess(h), id, ratio,
+                           &before, &after) != PSM_OK)
+        return nullptr;
+    const jint values[2] = {
+        static_cast<jint>(std::min<uint32_t>(
+            before, static_cast<uint32_t>(INT32_MAX))),
+        static_cast<jint>(std::min<uint32_t>(
+            after, static_cast<uint32_t>(INT32_MAX)))
+    };
+    jintArray out = env->NewIntArray(2);
+    if (out != nullptr)
+        env->SetIntArrayRegion(out, 0, 2, values);
+    return out;
+}
+
+JNIEXPORT jint JNICALL JNI_FN(nativeAddPrimitiveVolume)(
+    JNIEnv *, jclass, jlong h, jint id, jint type, jint shape,
+    jfloat sx, jfloat sy, jfloat sz)
+{
+    size_t index = 0;
+    return psm_model_add_primitive_volume(
+               sess(h), id, static_cast<psm_volume_type>(type),
+               static_cast<psm_primitive_shape>(shape),
+               sx, sy, sz, &index) == PSM_OK
+        ? static_cast<jint>(index) : -1;
+}
+
+JNIEXPORT jint JNICALL JNI_FN(nativeRemoveVolume)(
+    JNIEnv *, jclass, jlong h, jint id, jint index)
+{
+    return index < 0 ? PSM_ERR_INVALID_ARG :
+        psm_model_remove_volume(
+            sess(h), id, static_cast<size_t>(index));
+}
+
+JNIEXPORT jint JNICALL JNI_FN(nativeAddTextVolume)(
+    JNIEnv *env, jclass, jlong h, jint id, jstring text,
+    jstring fontPath, jfloat size, jfloat depth, jint type)
+{
+    const std::string text_value = jstr(env, text);
+    const std::string font_value = jstr(env, fontPath);
+    size_t index = 0;
+    return psm_model_add_text_volume(
+               sess(h), id, text_value.c_str(), font_value.c_str(),
+               size, depth, static_cast<psm_volume_type>(type),
+               &index) == PSM_OK
+        ? static_cast<jint>(index) : -1;
+}
+
+JNIEXPORT jint JNICALL JNI_FN(nativeAddSvgVolume)(
+    JNIEnv *env, jclass, jlong h, jint id, jstring path,
+    jfloat depth, jint type)
+{
+    const std::string value = jstr(env, path);
+    size_t index = 0;
+    return psm_model_add_svg_volume(
+               sess(h), id, value.c_str(), depth,
+               static_cast<psm_volume_type>(type),
+               &index) == PSM_OK
+        ? static_cast<jint>(index) : -1;
+}
+
+JNIEXPORT jint JNICALL JNI_FN(nativeLayOnFacet)(
+    JNIEnv *, jclass, jlong h, jint id, jint volume, jint facet)
+{
+    return volume < 0 || facet < 0 ? PSM_ERR_INVALID_ARG :
+        psm_model_lay_on_facet(
+            sess(h), id, static_cast<size_t>(volume),
+            static_cast<size_t>(facet));
+}
+
+JNIEXPORT jint JNICALL JNI_FN(nativePaintFacet)(
+    JNIEnv *, jclass, jlong h, jint id, jint volume, jint facet,
+    jint tool, jint state, jfloat radius)
+{
+    return volume < 0 || facet < 0 ? PSM_ERR_INVALID_ARG :
+        psm_model_paint_brush(
+            sess(h), id, static_cast<size_t>(volume),
+            static_cast<size_t>(facet),
+            static_cast<psm_paint_tool>(tool), state, radius);
+}
+
+JNIEXPORT jint JNICALL JNI_FN(nativeClearPaint)(
+    JNIEnv *, jclass, jlong h, jint id, jint tool)
+{
+    return psm_model_clear_paint(
+        sess(h), id, static_cast<psm_paint_tool>(tool));
+}
+
+JNIEXPORT jint JNICALL JNI_FN(nativeLayerProfileSet)(
+    JNIEnv *env, jclass, jlong h, jint id, jdoubleArray values)
+{
+    if (values == nullptr)
+        return psm_model_layer_profile_set(sess(h), id, nullptr, 0);
+    const jsize count = env->GetArrayLength(values);
+    if ((count & 1) != 0)
+        return PSM_ERR_INVALID_ARG;
+    std::vector<double> data(static_cast<size_t>(count));
+    env->GetDoubleArrayRegion(values, 0, count, data.data());
+    return psm_model_layer_profile_set(
+        sess(h), id, data.data(), data.size() / 2);
+}
+
+JNIEXPORT jdoubleArray JNICALL JNI_FN(nativeLayerProfile)(
+    JNIEnv *env, jclass, jlong h, jint id)
+{
+    const size_t count = psm_model_layer_profile_count(sess(h), id);
+    std::vector<double> data(count * 2);
+    for (size_t i = 0; i < count; ++i)
+        if (psm_model_layer_profile_at(
+                sess(h), id, i, &data[i * 2],
+                &data[i * 2 + 1]) != PSM_OK)
+            return nullptr;
+    jdoubleArray out =
+        env->NewDoubleArray(static_cast<jsize>(data.size()));
+    if (out != nullptr && ! data.empty())
+        env->SetDoubleArrayRegion(
+            out, 0, static_cast<jsize>(data.size()), data.data());
+    return out;
+}
+
+JNIEXPORT jstring JNICALL JNI_FN(nativeObjectColour)(
+    JNIEnv *env, jclass, jlong h, jint id)
+{
+    char value[256] = { 0 };
+    if (psm_model_colour_get(
+            sess(h), id, value, sizeof(value)) != PSM_OK)
+        return env->NewStringUTF("");
+    return env->NewStringUTF(value);
+}
+
+JNIEXPORT jint JNICALL JNI_FN(nativeObjectColourSet)(
+    JNIEnv *env, jclass, jlong h, jint id, jstring value)
+{
+    const std::string color = jstr(env, value);
+    return psm_model_colour_set(sess(h), id, color.c_str());
+}
+
+JNIEXPORT jintArray JNICALL JNI_FN(nativeObjectWipe)(
+    JNIEnv *env, jclass, jlong h, jint id)
+{
+    int32_t infill = 0, objects = 0;
+    if (psm_model_wipe_get(
+            sess(h), id, &infill, &objects) != PSM_OK)
+        return nullptr;
+    const jint values[2] = { infill, objects };
+    jintArray out = env->NewIntArray(2);
+    if (out != nullptr)
+        env->SetIntArrayRegion(out, 0, 2, values);
+    return out;
+}
+
+JNIEXPORT jint JNICALL JNI_FN(nativeObjectWipeSet)(
+    JNIEnv *, jclass, jlong h, jint id,
+    jboolean infill, jboolean objects)
+{
+    return psm_model_wipe_set(
+        sess(h), id, infill == JNI_TRUE, objects == JNI_TRUE);
+}
+
+/* --- Custom-G-Code und Wipe-Tower ------------------------------------ */
+
+JNIEXPORT jint JNICALL JNI_FN(nativeCustomGcodeCount)(
+    JNIEnv *, jclass, jlong h)
+{
+    return static_cast<jint>(psm_custom_gcode_count(sess(h)));
+}
+
+JNIEXPORT jobjectArray JNICALL JNI_FN(nativeCustomGcodeAt)(
+    JNIEnv *env, jclass, jlong h, jint index)
+{
+    if (index < 0)
+        return nullptr;
+    psm_custom_gcode item{};
+    if (psm_custom_gcode_at(
+            sess(h), static_cast<size_t>(index), &item) != PSM_OK)
+        return nullptr;
+    return string_array(env, {
+        std::to_string(item.print_z),
+        std::to_string(static_cast<int>(item.type)),
+        std::to_string(item.extruder),
+        item.color,
+        item.extra
+    });
+}
+
+psm_custom_gcode jni_custom_gcode(
+    JNIEnv *env, jdouble z, jint type, jint extruder,
+    jstring color, jstring extra)
+{
+    psm_custom_gcode item{};
+    item.print_z = z;
+    item.type = static_cast<psm_custom_gcode_type>(type);
+    item.extruder = extruder;
+    const std::string c = jstr(env, color);
+    const std::string e = jstr(env, extra);
+    std::strncpy(item.color, c.c_str(), sizeof(item.color) - 1);
+    std::strncpy(item.extra, e.c_str(), sizeof(item.extra) - 1);
+    return item;
+}
+
+JNIEXPORT jint JNICALL JNI_FN(nativeCustomGcodeAdd)(
+    JNIEnv *env, jclass, jlong h, jdouble z, jint type,
+    jint extruder, jstring color, jstring extra)
+{
+    const psm_custom_gcode item =
+        jni_custom_gcode(env, z, type, extruder, color, extra);
+    return psm_custom_gcode_add(sess(h), &item);
+}
+
+JNIEXPORT jint JNICALL JNI_FN(nativeCustomGcodeUpdate)(
+    JNIEnv *env, jclass, jlong h, jint index, jdouble z, jint type,
+    jint extruder, jstring color, jstring extra)
+{
+    if (index < 0)
+        return PSM_ERR_INVALID_ARG;
+    const psm_custom_gcode item =
+        jni_custom_gcode(env, z, type, extruder, color, extra);
+    return psm_custom_gcode_update(
+        sess(h), static_cast<size_t>(index), &item);
+}
+
+JNIEXPORT jint JNICALL JNI_FN(nativeCustomGcodeRemove)(
+    JNIEnv *, jclass, jlong h, jint index)
+{
+    return index < 0 ? PSM_ERR_INVALID_ARG :
+        psm_custom_gcode_remove(sess(h), static_cast<size_t>(index));
+}
+
+JNIEXPORT jint JNICALL JNI_FN(nativeCustomGcodeClear)(
+    JNIEnv *, jclass, jlong h)
+{
+    return psm_custom_gcode_clear(sess(h));
+}
+
+JNIEXPORT jfloatArray JNICALL JNI_FN(nativeWipeTower)(
+    JNIEnv *env, jclass, jlong h)
+{
+    float values[3] = {};
+    if (psm_wipe_tower_get(
+            sess(h), &values[0], &values[1], &values[2]) != PSM_OK)
+        return nullptr;
+    jfloatArray out = env->NewFloatArray(3);
+    if (out != nullptr)
+        env->SetFloatArrayRegion(out, 0, 3, values);
+    return out;
+}
+
+JNIEXPORT jint JNICALL JNI_FN(nativeWipeTowerSet)(
+    JNIEnv *, jclass, jlong h, jfloat x, jfloat y, jfloat rotation)
+{
+    return psm_wipe_tower_set(sess(h), x, y, rotation);
 }
 
 /* --- Presets ---------------------------------------------------------- */
@@ -535,7 +1053,7 @@ JNIEXPORT jstring JNICALL JNI_FN(nativePresetSelected)(JNIEnv *env, jclass, jlon
 JNIEXPORT jstring JNICALL JNI_FN(nativeConfigGet)(JNIEnv *env, jclass, jlong h, jstring key)
 {
     const std::string k = jstr(env, key);
-    char buf[4096] = { 0 };
+    char buf[65536] = { 0 };
     if (psm_config_get(sess(h), k.c_str(), buf, sizeof(buf)) != PSM_OK)
         return nullptr;
     return env->NewStringUTF(buf);
@@ -547,6 +1065,27 @@ JNIEXPORT jint JNICALL JNI_FN(nativeConfigSet)(JNIEnv *env, jclass, jlong h,
     const std::string k = jstr(env, key);
     const std::string v = jstr(env, value);
     return psm_config_set(sess(h), k.c_str(), v.c_str());
+}
+
+JNIEXPORT jstring JNICALL JNI_FN(nativePresetConfigGet)(JNIEnv *env, jclass, jlong h,
+                                                        jint type, jstring key)
+{
+    const std::string k = jstr(env, key);
+    char buf[65536] = { 0 };
+    if (psm_preset_config_get(sess(h), static_cast<psm_preset_type>(type),
+                              k.c_str(), buf, sizeof(buf)) != PSM_OK)
+        return nullptr;
+    return env->NewStringUTF(buf);
+}
+
+JNIEXPORT jint JNICALL JNI_FN(nativePresetConfigSet)(JNIEnv *env, jclass, jlong h,
+                                                     jint type, jstring key,
+                                                     jstring value)
+{
+    const std::string k = jstr(env, key);
+    const std::string v = jstr(env, value);
+    return psm_preset_config_set(sess(h), static_cast<psm_preset_type>(type),
+                                 k.c_str(), v.c_str());
 }
 
 /* --- Slicing ---------------------------------------------------------- */
@@ -619,6 +1158,33 @@ JNIEXPORT jint JNICALL JNI_FN(nativeGcodeExport)(JNIEnv *env, jclass, jlong h, j
     return psm_gcode_export(sess(h), p.c_str());
 }
 
+JNIEXPORT jint JNICALL JNI_FN(nativePlateExport)(
+    JNIEnv *env, jclass, jlong h, jstring path, jint format)
+{
+    const std::string p = jstr(env, path);
+    return format == 0
+        ? psm_plate_export_stl(sess(h), p.c_str())
+        : psm_plate_export_obj(sess(h), p.c_str());
+}
+
+JNIEXPORT jint JNICALL JNI_FN(nativeRepairStl)(
+    JNIEnv *env, jclass, jlong h, jstring input, jstring output)
+{
+    const std::string in = jstr(env, input);
+    const std::string out = jstr(env, output);
+    return psm_stl_repair(sess(h), in.c_str(), out.c_str());
+}
+
+JNIEXPORT jint JNICALL JNI_FN(nativeConvertGcode)(
+    JNIEnv *env, jclass, jlong h, jstring input, jstring output,
+    jboolean binary)
+{
+    const std::string in = jstr(env, input);
+    const std::string out = jstr(env, output);
+    return psm_gcode_convert(
+        sess(h), in.c_str(), out.c_str(), binary == JNI_TRUE);
+}
+
 JNIEXPORT jint JNICALL JNI_FN(nativeMirror)(JNIEnv *, jclass, jlong h, jint id, jint axis)
 {
     return psm_model_mirror(sess(h), static_cast<psm_object_id>(id), axis);
@@ -627,6 +1193,17 @@ JNIEXPORT jint JNICALL JNI_FN(nativeMirror)(JNIEnv *, jclass, jlong h, jint id, 
 JNIEXPORT jint JNICALL JNI_FN(nativeSetInstances)(JNIEnv *, jclass, jlong h, jint id, jint n)
 {
     return psm_model_set_instances(sess(h), static_cast<psm_object_id>(id), n);
+}
+
+/** "1" oder "0", gefolgt von Tab und dem Grund der Sperre. */
+JNIEXPORT jstring JNICALL JNI_FN(nativeConfigEnabled)(JNIEnv *env, jclass, jlong h,
+                                                      jstring key)
+{
+    const std::string k = jstr(env, key);
+    char reason[128] = { 0 };
+    const int32_t on = psm_config_enabled(sess(h), k.c_str(), reason, sizeof(reason));
+    const std::string out = std::string(on ? "1" : "0") + "	" + reason;
+    return env->NewStringUTF(out.c_str());
 }
 
 JNIEXPORT jstring JNICALL JNI_FN(nativeGcodeSuggestedName)(JNIEnv *env, jclass, jlong h)
@@ -720,6 +1297,41 @@ JNIEXPORT jint JNICALL JNI_VP(nativeDragSelected)(JNIEnv *, jclass, jlong h,
 JNIEXPORT void JNICALL JNI_VP(nativeSetSelection)(JNIEnv *, jclass, jlong h, jint id)
 {
     psm_viewport_set_selection(vp(h), id);
+}
+
+JNIEXPORT void JNICALL JNI_VP(nativeSetSelections)(
+    JNIEnv *env, jclass, jlong h, jintArray ids, jint primary)
+{
+    if (ids == nullptr) {
+        psm_viewport_set_selections(vp(h), nullptr, 0, primary);
+        return;
+    }
+    const jsize count = env->GetArrayLength(ids);
+    std::vector<jint> values(static_cast<size_t>(count));
+    env->GetIntArrayRegion(ids, 0, count, values.data());
+    psm_viewport_set_selections(
+        vp(h), reinterpret_cast<const psm_object_id *>(values.data()),
+        values.size(), primary);
+}
+
+JNIEXPORT jstring JNICALL JNI_VP(nativeSurfacePick)(
+    JNIEnv *env, jclass, jlong h, jfloat x, jfloat y)
+{
+    psm_surface_hit hit{};
+    if (! psm_viewport_pick_surface(vp(h), x, y, &hit))
+        return nullptr;
+    const std::string value =
+        std::to_string(hit.object_id) + "\t" +
+        std::to_string(hit.volume_index) + "\t" +
+        std::to_string(hit.facet_index) + "\t" +
+        std::to_string(hit.instance_index) + "\t" +
+        std::to_string(hit.position[0]) + "\t" +
+        std::to_string(hit.position[1]) + "\t" +
+        std::to_string(hit.position[2]) + "\t" +
+        std::to_string(hit.normal[0]) + "\t" +
+        std::to_string(hit.normal[1]) + "\t" +
+        std::to_string(hit.normal[2]);
+    return env->NewStringUTF(value.c_str());
 }
 
 /*

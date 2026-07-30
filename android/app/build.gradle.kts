@@ -26,7 +26,11 @@ android {
     // Die native Bibliothek wird NICHT von Gradle gebaut, sondern von
     // build/scripts/build-core.sh im Docker-Container auf dem Unraid und
     // dann hierher kopiert. Gradle packt sie nur ein.
-    sourceSets["main"].jniLibs.srcDirs("src/main/jniLibs")
+    // Die zuvor auf dem Share erzeugten Dateien unter jniLibs sind
+    // absichtlich unangetastet: ihre Unix-Besitzrechte verhindern ein
+    // sicheres Ersetzen von Windows aus. Alle aktuellen und künftigen
+    // Stage-Läufe verwenden deshalb ausschließlich dieses Verzeichnis.
+    sourceSets["main"].jniLibs.setSrcDirs(listOf("src/main/jniLibsFixed"))
 
     buildTypes {
         release {
@@ -77,4 +81,5 @@ dependencies {
     implementation(libs.androidx.material.icons)
 
     debugImplementation(libs.androidx.ui.tooling)
+    testImplementation(libs.junit)
 }

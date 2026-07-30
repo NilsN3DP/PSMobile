@@ -1,0 +1,666 @@
+#include "psmobile_core.h"
+
+#include <cmath>
+#include <cstdio>
+#include <cstdlib>
+#include <filesystem>
+#include <fstream>
+#include <iostream>
+#include <string>
+
+namespace {
+
+void require(bool value, const std::string &message)
+{
+    if (! value) {
+        std::cerr << "FAIL: " << message << '\n';
+        std::exit(1);
+    }
+}
+
+bool close_to(float actual, float expected, float epsilon = 0.0001f)
+{
+    return std::abs(actual - expected) <= epsilon;
+}
+
+} // namespace
+
+int main(int argc, char **argv)
+{
+    require(argc == 5,
+            "usage: psm_contract_tests DATADIR RESDIR MODEL PROJECT3MF");
+    require(psm_abi_version() == PSM_ABI_VERSION, "ABI version");
+
+    std::filesystem::create_directories(argv[1]);
+    psm_session *session = psm_session_create(argv[1], argv[2]);
+    require(session != nullptr,
+            std::string("session create: ") + psm_last_error(nullptr));
+
+    psm_object_id id = PSM_INVALID_ID;
+    size_t count = 0;
+    require(psm_model_load(session, argv[3], &id, 1, &count) == PSM_OK,
+            std::string("load cube: ") + psm_last_error(session));
+    require(count == 1 && id != PSM_INVALID_ID, "one object id");
+    require(psm_bed_count(session) == 1, "one initial bed");
+    require(psm_bed_object_count(session, 0) == 1,
+            "object belongs to first bed");
+
+    psm_object_info info{};
+    require(psm_model_info(session, id, &info) == PSM_OK, "object info");
+    require(info.triangle_count == 12, "cube has twelve triangles");
+
+    require(psm_model_volume_count(session, id) == 1,
+            "STL creates one model volume");
+    psm_volume_info volume{};
+    require(psm_model_volume_info(session, id, 0, &volume) == PSM_OK,
+            "volume info");
+    require(volume.type == PSM_VOLUME_MODEL_PART &&
+            volume.triangle_count == 12,
+            "volume type and triangle count");
+
+    /*
+     * Kaputte Eingaben dürfen das offene Projekt nicht leeren oder den
+     * Prozess beenden. Die Android-Dateidialoge zeigen diesen Fehler nur
+     * an und lassen den bisherigen Stand weiterbearbeiten.
+     */
+    const std::filesystem::path invalid_model =
+        std::filesystem::path(argv[1]) / "invalid-input.stl";
+    const std::filesystem::path invalid_project =
+        std::filesystem::path(argv[1]) / "invalid-input.3mf";
+    {
+        std::ofstream broken(invalid_model);
+        broken << "definitiv keine STL";
+    }
+    {
+        std::ofstream broken(invalid_project);
+        broken << "definitiv kein 3MF-Archiv";
+    }
+    psm_object_id invalid_ids[2]{};
+    size_t invalid_count = 0;
+    require(psm_model_load(
+                session, invalid_model.string().c_str(),
+                invalid_ids, 2, &invalid_count) != PSM_OK &&
+            psm_model_count(session) == 1,
+            "invalid model import preserves current project");
+    psm_project_import_info invalid_import{};
+    require(psm_project_load_3mf(
+                session, invalid_project.string().c_str(),
+                &invalid_import) != PSM_OK &&
+            psm_model_count(session) == 1,
+            "invalid project import preserves current project");
+
+    /*
+     * Mehrere Teiloperationen muessen fuer Touch und Zahlenfelder einen
+     * einzigen, beschrifteten Verlaufseintrag ergeben.
+     */
+    const psm_object_info original = info;
+    require(psm_history_clear(session) == PSM_OK, "clear history");
+    require(psm_history_begin(session, "Kombinierte Transformation") == PSM_OK,
+            "begin grouped history");
+    constexpr float half_pi = 1.57079632679f;
+    require(psm_model_set_position(session, id,
+                                   original.position[0] + 5.f,
+                                   original.position[1],
+                                   original.position[2]) == PSM_OK,
+            "set grouped position");
+    require(psm_model_set_rotation(session, id, 0.f, 0.f, half_pi) == PSM_OK,
+            "set radians");
+    require(psm_history_end(session) == PSM_OK, "end grouped history");
+    require(psm_history_undo_count(session) == 1,
+            "grouped actions create one undo entry");
+    char history_label[128]{};
+    require(psm_history_undo_label(session, history_label,
+                                   sizeof(history_label)) == PSM_OK &&
+            std::string(history_label) == "Kombinierte Transformation",
+            "undo exposes grouped label");
+
+    require(psm_model_info(session, id, &info) == PSM_OK,
+            "object info after rotation");
+    require(close_to(info.rotation[2], half_pi),
+            "C ABI rotation stays in radians");
+    require(close_to(info.position[0], original.position[0] + 5.f),
+            "grouped position applied");
+    require(psm_history_undo(session) == PSM_OK, "undo grouped transform");
+    require(psm_model_info(session, id, &info) == PSM_OK,
+            "object info after undo");
+    require(close_to(info.position[0], original.position[0]) &&
+            close_to(info.rotation[2], original.rotation[2]),
+            "undo restores position and rotation");
+    require(psm_history_redo_count(session) == 1,
+            "undo exposes redo");
+    require(psm_history_redo_label(session, history_label,
+                                   sizeof(history_label)) == PSM_OK &&
+            std::string(history_label) == "Kombinierte Transformation",
+            "redo exposes grouped label");
+    require(psm_history_redo(session) == PSM_OK, "redo grouped transform");
+
+    require(psm_extruder_count(session) >= 1, "at least one extruder");
+    require(psm_model_extruder_get(session, id) == 0,
+            "object initially inherits extruder");
+    require(psm_model_extruder_set(session, id, 1) == PSM_OK,
+            "assign object extruder");
+    require(psm_model_extruder_get(session, id) == 1,
+            "object extruder persisted");
+    require(psm_history_undo(session) == PSM_OK,
+            "object extruder is undoable");
+    require(psm_model_extruder_get(session, id) == 0,
+            "undo restores inherited object extruder");
+    require(psm_history_redo(session) == PSM_OK,
+            "redo object extruder");
+    require(psm_model_volume_extruder_set(session, id, 0, 1) == PSM_OK,
+            "assign volume extruder");
+    require(psm_model_volume_info(session, id, 0, &volume) == PSM_OK &&
+            volume.explicit_extruder == 1,
+            "volume stores explicit extruder");
+
+    require(psm_model_scale_to_fit(session, id, 10.f) == PSM_OK,
+            "scale transformed longest edge");
+    require(psm_model_fit_to_bed(session, id, 0.9f) == PSM_OK,
+            "fit object to bed");
+
+    /*
+     * Erweiterte Modellwerkzeuge laufen auf einer Kopie. Dadurch bleibt
+     * der nachfolgende Slice-Vertrag klein und reproduzierbar.
+     */
+    psm_object_id tool_object = PSM_INVALID_ID;
+    require(psm_model_duplicate(session, id, &tool_object) == PSM_OK,
+            "duplicate for extended tools");
+    size_t modifier_index = 0;
+    require(psm_model_add_primitive_volume(
+                session, tool_object, PSM_VOLUME_SUPPORT_BLOCKER,
+                PSM_PRIMITIVE_BOX, 3.f, 4.f, 5.f,
+                &modifier_index) == PSM_OK,
+            std::string("add support blocker: ") +
+                psm_last_error(session));
+    require(psm_model_volume_count(session, tool_object) == 2,
+            "support blocker appears as second volume");
+    require(psm_model_volume_info(
+                session, tool_object, modifier_index, &volume) == PSM_OK &&
+            volume.type == PSM_VOLUME_SUPPORT_BLOCKER,
+            "support blocker keeps its role");
+    require(psm_model_remove_volume(
+                session, tool_object, modifier_index) == PSM_OK &&
+            psm_model_volume_count(session, tool_object) == 1,
+            "remove generated modifier");
+
+    require(psm_model_paint_facet(
+                session, tool_object, 0, 0,
+                PSM_PAINT_SUPPORT, 1) == PSM_OK,
+            std::string("paint support facet: ") +
+                psm_last_error(session));
+    require(psm_model_paint_brush(
+                session, tool_object, 0, 0,
+                PSM_PAINT_SEAM, 1, 4.f) == PSM_OK,
+            std::string("paint connected touch brush: ") +
+                psm_last_error(session));
+    require(psm_model_clear_paint(
+                session, tool_object, PSM_PAINT_SUPPORT) == PSM_OK,
+            "clear support painting");
+    require(psm_model_clear_paint(
+                session, tool_object, PSM_PAINT_SEAM) == PSM_OK,
+            "clear seam painting");
+
+    const double layer_profile[] = { 0.0, 0.20, 10.0, 0.10 };
+    require(psm_model_layer_profile_set(
+                session, tool_object, layer_profile, 2) == PSM_OK &&
+            psm_model_layer_profile_count(session, tool_object) == 2,
+            "store variable layer profile");
+    double profile_z = -1.0;
+    double profile_height = -1.0;
+    require(psm_model_layer_profile_at(
+                session, tool_object, 1,
+                &profile_z, &profile_height) == PSM_OK &&
+            std::abs(profile_z - 10.0) < 0.0001 &&
+            std::abs(profile_height - 0.10) < 0.0001,
+            "read variable layer profile");
+
+    require(psm_model_colour_set(
+                session, tool_object, "#3366CC") == PSM_OK,
+            std::string("set object colour: ") +
+                psm_last_error(session));
+    char object_colour[64]{};
+    require(psm_model_colour_get(
+                session, tool_object,
+                object_colour, sizeof(object_colour)) == PSM_OK &&
+            std::string(object_colour).find("3366CC") != std::string::npos,
+            "read object colour");
+    int32_t wipe_infill = 0;
+    int32_t wipe_objects = 0;
+    require(psm_model_wipe_set(
+                session, tool_object, 1, 1) == PSM_OK &&
+            psm_model_wipe_get(
+                session, tool_object,
+                &wipe_infill, &wipe_objects) == PSM_OK &&
+            wipe_infill == 1 && wipe_objects == 1,
+            "object wipe options roundtrip");
+
+    require(psm_model_lay_on_facet(
+                session, tool_object, 0, 0) == PSM_OK,
+            std::string("lay on selected facet: ") +
+                psm_last_error(session));
+    uint32_t simplify_before = 0;
+    uint32_t simplify_after = 0;
+    require(psm_model_simplify(
+                session, tool_object, 0.75f,
+                &simplify_before, &simplify_after) == PSM_OK &&
+            simplify_before == 12 &&
+            simplify_after >= 4 &&
+            simplify_after <= simplify_before,
+            "simplify reports bounded triangle count");
+
+    psm_object_id split_ids[8]{};
+    size_t split_count = 0;
+    require(psm_model_split_objects(
+                session, tool_object, split_ids, 8,
+                &split_count) == PSM_ERR_UNSUPPORTED,
+            "single shell refuses split into objects");
+    require(psm_model_split_volumes(
+                session, tool_object,
+                &split_count) == PSM_ERR_UNSUPPORTED,
+            "single shell refuses split into volumes");
+
+    size_t text_volume = 0;
+    require(psm_model_add_text_volume(
+                session, tool_object, "PSMobile",
+                "/system/fonts/Roboto-Regular.ttf",
+                5.f, 0.8f, PSM_VOLUME_MODEL_PART,
+                &text_volume) == PSM_OK,
+            std::string("create embossed text: ") +
+                psm_last_error(session));
+    const std::filesystem::path svg_source =
+        std::filesystem::path(argv[1]) / "emboss-source.svg";
+    {
+        std::ofstream svg(svg_source);
+        svg << "<svg xmlns=\"http://www.w3.org/2000/svg\" "
+               "width=\"10\" height=\"8\" viewBox=\"0 0 10 8\">"
+               "<path d=\"M1 1 H9 V7 H1 Z\"/></svg>";
+    }
+    size_t svg_volume = 0;
+    require(psm_model_add_svg_volume(
+                session, tool_object,
+                svg_source.string().c_str(), 0.8f,
+                PSM_VOLUME_NEGATIVE,
+                &svg_volume) == PSM_OK,
+            std::string("create embossed SVG: ") +
+                psm_last_error(session));
+    require(psm_model_volume_count(session, tool_object) == 3,
+            "text and SVG are object volumes");
+    require(psm_model_remove_volume(
+                session, tool_object, svg_volume) == PSM_OK,
+            "remove SVG volume");
+    require(psm_model_remove_volume(
+                session, tool_object, text_volume) == PSM_OK,
+            "remove text volume");
+    require(psm_model_remove(session, tool_object) == PSM_OK,
+            "remove extended tool copy");
+
+    psm_object_id cut_source = PSM_INVALID_ID;
+    require(psm_model_duplicate(session, id, &cut_source) == PSM_OK,
+            "duplicate for cut");
+    psm_object_info cut_info{};
+    require(psm_model_info(session, cut_source, &cut_info) == PSM_OK,
+            "cut source bounds");
+    psm_object_id cut_ids[8]{};
+    size_t cut_count = 0;
+    require(psm_model_cut_z(
+                session, cut_source,
+                0.5f * (cut_info.bbox_min[2] + cut_info.bbox_max[2]),
+                1, 1, 0, cut_ids, 8, &cut_count) == PSM_OK &&
+            cut_count == 2,
+            std::string("horizontal cut keeps two halves: ") +
+                psm_last_error(session));
+    for (size_t i = 0; i < cut_count; ++i)
+        require(psm_model_remove(session, cut_ids[i]) == PSM_OK,
+                "remove cut result");
+
+    const std::filesystem::path plate_stl =
+        std::filesystem::path(argv[1]) / "plate-export.stl";
+    const std::filesystem::path plate_obj =
+        std::filesystem::path(argv[1]) / "plate-export.obj";
+    const std::filesystem::path repaired_stl =
+        std::filesystem::path(argv[1]) / "repaired.stl";
+    require(psm_plate_export_stl(
+                session, plate_stl.string().c_str()) == PSM_OK &&
+            std::filesystem::file_size(plate_stl) > 0,
+            "export active plate as STL");
+    require(psm_plate_export_obj(
+                session, plate_obj.string().c_str()) == PSM_OK &&
+            std::filesystem::file_size(plate_obj) > 0,
+            "export active plate as OBJ");
+    require(psm_stl_repair(
+                session, argv[3],
+                repaired_stl.string().c_str()) == PSM_OK &&
+            std::filesystem::file_size(repaired_stl) > 0,
+            "repair STL into new file");
+
+    /*
+     * Eine Änderung direkt nach dem Start muss in beiden möglichen
+     * Zeitabläufen sicher stale werden: entweder sieht der Worker die
+     * geänderte Revision, oder ein schon fertiges Ergebnis wird durch
+     * mark_design_changed() nachträglich invalidiert.
+     */
+    require(psm_slice_start(session, nullptr, nullptr) == PSM_OK,
+            "start slice for stale contract");
+    require(psm_history_begin(session, "Änderung während Slicing") == PSM_OK,
+            "history transaction may begin while slice uses its snapshot");
+    require(psm_model_info(session, id, &info) == PSM_OK,
+            "object info before stale mutation");
+    require(psm_model_set_position(
+                session, id,
+                info.position[0] + 1.f,
+                info.position[1],
+                info.position[2]) == PSM_OK,
+            "mutate while slice is running");
+    require(psm_history_end(session) == PSM_OK,
+            "history transaction ends while slice runs");
+    require(psm_slice_wait(session, -1) == PSM_ERR_STALE_RESULT,
+            "changed design produces stale slice");
+    psm_slice_stats slice_stats{};
+    require(psm_slice_stats_get(session, &slice_stats) ==
+                PSM_ERR_STALE_RESULT,
+            "stale stats are rejected");
+
+    require(psm_slice_start(session, nullptr, nullptr) == PSM_OK,
+            "start current slice");
+    require(psm_slice_wait(session, -1) == PSM_OK,
+            std::string("current slice: ") + psm_last_error(session));
+    require(psm_slice_stats_get(session, &slice_stats) == PSM_OK,
+            "current stats are available");
+    require(slice_stats.object_count == 1, "slice contains one object");
+
+    const std::filesystem::path ascii_gcode =
+        std::filesystem::path(argv[1]) / "conversion-source.gcode";
+    const std::filesystem::path binary_gcode =
+        std::filesystem::path(argv[1]) / "conversion-source.bgcode";
+    const std::filesystem::path restored_gcode =
+        std::filesystem::path(argv[1]) / "conversion-restored.gcode";
+    require(psm_gcode_export(
+                session, ascii_gcode.string().c_str()) == PSM_OK,
+            "export source G-code for conversion");
+    require(psm_gcode_convert(
+                session, ascii_gcode.string().c_str(),
+                binary_gcode.string().c_str(), 1) == PSM_OK &&
+            std::filesystem::file_size(binary_gcode) > 0,
+            std::string("convert ASCII G-code to BGCode: ") +
+                psm_last_error(session));
+    require(psm_gcode_convert(
+                session, binary_gcode.string().c_str(),
+                restored_gcode.string().c_str(), 0) == PSM_OK &&
+            std::filesystem::file_size(restored_gcode) > 0,
+            std::string("convert BGCode to ASCII G-code: ") +
+                psm_last_error(session));
+
+    /*
+     * Zwei deckungsgleiche Objekte erzeugen einen Konfliktfund im
+     * G-Code. Print::export_gcode darf dabei seinen optionalen
+     * GCodeProcessorResult nicht ueber einen Nullzeiger beschreiben.
+     */
+    psm_object_id conflicting = PSM_INVALID_ID;
+    require(psm_model_duplicate(session, id, &conflicting) == PSM_OK &&
+            conflicting != PSM_INVALID_ID,
+            "duplicate overlapping object for conflict export");
+    require(psm_slice_start(session, nullptr, nullptr) == PSM_OK,
+            "start overlapping conflict slice");
+    require(psm_slice_wait(session, -1) == PSM_OK,
+            std::string("overlapping conflict slice: ") +
+                psm_last_error(session));
+    require(psm_slice_stats_get(session, &slice_stats) == PSM_OK &&
+            slice_stats.object_count == 2,
+            "conflicting paths export without null dereference");
+    require(psm_model_remove(session, conflicting) == PSM_OK,
+            "remove conflict regression object");
+
+    require(psm_config_set(session, "layer_height", "0.21") == PSM_OK,
+            "change config after slice");
+    require(psm_slice_stats_get(session, &slice_stats) ==
+                PSM_ERR_STALE_RESULT,
+            "config change invalidates finished slice");
+
+    size_t second_bed = 0;
+    require(psm_bed_add(session, &second_bed) == PSM_OK,
+            "add second bed");
+    require(second_bed == 1 && psm_bed_active(session) == 1,
+            "new bed is selected directly");
+    require(psm_bed_select(session, 0) == PSM_OK, "select first bed");
+
+    psm_object_id moved = PSM_INVALID_ID;
+    require(psm_bed_move_object(session, id, 1, &moved) == PSM_OK,
+            "move object to second bed");
+    require(moved != PSM_INVALID_ID, "moved object id");
+    require(psm_bed_object_count(session, 0) == 0 &&
+            psm_bed_object_count(session, 1) == 1,
+            "bed object counts after move");
+
+    psm_object_id copied_back = PSM_INVALID_ID;
+    require(psm_model_duplicate(session, moved, &copied_back) == PSM_OK &&
+            copied_back != PSM_INVALID_ID,
+            "copy object from inactive bed to active bed");
+    require(psm_bed_object_count(session, 0) == 1 &&
+            psm_bed_object_count(session, 1) == 1,
+            "cross-bed clipboard keeps source and targets active bed");
+    require(psm_model_remove(session, copied_back) == PSM_OK,
+            "remove cross-bed clipboard regression copy");
+
+    require(psm_bed_select(session, 1) == PSM_OK, "select second bed");
+    require(psm_model_info(session, moved, &info) == PSM_OK,
+            "moved object is visible on selected bed");
+    require(psm_bed_clear(session) == PSM_OK, "clear active bed only");
+    require(psm_bed_object_count(session, 1) == 0, "active bed cleared");
+    require(psm_bed_remove(session, 1) == PSM_OK, "remove second bed");
+    require(psm_bed_count(session) == 1, "one bed remains");
+
+    psm_project_import_info project{};
+    require(psm_project_load_3mf(session, argv[4], &project) == PSM_OK,
+            std::string("load 3mf project: ") + psm_last_error(session));
+    require(project.config_loaded == 1, "embedded config loaded");
+    require(project.post_process_removed == 1,
+            "embedded post-process command removed");
+    require(std::string(project.requested_printer) ==
+                "PSMobile Test Printer 0.4",
+            "requested printer retained");
+    require(std::string(project.selected_printer).size() > 0,
+            "project printer selected");
+    require(project.bed_count == 2 && psm_bed_count(session) == 2,
+            "desktop multibed project split into two mobile beds");
+    require(project.object_count == 2 &&
+            psm_bed_object_count(session, 0) == 1 &&
+            psm_bed_object_count(session, 1) == 1,
+            "one project instance on each selectable bed");
+    require(psm_history_undo_count(session) == 0 &&
+            psm_history_redo_count(session) == 0,
+            "opening a project starts a clean history");
+
+    /*
+     * Strukturierte Desktop-Sonderwerte. compatible_printers kommt in
+     * Druck- UND Filamentprofil vor; beide müssen gezielt und unabhängig
+     * bearbeitbar bleiben.
+     */
+    require(psm_preset_config_set(
+                session, PSM_PRESET_PRINT, "compatible_printers",
+                "\"PSMobile Druckprofil-Ziel\"") == PSM_OK,
+            std::string("set print compatibility: ") +
+                psm_last_error(session));
+    require(psm_preset_config_set(
+                session, PSM_PRESET_FILAMENT, "compatible_printers",
+                "\"PSMobile Filament-Ziel\"") == PSM_OK,
+            std::string("set filament compatibility: ") +
+                psm_last_error(session));
+    char structured_value[4096]{};
+    require(psm_preset_config_get(
+                session, PSM_PRESET_PRINT, "compatible_printers",
+                structured_value, sizeof(structured_value)) == PSM_OK &&
+            std::string(structured_value).find("Druckprofil-Ziel") !=
+                std::string::npos,
+            "print compatibility remains scoped");
+    require(psm_preset_config_get(
+                session, PSM_PRESET_FILAMENT, "compatible_printers",
+                structured_value, sizeof(structured_value)) == PSM_OK &&
+            std::string(structured_value).find("Filament-Ziel") !=
+                std::string::npos,
+            "filament compatibility remains scoped");
+    require(psm_preset_config_set(
+                session, PSM_PRESET_PRINT, "gcode_substitutions",
+                "\"M104\";\"M104 S0\";i;\"Temperaturtest\"") == PSM_OK,
+            "set structured G-code substitution");
+    require(psm_preset_config_get(
+                session, PSM_PRESET_PRINT, "gcode_substitutions",
+                structured_value, sizeof(structured_value)) == PSM_OK &&
+            std::string(structured_value).find("Temperaturtest") !=
+                std::string::npos,
+            "read structured G-code substitution");
+    require(psm_preset_config_set(
+                session, PSM_PRESET_FILAMENT,
+                "filament_ramming_parameters",
+                "\"120 100 6.6 7.0| 0.05 6.6 0.45 7\"") == PSM_OK,
+            "set structured ramming curve");
+    require(psm_config_set(
+                session, "wiping_volumes_matrix",
+                "0,120,130,0") == PSM_OK &&
+            psm_config_set(
+                session, "wiping_volumes_use_custom_matrix",
+                "1") == PSM_OK,
+            "set project purge matrix");
+
+    require(psm_bed_select(session, 0) == PSM_OK,
+            "select first project bed for annotation roundtrip");
+    psm_object_id project_ids[8]{};
+    size_t project_id_count = 0;
+    require(psm_model_list(
+                session, project_ids, 8, &project_id_count) == PSM_OK &&
+            project_id_count == 1,
+            "locate first project object");
+    const psm_object_id annotated_id = project_ids[0];
+    require(psm_model_paint_brush(
+                session, annotated_id, 0, 0,
+                PSM_PAINT_SUPPORT, 1, 3.f) == PSM_OK &&
+            psm_model_paint_count(
+                session, annotated_id, PSM_PAINT_SUPPORT) > 0,
+            "project object keeps a support annotation");
+    size_t project_text_volume = 0;
+    require(psm_model_add_text_volume(
+                session, annotated_id, "3MF",
+                "/system/fonts/Roboto-Regular.ttf",
+                4.f, 0.6f, PSM_VOLUME_MODEL_PART,
+                &project_text_volume) == PSM_OK &&
+            psm_model_volume_count(session, annotated_id) >= 2,
+            "project object receives embossed text before roundtrip");
+
+    psm_custom_gcode custom{};
+    custom.print_z = 5.0;
+    custom.type = PSM_CUSTOM_PAUSE;
+    custom.extruder = 0;
+    std::snprintf(custom.extra, sizeof(custom.extra), "%s",
+                  "M601 ; PSMobile Vertragstest");
+    require(psm_custom_gcode_add(session, &custom) == PSM_OK &&
+            psm_custom_gcode_count(session) == 1,
+            "add project custom G-code");
+    psm_custom_gcode custom_read{};
+    require(psm_custom_gcode_at(session, 0, &custom_read) == PSM_OK &&
+            custom_read.type == PSM_CUSTOM_PAUSE &&
+            std::string(custom_read.extra).find("PSMobile") !=
+                std::string::npos,
+            "read project custom G-code");
+    require(psm_wipe_tower_set(session, 18.f, 24.f, 35.f) == PSM_OK,
+            "set project wipe tower");
+    float wipe_x = 0.f;
+    float wipe_y = 0.f;
+    float wipe_rotation = 0.f;
+    require(psm_wipe_tower_get(
+                session, &wipe_x, &wipe_y,
+                &wipe_rotation) == PSM_OK &&
+            close_to(wipe_x, 18.f) &&
+            close_to(wipe_y, 24.f) &&
+            close_to(wipe_rotation, 35.f),
+            "read project wipe tower");
+
+    /*
+     * Vollstaendiger 3MF-Roundtrip: mobile Einzelbetten werden wieder in
+     * PrusaSlicers Desktop-Landschaft geschrieben und beim erneuten
+     * Oeffnen identisch getrennt. Zugangsdaten duerfen dabei nicht in
+     * der Projektdatei landen.
+     */
+    require(psm_config_set(session, "print_host",
+                           "https://secret.invalid") == PSM_OK,
+            "set secret host before project save");
+    require(psm_config_set(session, "printhost_apikey",
+                           "PSMOBILE-SECRET-KEY") == PSM_OK,
+            "set secret api key before project save");
+
+    const std::filesystem::path roundtrip =
+        std::filesystem::path(argv[1]) / "roundtrip.3mf";
+    require(psm_project_save_3mf(session, roundtrip.string().c_str()) == PSM_OK,
+            std::string("save 3mf roundtrip: ") + psm_last_error(session));
+    require(std::filesystem::exists(roundtrip) &&
+            std::filesystem::file_size(roundtrip) > 0,
+            "saved 3mf exists");
+
+    const std::filesystem::path second_data =
+        std::filesystem::path(argv[1]) / "roundtrip-data";
+    std::filesystem::create_directories(second_data);
+    psm_session *roundtrip_session =
+        psm_session_create(second_data.string().c_str(), argv[2]);
+    require(roundtrip_session != nullptr, "roundtrip session create");
+    psm_project_import_info reopened{};
+    require(psm_project_load_3mf(roundtrip_session,
+                                 roundtrip.string().c_str(),
+                                 &reopened) == PSM_OK,
+            std::string("reopen saved 3mf: ") +
+                psm_last_error(roundtrip_session));
+    require(reopened.config_loaded == 1 &&
+            reopened.object_count == 2 &&
+            reopened.bed_count == 2,
+            "roundtrip retains config, objects and beds");
+    require(psm_bed_object_count(roundtrip_session, 0) == 1 &&
+            psm_bed_object_count(roundtrip_session, 1) == 1,
+            "roundtrip retains direct bed membership");
+    require(psm_bed_select(roundtrip_session, 0) == PSM_OK,
+            "select annotated roundtrip bed");
+    psm_object_id reopened_ids[8]{};
+    size_t reopened_id_count = 0;
+    require(psm_model_list(
+                roundtrip_session, reopened_ids, 8,
+                &reopened_id_count) == PSM_OK &&
+            reopened_id_count == 1 &&
+            psm_model_volume_count(roundtrip_session, reopened_ids[0]) >= 2,
+            "roundtrip retains embossed text volume");
+    require(psm_model_paint_count(
+                roundtrip_session, reopened_ids[0],
+                PSM_PAINT_SUPPORT) > 0,
+            "roundtrip retains support facet annotation");
+    require(std::string(reopened.selected_printer).size() > 0,
+            "roundtrip selects its embedded printer profile");
+    require(psm_custom_gcode_count(roundtrip_session) == 1,
+            "roundtrip retains custom G-code");
+    psm_custom_gcode reopened_custom{};
+    require(psm_custom_gcode_at(
+                roundtrip_session, 0,
+                &reopened_custom) == PSM_OK &&
+            reopened_custom.type == PSM_CUSTOM_PAUSE,
+            "roundtrip restores custom G-code type");
+    require(psm_wipe_tower_get(
+                roundtrip_session, &wipe_x, &wipe_y,
+                &wipe_rotation) == PSM_OK &&
+            close_to(wipe_x, 18.f) &&
+            close_to(wipe_y, 24.f) &&
+            close_to(wipe_rotation, 35.f),
+            "roundtrip retains wipe tower transform");
+
+    char config_value[256]{};
+    require(psm_config_get(roundtrip_session, "print_host",
+                           config_value, sizeof(config_value)) == PSM_OK &&
+            std::string(config_value).empty(),
+            "saved project strips print host");
+    require(psm_config_get(roundtrip_session, "printhost_apikey",
+                           config_value, sizeof(config_value)) == PSM_OK &&
+            std::string(config_value).empty(),
+            "saved project strips API key");
+    require(psm_config_get(roundtrip_session, "post_process",
+                           config_value, sizeof(config_value)) == PSM_OK &&
+            std::string(config_value).empty(),
+            "saved project contains no post-processing command");
+
+    psm_session_destroy(roundtrip_session);
+    psm_session_destroy(session);
+    std::cout << "PASS: psm_contract_tests\n";
+    return 0;
+}

@@ -11,6 +11,7 @@ import android.os.Build
 import android.os.IBinder
 import android.util.Log
 import androidx.core.app.NotificationCompat
+import androidx.core.content.ContextCompat
 import de.psmobile.MainActivity
 import de.psmobile.R
 import de.psmobile.core.PsmCore
@@ -22,7 +23,9 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.File
+import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * Haelt die PsmCore-Session und faehrt den Slice-Job.
@@ -42,6 +45,8 @@ class SlicerService : Service() {
         private const val TAG = "SlicerService"
         private const val CHANNEL_ID = "psm_slicing"
         private const val NOTIFICATION_ID = 1
+        const val ACTION_START_SLICE = "de.psmobile.action.START_SLICE"
+        const val ACTION_CANCEL_SLICE = "de.psmobile.action.CANCEL_SLICE"
 
         // Feste Stufen statt freier Eingabe - siehe QuickKey.
         val LAYER_HEIGHTS = listOf("0.1" to "0,1", "0.15" to "0,15", "0.2" to "0,2", "0.3" to "0,3")
@@ -56,6 +61,7 @@ class SlicerService : Service() {
         data class Done(val stats: PsmCore.SliceStats?, val seconds: Double) : Progress
         data class Failed(val message: String) : Progress
         data object Cancelled : Progress
+        data object Stale : Progress
     }
 
     inner class LocalBinder : Binder() {
@@ -70,6 +76,9 @@ class SlicerService : Service() {
 
     private val _objects = MutableStateFlow<List<PsmCore.ObjectInfo>>(emptyList())
     val objects: StateFlow<List<PsmCore.ObjectInfo>> = _objects.asStateFlow()
+
+    private val _beds = MutableStateFlow<List<PsmCore.Bed>>(emptyList())
+    val beds: StateFlow<List<PsmCore.Bed>> = _beds.asStateFlow()
 
     /** Ein Extruder mit seinem Filament und seiner Farbe. */
     data class Extruder(
@@ -87,13 +96,22 @@ class SlicerService : Service() {
         val selectedPrinter: String = "",
         val selectedPrint: String = "",
         val selectedFilament: String = "",
+        val printerChanges: List<PsmCore.Change> = emptyList(),
+        val printChanges: List<PsmCore.Change> = emptyList(),
+        val filamentChanges: List<PsmCore.Change> = emptyList(),
         /**
          * Ein Eintrag je Extruder. Bei einem Kopf genau einer, beim MMU3
          * und beim XL-5T fuenf - jeder mit eigenem Filament und eigener
          * Farbe.
          */
         val extruders: List<Extruder> = emptyList(),
-    )
+    ) {
+        fun changes(type: PsmCore.PresetType): List<PsmCore.Change> = when (type) {
+            PsmCore.PresetType.PRINTER -> printerChanges
+            PsmCore.PresetType.PRINT -> printChanges
+            PsmCore.PresetType.FILAMENT -> filamentChanges
+        }
+    }
 
     private val _presets = MutableStateFlow(Presets())
     val presets: StateFlow<Presets> = _presets.asStateFlow()
@@ -122,11 +140,63 @@ class SlicerService : Service() {
     private val _quick = MutableStateFlow(QuickSettings())
     val quickSettings: StateFlow<QuickSettings> = _quick.asStateFlow()
 
+    private val _history = MutableStateFlow(
+        PsmCore.HistoryState(0, 0, "", "")
+    )
+    val history: StateFlow<PsmCore.HistoryState> = _history.asStateFlow()
+
+    private val _volumes =
+        MutableStateFlow<Map<Int, List<PsmCore.VolumeInfo>>>(emptyMap())
+    val volumes: StateFlow<Map<Int, List<PsmCore.VolumeInfo>>> =
+        _volumes.asStateFlow()
+
+    private val _toolMessage = MutableStateFlow<String?>(null)
+    val toolMessage: StateFlow<String?> = _toolMessage.asStateFlow()
+    private val heavyMutationActive = AtomicBoolean(false)
+
+    fun clearToolMessage() {
+        _toolMessage.value = null
+    }
+
     private var core: PsmCore? = null
+    @Volatile private var sliceCommandActive = false
+    @Volatile private var cancelRequestedByCommand = false
+    @Volatile private var latestCommandStartId = 0
     var lastGcode: File? = null
         private set
 
     override fun onBind(intent: Intent?): IBinder = binder
+
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        /* Auch ein doppelter Start- oder Cancel-Intent erhoeht Androids
+         * startId. Der Worker muss beim Abschluss die neueste ID
+         * quittieren, sonst bleibt der Service unbemerkt gestartet. */
+        latestCommandStartId = startId
+        when (intent?.action) {
+            ACTION_START_SLICE -> {
+                if (sliceCommandActive) {
+                    return START_NOT_STICKY
+                }
+                sliceCommandActive = true
+                cancelRequestedByCommand = false
+                /* Android verlangt die Notification unmittelbar nach
+                 * startForegroundService; Preset-Laden und Slicen duerfen
+                 * erst danach im Worker beginnen. */
+                startForeground(
+                    NOTIFICATION_ID,
+                    buildNotification(0, getString(R.string.slice_starting)),
+                )
+                runSlice(startId)
+            }
+            ACTION_CANCEL_SLICE -> {
+                cancelRequestedByCommand = true
+                core?.cancelSlice()
+                if (!sliceCommandActive)
+                    stopSelfResult(startId)
+            }
+        }
+        return START_NOT_STICKY
+    }
 
     override fun onCreate() {
         super.onCreate()
@@ -155,6 +225,8 @@ class SlicerService : Service() {
         val dataDir = File(filesDir, "psmdata").apply { mkdirs() }
         val c = PsmCore.create(dataDir.absolutePath, resDir.absolutePath)
         core = c
+        refreshBeds()
+        refreshHistory()
 
         // Nur die bei der Ersteinrichtung gewaehlten Drucker einrichten.
         // Alles zu laden kostet 13,5 s statt 1,9 s - siehe SetupScreen.
@@ -197,8 +269,7 @@ class SlicerService : Service() {
                 c.installPresets(keys)
                 prefs.edit().putStringSet("printers", keys.toSet()).apply()
                 refreshPresets()
-                refreshQuickSettings()
-                bumpConfig()
+                notifyConfigChanged()
                 _setupNeeded.value = false
             } catch (t: Throwable) {
                 Log.e(TAG, "Ersteinrichtung fehlgeschlagen", t)
@@ -252,13 +323,35 @@ class SlicerService : Service() {
 
     fun refreshPresets() {
         val c = core ?: return
+        val selectedPrinter = c.selectedPreset(PsmCore.PresetType.PRINTER)
+        val allPrinters = c.presetNames(PsmCore.PresetType.PRINTER)
+        val printers = if (de.psmobile.net.PrinterStore.onlyLinked(this)) {
+            val linked = de.psmobile.net.PrinterStore.all(this)
+                .map { it.presetName }
+                .filter { it.isNotBlank() }
+                .toSet()
+            // Die aktuelle Auswahl bleibt sichtbar. Andernfalls wuerde
+            // das Kombifeld beim Einschalten des Filters leer erscheinen.
+            allPrinters.filter { it == selectedPrinter || it in linked }
+        } else {
+            allPrinters
+        }
         _presets.value = Presets(
-            printers = c.presetNames(PsmCore.PresetType.PRINTER),
+            printers = printers,
             prints = c.presetNames(PsmCore.PresetType.PRINT),
             filaments = c.presetNames(PsmCore.PresetType.FILAMENT),
-            selectedPrinter = c.selectedPreset(PsmCore.PresetType.PRINTER),
+            selectedPrinter = selectedPrinter,
             selectedPrint = c.selectedPreset(PsmCore.PresetType.PRINT),
             selectedFilament = c.selectedPreset(PsmCore.PresetType.FILAMENT),
+            printerChanges = runCatching {
+                c.changes(PsmCore.PresetType.PRINTER)
+            }.getOrDefault(emptyList()),
+            printChanges = runCatching {
+                c.changes(PsmCore.PresetType.PRINT)
+            }.getOrDefault(emptyList()),
+            filamentChanges = runCatching {
+                c.changes(PsmCore.PresetType.FILAMENT)
+            }.getOrDefault(emptyList()),
             extruders = (0 until c.extruderCount()).map { i ->
                 Extruder(
                     index = i,
@@ -274,17 +367,20 @@ class SlicerService : Service() {
         val c = core ?: return
         runCatching { c.setExtruderFilament(index, name) }
             .onFailure { Log.w(TAG, "Filament fuer Extruder $index: ${it.message}") }
-        refreshPresets()
-        refreshQuickSettings()
-        bumpConfig()
+            .onSuccess {
+                refreshPresets()
+                notifyConfigChanged()
+            }
     }
 
     fun setExtruderColor(index: Int, rgb: String) {
         val c = core ?: return
         runCatching { c.setExtruderColor(index, rgb) }
             .onFailure { Log.w(TAG, "Farbe fuer Extruder $index: ${it.message}") }
-        refreshPresets()
-        bumpConfig()
+            .onSuccess {
+                refreshPresets()
+                notifyConfigChanged()
+            }
     }
 
     /**
@@ -298,14 +394,54 @@ class SlicerService : Service() {
         val c = core ?: return
         runCatching { c.selectPreset(type, name) }
             .onFailure { Log.w(TAG, "Preset '$name' nicht waehlbar: ${it.message}") }
-        refreshPresets()
-        refreshQuickSettings()   // ein anderes Profil bringt andere Werte mit
-        refreshObjects()
-        bumpConfig()
-        // Ein anderer Drucker heisst ein anderes Bett. Ohne bumpScene baut
-        // der Viewport es nie neu und man sieht beim Wechsel vom MK4S auf
-        // den XL weiter das kleine Rechteck.
-        if (type == PsmCore.PresetType.PRINTER) bumpScene()
+            .onSuccess {
+                refreshPresets()
+                refreshObjects()
+                notifyConfigChanged()
+            }
+    }
+
+    /** Ungespeicherte Werte verwerfen und danach ein anderes Profil waehlen. */
+    fun discardPresetChangesAndSelect(type: PsmCore.PresetType, name: String) {
+        val c = core ?: return
+        runCatching {
+            c.discardChanges(type)
+            c.selectPreset(type, name)
+        }
+            .onFailure { Log.w(TAG, "Aenderungen verwerfen: ${it.message}") }
+            .onSuccess {
+                refreshPresets()
+                refreshObjects()
+                notifyConfigChanged()
+            }
+    }
+
+    /** Ein Profil wechseln und die bearbeiteten Werte auf das Ziel uebertragen. */
+    fun selectPresetKeeping(
+        type: PsmCore.PresetType,
+        name: String,
+        changes: List<PsmCore.Change>,
+    ) {
+        val c = core ?: return
+        runCatching { c.selectPresetKeeping(type, name, changes) }
+            .onFailure { Log.w(TAG, "Aenderungen uebertragen: ${it.message}") }
+            .onSuccess {
+                refreshPresets()
+                refreshObjects()
+                notifyConfigChanged()
+            }
+    }
+
+    /** Das aktuell bearbeitete Profil unter eigenem Namen dauerhaft speichern. */
+    fun savePresetAs(type: PsmCore.PresetType, name: String) {
+        val c = core ?: return
+        runCatching { c.savePresetAs(type, name.trim()) }
+            .onFailure { Log.w(TAG, "Profil speichern: ${it.message}") }
+            .onSuccess {
+                refreshPresets()
+                refreshObjects()
+                notifyConfigChanged()
+            }
     }
 
     /** Fuer den Viewport, der direkt auf der Session arbeitet (E-03). */
@@ -357,6 +493,37 @@ class SlicerService : Service() {
 
     private fun bumpConfig() { _configRevision.value = _configRevision.value + 1 }
 
+    /**
+     * Entfernt alle Android-seitigen Verweise auf ein altes Ergebnis.
+     * Der Core prueft dieselbe Invariante noch einmal ueber Revisionen;
+     * diese Seite sorgt dafuer, dass die UI gar nicht erst Export oder
+     * Versand fuer einen veralteten Job anbietet.
+     */
+    private fun invalidateSliceResult() {
+        lastGcode = null
+        _sendState.value = null
+        if (_progress.value !is Progress.Running)
+            _progress.value = Progress.Idle
+    }
+
+    /**
+     * Rueckmeldung fuer Einstellungsseiten, die direkt ueber PsmCore
+     * schreiben. Aktualisiert Abhaengigkeiten, Bett und Slice-Status.
+     */
+    fun notifyConfigChanged() {
+        refreshPresets()
+        refreshQuickSettings()
+        bumpConfig()
+        bumpScene()
+        invalidateSliceResult()
+    }
+
+    /** Rueckmeldung nach einer direkten Manipulation im GL-Viewport. */
+    fun notifyViewportChanged() {
+        refreshObjects()
+        invalidateSliceResult()
+    }
+
     fun refreshQuickSettings() {
         val c = core ?: return
         _quick.value = QuickSettings(
@@ -371,34 +538,169 @@ class SlicerService : Service() {
         val c = core ?: return
         runCatching { c[key.configKey] = value }
             .onFailure { Log.w(TAG, "${key.configKey}=$value abgelehnt: ${it.message}") }
-        refreshQuickSettings()
+            .onSuccess { notifyConfigChanged() }
     }
 
     // --- Werkzeuge --------------------------------------------------------
 
     fun clearBed() {
-        runCatching { core?.clear() }.onFailure { Log.w(TAG, "Bett leeren", it) }
+        runCatching { core?.clearBed() }.onFailure { Log.w(TAG, "Bett leeren", it) }
         refreshObjects()
-        _progress.value = Progress.Idle
-        // Auch auf dieser Seite den alten G-Code vergessen - sonst bleiben
-        // "Exportieren" und "Senden" bedienbar. Befund B5.
-        lastGcode = null
-        _sendState.value = null
+        invalidateSliceResult()
+    }
+
+    /** Leeres Projekt mit einem Bett; der vorherige Stand bleibt undo-fähig. */
+    fun newProject() {
+        val c = core ?: return
+        runCatching { c.clear() }
+            .onFailure { Log.w(TAG, "Neues Projekt", it) }
+            .onSuccess {
+                refreshObjects()
+                invalidateSliceResult()
+                showBed()
+            }
+    }
+
+    /** Exportiert atomar in eine neue Cache-Datei; Activity kopiert sie ins SAF-Ziel. */
+    fun saveProjectFile(): File {
+        val c = ensureCore()
+        val dir = File(cacheDir, "projects").apply { mkdirs() }
+        val file = File(dir, "project-${System.nanoTime()}.3mf")
+        c.saveProject(file.absolutePath)
+        dir.listFiles()?.forEach { if (it != file) it.delete() }
+        return file
+    }
+
+    fun suggestedProjectName(): String {
+        val stem = _objects.value.firstOrNull()?.name
+            ?.substringBeforeLast('.')
+            ?.takeIf { it.isNotBlank() }
+            ?: "PSMobile-Projekt"
+        return stem.replace(Regex("[\\\\/:*?\"<>|]"), "_") + ".3mf"
+    }
+
+    fun exportPlateFile(format: PsmCore.PlateFormat): File {
+        val c = ensureCore()
+        val dir = File(cacheDir, "plate-export").apply { mkdirs() }
+        val extension =
+            if (format == PsmCore.PlateFormat.STL) "stl" else "obj"
+        val file = File(dir, "druckbett-${System.nanoTime()}.$extension")
+        c.exportPlate(file.absolutePath, format)
+        dir.listFiles()?.forEach { if (it != file) it.delete() }
+        return file
+    }
+
+    fun repairStlFile(input: File): File {
+        val c = ensureCore()
+        val dir = File(cacheDir, "stl-repair").apply { mkdirs() }
+        val file = File(dir, "repariert-${System.nanoTime()}.stl")
+        c.repairStl(input.absolutePath, file.absolutePath)
+        dir.listFiles()?.forEach { if (it != file) it.delete() }
+        return file
+    }
+
+    fun convertGcodeFile(input: File, toBinary: Boolean): File {
+        val c = ensureCore()
+        val dir = File(cacheDir, "gcode-convert").apply { mkdirs() }
+        val extension = if (toBinary) "bgcode" else "gcode"
+        val file = File(dir, "konvertiert-${System.nanoTime()}.$extension")
+        c.convertGcode(input.absolutePath, file.absolutePath, toBinary)
+        dir.listFiles()?.forEach { if (it != file) it.delete() }
+        return file
+    }
+
+    fun undo() {
+        val c = core ?: return
+        runCatching { c.undo() }
+            .onFailure { Log.w(TAG, "Rückgängig", it) }
+            .onSuccess {
+                refreshObjects()
+                invalidateSliceResult()
+                showBed()
+            }
+    }
+
+    fun redo() {
+        val c = core ?: return
+        runCatching { c.redo() }
+            .onFailure { Log.w(TAG, "Wiederholen", it) }
+            .onSuccess {
+                refreshObjects()
+                invalidateSliceResult()
+                showBed()
+            }
+    }
+
+    fun selectBed(index: Int) {
+        val c = core ?: return
+        runCatching { c.selectBed(index) }
+            .onFailure { Log.w(TAG, "Bett ${index + 1} waehlen", it) }
+            .onSuccess {
+                refreshObjects()
+                invalidateSliceResult()
+            }
+    }
+
+    fun addBed() {
+        val c = core ?: return
+        runCatching { c.addBed() }
+            .onFailure { Log.w(TAG, "Bett anlegen", it) }
+            .onSuccess {
+                refreshObjects()
+                invalidateSliceResult()
+            }
+    }
+
+    fun removeBed(index: Int) {
+        val c = core ?: return
+        runCatching { c.removeBed(index) }
+            .onFailure { Log.w(TAG, "Bett ${index + 1} entfernen", it) }
+            .onSuccess {
+                refreshObjects()
+                invalidateSliceResult()
+            }
+    }
+
+    fun moveObjectToBed(id: Int, target: Int) {
+        val c = core ?: return
+        runCatching { c.moveObjectToBed(id, target) }
+            .onFailure { Log.w(TAG, "Objekt auf Bett ${target + 1} verschieben", it) }
+            .onSuccess {
+                refreshObjects()
+                invalidateSliceResult()
+            }
     }
 
     fun arrange() {
-        runCatching { core?.arrange() }.onFailure { Log.w(TAG, "Anordnen", it) }
-        refreshObjects()
+        runCatching { core?.arrange() }
+            .onFailure { Log.w(TAG, "Anordnen", it) }
+            .onSuccess { refreshObjects(); invalidateSliceResult() }
     }
 
     fun dropToBed(id: Int) {
-        runCatching { core?.dropToBed(id) }.onFailure { Log.w(TAG, "Aufs Bett legen", it) }
-        refreshObjects()
+        runCatching { core?.dropToBed(id) }
+            .onFailure { Log.w(TAG, "Aufs Bett legen", it) }
+            .onSuccess { refreshObjects(); invalidateSliceResult() }
     }
 
-    fun duplicate(id: Int) {
-        runCatching { core?.duplicate(id) }.onFailure { Log.w(TAG, "Duplizieren", it) }
-        refreshObjects()
+    fun duplicate(id: Int, targetBed: Int? = null): Boolean {
+        val c = core ?: return false
+        return runCatching {
+            val copy = c.duplicate(id)
+            if (targetBed != null)
+                c.moveObjectToBed(copy, targetBed)
+        }
+            .fold(
+                onSuccess = {
+                    refreshObjects()
+                    invalidateSliceResult()
+                    true
+                },
+                onFailure = {
+                    Log.w(TAG, "Duplizieren", it)
+                    false
+                },
+            )
     }
 
     // --- An einen Drucker senden ------------------------------------------
@@ -418,26 +720,37 @@ class SlicerService : Service() {
      */
     fun sendToPrinter(printer: de.psmobile.net.PrusaLink.Printer, printAfter: Boolean) {
         val gcode = lastGcode
-        if (gcode == null || !gcode.exists()) {
-            _sendState.value = "Kein G-Code vorhanden – erst slicen"
+        if (core?.sliceState() != PsmCore.SliceState.DONE ||
+            gcode == null || !gcode.exists()) {
+            _sendState.value = "Kein aktueller G-Code vorhanden – erneut slicen"
             return
         }
 
         scope.launch {
             _sendState.value = "Sende an ${printer.name}…"
 
-            val model = _objects.value.firstOrNull()?.name?.substringBeforeLast('.')
-            val remote = (model ?: "psmobile") + ".gcode"
-
-            val r = de.psmobile.net.PrusaLink.upload(printer, gcode, remote, printAfter)
+            val remote = suggestedGcodeName()
+            val r = withContext(Dispatchers.IO) {
+                de.psmobile.net.PrusaLink.upload(
+                    printer,
+                    gcode,
+                    remote,
+                    printAfter,
+                )
+            }
             var msg = when (r) {
                 is de.psmobile.net.PrusaLink.Result.Ok -> r.message
                 is de.psmobile.net.PrusaLink.Result.Error -> "Fehler: ${r.message}"
             }
 
             if (de.psmobile.net.BackupStore.isConfigured(this@SlicerService)) {
-                val b = de.psmobile.net.BackupStore.archive(
-                    this@SlicerService, gcode, printer.name)
+                val b = withContext(Dispatchers.IO) {
+                    de.psmobile.net.BackupStore.archive(
+                        this@SlicerService,
+                        gcode,
+                        printer.name,
+                    )
+                }
                 msg += if (b.ok) "  ·  gesichert" else "  ·  Sicherung: ${b.message}"
             }
 
@@ -460,8 +773,7 @@ class SlicerService : Service() {
         val c = core ?: return
         runCatching { c[key] = value }
             .onFailure { Log.w(TAG, "$key=$value abgelehnt: ${it.message}") }
-        refreshQuickSettings()
-        bumpConfig()
+            .onSuccess { notifyConfigChanged() }
     }
 
     /* --- Objekt bearbeiten ------------------------------------------- */
@@ -471,11 +783,115 @@ class SlicerService : Service() {
      * Zweite und Dritte bereits.
      */
 
-    private fun withObject(id: Int, what: String, block: (PsmCore) -> Unit) {
+    private fun withObject(
+        id: Int,
+        what: String,
+        clearMessage: Boolean = true,
+        block: (PsmCore) -> Unit,
+    ) {
         val c = core ?: return
-        runCatching { block(c) }.onFailure { Log.w(TAG, "$what: ${it.message}") }
-        refreshObjects()
+        if (clearMessage)
+            _toolMessage.value = null
+        val undoBefore = c.historyState().undoCount
+        runCatching {
+            c.beginHistory(what)
+            try {
+                block(c)
+            } finally {
+                c.endHistory()
+            }
+        }
+            .onFailure {
+                runCatching {
+                    if (c.historyState().undoCount > undoBefore)
+                        c.undo()
+                }
+                refreshObjects()
+                Log.w(TAG, "$what: ${it.message}")
+                _toolMessage.value = "$what fehlgeschlagen: ${it.message}"
+            }
+            .onSuccess {
+                refreshObjects()
+                invalidateSliceResult()
+                if (_toolMessage.value == null ||
+                    _toolMessage.value == "$what läuft …")
+                    _toolMessage.value = what
+            }
     }
+
+    /**
+     * Mesh-Neuberechnungen dürfen den Compose-Hauptthread nicht anhalten.
+     * Zugleich läuft höchstens eine schwere Mutation, damit zwei schnelle
+     * Fingertipps nicht zwei Emboss-/Simplify-Jobs übereinander starten.
+     */
+    private fun withObjectAsync(
+        id: Int,
+        what: String,
+        block: (PsmCore) -> Unit,
+    ) {
+        if (!heavyMutationActive.compareAndSet(false, true)) {
+            _toolMessage.value = "Bitte warten – eine Geometrieoperation läuft bereits."
+            return
+        }
+        _toolMessage.value = "$what läuft …"
+        scope.launch {
+            try {
+                withObject(id, what, clearMessage = false, block = block)
+            } finally {
+                heavyMutationActive.set(false)
+            }
+        }
+    }
+
+    private fun withObjects(
+        ids: Collection<Int>,
+        what: String,
+        block: (PsmCore, Int) -> Unit,
+    ) {
+        val c = core ?: return
+        val stableIds = ids.distinct()
+        if (stableIds.isEmpty()) return
+        val undoBefore = c.historyState().undoCount
+        runCatching {
+            c.beginHistory(what)
+            try {
+                stableIds.forEach { id -> block(c, id) }
+            } finally {
+                c.endHistory()
+            }
+        }
+            .onFailure {
+                runCatching {
+                    if (c.historyState().undoCount > undoBefore)
+                        c.undo()
+                }
+                refreshObjects()
+                Log.w(TAG, "$what: ${it.message}")
+                _toolMessage.value = "$what fehlgeschlagen: ${it.message}"
+            }
+            .onSuccess {
+                refreshObjects()
+                invalidateSliceResult()
+                _toolMessage.value = "$what · ${stableIds.size} Objekt" +
+                    if (stableIds.size == 1) "" else "e"
+            }
+    }
+
+    fun removeObjects(ids: Collection<Int>) =
+        withObjects(ids, "Auswahl löschen") { c, id -> c.removeModel(id) }
+
+    fun dropToBed(ids: Collection<Int>) =
+        withObjects(ids, "Auswahl aufs Bett legen") { c, id -> c.dropToBed(id) }
+
+    fun mirror(ids: Collection<Int>, axis: PsmCore.Axis) =
+        withObjects(ids, "Auswahl spiegeln") { c, id -> c.mirror(id, axis) }
+
+    fun duplicateObjects(ids: Collection<Int>, targetBed: Int? = null) =
+        withObjects(ids, "Auswahl duplizieren") { c, id ->
+            val copy = c.duplicate(id)
+            if (targetBed != null)
+                c.moveObjectToBed(copy, targetBed)
+        }
 
     /** Gleichmaessig auf einen Faktor setzen (1.0 = Originalgroesse). */
     fun setUniformScale(id: Int, factor: Float) =
@@ -486,17 +902,8 @@ class SlicerService : Service() {
         withObject(id, "Auf Mass skalieren") { it.scaleToFit(id, mm); it.dropToBed(id) }
 
     /** So gross wie das Bett es zulaesst. */
-    fun scaleToBed(id: Int) = withObject(id, "Aufs Bett einpassen") { c ->
-        // Die kleinere Bettkante minus etwas Rand ist das, was sicher passt.
-        val shape = c["bed_shape"].orEmpty()
-        val pts = shape.split(',').mapNotNull { p ->
-            p.split('x').mapNotNull { it.trim().toFloatOrNull() }.takeIf { it.size == 2 }
-        }
-        val w = pts.maxOfOrNull { it[0] } ?: 200f
-        val d = pts.maxOfOrNull { it[1] } ?: 200f
-        c.scaleToFit(id, minOf(w, d) * 0.9f)
-        c.dropToBed(id)
-    }
+    fun scaleToBed(id: Int) =
+        withObject(id, "Aufs Bett einpassen") { it.fitToBed(id, 0.9f) }
 
     fun setRotationAxis(id: Int, axis: Int, degrees: Float) =
         withObject(id, "Drehen") { c ->
@@ -528,36 +935,242 @@ class SlicerService : Service() {
     fun setInstances(id: Int, count: Int) =
         withObject(id, "Kopien") { it.setInstances(id, count) }
 
+    fun setObjectExtruder(id: Int, extruder: Int) =
+        withObject(id, "Objekt-Extruder") {
+            it.setObjectExtruder(id, extruder)
+        }
+
+    fun setVolumeExtruder(id: Int, volume: Int, extruder: Int) =
+        withObject(id, "Volumen-Extruder") {
+            it.setVolumeExtruder(id, volume, extruder)
+        }
+
+    fun splitIntoObjects(id: Int) =
+        withObjectAsync(id, "In Objekte teilen") { it.splitObjects(id) }
+
+    fun splitIntoVolumes(id: Int) =
+        withObjectAsync(id, "In Volumen teilen") { it.splitVolumes(id) }
+
+    fun cutObject(
+        id: Int,
+        zMm: Float,
+        keepUpper: Boolean,
+        keepLower: Boolean,
+        keepAsParts: Boolean,
+    ) = withObjectAsync(id, "Schneiden") {
+        it.cutZ(id, zMm, keepUpper, keepLower, keepAsParts)
+    }
+
+    fun simplifyObject(id: Int, remainingRatio: Float) =
+        withObjectAsync(id, "Vereinfachen") {
+            val result = it.simplify(id, remainingRatio.coerceIn(0.01f, 1f))
+            _toolMessage.value =
+                "Vereinfacht: ${result.before} → ${result.after} Dreiecke"
+        }
+
+    fun addPrimitiveVolume(
+        id: Int,
+        type: PsmCore.VolumeType,
+        shape: PsmCore.PrimitiveShape,
+        x: Float,
+        y: Float,
+        z: Float,
+    ) = withObject(id, "Volumen hinzufügen") {
+        it.addPrimitiveVolume(id, type, shape, x, y, z)
+    }
+
+    fun removeVolume(id: Int, volume: Int) =
+        withObject(id, "Volumen entfernen") { it.removeVolume(id, volume) }
+
+    fun addTextVolume(
+        id: Int,
+        text: String,
+        sizeMm: Float,
+        depthMm: Float,
+        type: PsmCore.VolumeType,
+    ) = withObjectAsync(id, "Text prägen") {
+        it.addTextVolume(
+            id = id,
+            text = text,
+            fontPath = "/system/fonts/Roboto-Regular.ttf",
+            sizeMm = sizeMm,
+            depthMm = depthMm,
+            type = type,
+        )
+    }
+
+    fun addSvgVolume(
+        id: Int,
+        svg: File,
+        depthMm: Float,
+        type: PsmCore.VolumeType,
+    ) = withObjectAsync(id, "SVG prägen") {
+        it.addSvgVolume(id, svg.absolutePath, depthMm, type)
+    }
+
+    fun layOnFacet(hit: de.psmobile.core.PsmViewport.SurfaceHit) =
+        withObject(hit.objectId, "Auf Fläche legen") {
+            it.layOnFacet(hit.objectId, hit.volumeIndex, hit.facetIndex)
+        }
+
+    fun paintFacet(
+        hit: de.psmobile.core.PsmViewport.SurfaceHit,
+        tool: PsmCore.PaintTool,
+        state: Int,
+        radiusMm: Float,
+    ) = withObjectAsync(hit.objectId, "Fläche bemalen") {
+        it.paintFacet(
+            hit.objectId, hit.volumeIndex, hit.facetIndex,
+            tool, state, radiusMm,
+        )
+    }
+
+    fun clearPaint(id: Int, tool: PsmCore.PaintTool) =
+        withObject(id, "Bemalung löschen") { it.clearPaint(id, tool) }
+
+    fun layerProfile(id: Int): List<Pair<Double, Double>> =
+        core?.layerProfile(id).orEmpty()
+
+    fun setLayerProfile(id: Int, values: List<Pair<Double, Double>>) =
+        withObject(id, "Variable Schichthöhe") {
+            it.setLayerProfile(id, values)
+        }
+
+    fun setObjectColour(id: Int, colour: String) =
+        withObject(id, "Objektfarbe") { it.setObjectColour(id, colour) }
+
+    fun setObjectWipe(id: Int, intoInfill: Boolean, intoObjects: Boolean) =
+        withObject(id, "Wischoptionen") {
+            it.setObjectWipe(id, intoInfill, intoObjects)
+        }
+
+    fun customGcodes(): List<PsmCore.CustomGcode> =
+        core?.customGcodes().orEmpty()
+
+    fun replaceCustomGcodes(values: List<PsmCore.CustomGcode>) {
+        val c = core ?: return
+        runCatching {
+            c.beginHistory("Custom G-Code")
+            try {
+                c.clearCustomGcode()
+                values.sortedBy { it.printZ }.forEach(c::addCustomGcode)
+            } finally {
+                c.endHistory()
+            }
+        }
+            .onFailure {
+                Log.w(TAG, "Custom G-Code: ${it.message}")
+                _toolMessage.value = "Custom G-Code fehlgeschlagen: ${it.message}"
+            }
+            .onSuccess {
+                refreshObjects()
+                invalidateSliceResult()
+                _toolMessage.value = "Custom G-Code gespeichert"
+            }
+    }
+
+    fun wipeTower(): PsmCore.WipeTower =
+        core?.wipeTower() ?: PsmCore.WipeTower(0f, 0f, 0f)
+
+    fun setWipeTower(value: PsmCore.WipeTower) {
+        val c = core ?: return
+        runCatching { c.setWipeTower(value) }
+            .onFailure {
+                Log.w(TAG, "Wipe-Tower: ${it.message}")
+                _toolMessage.value = "Wipe-Tower fehlgeschlagen: ${it.message}"
+            }
+            .onSuccess {
+                refreshObjects()
+                invalidateSliceResult()
+                _toolMessage.value = "Wipe-Tower gespeichert"
+            }
+    }
+
     fun refreshObjects() {
         val c = core ?: return
         // IntArray kennt kein mapNotNull - erst in eine Liste ueberfuehren.
-        _objects.value = c.listObjects().toList().mapNotNull { c.objectInfo(it) }
+        val values = c.listObjects().toList().mapNotNull { c.objectInfo(it) }
+        _objects.value = values
+        _volumes.value = values.associate { it.id to c.volumes(it.id) }
+        refreshBeds()
+        refreshHistory()
         bumpScene()
     }
 
-    fun loadModel(path: String) {
+    private fun refreshBeds() {
+        val c = core ?: return
+        _beds.value = c.beds()
+    }
+
+    private fun refreshHistory() {
+        val c = core ?: return
+        _history.value = c.historyState()
+    }
+
+    enum class ImportMode { OBJECTS, PROJECT }
+
+    /**
+     * Importiert eine normale Modelldatei oder eine 3MF in dem vom Nutzer
+     * gewaehlten Modus. Ein Projekt ersetzt das Bett und aktualisiert
+     * unmittelbar alle Preset-Anzeigen auf die eingebettete Auswahl.
+     */
+    fun loadModel(path: String, mode: ImportMode = ImportMode.OBJECTS): PsmCore.ProjectImport? {
         val c = ensureCore()
-        c.loadModel(path)
+        val project = when (mode) {
+            ImportMode.OBJECTS -> {
+                c.loadModel(path)
+                null
+            }
+            ImportMode.PROJECT -> c.loadProject(path)
+        }
         refreshObjects()
+        if (project != null) {
+            refreshPresets()
+            refreshQuickSettings()
+            bumpConfig()
+        }
+        invalidateSliceResult()
         // Nach einem Import gehoert die Aufmerksamkeit aufs Bett - sonst
         // laedt das Modell unsichtbar hinter einem anderen Bildschirm.
         showBed()
+        return project
     }
 
     fun removeObject(id: Int) {
         core?.removeModel(id)
         refreshObjects()
+        invalidateSliceResult()
     }
 
     fun startSlice() {
-        val c = ensureCore()
+        ContextCompat.startForegroundService(
+            this,
+            Intent(this, SlicerService::class.java).setAction(ACTION_START_SLICE),
+        )
+    }
+
+    private fun runSlice(startId: Int) {
         if (_progress.value is Progress.Running) return
 
-        startForeground(NOTIFICATION_ID, buildNotification(0, getString(R.string.slice_starting)))
+        invalidateSliceResult()
         val t0 = System.nanoTime()
 
         scope.launch {
             try {
+                val c = ensureCore()
+                val memory = sliceMemoryDecision(c)
+                if (memory.blocked) {
+                    val needMb = memory.estimatedPeakBytes / (1024 * 1024)
+                    val budgetMb = memory.safeBudgetBytes / (1024 * 1024)
+                    _progress.value = Progress.Failed(
+                        getString(R.string.memory_blocked, needMb, budgetMb)
+                    )
+                    return@launch
+                }
+                if (cancelRequestedByCommand) {
+                    _progress.value = Progress.Cancelled
+                    return@launch
+                }
                 c.startSlice { percent, stage ->
                     _progress.value = Progress.Running(percent, stage)
                     updateNotification(percent, stage)
@@ -572,30 +1185,55 @@ class SlicerService : Service() {
                         _progress.value = Progress.Done(c.sliceStats(), secs)
                     }
                     PsmCore.SliceState.CANCELLED -> _progress.value = Progress.Cancelled
+                    PsmCore.SliceState.STALE -> {
+                        lastGcode = null
+                        _progress.value = Progress.Stale
+                    }
                     else -> _progress.value = Progress.Failed(c.lastError())
                 }
             } catch (t: Throwable) {
                 _progress.value = Progress.Failed(t.message ?: "unbekannter Fehler")
             } finally {
+                sliceCommandActive = false
                 stopForeground(STOP_FOREGROUND_REMOVE)
+                stopSelfResult(latestCommandStartId.coerceAtLeast(startId))
             }
         }
     }
 
     fun cancelSlice() {
-        core?.cancelSlice()
+        startService(
+            Intent(this, SlicerService::class.java).setAction(ACTION_CANCEL_SLICE)
+        )
     }
 
-    /** Geschaetzter Spitzenspeicher gegen das Budget dieses Geraets. */
+    private fun sliceMemoryDecision(c: PsmCore): SliceMemoryPolicy.Decision {
+        val am = getSystemService(Context.ACTIVITY_SERVICE) as android.app.ActivityManager
+        val info = android.app.ActivityManager.MemoryInfo()
+        am.getMemoryInfo(info)
+        val currentPssBytes = android.os.Debug.getPss().toLong() * 1024L
+        return SliceMemoryPolicy.evaluate(
+            estimatedPeakBytes = c.estimatedSliceMemory(),
+            totalDeviceBytes = info.totalMem,
+            availableDeviceBytes = info.availMem,
+            currentProcessBytes = currentPssBytes,
+            systemLowMemory = info.lowMemory,
+        )
+    }
+
+    /** Geschaetzter Spitzenspeicher gegen das reale native Geraetebudget. */
     fun memoryWarning(): String? {
         val c = core ?: return null
-        val need = c.estimatedSliceMemory()
-        val am = getSystemService(Context.ACTIVITY_SERVICE) as android.app.ActivityManager
-        val budgetMb = am.largeMemoryClass.toLong()
-        val needMb = need / (1024 * 1024)
-        return if (needMb > budgetMb * 0.8)
-            getString(R.string.memory_warning, needMb, budgetMb)
-        else null
+        val memory = sliceMemoryDecision(c)
+        if (memory.blocked || memory.warning) {
+            val needMb = memory.estimatedPeakBytes / (1024 * 1024)
+            val budgetMb = memory.safeBudgetBytes / (1024 * 1024)
+            return if (memory.blocked)
+                getString(R.string.memory_blocked, needMb, budgetMb)
+            else
+                getString(R.string.memory_warning, needMb, budgetMb)
+        }
+        return null
     }
 
     // --- Benachrichtigung -------------------------------------------------
@@ -619,6 +1257,12 @@ class SlicerService : Service() {
             Intent(this, MainActivity::class.java),
             android.app.PendingIntent.FLAG_IMMUTABLE,
         )
+        val cancel = android.app.PendingIntent.getService(
+            this, 1,
+            Intent(this, SlicerService::class.java).setAction(ACTION_CANCEL_SLICE),
+            android.app.PendingIntent.FLAG_UPDATE_CURRENT or
+                android.app.PendingIntent.FLAG_IMMUTABLE,
+        )
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle(getString(R.string.slicing))
             .setContentText(stage)
@@ -626,6 +1270,11 @@ class SlicerService : Service() {
             .setProgress(100, percent, percent <= 0)
             .setOngoing(true)
             .setContentIntent(tap)
+            .addAction(
+                android.R.drawable.ic_menu_close_clear_cancel,
+                getString(R.string.cancel_slice),
+                cancel,
+            )
             .build()
     }
 

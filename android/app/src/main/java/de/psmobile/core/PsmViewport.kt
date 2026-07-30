@@ -28,6 +28,10 @@ class PsmViewport private constructor(private var handle: Long) {
         @JvmStatic private external fun nativeViewPreset(h: Long, which: Int)
         @JvmStatic private external fun nativePick(h: Long, x: Float, y: Float): Int
         @JvmStatic private external fun nativeSetSelection(h: Long, id: Int)
+        @JvmStatic private external fun nativeSetSelections(
+            h: Long, ids: IntArray, primary: Int)
+        @JvmStatic private external fun nativeSurfacePick(
+            h: Long, x: Float, y: Float): String?
         @JvmStatic private external fun nativeDragSelected(
             h: Long, fx: Float, fy: Float, tx: Float, ty: Float): Int
         @JvmStatic private external fun nativeLastError(h: Long): String
@@ -60,6 +64,45 @@ class PsmViewport private constructor(private var handle: Long) {
 
     fun pick(x: Float, y: Float): Int = nativePick(handle, x, y)
     fun setSelection(id: Int) = nativeSetSelection(handle, id)
+
+    /**
+     * Markiert mehrere Objekte. Nur [primary] traegt Gizmos und ist das
+     * Ziel numerischer Einzelwerkzeuge.
+     */
+    fun setSelections(ids: Collection<Int>, primary: Int?) =
+        nativeSetSelections(handle, ids.toIntArray(), primary ?: -1)
+
+    data class SurfaceHit(
+        val objectId: Int,
+        val volumeIndex: Int,
+        val facetIndex: Int,
+        val instanceIndex: Int,
+        val x: Float,
+        val y: Float,
+        val z: Float,
+        val nx: Float,
+        val ny: Float,
+        val nz: Float,
+    )
+
+    /** Exakter Dreieckstreffer in Weltkoordinaten. */
+    fun surfacePick(x: Float, y: Float): SurfaceHit? {
+        val fields = nativeSurfacePick(handle, x, y)?.split('\t') ?: return null
+        if (fields.size != 10) return null
+        val numbers = fields.map { it.toFloatOrNull() ?: return null }
+        return SurfaceHit(
+            objectId = numbers[0].toInt(),
+            volumeIndex = numbers[1].toInt(),
+            facetIndex = numbers[2].toInt(),
+            instanceIndex = numbers[3].toInt(),
+            x = numbers[4],
+            y = numbers[5],
+            z = numbers[6],
+            nx = numbers[7],
+            ny = numbers[8],
+            nz = numbers[9],
+        )
+    }
 
     /** @return true wenn das ausgewaehlte Objekt bewegt wurde */
     fun dragSelected(fx: Float, fy: Float, tx: Float, ty: Float): Boolean =

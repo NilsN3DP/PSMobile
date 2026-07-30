@@ -1,6 +1,8 @@
 # Fehler und Bedienprobleme
 
-Stand: 2026-07-29, erster systematischer Durchgang.
+Stand: 2026-07-30. „BEHOBEN (coded)“ bedeutet, dass die Korrektur im
+Quellcode vorliegt; bei Native-Änderungen steht der aktuelle
+Android-Link- und Gerätetest noch aus.
 
 Gefundenes wird hier gesammelt, **nicht sofort alles behoben**. Erst
 sammeln, dann nach Schwere abarbeiten. Wer einen Punkt erledigt, hakt ihn
@@ -80,16 +82,11 @@ gespeichert.
 
 ## B - Stoert im Alltag
 
-### B1 · Druckbett ist ein flaches Vieleck
-PrusaSlicer liefert echte Bettmodelle (`mk4_bed.stl`, `mini_bed.stl`,
-`coreone_bed.stl` …) und 18 Betttexturen mit. Die STLs sind bereits in
-den Assets, **die Texturen loescht `stage-resources.sh` aber weg**
-(`find … -name '*.svg' -delete`). Der Viewport zeichnet stattdessen ein
-Vieleck aus `bed_shape`.
-
-*Ansatz*: Texturen nicht mehr loeschen; im Viewport `bed_model` und
-`bed_texture` aus dem Druckerprofil laden und statt des Vielecks
-zeichnen. Das ist uebernehmbare Information - siehe E-12.
+### B1 · Druckbett ist ein flaches Vieleck — BEHOBEN
+Der Viewport lädt `bed_model` und `bed_texture` aus dem aktiven
+Druckerprofil und rendert PrusaSlicers Bettmodell samt Textur. Die
+Umsetzung wurde bereits auf dem Android-Gerät geprüft; siehe
+`docs/08-loop-protokoll.md` und die Commits `e52a4a1`/`e76a7c2`.
 
 ### B9 · Wiedergeoeffnete Druckerauswahl ist leer — BEHOBEN
 Behoben im Loop-Durchlauf 05:45. SetupScreen nimmt eine Vorauswahl
@@ -122,12 +119,17 @@ Am Geraet nachgeprueft: Die Auswahl geht auf, das Protokoll meldet
 Schaltflaeche gehaengt - nach der Ersteinrichtung kam man nie wieder an
 die Auswahl heran.
 
-### B3 · Senden geht immer an den ersten Drucker
-`linkPrinters.first()` ist fest verdrahtet. Bei mehreren Geraeten fehlt
-die Auswahl.
+### B3 · Senden geht immer an den ersten Drucker — BEHOBEN (built)
+Bei mehreren Geräten öffnet der Senden-Knopf jetzt eine explizite
+Zielauswahl. `linkPrinters.first()` wird nicht mehr als stilles Ziel
+verwendet. Der Hardwaretest mit zwei Druckern steht aus.
 
-### B4 · Schalter "nur eingerichtete Drucker" filtert nichts
-Wird gespeichert, aber `refreshPresets()` wertet ihn nicht aus.
+### B4 · Schalter "nur eingerichtete Drucker" filtert nichts — BEHOBEN (built)
+`refreshPresets()` wertet den gespeicherten Schalter jetzt aus und
+zeigt nur Profile, die einem eingerichteten PrusaLink-Gerät zugeordnet
+sind. Das aktuell aktive Profil bleibt sichtbar, damit die Auswahl beim
+Einschalten nicht leer wird. Beim Verlassen der Druckerverwaltung wird
+die Liste sofort neu aufgebaut.
 
 ### B5 · Alter G-Code ueberlebt das Leeren des Bettes — BEHOBEN
 Behoben im Loop-Durchlauf 04:45. `psm_session_clear` loescht die Datei
@@ -143,38 +145,52 @@ exportieren" verschwunden, "Jetzt slicen" ist ausgegraut, und
 Senden an - mit dem G-Code des vorherigen Modells. Das haette einen
 falschen Druck ausloesen koennen.
 
-### B6 · Geaenderte Einstellungen sind nicht als geaendert erkennbar
-PrusaSlicer haengt "(modified)" an den Profilnamen, sobald ein Wert
-abweicht. Bei uns weicht die Konfiguration still vom benannten Profil ab.
+### B6 · Geaenderte Einstellungen sind nicht als geaendert erkennbar — BEHOBEN (emulator_tested)
+Die Profilfelder zeigen Anzahl und Zustand ungespeicherter Änderungen.
+Beim Profilwechsel listet ein Dialog die geänderten Werte und bietet
+„auf Ziel übertragen“, „verwerfen“ und „speichern unter“ an. Im
+Emulator wurde `fill_density: 15% → 25%` auf ein anderes Druckprofil
+übertragen und anschließend korrekt als weiterhin geändert angezeigt.
 
-### B7 · Skalieren auf Groesse ignoriert die Drehung
-`psm_model_scale_to_fit` misst `raw_mesh_bounding_box`, also ungedreht.
-Nach einer Drehung ist das Ergebnis falsch.
+### B7 · Skalieren auf Größe ignoriert die Drehung — BEHOBEN (coded)
+`psm_model_scale_to_fit` verwendet nun die transformierte
+Instanz-Bounding-Box und multipliziert den bestehenden Skalierungsfaktor.
+Zusätzlich liegt „Aufs Bett einpassen“ vollständig im Core. Beides ist
+im C-ABI-Vertragstest auf dem x86_64-Emulator abgedeckt; der UI-Test
+steht aus.
 
-### B8 · Einstellungen waehrend des Slicens
-Werte lassen sich aendern, waehrend ein Job laeuft. `Print::apply` hat die
-Konfiguration da schon uebernommen - die Aenderung wirkt still erst beim
-naechsten Lauf.
+### B8 · Einstellungen während des Slicens — BEHOBEN (coded)
+Ein Slice arbeitet jetzt auf einem unveränderlichen Modell- und
+Konfigurationssnapshot. Jede spätere Änderung erhöht die
+Designrevision; das alte Ergebnis wird als `STALE` verworfen und kann
+nicht exportiert oder gesendet werden. Der C-ABI-Ablauf ist auf dem
+x86_64-Emulator geprüft; Service-/UI-Test steht aus.
 
 ---
 
 ## C - Politur
 
-### C1 · Digest-Herausforderungen nicht threadsicher
-`PrusaLink.challenges` ist eine gewoehnliche `mutableMapOf`, wird aber aus
-IO-Coroutinen gelesen und geschrieben.
+### C1 · Digest-Herausforderungen nicht threadsicher — BEHOBEN (built)
+Challenges liegen in einer `ConcurrentHashMap`, der Nonce-Counter ist
+atomar und unbekannte Algorithmen/qop werden abgelehnt. Parallelität und
+Algorithmusauswahl sind durch JVM-Unit-Tests abgedeckt.
 
-### C2 · Zugangsdaten unverschluesselt
-API-Schluessel und Passwort liegen in gewoehnlichen SharedPreferences.
-Vor einer Veroeffentlichung auf EncryptedSharedPreferences umstellen.
+### C2 · Zugangsdaten unverschlüsselt — BEHOBEN (built)
+API-Schlüssel und Passwörter liegen AES-256-GCM-verschlüsselt hinter
+einem Android-Keystore-Schlüssel in getrennten Preferences. Diese Datei
+ist von Cloud- und Device-Transfer-Backup ausgeschlossen. Der
+Geräte-/Restore-Test steht aus.
 
-### C3 · Undo, Redo, Ausschneiden, Einfuegen, Layer-Editing
-Die Werkzeuge sind sichtbar, aber dauerhaft inaktiv. Entweder umsetzen
-oder ausblenden - dauerhaft graue Knoepfe sind schlechter als keine.
+### C3 · Undo und Redo — BEHOBEN (emulator_tested)
+Beide Werkzeuge folgen einer begrenzten Core-Historie. Touch-Gesten und
+kombinierte Aktionen werden gruppiert; Bett-, Objekt-, Volumen- und
+Extruderänderungen sind abgedeckt. Die Objekt-Zwischenablage funktioniert
+auch bettübergreifend; Mehrfachauswahl und Layer-Editing bleiben offen.
 
-### C4 · Objektliste ohne Baum
-Nur Name und Groesse. PrusaSlicer zeigt Volumen, Modifikatoren und
-Einstellungen je Objekt.
+### C4 · Objektliste ohne Baum — BEHOBEN (emulator_tested)
+Die Liste zeigt jetzt aufklappbare Volumen, Typ, Dreieckszahl und
+Extruder je Objekt beziehungsweise druckbarem Teil. Erzeugungsdialoge
+für Modifier und die übrigen Objektparameter bleiben offen.
 
 ---
 
@@ -185,11 +201,24 @@ Einstellungen je Objekt.
 - Leere Datei: kein Absturz.
 - Zweimal hintereinander slicen: kein Absturz mehr, seit
   `teardown_print()` die Callbacks vor der Freigabe entschaerft.
+- 20 Slices hintereinander: gleicher Prozess, 20 fertige G-Codes, kein
+  Crash oder ANR.
+- 41-MB-3MF im Hintergrund bei ausgeschaltetem Display: 600 Layer in
+  31,0 s, danach Vorschau und Export verfügbar.
+- Ein dabei reproduzierter SIGSEGV bei G-Code-Pfadkonflikten ist behoben:
+  `Print::export_gcode` bekommt jetzt ein gültiges
+  `GCodeProcessorResult`; ein überlappender Zwei-Objekt-Vertragstest
+  deckt den früheren Nullzugriff ab.
+- Abbruch eines großen Slices und direkter Neustart: beide Abläufe
+  bestanden.
+- 500 zufällige Touch-/Navigationsereignisse: kein Crash oder ANR.
 - Import mit Umlauten im Dateinamen: laeuft.
 
 ## Noch nicht geprueft
 
-- Grosse Modelle, Speicherdruck, Verhalten unter dem Low-Memory-Killer.
-- Drehen des Geraets und Wechsel in den Hintergrund waehrend des Slicens.
+- Verhalten unter echtem Low-Memory-Killer auf 4–6-GB-Hardware.
+- Drehen des Geraets waehrend des Slicens.
 - Alle 247 Parameter einzeln aendern und pruefen, ob sie wirken.
 - **Alles rund um PrusaLink gegen ein echtes Geraet.**
+- 3MF-Roundtrip mit Custom-G-Code/Wipe-Tower gegen Desktop-PrusaSlicer.
+- Snapshot/Stale-Verhalten nach Änderung während eines laufenden Slice.

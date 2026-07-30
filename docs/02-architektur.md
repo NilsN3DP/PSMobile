@@ -51,9 +51,13 @@ Jede Zeile Logik oberhalb wird zweimal geschrieben.
   doppelt gepufferten Szenenzustand.
 - **Slice-Job**: eigener Thread im Kern; TBB parallelisiert darin.
   Fortschritt und Abbruch laufen ueber Callbacks im C-ABI.
-- **Android zusaetzlich**: Slicing laeuft in einem eigenen Prozess
-  (`android:process=":slicer"`) mit Foreground-Service. Wenn der
-  Low-Memory-Killer zuschlaegt, stirbt der Job, nicht die App.
+- **Android, aktuelle Phase**: Slicing läuft als started und bound
+  Foreground-Service im App-Prozess. Modell und Konfiguration werden
+  für jeden Job unter einem Lock kopiert; der Worker arbeitet
+  ausschließlich auf diesem Snapshot. Ein eigener
+  `android:process=":slicer"` folgt erst mit einem serialisierbaren
+  Auftrag und AIDL/Messenger – ein lokaler Binder und ein nativer
+  Session-Zeiger sind nicht prozessübergreifend.
 - **iOS**: kein zweiter Prozess moeglich. Stattdessen frueh
   `os_proc_available_memory()` pruefen und beim Import warnen bzw.
   dezimieren.

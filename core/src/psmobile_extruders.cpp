@@ -60,6 +60,10 @@ void refresh_config(psm_session *s)
 {
     if (s->presets)
         s->config = s->presets->full_config();
+    /* Die Abhaengigkeitsregeln haengen an der Konfiguration - jede
+     * Aenderung macht die zwischengespeicherte Karte ungueltig. */
+    ++s->config_revision;
+    s->mark_design_changed();
 }
 
 /* Hersteller eines Filaments, wie ihn der Assistent des Desktops liest. */
@@ -143,6 +147,9 @@ extern "C" {
 
 PSM_API size_t psm_preset_dirty_count(psm_session *s, psm_preset_type type)
 {
+    if (s == nullptr)
+        return 0;
+    std::lock_guard<std::recursive_mutex> data_lock(s->data_mtx);
     PresetCollection *c = collection_of(s, type);
     if (c == nullptr)
         return 0;
@@ -158,30 +165,37 @@ PSM_API psm_result psm_preset_dirty_at(psm_session *s, psm_preset_type type, siz
                                        char *out_old, size_t old_cap,
                                        char *out_new, size_t new_cap)
 {
-    PresetCollection *c = collection_of(s, type);
-    if (c == nullptr)
-        return s == nullptr ? PSM_ERR_INVALID_ARG : PSM_ERR_NOT_FOUND;
-    try {
-        const std::vector<std::string> keys = c->current_dirty_options();
-        if (index >= keys.size())
+    if (s != nullptr) {
+        std::lock_guard<std::recursive_mutex> data_lock(s->data_mtx);
+        PresetCollection *c = collection_of(s, type);
+        if (c == nullptr)
             return PSM_ERR_NOT_FOUND;
+        try {
+            const std::vector<std::string> keys = c->current_dirty_options();
+            if (index >= keys.size())
+                return PSM_ERR_NOT_FOUND;
 
-        const std::string &key = keys[index];
-        copy_str(out_key, key_cap, key);
+            const std::string &key = keys[index];
+            copy_str(out_key, key_cap, key);
 
-        const DynamicPrintConfig &was = c->get_selected_preset().config;
-        const DynamicPrintConfig &now = c->get_edited_preset().config;
-        copy_str(out_old, old_cap, was.has(key) ? was.opt_serialize(key) : std::string());
-        copy_str(out_new, new_cap, now.has(key) ? now.opt_serialize(key) : std::string());
-        return PSM_OK;
-    } catch (const std::exception &e) {
-        s->set_error(e.what());
-        return PSM_ERR_GENERIC;
+            const DynamicPrintConfig &was = c->get_selected_preset().config;
+            const DynamicPrintConfig &now = c->get_edited_preset().config;
+            copy_str(out_old, old_cap, was.has(key) ? was.opt_serialize(key) : std::string());
+            copy_str(out_new, new_cap, now.has(key) ? now.opt_serialize(key) : std::string());
+            return PSM_OK;
+        } catch (const std::exception &e) {
+            s->set_error(e.what());
+            return PSM_ERR_GENERIC;
+        }
     }
+    return PSM_ERR_INVALID_ARG;
 }
 
 PSM_API psm_result psm_preset_discard(psm_session *s, psm_preset_type type)
 {
+    if (s == nullptr)
+        return PSM_ERR_INVALID_ARG;
+    std::lock_guard<std::recursive_mutex> data_lock(s->data_mtx);
     PresetCollection *c = collection_of(s, type);
     if (c == nullptr)
         return s == nullptr ? PSM_ERR_INVALID_ARG : PSM_ERR_NOT_FOUND;
@@ -199,6 +213,9 @@ PSM_API psm_result psm_preset_save_as(psm_session *s, psm_preset_type type, cons
 {
     if (name == nullptr || *name == 0)
         return PSM_ERR_INVALID_ARG;
+    if (s == nullptr)
+        return PSM_ERR_INVALID_ARG;
+    std::lock_guard<std::recursive_mutex> data_lock(s->data_mtx);
     PresetCollection *c = collection_of(s, type);
     if (c == nullptr)
         return s == nullptr ? PSM_ERR_INVALID_ARG : PSM_ERR_NOT_FOUND;
@@ -222,6 +239,9 @@ PSM_API psm_result psm_preset_select_keeping(psm_session *s, psm_preset_type typ
                                              const char *const *values,
                                              size_t count)
 {
+    if (s == nullptr)
+        return PSM_ERR_INVALID_ARG;
+    std::lock_guard<std::recursive_mutex> data_lock(s->data_mtx);
     const psm_result r = psm_preset_select(s, type, name);
     if (r != PSM_OK)
         return r;
@@ -241,6 +261,71 @@ PSM_API psm_result psm_preset_select_keeping(psm_session *s, psm_preset_type typ
                  std::to_string(taken) + " von " + std::to_string(count) +
                  " Aenderungen uebernommen");
     return PSM_OK;
+}
+
+PSM_API psm_result psm_preset_config_get(psm_session *s, psm_preset_type type,
+                                         const char *key,
+                                         char *out, size_t out_cap)
+{
+    if (s == nullptr || key == nullptr || out == nullptr || out_cap == 0)
+        return PSM_ERR_INVALID_ARG;
+    std::lock_guard<std::recursive_mutex> data_lock(s->data_mtx);
+    PresetCollection *collection = collection_of(s, type);
+    if (collection == nullptr)
+        return PSM_ERR_NOT_FOUND;
+    try {
+        const DynamicPrintConfig &config = collection->get_edited_preset().config;
+        if (! config.has(key)) {
+            s->set_error(std::string("Parameter gehoert nicht zu diesem Preset: ") + key);
+            return PSM_ERR_NOT_FOUND;
+        }
+        const ConfigOption *option = config.option(key);
+        if (const auto *string = dynamic_cast<const ConfigOptionString *>(option))
+            copy_str(out, out_cap, string->value);
+        else
+            copy_str(out, out_cap, config.opt_serialize(key));
+        return PSM_OK;
+    } catch (const std::exception &e) {
+        s->set_error(e.what());
+        return PSM_ERR_GENERIC;
+    }
+}
+
+PSM_API psm_result psm_preset_config_set(psm_session *s, psm_preset_type type,
+                                         const char *key, const char *value)
+{
+    if (s == nullptr || key == nullptr || value == nullptr)
+        return PSM_ERR_INVALID_ARG;
+    std::lock_guard<std::recursive_mutex> data_lock(s->data_mtx);
+    PresetCollection *collection = collection_of(s, type);
+    if (collection == nullptr)
+        return PSM_ERR_NOT_FOUND;
+    try {
+        DynamicPrintConfig &config = collection->get_edited_preset().config;
+        if (! config.has(key)) {
+            s->set_error(std::string("Parameter gehoert nicht zu diesem Preset: ") + key);
+            return PSM_ERR_NOT_FOUND;
+        }
+
+        ConfigOption *option = config.option(key);
+        if (auto *string = dynamic_cast<ConfigOptionString *>(option)) {
+            string->value = value;
+        } else {
+            ConfigSubstitutionContext substitutions(
+                ForwardCompatibilitySubstitutionRule::Disable);
+            if (! config.set_deserialize_nothrow(key, value, substitutions)) {
+                s->set_error(std::string("ungueltiger Wert fuer ") + key + ": " + value);
+                return PSM_ERR_INVALID_ARG;
+            }
+        }
+
+        collection->update_dirty();
+        refresh_config(s);
+        return PSM_OK;
+    } catch (const std::exception &e) {
+        s->set_error(e.what());
+        return PSM_ERR_GENERIC;
+    }
 }
 
 /* ------------------------------------------------------------------ */
@@ -268,6 +353,7 @@ PSM_API psm_result psm_config_get_at(psm_session *s, const char *key, int32_t in
     if (s == nullptr || key == nullptr || out == nullptr || index < 0)
         return PSM_ERR_INVALID_ARG;
     try {
+        std::lock_guard<std::recursive_mutex> data_lock(s->data_mtx);
         const ConfigOption *opt = s->config.option(key);
         if (opt == nullptr)
             return PSM_ERR_NOT_FOUND;
@@ -293,6 +379,7 @@ PSM_API psm_result psm_config_set_at(psm_session *s, const char *key, int32_t in
     if (s == nullptr || key == nullptr || value == nullptr || index < 0)
         return PSM_ERR_INVALID_ARG;
     try {
+        std::lock_guard<std::recursive_mutex> data_lock(s->data_mtx);
         const ConfigOption *opt = s->config.option(key);
         if (opt == nullptr) {
             s->set_error(std::string("unbekannter Parameter: ") + key);
@@ -342,6 +429,7 @@ PSM_API psm_result psm_bed_model_file(psm_session *s, char *out, size_t out_cap)
     if (! s->presets)
         return PSM_ERR_NOT_FOUND;
     try {
+        std::lock_guard<std::recursive_mutex> data_lock(s->data_mtx);
         const Preset &p = s->presets->printers.get_edited_preset();
         copy_str(out, out_cap, Slic3r::PresetUtils::system_printer_bed_model(p));
         return PSM_OK;
@@ -358,6 +446,7 @@ PSM_API psm_result psm_bed_texture_file(psm_session *s, char *out, size_t out_ca
     if (! s->presets)
         return PSM_ERR_NOT_FOUND;
     try {
+        std::lock_guard<std::recursive_mutex> data_lock(s->data_mtx);
         const Preset &p = s->presets->printers.get_edited_preset();
         copy_str(out, out_cap, Slic3r::PresetUtils::system_printer_bed_texture(p));
         return PSM_OK;
@@ -375,6 +464,7 @@ PSM_API int32_t psm_extruder_count(psm_session *s)
 {
     if (s == nullptr)
         return 0;
+    std::lock_guard<std::recursive_mutex> data_lock(s->data_mtx);
     const auto *nd = s->config.opt<ConfigOptionFloats>("nozzle_diameter");
     if (nd == nullptr || nd->values.empty())
         return 1;
@@ -388,6 +478,7 @@ PSM_API psm_result psm_extruder_filament_get(psm_session *s, int32_t extruder,
         return PSM_ERR_INVALID_ARG;
     if (! s->presets)
         return PSM_ERR_NOT_FOUND;
+    std::lock_guard<std::recursive_mutex> data_lock(s->data_mtx);
     const auto idx = static_cast<size_t>(extruder);
     if (idx >= s->presets->extruders_filaments.size())
         return PSM_ERR_NOT_FOUND;
@@ -408,6 +499,7 @@ PSM_API psm_result psm_extruder_filament_set(psm_session *s, int32_t extruder,
         return PSM_ERR_INVALID_ARG;
     if (! s->presets)
         return PSM_ERR_NOT_FOUND;
+    std::lock_guard<std::recursive_mutex> data_lock(s->data_mtx);
     const auto idx = static_cast<size_t>(extruder);
     if (idx >= s->presets->extruders_filaments.size())
         return PSM_ERR_NOT_FOUND;
@@ -445,6 +537,7 @@ PSM_API psm_result psm_extruder_color_get(psm_session *s, int32_t extruder,
     if (s == nullptr || out == nullptr || extruder < 0)
         return PSM_ERR_INVALID_ARG;
     try {
+        std::lock_guard<std::recursive_mutex> data_lock(s->data_mtx);
         const ConfigOptionStrings *opt = extruder_colours(s, false);
         const auto idx = static_cast<size_t>(extruder);
         copy_str(out, out_cap,
@@ -463,6 +556,7 @@ PSM_API psm_result psm_extruder_color_set(psm_session *s, int32_t extruder,
     if (s == nullptr || rgb == nullptr || extruder < 0)
         return PSM_ERR_INVALID_ARG;
     try {
+        std::lock_guard<std::recursive_mutex> data_lock(s->data_mtx);
         ConfigOptionStrings *opt = extruder_colours(s, true);
         const auto idx = static_cast<size_t>(extruder);
         if (opt == nullptr || idx >= opt->values.size())
@@ -486,6 +580,7 @@ PSM_API size_t psm_filament_vendor_count(psm_session *s)
     if (s == nullptr)
         return 0;
     try {
+        std::lock_guard<std::recursive_mutex> data_lock(s->data_mtx);
         return vendor_rows(s).size();
     } catch (const std::exception &) {
         return 0;
@@ -500,6 +595,7 @@ PSM_API psm_result psm_filament_vendor_at(psm_session *s, size_t index,
     if (s == nullptr)
         return PSM_ERR_INVALID_ARG;
     try {
+        std::lock_guard<std::recursive_mutex> data_lock(s->data_mtx);
         const std::vector<VendorRow> rows = vendor_rows(s);
         if (index >= rows.size())
             return PSM_ERR_NOT_FOUND;
@@ -521,6 +617,7 @@ PSM_API psm_result psm_filament_vendors_set(psm_session *s,
     if (! s->presets)
         return PSM_ERR_NOT_FOUND;
     try {
+        std::lock_guard<std::recursive_mutex> data_lock(s->data_mtx);
         std::set<std::string> wanted;
         for (size_t i = 0; i < count; ++i)
             if (names != nullptr && names[i] != nullptr)

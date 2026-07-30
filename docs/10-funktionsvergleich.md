@@ -1,237 +1,202 @@
 # Funktionsvergleich PrusaSlicer 2.9.6 ↔ PSMobile
 
-Stand: 29.07.2026, nach dem Lauf mit den Einstellungsseiten.
-SLA bleibt ausserhalb des Umfangs; alle Zahlen unten sind reine FFF.
+Stand: 2026-07-30. Android ist der einzige aktuelle
+Implementierungsfokus. iOS wird erst portiert, wenn der Android-Ablauf
+stabil und auf Geräten geprüft ist.
 
-## Wie gemessen wird
+Die maschinenlesbare Wahrheitsquelle ist
+`docs/feature-matrix.json`. `build/scripts/feature-report.py --check`
+prüft Status und Evidenzpfade. Dabei bedeutet `coded` ausdrücklich
+nicht, dass die Funktion bereits in einem aktuellen APK oder auf einem
+Gerät lief.
 
-Nicht nach Augenmass. `build/scripts/gap-report.py` stellt gegenueber:
+## Aktuell umgesetzt
 
-1. **Parameter** — alle Optionen aus `libslic3r/PrintConfig.cpp` gegen
-   die Schluessel in unserer `tabs.json`.
-2. **Werkzeuge am Modell** — das `EType`-Enum aus `GLGizmosManager.hpp`.
-3. **Menuebefehle** — die `append_menu_item`-Aufrufe aus `MainFrame.cpp`.
+- FFF-Slicing über PrusaSlicer/libslic3r und eine plattformneutrale C-ABI.
+- Android-Viewport mit Bett, Modell, Auswahl, Kamera und
+  G-Code-Vorschau samt Layerbereich; diese älteren Pfade liefen bereits
+  auf einem Android-Gerät.
+- Verschieben per Touch sowie Position, Drehung und Skalierung über
+  Zahlenfelder. Android zeigt Grad, die C-ABI bleibt bei Radiant.
+- Auf Bett legen, auf Bettgröße einpassen, spiegeln, duplizieren,
+  Instanzzahl und Auto-Arrange.
+- Druck-, Filament- und Druckereinstellungen mit 317 von 370
+  FFF-relevanten `PrintConfig`-Optionen.
+- Schnelleinstellungen für Schichthöhe, Fülldichte, Supports und Brim.
+- Filament und Farbe je Extruder.
+- Aufklappbarer Objekt-/Volumenbaum mit Volumentyp, Dreieckszahl und
+  Extruderzuweisung je Objekt oder druckbarem Teil.
+- Begrenztes Undo/Redo für Objekt-, Volumen- und Bettaktionen; eine
+  komplette Touch-Geste oder kombinierte Zahlenaktion ist ein Schritt.
+- Export/Teilen von G-Code und PrusaLink-Code für API-Key oder
+  HTTP-Digest.
+- Slicing als started Foreground-Service im App-Prozess.
 
-Der Bericht laesst sich jederzeit erneut fahren; er ist die Grundlage
-fuer alles hier.
+Neu gebaut und im C-ABI-Vertragstest auf einem x86_64-Emulator geprüft:
 
----
+- Slice-Snapshot und Designrevision: Änderungen können keinen alten
+  G-Code mehr als aktuell erscheinen lassen.
+- Abhängige Einstellungsfelder nutzen extrahierte
+  PrusaSlicer-Toggle-Logik.
+- Druckerzugänge liegen AES-GCM-verschlüsselt im Android Keystore und
+  sind von Auto Backup ausgeschlossen.
+- Bei mehreren PrusaLink-Druckern muss das Uploadziel gewählt werden.
 
-## 1. Parameter
+Zusätzlich im Compose-UI-Smoke-Test auf demselben Emulator geprüft:
 
-```
-PrintConfig definiert insgesamt   560
-davon SLA                         190
-FFF-relevant                      370
-in PSMobile erreichbar            317
-fehlend                            53
-```
+- 3MF fragt immer zwischen **Nur 3D-Objekte** und **Als Projekt**.
+- Projektimport übernimmt Positionen, eingebettete FFF-Konfiguration
+  und wählt das passende installierte Druckerprofil; bei Abweichungen
+  bleibt die eingebettete Konfiguration als projektlokales Profil
+  aktiv.
+- Eingebettete Post-Processing-Skripte werden beim mobilen
+  Projektimport entfernt.
+- Mehrbettprojekte werden in einzelne mobile Betten zerlegt. Der Nutzer
+  wählt `Bett 1`, `Bett 2` usw. direkt; es gibt keine große
+  scrollbare Desktop-Bettlandschaft.
+- Objekte können gezielt auf ein anderes Bett verschoben werden.
+- Projekte können neu angelegt, als 3MF gespeichert und über
+  **Speichern unter** an Android-Dokumentanbieter ausgegeben werden.
+- Eine gespeicherte Zwei-Bett-3MF wurde im Emulator geschlossen und
+  wieder geöffnet; Objektzahlen und direkte Bettzuordnung blieben
+  erhalten.
+- Undo und Redo wurden in der Compose-Werkzeugleiste mit einer
+  Duplizieraktion vorwärts und rückwärts geprüft.
+- In einem MMU3-Profil wurde ein Modellvolumen über den Baum sichtbar
+  auf `Extruder 3` gesetzt.
 
-Zum Vergleich: am Morgen des 29.07. waren es 247. Der Sprung kam nicht
-durch Abtippen, sondern weil `extract-ui.py` drei Muster in `Tab.cpp`
-nicht kannte. Alle drei sind inzwischen abgedeckt:
+## Parameter
 
-| Muster im Original | Was dadurch fehlte |
-|---|---|
-| `option = optgroup->get_option("k"); … append_single_option_line(option)` | saemtliche Custom-G-code-Felder |
-| Seiten aus `build_extruder_pages` / `build_kinematics_page` / `build_unregular_pages` | die gesamte Retraction, Machine limits |
-| `line.append_option(optgroup->get_option("k"))` — zwei Werte unter einer Beschriftung | `top_solid_layers`, `first_layer_temperature`, `bed_temperature`, Luefterdrehzahlen |
+`build/scripts/gap-report.py` misst direkt gegen
+`libslic3r/PrintConfig.cpp`:
 
-### Die verbleibenden 53, einzeln eingeordnet
+| Kategorie | Anzahl |
+| --- | ---: |
+| FFF-relevant | 370 |
+| in PSMobile erreichbar | 317 |
+| fehlend | 53 |
+| davon Messartefakte/interne/veraltete/unsichtbare Werte | 31 |
+| echte Spezialdialog-Lücken | 18 |
+| gehört an den Objektbaum | 4 |
 
-**a) Artefakte der Messung, keine echten Optionen (3)**
+Die 18 Dialogwerte betreffen Bettform/-textur/-modell,
+Wischvolumenmatrix, Ramming, G-Code-Ersetzungen,
+Profilkompatibilitäten sowie die vollständige Physical-Printer-
+Konfiguration. PSMobiles eigene PrusaLink-Verwaltung ersetzt davon nur
+den lokalen Standardfall; OctoPrint, Repetier, FlashAir, AstroBox, MKS,
+Zertifikatsdateien und Prusa Connect sind nicht abgedeckt.
 
-`machine_max_feedrate_`, `machine_max_acceleration_`, `machine_max_jerk_`
+Die vier Objektwerte sind `extruder`, `extruder_colour`,
+`wipe_into_infill` und `wipe_into_objects`. `extruder` ist jetzt über
+den Objekt-/Volumenbaum erreichbar. Eigene Objektfarbe sowie
+„In Infill/Objekte wischen“ fehlen noch; deshalb ist die vollständige
+Multicolor-Parität trotz funktionierender Teilzuweisung noch nicht
+erreicht.
 
-PrintConfig baut diese Namen selbst in einer Achsenschleife zusammen.
-Der Bericht sieht den Praefix. Die echten Schluessel (`…_x`, `…_y`,
-`…_z`, `…_e`) sind vorhanden. Nichts zu tun.
+## Modellwerkzeuge
 
-**b) Interne Buchfuehrung, am Desktop nirgends bedienbar (20)**
+Der Desktop deklariert 13 relevante Gizmo-Typen. PSMobile hat
+numerisches Skalieren und Drehen sowie zusätzlich mobiles
+Touch-Verschieben. Noch nicht umgesetzt sind:
 
-`printer_technology`, `printer_model`, `printer_vendor`,
-`printer_variant`, `print_settings_id`, `printer_settings_id`,
-`filament_settings_id`, `physical_printer_settings_id`, `preset_name`,
-`preset_names`, `profile_vendor`, `profile_version`, `inherits`,
-`inherits_cummulative`, `compatible_printers_condition_cummulative`,
-`compatible_prints_condition_cummulative`, `default_filament_profile`,
-`default_print_profile`, `extrusion_axis`, `filament_vendor`
+- an einer gewählten Fläche flach legen;
+- schneiden und vereinfachen;
+- Supports, Naht, Fuzzy Skin und MMU-Farbe bemalen;
+- messen;
+- Text und SVG prägen;
+- der im Desktop-Enum geführte Hollow-Pfad.
 
-Diese Werte stehen in den Profildateien und werden vom Programm
-gepflegt, nicht vom Nutzer. `filament_vendor` benutzen wir bereits — zur
-Gruppierung der Materialliste, nicht als Einstellzeile. Nichts zu tun.
+„Aufs Bett legen“ ist nicht dasselbe wie „Flach legen“: Ersteres senkt
+das Objekt nur auf Z=0, letzteres richtet eine ausgewählte Fläche aus.
 
-**c) In 2.9 abgeloest oder nur noch fuer die Kommandozeile (4)**
+## Projekt- und Dateiabläufe
 
-`colorprint_heights` (durch Custom-G-code-Eintraege ersetzt),
-`infill_only_where_needed` (entfernt), `thumbnails_format` (in
-`thumbnails` aufgegangen), `duplicate_distance` (nur CLI).
-Nichts zu tun.
+| Ablauf | Stand |
+| --- | --- |
+| STL/OBJ/AMF/3MF als Geometrie importieren | vorhanden |
+| 3MF als Projekt mit Konfiguration öffnen | Core und Compose-UI im Emulator geprüft |
+| Drucker aus 3MF automatisch auswählen | projektlokales Profil im UI geprüft; exaktes installiertes Profil offen |
+| Mehrere Betten direkt auswählen | Core und Bettchips im Emulator geprüft |
+| Neues Projekt | Compose-UI im Emulator geprüft, mit Verlustwarnung |
+| Projekt als 3MF speichern / Speichern unter | Core-Roundtrip und SAF-UI im Emulator geprüft |
+| STEP | absichtlich im mobilen Build deaktiviert |
+| ZIP-Archivimport | fehlt |
+| Platte als STL/OBJ exportieren | fehlt |
+| G-Code binär/ASCII konvertieren | fehlt |
+| beschädigte STL reparieren | fehlt |
 
-**d) Am Desktop nicht sichtbar (4)**
+Der mobile Roundtrip ist umgesetzt: lokale Betten werden beim Speichern
+in PrusaSlicers virtuelle Bettlandschaft zurückübersetzt, Zugangsdaten
+und Post-Processing werden entfernt. Offen bleibt der zusätzliche
+manuelle Vergleich komplexer Projekte mit Desktop-PrusaSlicer,
+insbesondere Custom-G-Code und Wipe-Tower.
 
-`seam_preferred_direction`, `seam_preferred_direction_jitter` (im
-Quelltext auskommentiert), `solid_layers`, `solid_min_thickness`
-(Sammelwerte, die auf top/bottom durchschlagen). Nichts zu tun.
+## Bedienung und Zustandsverwaltung
 
-**e) Eigene Dialoge am Desktop — echte Luecken (14)**
+Jetzt vorhanden sind Undo/Redo, eine projektinterne
+Objekt-Zwischenablage über mehrere Druckbetten sowie der
+Objekt-/Volumenbaum mit Extruder je druckbarem Teil. „+ Kopie“ und
+„− Kopie“ ändern Instanzen getrennt von Kopieren/Einfügen. Modifier,
+Negativvolumen und Support-Blocker werden mit ihrem Typ angezeigt; ihre
+Erzeugungs- und Bearbeitungsdialoge fehlen noch.
 
-| Schluessel | Dialog im Original | Aufwand |
-|---|---|---|
-| `bed_shape`, `bed_custom_texture`, `bed_custom_model` | `BedShapeDialog` — Form, Groesse, eigene Textur und Modell | mittel |
-| `wiping_volumes_matrix`, `wiping_volumes_use_custom_matrix` | `WipingDialog` — Reinigungsmengen als Matrix Filament×Filament | mittel, fuer MMU wichtig |
-| `filament_ramming_parameters` | `RammingDialog` — Rammkurve als Diagramm | hoch |
-| `gcode_substitutions` | `SubstitutionManager` — Suchen-und-Ersetzen im Ausgabe-G-code | gering |
-| `print_host`, `host_type`, `printhost_apikey`, `printhost_port`, `printhost_cafile`, `printhost_user`, `printhost_password`, `printhost_ssl_ignore_revoke`, `printhost_authorization_type` | `PhysicalPrinterDialog` | teilweise vorhanden |
+Weiterhin fehlend:
 
-Zum letzten Punkt: wir haben eine eigene PrusaLink-Verwaltung mit
-Adresse, Benutzer und Passwort. Sie speichert aber in den
-SharedPreferences statt im Druckerprofil, kennt keine anderen
-Host-Typen (OctoPrint, Repetier, FlashAir, AstroBox, MKS) und
-unterstuetzt kein Zertifikat.
+- Mehrfachauswahl;
+- Suchen und „Alles auswählen/Auswahl aufheben“;
+- vollständige Tastatur- und Stiftbedienung.
 
-**f) Am Objekt statt im Profil (4)**
+Profiländerungen werden mit Anzahl markiert. Beim Wechsel können die
+Werte übertragen, verworfen oder unter eigenem Profilnamen gespeichert
+werden.
 
-`extruder`, `extruder_colour`, `wipe_into_infill`, `wipe_into_objects`
+Desktop-Menüs wie neue Instanz, Konfigurationsordner öffnen,
+SD-Karte auswerfen oder Desktop-Fensterverwaltung sind keine
+Mobile-Paritätsziele.
 
-Die gehoeren in den Objektbaum, nicht auf eine Profilseite.
-`extruder_colour` ist ueber die Extruderfarben in der Seitenleiste
-bereits erreichbar; `extruder` je Objekt und je Teil ist Aufgabe 26 und
-die eigentliche Sperre fuer echtes Multicolor.
+## Slicing, Speicher und Hintergrund
 
-### Fazit Parameter
+Der neue Core slict aus einer Modell-/Konfigurationskopie und verwirft
+das Ergebnis, wenn sich das aktive Projekt währenddessen ändert. Der
+Foreground-Service ist korrekt started und zeigt sofort eine
+Benachrichtigung; er bleibt zunächst bewusst im UI-Prozess.
 
-Von 370 sind **317 erreichbar**, **31 brauchen nichts** (Gruppen a–d),
-**14 sind echte Luecken** in Form von fuenf Spezialdialogen und
-**4 gehoeren an den Objektbaum**.
+Im x86_64-Emulator bestanden ein 41-MB-3MF, 31 Sekunden Slicing bei
+ausgeschaltetem Display, UI-Abbruch mit direktem Neustart, Vorschau,
+Teilen und 20 aufeinanderfolgende Slice-Zyklen. Ein dabei
+reproduzierter Nullzugriff nach erkanntem G-Code-Pfadkonflikt ist im
+Core behoben und durch einen Vertragstest abgedeckt.
 
----
+Noch offen sind:
 
-## 2. Seiten
+- Änderung-während-Slice als vollständiger UI-Ablauf, Geräte-Rotation
+  während des Slicens und der bediente Notification-Cancel-Test;
+- gemessene Speichergrenzen und Low-Memory-Verhalten auf realen
+  4–6-GB- und ≥8-GB-ARM-Geräten;
+- gestaffeltes Laden bzw. Dezimierung großer Vorschauen;
+- separater Slicer-Prozess samt serialisierbarem Auftrag und Recovery.
 
-Der Druckerbaum stimmt seit heute mit dem Desktop ueberein — geprueft
-gegen das Belegfoto eines XL-5T:
+## Netzwerk und Auslieferung
 
-```
-General | Custom G-code | Machine limits | Single extruder MM setup
-        | Extruder 1 … 5 | Notes | Dependencies
-```
+PrusaLink ist implementiert, aber nicht gegen reale Druckerhardware
+verifiziert. Prusa Connect braucht eine eigene OAuth-Client-ID.
+Cleartext-HTTP ist nur nach ausdrücklicher Freigabe je Drucker erlaubt.
 
-Die Extruderseiten entstehen zur Laufzeit, eine je Eintrag in
-`nozzle_diameter`, genau wie `TabPrinter::build_extruder_pages`.
+Vor einer öffentlichen Auslieferung fehlen außerdem Lizenzdatei,
+Third-Party-Notices, Quellcodeangebot, Datenschutztext und die
+Store-/AGPL-Entscheidung.
 
-Druck (10 Seiten) und Filament (6 Seiten) sind ebenfalls vollstaendig.
-Was auf den Seiten *Dependencies* steht, ist noch leer: dort gehoert der
-Abhaengigkeitsbaum hin, den der Desktop als eigenes Widget zeichnet.
+## Empfohlene Reihenfolge
 
----
-
-## 3. Werkzeuge am Modell
-
-PrusaSlicer kennt dreizehn (ohne die beiden SLA-Werkzeuge):
-
-| Werkzeug | PSMobile | Bemerkung |
-|---|---|---|
-| Verschieben | teilweise | nur Ziehen mit dem Finger, keine Zahleneingabe |
-| Skalieren | fehlt | ABI `psm_model_set_scale` liegt bereit |
-| Drehen | fehlt | ABI `psm_model_set_rotation` liegt bereit |
-| Flach legen | fehlt | Flaeche antippen, Objekt richtet sich danach |
-| Schneiden | fehlt | `libslic3r/CutUtils` ist GUI-frei, portierbar |
-| Vereinfachen | fehlt | `libslic3r/QuadricEdgeCollapse`, GUI-frei |
-| Stuetzen bemalen | fehlt | braucht `TriangleSelector` plus eigenen Pinsel |
-| Naht bemalen | fehlt | dito |
-| Fuzzy Skin bemalen | fehlt | dito |
-| MMU-Farbe bemalen | fehlt | dito, das teuerste Stueck |
-| Messen | fehlt | |
-| Text praegen | fehlt | braucht Schriftbehandlung |
-| SVG praegen | fehlt | |
-
-**Neu in dieser Runde entdeckt:** *Vereinfachen* und *Fuzzy Skin
-bemalen* standen in keiner meiner frueheren Listen. Vereinfachen ist
-davon das guenstigste — reine Geometrie, kein wx.
-
----
-
-## 4. Menuebefehle
-
-`MainFrame.cpp` hat 68 Eintraege. Nach Bereichen:
-
-**Datei — vorhanden:** Modell importieren (STL/3MF/OBJ/AMF), G-code
-exportieren, G-code senden, Slicen.
-
-**Datei — fehlt:** Neues Projekt, Projekt oeffnen, Projekt speichern,
-Projekt speichern unter, STL in imperialen Einheiten importieren,
-ZIP-Archiv importieren, Konfiguration importieren/exportieren,
-Konfigurationsbuendel importieren/exportieren, Platte als STL/OBJ
-exportieren (mit und ohne Stuetzen), Werkzeugwege als OBJ exportieren,
-ASCII-G-code nach binaer wandeln und zurueck, STL reparieren.
-
-**Bearbeiten — fehlt vollstaendig:** Alles auswaehlen, Auswahl
-aufheben, Auswahl loeschen (nur ueber die Werkzeugleiste), Alles
-loeschen (vorhanden), Rueckgaengig, Wiederholen, Kopieren, Einfuegen,
-Neu von Datei laden, Suchen.
-
-**Ansicht — vorhanden:** Iso, Oben, Unten, Vorn, Hinten, Links, Rechts,
-3D-Editor, Vorschau.
-
-**Fenster — fehlt:** Reiter direkt anspringen (seit heute ueber die
-Reiterleiste da), Formenbibliothek, Warteschlange fuer Druckerhosts,
-Profile vergleichen.
-
-Von den 68 sind rund **20 sinnvoll uebertragbar**; der Rest ist
-Desktop-Eigenheit (Neue Instanz, Konfigurationsordner zeigen,
-Tastenkuerzel) oder gehoert zu SLA.
-
----
-
-## 5. Hauptbildschirm
-
-Das Belegfoto der Desktop-Seitenleiste zeigt: Druckprofil, Filament (bei
-MMU fuenf Zeilen mit Farbe), Drucker, dann **Supports**, **Infill**,
-**Brim** als direkte Bedienelemente, darunter die Objektliste und
-"Slice now".
-
-Bei uns sind Profile und Filamente je Extruder seit heute da. Es fehlen:
-
-* Die drei Schnellzugriffe Supports, Infill, Brim
-* Ein Baum statt einer flachen Objektliste
-* Betthaftung, Schalenstaerke und Infill-Muster nach dem Vorbild von
-  EasyPrint (Belegbild): Infill mit Bild, Decke/Wand/Boden je in
-  Millimetern und Schichten
-
----
-
-## 6. Was seit dem letzten Bericht dazugekommen ist
-
-* G-Code-Vorschau ueber libvgcode, mit Schichtregler
-* Material und Farbe je Extruder, samt Farbwaehler
-* Alle Einstellungsseiten des Druckers inklusive Retraction
-* Reiterleiste Druck / Filament / Drucker
-* Aenderungen leben im `edited preset`, damit ein Profilwechsel sie
-  nicht mehr kommentarlos wegwirft
-* G-Code-Dateiname aus `output_filename_format`; dabei kam heraus, dass
-  bgcode laengst lief
-
-**Behobene Fehler:** Bett wechselte beim Druckerwechsel nicht mit;
-neu geladenes Objekt war unsichtbar; `\n` stand woertlich in den
-G-code-Feldern; Filamentwerte zeigten die ganze Reihe ueber alle Duesen.
-
----
-
-## 7. Reihenfolge
-
-1. **Objekt-Schnelleinstellungen** mit Zwei-Finger-Skalierung — Aufgabe 25
-2. **Schnellzugriffe Infill, Schalen, Stuetzen** im Hauptschirm — 34
-3. **Abhaengigkeiten ausgrauen** mit Begruendung — 27
-4. **Objektbaum mit Extruder je Teil** — 26, danach ist Multicolor echt
-5. **Filamentauswahl mit Suche und Herstellern** — 33
-6. **Profiländerungen behalten und speichern**, Nachfrage beim Wechsel — 21
-7. **Projekte** neu, oeffnen, speichern als 3MF — 35
-8. **Rueckgaengig und Wiederholen** — GUI-frei, guenstig
-9. **Vereinfachen, Schneiden, Flach legen** — GUI-freie Geometrie
-10. **Bettform, Reinigungsmengen, G-code-Ersetzungen** — die drei
-    guenstigen Spezialdialoge
-11. **Mehrfachauswahl und Dateiliste** — 39
-12. **Reinigungsturm verschieben** — 36
-13. **Zwei Oberflaechen Einfach/Experte** — 41, zum Schluss
-14. Die Bemal-Werkzeuge — das teure Ende
+1. Das Android-Gerätegate auf beiden arm64-Speicherklassen ausführen;
+   Rotation, Notification-Abbruch und Low-Memory-Verhalten nachholen.
+2. Die vorhandene Projektlokal-/Post-Processing-/Mehrbett-Fixture um
+   ein exakt installiertes Druckerprofil ergänzen.
+3. Custom-G-Code-/Wipe-Tower-Roundtrip gegen Desktop-PrusaSlicer
+   ergänzen.
+4. Mehrfachauswahl und Auswahlbefehle bauen; Clipboard und sichtbarer
+   Dirty-Profilzustand sind vorhanden.
+5. Flach legen, schneiden und vereinfachen.
+6. Spezialdialoge für Bett, Wischmatrix und G-Code-Ersetzungen.
+7. Malwerkzeuge, Messen und Prägen.
+8. Erst danach den stabilen Funktionsumfang auf iOS portieren.

@@ -15,6 +15,9 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -70,7 +73,13 @@ fun SetupScreen(
 
     val shown = models.filter { showSla || !it.isSla }
 
-    Box(modifier.fillMaxSize().background(PrusaColors.Background), Alignment.TopCenter) {
+    Box(
+        modifier
+            .fillMaxSize()
+            .background(PrusaColors.Background)
+            .windowInsetsPadding(WindowInsets.safeDrawing),
+        Alignment.TopCenter,
+    ) {
         Column(Modifier.widthIn(max = 760.dp).fillMaxSize().padding(24.dp)) {
 
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -92,8 +101,8 @@ fun SetupScreen(
                 // mitgelieferten PrusaSlicer-Katalogen.
                 Box {
                     Row(
-                        Modifier.height(40.dp)
-                            .clip(RoundedCornerShape(4.dp))
+                        Modifier.height(48.dp)
+                            .clip(RoundedCornerShape(8.dp))
                             .background(PrusaColors.PanelRaised)
                             .clickable { langMenu = true }
                             .padding(horizontal = 12.dp),
@@ -147,13 +156,13 @@ fun SetupScreen(
                     val on = selected.any { it.startsWith("${m.key}:") }
                     Column(
                         Modifier.fillMaxWidth()
-                            .clip(RoundedCornerShape(4.dp))
+                            .clip(RoundedCornerShape(10.dp))
                             .background(if (on) PrusaColors.Orange.copy(alpha = 0.16f)
                                         else PrusaColors.PanelRaised)
                             .border(1.dp,
                                     if (on) PrusaColors.Orange else PrusaColors.Divider,
-                                    RoundedCornerShape(4.dp))
-                            .padding(horizontal = 12.dp, vertical = 10.dp),
+                                    RoundedCornerShape(10.dp))
+                            .padding(horizontal = 14.dp, vertical = 12.dp),
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically,
                             modifier = Modifier.fillMaxWidth().clickable {
@@ -200,15 +209,15 @@ fun SetupScreen(
                                     val vkey = "${m.key}:$v"
                                     val vOn = vkey in selected
                                     Box(
-                                        Modifier.height(36.dp)
-                                            .clip(RoundedCornerShape(4.dp))
+                                        Modifier.height(48.dp)
+                                            .clip(RoundedCornerShape(8.dp))
                                             .background(if (vOn) PrusaColors.Orange
                                                         else PrusaColors.Panel)
                                             .clickable {
                                                 selected = if (vOn) selected - vkey
                                                            else selected + vkey
                                             }
-                                            .padding(horizontal = 12.dp),
+                                            .padding(horizontal = 16.dp),
                                         contentAlignment = Alignment.Center,
                                     ) {
                                         Text(v, color = PrusaColors.TextPrimary, fontSize = 13.sp)
@@ -223,8 +232,8 @@ fun SetupScreen(
             Button(
                 onClick = { onConfirm(selected.toList()) },
                 enabled = selected.isNotEmpty() && !busy,
-                modifier = Modifier.fillMaxWidth().height(52.dp).padding(top = 12.dp),
-                shape = RoundedCornerShape(6.dp),
+                modifier = Modifier.fillMaxWidth().padding(top = 12.dp).height(58.dp),
+                shape = RoundedCornerShape(12.dp),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = PrusaColors.Orange,
                     contentColor = PrusaColors.TextPrimary,

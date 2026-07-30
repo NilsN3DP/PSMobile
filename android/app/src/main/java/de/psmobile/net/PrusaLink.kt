@@ -5,6 +5,8 @@ import org.json.JSONObject
 import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
+import java.util.Locale
+import java.util.concurrent.ConcurrentHashMap
 
 /**
  * PrusaLink-Anbindung.
@@ -36,7 +38,7 @@ object PrusaLink {
     data class Printer(
         val id: String,
         val name: String,
-        val host: String,               // IP oder Hostname, ohne Schema
+        val host: String,               // URL; ohne Schema gilt HTTPS
         val auth: Auth = Auth.USER_PASSWORD,
         val apiKey: String = "",
         val username: String = DEFAULT_USER,
@@ -44,14 +46,27 @@ object PrusaLink {
         /** Preset-Name in PSMobile, damit Profil und Geraet zusammenfinden. */
         val presetName: String = "",
         val storage: String = "usb",
+        val allowInsecureHttp: Boolean = false,
     ) {
         val baseUrl: String
-            get() = if (host.startsWith("http")) host.trimEnd('/')
-                    else "http://${host.trimEnd('/')}"
+            get() = if (host.startsWith("http://", ignoreCase = true) ||
+                        host.startsWith("https://", ignoreCase = true))
+                host.trimEnd('/')
+            else
+                "https://${host.trimEnd('/')}"
+
+        val transportError: String?
+            get() = when {
+                host.isBlank() -> "Adresse fehlt"
+                baseUrl.startsWith("http://", ignoreCase = true) &&
+                    !allowInsecureHttp ->
+                    "HTTP ist für diesen Drucker nicht freigegeben"
+                else -> null
+            }
 
         /** Anmeldedaten vollstaendig? */
         val isComplete: Boolean
-            get() = host.isNotBlank() && when (auth) {
+            get() = transportError == null && when (auth) {
                 Auth.API_KEY -> apiKey.isNotBlank()
                 Auth.USER_PASSWORD -> username.isNotBlank() && password.isNotBlank()
             }
@@ -70,10 +85,11 @@ object PrusaLink {
      * aus einer billigen Anfrage geholt und fuer den PUT wiederverwendet -
      * bei qop=auth ist das mit hochgezaehltem nc ausdruecklich erlaubt.
      */
-    private val challenges = mutableMapOf<String, DigestAuth.Challenge>()
+    private val challenges = ConcurrentHashMap<String, DigestAuth.Challenge>()
 
     /** Zustand abfragen. Dient zugleich als Test der Anmeldedaten. */
     fun probe(p: Printer): Result = try {
+        p.transportError?.let { return Result.Error(it) }
         val (code, body) = request(p, "/api/v1/status", "GET")
         when (code) {
             in 200..299 -> Result.Ok(describe(body))
@@ -96,6 +112,7 @@ object PrusaLink {
      *                   Kopfzeile im Format `?1` bzw. `?0`, nicht true/false.
      */
     fun upload(p: Printer, file: File, remoteName: String, printAfter: Boolean): Result = try {
+        p.transportError?.let { return Result.Error(it) }
         val safe = remoteName.replace(Regex("[^A-Za-z0-9._-]"), "_")
         val path = "/api/v1/files/${p.storage}/$safe"
 
@@ -195,7 +212,8 @@ object PrusaLink {
         val nozzle = printer?.optDouble("temp_nozzle", Double.NaN) ?: Double.NaN
         buildString {
             append(state.ifBlank { "verbunden" })
-            if (!nozzle.isNaN()) append("  ·  Düse %.0f °C".format(nozzle))
+            if (!nozzle.isNaN())
+                append("  ·  Düse ${String.format(Locale.ROOT, "%.0f", nozzle)} °C")
         }
     }.getOrDefault("verbunden")
 }

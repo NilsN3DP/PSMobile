@@ -3,6 +3,8 @@
     <string name="app_name">PSMobile</string>
     <string name="slicing">Slicen</string>
     <string name="slice_starting">wird vorbereitet</string>
+    <string name="cancel_slice">Abbrechen</string>
     <string name="channel_slicing">Slicing-Fortschritt</string>
-    <string name="memory_warning">Dieses Modell braucht geschaetzt %1$d MB, das Geraet gibt der App etwa %2$d MB. Das kann fehlschlagen – Modell vereinfachen oder Remote-Slicing nutzen.</string>
+    <string name="memory_warning">Speicherbedarf ca. %1$d MB; sichere Grenze auf diesem Gerät: %2$d MB. Vor dem Slicen besser vereinfachen.</string>
+    <string name="memory_blocked">Slicen sicher gestoppt: Dieses Projekt benötigt voraussichtlich etwa %1$d MB RAM, die sichere Grenze auf diesem Gerät liegt bei etwa %2$d MB. Nutze „Vereinfachen“, ein gröberes Profil oder ein Gerät mit mehr RAM.</string>
 </resources>

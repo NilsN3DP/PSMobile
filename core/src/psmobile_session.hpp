@@ -15,10 +15,13 @@
 
 #include <atomic>
 #include <condition_variable>
+#include <deque>
 #include <memory>
 #include <mutex>
+#include <map>
 #include <string>
 #include <thread>
+#include <utility>
 #include <vector>
 
 #include "libslic3r/Model.hpp"
@@ -31,17 +34,84 @@ void psm_emit_log(psm_log_level lvl, const std::string &msg);
 
 struct psm_session
 {
+    struct HistorySnapshot {
+        std::vector<std::unique_ptr<Slic3r::Model>> beds;
+        size_t                                      active_bed = 0;
+        std::string                                 label;
+
+        HistorySnapshot(
+            const std::vector<std::unique_ptr<Slic3r::Model>> &source,
+            size_t active,
+            std::string action)
+            : active_bed(active), label(std::move(action))
+        {
+            beds.reserve(source.size());
+            for (const auto &bed : source)
+                beds.emplace_back(std::make_unique<Slic3r::Model>(*bed));
+        }
+
+        HistorySnapshot(HistorySnapshot &&) noexcept = default;
+        HistorySnapshot &operator=(HistorySnapshot &&) noexcept = default;
+        HistorySnapshot(const HistorySnapshot &) = delete;
+        HistorySnapshot &operator=(const HistorySnapshot &) = delete;
+    };
+
     std::string datadir;
     std::string resdir;
 
-    Slic3r::Model                          model;
+    /*
+     * Mobil werden Betten als getrennte Projektebenen gehalten. Dadurch
+     * liegt im Viewport immer genau ein Bett im sichtbaren Koordinatenraum:
+     * Der Nutzer waehlt Bett 1/2/3 explizit, statt durch eine riesige
+     * Desktop-Bettlandschaft zu scrollen.
+     */
+    std::vector<std::unique_ptr<Slic3r::Model>> bed_models;
+    size_t                                 active_bed = 0;
     Slic3r::DynamicPrintConfig             config;
     std::unique_ptr<Slic3r::PresetBundle>  presets;
 
+    /*
+     * Begrenzte Projekt-Historie. Model-Kopien teilen die unveraenderlichen
+     * Mesh-Puffer ueber shared_ptr; damit kostet ein Verschieben nicht noch
+     * einmal die komplette STL im Speicher. Preset-Aenderungen bleiben
+     * vorerst ausserhalb der Historie, Modell-, Volumen- und Bettaktionen
+     * sind dagegen vollstaendig enthalten.
+     */
+    std::deque<HistorySnapshot>            undo_history;
+    std::deque<HistorySnapshot>            redo_history;
+    size_t                                 history_depth = 0;
+    bool                                   history_checkpoint_taken = false;
+    std::string                            history_label;
+    static constexpr size_t                HISTORY_LIMIT = 20;
+
+    psm_session();
+
+    Slic3r::Model &model()
+    {
+        return *bed_models[active_bed];
+    }
+
+    const Slic3r::Model &model() const
+    {
+        return *bed_models[active_bed];
+    }
+
+    /*
+     * Modell, Konfiguration und Presets werden auch vom GL-Thread
+     * gelesen. Der rekursive Mutex ist noetig, weil einige Helfer
+     * innerhalb einer bereits geschuetzten Operation wieder ueber das
+     * C-ABI gehen (zum Beispiel Bettmodell/-textur).
+     */
+    std::recursive_mutex             data_mtx;
+
     /* Slice-Job */
     std::unique_ptr<Slic3r::Print>   print;
+    std::unique_ptr<Slic3r::Model>   slice_model;
+    Slic3r::DynamicPrintConfig       slice_config;
     std::thread                      worker;
     std::mutex                       mtx;
+    std::mutex                       print_mtx;
+    std::mutex                       result_mtx;
     std::condition_variable          cv;
     std::atomic<int>                 state{ PSM_STATE_IDLE };
     std::atomic<bool>                cancel_requested{ false };
@@ -50,7 +120,24 @@ struct psm_session
     std::string                      gcode_tmp_path;
     psm_slice_stats                  stats{};
 
+    /*
+     * design_revision beschreibt exakt den Stand, aus dem ein Slice
+     * entstehen muss. Der Worker merkt sich seine Startrevision. Nur
+     * wenn sie beim Abschluss noch aktuell ist, darf sein G-Code
+     * exportiert oder gesendet werden.
+     */
+    std::atomic<uint64_t>            design_revision{ 1 };
+    std::atomic<uint64_t>            running_revision{ 0 };
+    std::atomic<uint64_t>            result_revision{ 0 };
+
     std::string                      last_error;
+
+    /* Ergebnis der Abhaengigkeitsregeln, zwischengespeichert.
+     * config_revision zaehlt bei jeder Aenderung hoch; solange sie
+     * gleich bleibt, gilt die Karte. */
+    std::map<std::string, bool>      toggles;
+    uint64_t                         config_revision = 0;
+    uint64_t                         toggle_revision = ~0ull;
 
     /* Schluesselliste fuer die generierte Experten-UI, einmal aufgebaut */
     std::vector<std::string>         config_keys;
@@ -88,6 +175,66 @@ struct psm_session
      * zurueckgreift, laeuft dann in einen Nullzeiger. Deshalb erst die
      * Callbacks entschaerfen, dann freigeben. */
     void teardown_print();
+
+    void history_begin(const std::string &label)
+    {
+        if (history_depth++ == 0) {
+            history_checkpoint_taken = false;
+            history_label = label;
+        }
+    }
+
+    void history_checkpoint(const std::string &label)
+    {
+        if (history_depth > 0 && history_checkpoint_taken)
+            return;
+        undo_history.emplace_back(
+            bed_models,
+            active_bed,
+            history_depth > 0 && ! history_label.empty() ? history_label : label);
+        while (undo_history.size() > HISTORY_LIMIT)
+            undo_history.pop_front();
+        redo_history.clear();
+        if (history_depth > 0)
+            history_checkpoint_taken = true;
+    }
+
+    void history_end()
+    {
+        if (history_depth == 0)
+            return;
+        if (--history_depth == 0) {
+            history_checkpoint_taken = false;
+            history_label.clear();
+        }
+    }
+
+    void history_clear()
+    {
+        undo_history.clear();
+        redo_history.clear();
+        history_depth = 0;
+        history_checkpoint_taken = false;
+        history_label.clear();
+    }
+
+    void mark_design_changed()
+    {
+        design_revision.fetch_add(1, std::memory_order_acq_rel);
+        result_revision.store(0, std::memory_order_release);
+
+        int expected = PSM_STATE_DONE;
+        state.compare_exchange_strong(expected, PSM_STATE_STALE,
+                                      std::memory_order_acq_rel);
+    }
+
+    bool result_is_current() const
+    {
+        const uint64_t result = result_revision.load(std::memory_order_acquire);
+        return state.load(std::memory_order_acquire) == PSM_STATE_DONE &&
+               result != 0 &&
+               result == design_revision.load(std::memory_order_acquire);
+    }
 
     ~psm_session();
 };

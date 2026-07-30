@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.DropdownMenu
@@ -75,7 +76,7 @@ fun QuickSettings(
         // --- Fuellung --------------------------------------------------
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(PsUi.tr("Infill"), color = PrusaColors.TextMuted,
-                 fontSize = 12.sp, modifier = Modifier.width(80.dp))
+                 fontSize = 13.sp, modifier = Modifier.width(88.dp))
             Box(Modifier.weight(1f)) {
                 // Dieselben Stufen wie im Kombifeld des Desktops.
                 Picker(
@@ -89,7 +90,7 @@ fun QuickSettings(
 
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(PsUi.tr("Fill pattern"), color = PrusaColors.TextMuted,
-                 fontSize = 12.sp, modifier = Modifier.width(80.dp))
+                 fontSize = 13.sp, modifier = Modifier.width(88.dp))
             Box(Modifier.weight(1f)) {
                 // Werte und Beschriftungen kommen aus PrintConfig, nicht
                 // aus einer eigenen Liste.
@@ -110,7 +111,7 @@ fun QuickSettings(
         // --- Stuetzen --------------------------------------------------
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(PsUi.tr("Supports"), color = PrusaColors.TextMuted,
-                 fontSize = 12.sp, modifier = Modifier.width(80.dp))
+                 fontSize = 13.sp, modifier = Modifier.width(88.dp))
             Box(Modifier.weight(1f)) {
                 val on = values["support_material"] == "1"
                 val auto = values["support_material_auto"] == "1"
@@ -159,7 +160,7 @@ fun QuickSettings(
         var lastBrim by remember { mutableStateOf(if (brim > 0f) brim else 5f) }
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(PsUi.tr("Brim"), color = PrusaColors.TextMuted,
-                 fontSize = 12.sp, modifier = Modifier.width(80.dp))
+                 fontSize = 13.sp, modifier = Modifier.width(88.dp))
             Toggle(brim > 0f) { on ->
                 if (on) set("brim_width", lastBrim.toString())
                 else { lastBrim = if (brim > 0f) brim else lastBrim; set("brim_width", "0") }
@@ -188,7 +189,7 @@ fun QuickSettings(
             val n = values[key]?.toIntOrNull() ?: 0
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(label, color = PrusaColors.TextPrimary,
-                     fontSize = 13.sp, modifier = Modifier.width(80.dp))
+                     fontSize = 13.sp, modifier = Modifier.width(88.dp))
                 Stepper(n) { set(key, it.toString()) }
                 Text(
                     "%.2f mm".format(n * factor),
@@ -215,12 +216,12 @@ private fun Picker(
 
     Box(Modifier.fillMaxWidth()) {
         Row(
-            Modifier.fillMaxWidth().height(40.dp)
-                .clip(RoundedCornerShape(4.dp))
+            Modifier.fillMaxWidth().height(48.dp)
+                .clip(RoundedCornerShape(8.dp))
                 .background(PrusaColors.PanelRaised)
-                .border(1.dp, PrusaColors.Divider, RoundedCornerShape(4.dp))
+                .border(1.dp, PrusaColors.Divider, RoundedCornerShape(8.dp))
                 .clickable { open = true }
-                .padding(horizontal = 10.dp),
+                .padding(horizontal = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(shown.ifBlank { "–" }, color = PrusaColors.TextPrimary,
@@ -248,17 +249,23 @@ private fun Picker(
 @Composable
 private fun Toggle(on: Boolean, onChange: (Boolean) -> Unit) {
     Box(
-        Modifier.width(52.dp).height(30.dp)
-            .clip(RoundedCornerShape(15.dp))
-            .background(if (on) PrusaColors.Orange else PrusaColors.PanelRaised)
+        Modifier.width(60.dp).height(48.dp)
+            .clip(RoundedCornerShape(10.dp))
             .clickable { onChange(!on) },
-        contentAlignment = if (on) Alignment.CenterEnd else Alignment.CenterStart,
+        contentAlignment = Alignment.Center,
     ) {
         Box(
-            Modifier.padding(horizontal = 3.dp).width(24.dp).height(24.dp)
-                .clip(RoundedCornerShape(12.dp))
-                .background(Color.White),
-        )
+            Modifier.width(56.dp).height(34.dp)
+                .clip(RoundedCornerShape(17.dp))
+                .background(if (on) PrusaColors.Orange else PrusaColors.PanelRaised),
+            contentAlignment = if (on) Alignment.CenterEnd else Alignment.CenterStart,
+        ) {
+            Box(
+                Modifier.padding(horizontal = 3.dp).size(28.dp)
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(Color.White),
+            )
+        }
     }
 }
 
@@ -271,7 +278,7 @@ private fun Stepper(value: Int, onChange: (Int) -> Unit) {
             value.toString(),
             color = PrusaColors.TextPrimary,
             fontSize = 14.sp,
-            modifier = Modifier.width(40.dp),
+            modifier = Modifier.width(44.dp),
         )
         StepButton("+") { onChange(value + 1) }
     }
@@ -280,8 +287,8 @@ private fun Stepper(value: Int, onChange: (Int) -> Unit) {
 @Composable
 private fun StepButton(label: String, onClick: () -> Unit) {
     Box(
-        Modifier.width(40.dp).height(36.dp)
-            .clip(RoundedCornerShape(4.dp))
+        Modifier.width(48.dp).height(48.dp)
+            .clip(RoundedCornerShape(8.dp))
             .background(PrusaColors.PanelRaised)
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center,
