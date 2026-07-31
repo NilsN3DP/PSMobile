@@ -659,6 +659,48 @@ int main(int argc, char **argv)
             std::string(config_value).empty(),
             "saved project contains no post-processing command");
 
+    /*
+     * ColorMix-Rezepte sind virtuelle Extruder. Sie müssen sich wie ein
+     * echter Extruder am Objekt, am Volumen und auf jedem mobilen Bett
+     * auswählen lassen, dürfen aber keine beliebigen IDs freischalten.
+     */
+    require(psm_config_set(roundtrip_session, "nozzle_diameter", "0.4,0.4") == PSM_OK &&
+            psm_extruder_count(roundtrip_session) == 2,
+            "configure two physical heads for ColorMix");
+    const char *colormix_json = R"JSON({
+        "version":1,
+        "physical_extruders":[{"id":1,"color":"#FF0000"},{"id":2,"color":"#0000FF"}],
+        "virtual_extruders":[{
+            "id":3,"kind":"fullspectrum",
+            "components":[{"extruder":1,"ratio":0.5},{"extruder":2,"ratio":0.5}]
+        }]
+    })JSON";
+    require(psm_colormix_set_json(roundtrip_session, colormix_json) == PSM_OK,
+            std::string("store ColorMix recipe: ") +
+                psm_last_error(roundtrip_session));
+    char colormix_read[4096]{};
+    const psm_result colormix_read_result = psm_colormix_get_json(roundtrip_session, colormix_read,
+                                                                   sizeof(colormix_read));
+    require(colormix_read_result == PSM_OK &&
+            std::string(colormix_read).find("\"id\": 3") != std::string::npos,
+            std::string("read ColorMix recipe from active bed (rc=") +
+                std::to_string(static_cast<int>(colormix_read_result)) + "): " +
+                colormix_read + "; " + psm_last_error(roundtrip_session));
+    require(psm_model_extruder_set(roundtrip_session, reopened_ids[0], 3) == PSM_OK &&
+            psm_model_extruder_get(roundtrip_session, reopened_ids[0]) == 3,
+            "assign virtual ColorMix extruder to object");
+    require(psm_model_volume_extruder_set(roundtrip_session, reopened_ids[0], 0, 3) == PSM_OK &&
+            psm_model_volume_info(roundtrip_session, reopened_ids[0], 0, &volume) == PSM_OK &&
+            volume.explicit_extruder == 3,
+            "assign virtual ColorMix extruder to volume");
+    require(psm_model_extruder_set(roundtrip_session, reopened_ids[0], 4) == PSM_ERR_INVALID_ARG,
+            "reject undefined virtual extruder");
+    require(psm_bed_select(roundtrip_session, 1) == PSM_OK &&
+            psm_colormix_get_json(roundtrip_session, colormix_read,
+                                  sizeof(colormix_read)) == PSM_OK &&
+            std::string(colormix_read).find("\"id\": 3") != std::string::npos,
+            "ColorMix recipe is shared across mobile beds");
+
     psm_session_destroy(roundtrip_session);
     psm_session_destroy(session);
     std::cout << "PASS: psm_contract_tests\n";

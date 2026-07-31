@@ -123,12 +123,15 @@ private data class PendingPresetSwitch(
 @Composable
 fun SlicerScreen(
     service: SlicerService?,
+    onOpenSimple: () -> Unit,
     onPickFile: (android.net.Uri) -> Unit,
     onShare: (android.net.Uri) -> Unit,
     onPickBackupFolder: () -> Unit,
     onNewProject: () -> Unit,
     onSaveProject: () -> Unit,
     onSaveProjectAs: () -> Unit,
+    canReloadProject: Boolean,
+    onReloadProject: () -> Unit,
     onExportPlate: (PsmCore.PlateFormat) -> Unit,
     onRepairStl: () -> Unit,
     onConvertGcode: () -> Unit,
@@ -143,12 +146,15 @@ fun SlicerScreen(
     }
     SlicerContent(
         service = service,
+        onOpenSimple = onOpenSimple,
         onPickFile = onPickFile,
         onShare = onShare,
         onPickBackupFolder = onPickBackupFolder,
         onNewProject = onNewProject,
         onSaveProject = onSaveProject,
         onSaveProjectAs = onSaveProjectAs,
+        canReloadProject = canReloadProject,
+        onReloadProject = onReloadProject,
         onExportPlate = onExportPlate,
         onRepairStl = onRepairStl,
         onConvertGcode = onConvertGcode,
@@ -159,12 +165,15 @@ fun SlicerScreen(
 @Composable
 private fun SlicerContent(
     service: SlicerService,
+    onOpenSimple: () -> Unit,
     onPickFile: (android.net.Uri) -> Unit,
     onShare: (android.net.Uri) -> Unit,
     onPickBackupFolder: () -> Unit,
     onNewProject: () -> Unit,
     onSaveProject: () -> Unit,
     onSaveProjectAs: () -> Unit,
+    canReloadProject: Boolean,
+    onReloadProject: () -> Unit,
     onExportPlate: (PsmCore.PlateFormat) -> Unit,
     onRepairStl: () -> Unit,
     onConvertGcode: () -> Unit,
@@ -176,8 +185,10 @@ private fun SlicerContent(
 
     val objects by service.objects.collectAsState()
     val beds by service.beds.collectAsState()
+    val lockedBeds by service.lockedBeds.collectAsState()
     val progress by service.progress.collectAsState()
     val presets by service.presets.collectAsState()
+    val colorMix by service.colorMix.collectAsState()
     val history by service.history.collectAsState()
     val volumes by service.volumes.collectAsState()
     val sceneRevision by service.sceneRevision.collectAsState()
@@ -201,10 +212,23 @@ private fun SlicerContent(
     val settingsTab = (screen as? SlicerService.Screen.Settings)?.tab
     var settingsMode by remember { mutableStateOf(PsmCore.Mode.SIMPLE) }
     val showPrinters = screen is SlicerService.Screen.Printers
+    val showWizard = screen is SlicerService.Screen.Wizard
+    val showColorMix = screen is SlicerService.Screen.ColorMix
     val ctx = androidx.compose.ui.platform.LocalContext.current
     val sendState by service.sendState.collectAsState()
     var linkPrinters by remember { mutableStateOf(de.psmobile.net.PrinterStore.all(ctx)) }
     var confirmNewProject by remember { mutableStateOf(false) }
+    var confirmReloadProject by remember { mutableStateOf(false) }
+
+    if (showWizard) {
+        AdvancedWizardScreen(service = service, onClose = service::showBed)
+        return
+    }
+
+    if (showColorMix) {
+        ColorMixScreen(service = service, onClose = service::showBed)
+        return
+    }
 
     if (showPrinters) {
         PrintersScreen(
@@ -239,6 +263,14 @@ private fun SlicerContent(
 
     val selected = objects.firstOrNull { it.id == selectedId }
     val activeBed = beds.firstOrNull { it.active }?.index ?: 0
+    val extruderOptions = buildList {
+        repeat(presets.extruders.size.coerceAtLeast(1)) { index ->
+            add(ExtruderChoice(index + 1, "Extruder ${index + 1}"))
+        }
+        colorMix.recipes.forEach { recipe ->
+            add(ExtruderChoice(recipe.id, "ColorMix ${recipe.id}"))
+        }
+    }
 
     LaunchedEffect(activeBed) {
         selectedId = null
@@ -365,6 +397,8 @@ private fun SlicerContent(
                     onSelectBed = service::selectBed,
                     onAddBed = service::addBed,
                     onRemoveBed = service::removeBed,
+                    lockedBeds = lockedBeds,
+                    onToggleBedLock = service::toggleBedLock,
                     onNew = {
                         if (objects.isNotEmpty() || beds.size > 1)
                             confirmNewProject = true
@@ -373,6 +407,10 @@ private fun SlicerContent(
                     },
                     onSave = onSaveProject,
                     onSaveAs = onSaveProjectAs,
+                    onReload = if (canReloadProject) {
+                        { confirmReloadProject = true }
+                    } else null,
+                    onOpenSimple = onOpenSimple,
                     actionsEnabled = progress !is SlicerService.Progress.Running,
                     showInspectorAction = !permanentInspector,
                     inspectorOpen = inspectorOpen,
@@ -478,6 +516,7 @@ private fun SlicerContent(
                 Sidebar(
                     service = service,
                     presets = presets,
+                    extruderOptions = extruderOptions,
                     objects = objects,
                     volumes = volumes,
                     beds = beds,
@@ -557,6 +596,7 @@ private fun SlicerContent(
             Sidebar(
                 service = service,
                 presets = presets,
+                extruderOptions = extruderOptions,
                 objects = objects,
                 volumes = volumes,
                 beds = beds,
@@ -652,6 +692,28 @@ private fun SlicerContent(
             },
         )
     }
+
+    if (confirmReloadProject) {
+        AlertDialog(
+            onDismissRequest = { confirmReloadProject = false },
+            title = { Text("Projekt neu laden") },
+            text = {
+                Text(
+                    "Die gespeicherte 3MF-Datei wird erneut vom Datenträger geladen. " +
+                        "Nicht gespeicherte Änderungen im aktuellen Projekt gehen verloren."
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmReloadProject = false
+                    onReloadProject()
+                }) { Text("Neu laden") }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmReloadProject = false }) { Text("Abbrechen") }
+            },
+        )
+    }
 }
 
 /* ------------------------------------------------------------------ */
@@ -695,9 +757,8 @@ private fun ToolStrip(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        tools.forEach { tool ->
-            val enabled = tool.name !in notYet &&
-                          (tool.name !in needsSelection || hasSelection) &&
+        tools.filterNot { it.name in notYet }.forEach { tool ->
+            val enabled = (tool.name !in needsSelection || hasSelection) &&
                           (tool.name != "paste" || canPaste) &&
                           (tool.name != "undo" || canUndo) &&
                           (tool.name != "redo" || canRedo)
@@ -1132,9 +1193,13 @@ private fun WorkspaceBar(
     onSelectBed: (Int) -> Unit,
     onAddBed: () -> Unit,
     onRemoveBed: (Int) -> Unit,
+    lockedBeds: Set<Int>,
+    onToggleBedLock: (Int) -> Unit,
     onNew: () -> Unit,
     onSave: () -> Unit,
     onSaveAs: () -> Unit,
+    onReload: (() -> Unit)?,
+    onOpenSimple: () -> Unit,
     actionsEnabled: Boolean,
     showInspectorAction: Boolean,
     inspectorOpen: Boolean,
@@ -1160,6 +1225,7 @@ private fun WorkspaceBar(
                 onNew = onNew,
                 onSave = onSave,
                 onSaveAs = onSaveAs,
+                onReload = onReload,
                 enabled = actionsEnabled,
             )
             Box(
@@ -1173,8 +1239,11 @@ private fun WorkspaceBar(
                 onSelect = onSelectBed,
                 onAdd = onAddBed,
                 onRemove = onRemoveBed,
+                lockedBeds = lockedBeds,
+                onToggleLock = onToggleBedLock,
             )
         }
+        ProjectAction("Simple", actionsEnabled, onOpenSimple)
         if (showInspectorAction) {
             Box(
                 Modifier
@@ -1219,6 +1288,7 @@ private fun ProjectBar(
     onNew: () -> Unit,
     onSave: () -> Unit,
     onSaveAs: () -> Unit,
+    onReload: (() -> Unit)?,
     enabled: Boolean,
     modifier: Modifier = Modifier,
 ) {
@@ -1232,6 +1302,7 @@ private fun ProjectBar(
         ProjectAction("Neu", enabled, onNew)
         ProjectAction("Speichern", enabled, onSave)
         ProjectAction("Speichern unter", enabled, onSaveAs)
+        if (onReload != null) ProjectAction("Neu laden", enabled, onReload)
     }
 }
 
@@ -1267,11 +1338,14 @@ private fun ProjectAction(label: String, enabled: Boolean, onClick: () -> Unit) 
  * und jeder Chip springt unmittelbar zum gewaehlten Bett.
  */
 @Composable
+@OptIn(ExperimentalFoundationApi::class)
 private fun BedSelector(
     beds: List<PsmCore.Bed>,
     onSelect: (Int) -> Unit,
     onAdd: () -> Unit,
     onRemove: (Int) -> Unit,
+    lockedBeds: Set<Int>,
+    onToggleLock: (Int) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     if (beds.isEmpty()) return
@@ -1287,7 +1361,7 @@ private fun BedSelector(
     ) {
         beds.forEach { bed ->
             Text(
-                "Bett ${bed.index + 1} · ${bed.objectCount}",
+                "${if (bed.index in lockedBeds) "🔒 " else ""}Bett ${bed.index + 1} · ${bed.objectCount}",
                 color = if (bed.active) Color.White else PrusaColors.TextPrimary,
                 fontSize = 14.sp,
                 fontWeight = if (bed.active) FontWeight.SemiBold else FontWeight.Normal,
@@ -1295,7 +1369,11 @@ private fun BedSelector(
                     .height(50.dp)
                     .clip(RoundedCornerShape(8.dp))
                     .background(if (bed.active) PrusaColors.Orange else PrusaColors.PanelRaised)
-                    .clickable(enabled = !bed.active) { onSelect(bed.index) }
+                    .combinedClickable(
+                        enabled = true,
+                        onClick = { if (!bed.active) onSelect(bed.index) },
+                        onLongClick = { onToggleLock(bed.index) },
+                    )
                     .padding(horizontal = 16.dp, vertical = 14.dp),
             )
         }
@@ -1336,6 +1414,7 @@ private fun BedSelector(
 private fun Sidebar(
     service: SlicerService,
     presets: SlicerService.Presets,
+    extruderOptions: List<ExtruderChoice>,
     objects: List<PsmCore.ObjectInfo>,
     volumes: Map<Int, List<PsmCore.VolumeInfo>>,
     beds: List<PsmCore.Bed>,
@@ -1524,6 +1603,26 @@ private fun Sidebar(
                             fontSize = 14.sp,
                         )
                     }
+                    OutlinedButton(
+                        onClick = { service.showScreen(SlicerService.Screen.Wizard) },
+                        modifier = Modifier.fillMaxWidth().height(52.dp),
+                        shape = RoundedCornerShape(10.dp),
+                    ) {
+                        Text(
+                            "Advanced-Assistent öffnen",
+                            color = PrusaColors.TextPrimary,
+                            fontSize = 14.sp,
+                        )
+                    }
+                    if (presets.extruders.size >= 2) {
+                        OutlinedButton(
+                            onClick = { service.showScreen(SlicerService.Screen.ColorMix) },
+                            modifier = Modifier.fillMaxWidth().height(52.dp),
+                            shape = RoundedCornerShape(10.dp),
+                        ) {
+                            Text("ColorMix", color = PrusaColors.TextPrimary, fontSize = 14.sp)
+                        }
+                    }
                 }
 
                 InspectorSection.OBJECTS -> {
@@ -1596,7 +1695,7 @@ private fun Sidebar(
                             ObjectTreeRow(
                                 obj = obj,
                                 volumes = volumes[obj.id].orEmpty(),
-                                extruderCount = presets.extruders.size.coerceAtLeast(1),
+                                extruderOptions = extruderOptions,
                                 isSelected = obj.id in selectedIds,
                                 isPrimary = obj.id == selected?.id,
                                 onSelect = { onSelect(obj.id) },
@@ -1675,8 +1774,7 @@ private fun Sidebar(
                         volumes = selected?.let {
                             volumes[it.id].orEmpty()
                         }.orEmpty(),
-                        extruderCount =
-                            presets.extruders.size.coerceAtLeast(1),
+                        extruderOptions = extruderOptions,
                         surfaceMode = surfaceMode,
                         measureText = measureText,
                         onSurfaceMode = onSurfaceMode,
@@ -2021,7 +2119,7 @@ private fun PresetCombo(
 private fun ObjectTreeRow(
     obj: PsmCore.ObjectInfo,
     volumes: List<PsmCore.VolumeInfo>,
-    extruderCount: Int,
+    extruderOptions: List<ExtruderChoice>,
     isSelected: Boolean,
     isPrimary: Boolean,
     onSelect: () -> Unit,
@@ -2096,10 +2194,10 @@ private fun ObjectTreeRow(
                     Text("außerhalb des Bettes", color = PrusaColors.Danger, fontSize = 11.sp)
                 }
             }
-            if (extruderCount > 1 || obj.extruder > 0) {
+            if (extruderOptions.size > 1 || obj.extruder > 0) {
                 ExtruderPicker(
                     selected = obj.extruder,
-                    count = extruderCount,
+                    options = extruderOptions,
                     inheritedLabel = "Standard",
                     onSelect = onObjectExtruder,
                 )
@@ -2125,7 +2223,7 @@ private fun ObjectTreeRow(
                 HorizontalDivider(color = PrusaColors.Divider.copy(alpha = 0.65f))
                 VolumeTreeRow(
                     volume = volume,
-                    extruderCount = extruderCount,
+                    extruderOptions = extruderOptions,
                     onExtruder = { onVolumeExtruder(volume.index, it) },
                 )
             }
@@ -2136,7 +2234,7 @@ private fun ObjectTreeRow(
 @Composable
 private fun VolumeTreeRow(
     volume: PsmCore.VolumeInfo,
-    extruderCount: Int,
+    extruderOptions: List<ExtruderChoice>,
     onExtruder: (Int) -> Unit,
 ) {
     val typeLabel = when (volume.type) {
@@ -2180,11 +2278,11 @@ private fun VolumeTreeRow(
             )
         }
         if (volume.type == PsmCore.VolumeType.MODEL_PART &&
-            (extruderCount > 1 || volume.explicitExtruder > 0)
+            (extruderOptions.size > 1 || volume.explicitExtruder > 0)
         ) {
             ExtruderPicker(
                 selected = volume.explicitExtruder,
-                count = extruderCount,
+                options = extruderOptions,
                 inheritedLabel = "Vom Objekt",
                 onSelect = onExtruder,
             )
@@ -2195,7 +2293,7 @@ private fun VolumeTreeRow(
 @Composable
 private fun ExtruderPicker(
     selected: Int,
-    count: Int,
+    options: List<ExtruderChoice>,
     inheritedLabel: String,
     onSelect: (Int) -> Unit,
 ) {
@@ -2213,7 +2311,7 @@ private fun ExtruderPicker(
             contentAlignment = Alignment.Center,
         ) {
             Text(
-                if (selected > 0) "E$selected ▾" else "Auto ▾",
+                if (selected > 0) "${options.firstOrNull { it.id == selected }?.label ?: "E$selected"} ▾" else "Auto ▾",
                 color = if (selected > 0) PrusaColors.Orange else PrusaColors.TextMuted,
                 fontSize = 12.sp,
                 fontWeight = FontWeight.SemiBold,
@@ -2231,24 +2329,26 @@ private fun ExtruderPicker(
                     onSelect(0)
                 },
             )
-            (1..count).forEach { extruder ->
+            options.forEach { extruder ->
                 DropdownMenuItem(
                     text = {
                         Text(
-                            "Extruder $extruder",
-                            color = if (selected == extruder)
+                            extruder.label,
+                            color = if (selected == extruder.id)
                                 PrusaColors.Orange else PrusaColors.TextPrimary,
                         )
                     },
                     onClick = {
                         expanded = false
-                        onSelect(extruder)
+                        onSelect(extruder.id)
                     },
                 )
             }
         }
     }
 }
+
+internal data class ExtruderChoice(val id: Int, val label: String)
 
 @Composable
 private fun ProgressBlock(progress: SlicerService.Progress) {

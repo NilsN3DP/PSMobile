@@ -9,9 +9,8 @@ Vier Vergleiche:
 
   1. Parameter - alle FFF-Optionen aus PrintConfig.cpp gegen die
      Schluessel in tabs.json. Fehlende werden NICHT nur gezaehlt, sondern
-     eingeordnet: Messartefakt, interne Buchfuehrung, veraltet, eigener
-     Dialog, am Objekt. Eine nackte Zahl ist wertlos - "53 fehlen" sagt
-     nichts, "14 davon sind echte Luecken in fuenf Dialogen" schon.
+     eingeordnet: Messartefakt, interne Buchfuehrung, veraltet,
+     PSMobile-Spezialdialog, offene Dialogluecke oder Objektwerkzeug.
   2. Werkzeuge am Modell - das EType-Enum aus GLGizmosManager.hpp.
   3. Menuebefehle - append_menu_item aus MainFrame.cpp, gegen die Liste
      dessen gehalten, was die App anbietet.
@@ -81,8 +80,9 @@ UNSICHTBAR = {
     "solid_layers", "solid_min_thickness",                          # Sammelwerte
 }
 
-DIALOG = {
-    # Echte Luecken - Aufgabe 43.
+# Diese Werte sind nicht in tabs.json, werden aber in der mobilen
+# Spezialdialogansicht bearbeitet.
+MOBILE_DIALOG = {
     "bed_shape": "BedShapeDialog",
     "bed_custom_texture": "BedShapeDialog",
     "bed_custom_model": "BedShapeDialog",
@@ -90,6 +90,13 @@ DIALOG = {
     "wiping_volumes_use_custom_matrix": "WipingDialog",
     "filament_ramming_parameters": "RammingDialog",
     "gcode_substitutions": "SubstitutionManager",
+    "compatible_printers": "Dependencies-Widget",
+    "compatible_prints": "Dependencies-Widget",
+}
+
+DIALOG = {
+    # Offen: die Desktop-Physical-Printer-Konfiguration. Die
+    # PrusaLink-Zielwahl ersetzt diese Mehrhost-Verwaltung nicht.
     "print_host": "PhysicalPrinterDialog",
     "host_type": "PhysicalPrinterDialog",
     "printhost_apikey": "PhysicalPrinterDialog",
@@ -99,8 +106,6 @@ DIALOG = {
     "printhost_password": "PhysicalPrinterDialog",
     "printhost_ssl_ignore_revoke": "PhysicalPrinterDialog",
     "printhost_authorization_type": "PhysicalPrinterDialog",
-    "compatible_printers": "Dependencies-Widget",
-    "compatible_prints": "Dependencies-Widget",
 }
 
 AM_OBJEKT = {
@@ -114,6 +119,7 @@ def classify(key):
     if key in INTERN:     return "intern"
     if key in VERALTET:   return "veraltet"
     if key in UNSICHTBAR: return "am Desktop unsichtbar"
+    if key in MOBILE_DIALOG: return "PSMobile-Spezialdialog"
     if key in DIALOG:     return "eigener Dialog"
     if key in AM_OBJEKT:  return "am Objekt"
     return "NICHT EINGEORDNET"
@@ -144,8 +150,12 @@ def parameters():
     print("PARAMETER")
     print("=" * 72)
     print("  FFF-relevant in PrintConfig      %d" % len(fff))
-    print("  in PSMobile erreichbar           %d" % (len(fff) - len(missing)))
-    print("  fehlend                          %d" % len(missing))
+    in_tabs = len(fff) - len(missing)
+    special = len(buckets.get("PSMobile-Spezialdialog", []))
+    object_tools = len(buckets.get("am Objekt", []))
+    print("  in tabs.json erreichbar          %d" % in_tabs)
+    print("  in PSMobile erreichbar           %d" % (in_tabs + special + object_tools))
+    print("  nicht in tabs.json               %d" % len(missing))
     print()
 
     braucht_nichts = 0
@@ -153,7 +163,8 @@ def parameters():
         if name in buckets:
             braucht_nichts += len(buckets[name])
     print("  davon braucht nichts             %d" % braucht_nichts)
-    print("  echte Luecken (eigene Dialoge)   %d" % len(buckets.get("eigener Dialog", [])))
+    print("  ueber Spezialdialog erreichbar  %d" % len(buckets.get("PSMobile-Spezialdialog", [])))
+    print("  echte Dialog-Luecken             %d" % len(buckets.get("eigener Dialog", [])))
     print("  gehoert an den Objektbaum        %d" % len(buckets.get("am Objekt", [])))
     print()
 
@@ -176,40 +187,74 @@ def parameters():
 # Werkzeuge, Menuebefehle, Dialoge
 # ----------------------------------------------------------------------
 
-# Was die App bereits kann - hier von Hand gepflegt, weil es keine
-# maschinenlesbare Quelle dafuer gibt. Wer ein Feature baut, traegt es
-# hier ein; wer es vergisst, sieht es beim naechsten Lauf.
+# Desktop-Zuordnungen stammen aus der Statusmatrix. Damit kann ein
+# Feature nicht als fehlend gezaehlt werden, wenn seine Kotlin-/native
+# Evidenz bereits als gebaut oder getestet eingetragen ist.
+IMPLEMENTED_STATUSES = {
+    "coded", "built", "emulator_tested", "device_tested", "hardware_tested",
+}
+
+# Diese Desktop-Kommandos werden auf Android bewusst nicht nachgebaut.
+# Die Beschriftung im Bericht macht aus einer fehlenden Zeile keine
+# irrefuehrende Funktionsluecke.
+MENU_EXCLUSIONS = {
+    "Import ZIP Archive": "ZIP",
+    "Import SLA Archive": "SLA",
+    "Print &Host Upload Queue": "Hardware-Druckerwarteschlange",
+    "Open new instance": "Desktop-Fensterverwaltung",
+    "Open New Instance": "Desktop-Fensterverwaltung",
+    "Open PrusaSlicer": "Desktop-Fensterverwaltung",
+    "Open &PrusaSlicer": "Desktop-Fensterverwaltung",
+    "E&xit": "Desktop-Fensterverwaltung",
+    "&Quit": "Desktop-Fensterverwaltung",
+}
+
+
 def capabilities():
-    """Liest belegte Desktop-Zuordnungen aus der Statusmatrix."""
+    """Liest umgesetzte und noch offene Desktop-Zuordnungen aus der Matrix."""
     with open(MATRIX, encoding="utf-8") as stream:
         matrix = json.load(stream)
-    present = {"coded", "built", "emulator_tested", "device_tested",
-               "hardware_tested"}
-    features = [
+    android_features = [
         feature for feature in matrix.get("features", [])
         if feature.get("platform") == "android"
-        and feature.get("status") in present
+    ]
+    implemented = [
+        feature for feature in android_features
+        if feature.get("status") in IMPLEMENTED_STATUSES
+    ]
+    pending = [
+        feature for feature in android_features
+        if feature.get("status") not in IMPLEMENTED_STATUSES
     ]
     gizmos = {
-        name for feature in features
+        name for feature in implemented
         for name in feature.get("desktop_gizmos", [])
     }
     menu = {
-        name for feature in features
+        name for feature in implemented
         for name in feature.get("desktop_menu", [])
     }
-    return gizmos, menu
+    stale_gizmos = {
+        name for feature in pending
+        for name in feature.get("desktop_gizmos", [])
+    }
+    stale_menu = {
+        name for feature in pending
+        for name in feature.get("desktop_menu", [])
+    }
+    return gizmos, menu, stale_gizmos, stale_menu
 
 
-def gizmos(haben_wir):
+def gizmos(haben_wir, matrix_offen):
     hpp = os.path.join(PS, "src/slic3r/GUI/Gizmos/GLGizmosManager.hpp")
     if not os.path.exists(hpp):
         return
     m = re.search(r"enum\s+EType\s*:?[^{]*\{([^}]*)\}", read(hpp))
     names = []
     if m:
-        for entry in m.group(1).split(","):
-            entry = entry.split("//")[0].strip().split("=")[0].strip()
+        enum_body = re.sub(r"//[^\n]*", "", m.group(1))
+        for entry in enum_body.split(","):
+            entry = entry.strip().split("=")[0].strip()
             if entry and entry[0].isupper() and entry != "Undefined":
                 names.append(entry)
 
@@ -222,11 +267,14 @@ def gizmos(haben_wir):
     print("=" * 72)
     print("  PrusaSlicer (ohne SLA)  %d" % len(names))
     print("  bei uns im Code         %d" % len([n for n in names if n in haben_wir]))
-    print("  fehlend                 %d   %s" % (len(fehlt), ", ".join(fehlt)))
+    print("  nicht umgesetzt         %d   %s" % (len(fehlt), ", ".join(fehlt)))
+    stale = [n for n in fehlt if n in matrix_offen]
+    if stale:
+        print("  MATRIX NICHT UMGESETZT  %s" % ", ".join(stale))
     print()
 
 
-def menu_items(haben_wir):
+def menu_items(haben_wir, matrix_offen):
     path = os.path.join(PS, "src/slic3r/GUI/MainFrame.cpp")
     if not os.path.exists(path):
         return
@@ -234,26 +282,37 @@ def menu_items(haben_wir):
     items = list(dict.fromkeys(
         re.findall(r"append_menu_item\([^,]+,\s*[^,]+,\s*_L\(\"((?:[^\"\\\\]|\\\\.)*)\"\)", src)))
     fehlt = [i for i in items if i not in haben_wir]
+    ausgeschlossen = [i for i in fehlt if i in MENU_EXCLUSIONS]
+    matrix_fehlt = [i for i in fehlt if i in matrix_offen]
+    unbelegt = [i for i in fehlt if i not in MENU_EXCLUSIONS and i not in matrix_offen]
 
     print("=" * 72)
     print("MENUEBEFEHLE")
     print("=" * 72)
     print("  im Hauptfenster   %d" % len(items))
     print("  bei uns vorhanden %d" % (len(items) - len(fehlt)))
-    print("  fehlend           %d" % len(fehlt))
-    for it in fehlt:
-        print("      %s" % it)
+    print("  nicht umgesetzt   %d" % len(unbelegt))
+    print("  Matrix offen      %d" % len(matrix_fehlt))
+    print("  ausgenommen       %d" % len(ausgeschlossen))
+    for it in matrix_fehlt:
+        print("      MATRIX NICHT UMGESETZT  %s" % it)
+    for it in ausgeschlossen:
+        print("      AUSGENOMMEN: %-9s %s" % (MENU_EXCLUSIONS[it], it))
+    for it in unbelegt:
+        print("      NICHT BELEGT             %s" % it)
     print()
 
 
 def dialogs():
     """Welche eigenen Dialoge bearbeiten Parameter?"""
-    known = sorted(set(DIALOG.values()))
+    known = sorted(set(MOBILE_DIALOG.values()) | set(DIALOG.values()))
     print("=" * 72)
     print("EIGENE DIALOGE")
     print("=" * 72)
     for d in known:
-        keys = sorted(k for k, v in DIALOG.items() if v == d)
+        keys = sorted(
+            k for k, v in {**MOBILE_DIALOG, **DIALOG}.items() if v == d
+        )
         print("  %-24s %2d Parameter   %s" % (d, len(keys), ", ".join(keys[:4])))
     print()
 
@@ -273,9 +332,9 @@ def main(argv=None):
     PS, ASSETS, MATRIX = args.prusaslicer_src, args.assets_dir, args.matrix
 
     missing = parameters()
-    haben_gizmos, haben_menu = capabilities()
-    gizmos(haben_gizmos)
-    menu_items(haben_menu)
+    haben_gizmos, haben_menu, offene_gizmos, offene_menu = capabilities()
+    gizmos(haben_gizmos, offene_gizmos)
+    menu_items(haben_menu, offene_menu)
     dialogs()
 
     details = "".join("%-44s %s\n" % (k, classify(k)) for k in missing)

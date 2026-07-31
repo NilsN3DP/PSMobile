@@ -307,7 +307,11 @@ private class SceneGLView(
                                 else -> false
                             }
                             if (handled) post { controller.onScaled?.invoke() }
-                            else vp.orbit(dx, dy)
+                            // Der Renderer erwartet ein Kameradelta, die
+                            // Geste dagegen ein Inhaltsdelta. Horizontal
+                            // deshalb einmal spiegeln: Wischen nach rechts
+                            // dreht das Bett sichtbar nach rechts.
+                            else vp.orbit(-dx, dy)
                         }
                         requestRender()
                     }

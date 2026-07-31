@@ -1,4 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <style name="Theme.PSMobile" parent="android:Theme.Material.Light.NoActionBar" />
+    <style name="Theme.PSMobile" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/ps_background</item>
+        <item name="android:statusBarColor">@color/ps_background</item>
+        <item name="android:navigationBarColor">@color/ps_background</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar">false</item>
+        <!-- Android 12+ zeigt diesen Hintergrund schon vor Compose. -->
+        <item name="android:windowSplashScreenBackground">@color/ps_background</item>
+    </style>
 </resources>

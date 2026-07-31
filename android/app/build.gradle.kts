@@ -17,6 +17,11 @@ android {
         versionCode = 1
         versionName = "0.1.0-m3"
 
+        val manifestUrl = providers.gradleProperty("profileManifestUrl").orNull.orEmpty()
+        val allowedHosts = providers.gradleProperty("profileUpdateAllowedHosts").orNull.orEmpty()
+        buildConfigField("String", "PROFILE_UPDATE_MANIFEST_URL", "\"$manifestUrl\"")
+        buildConfigField("String", "PROFILE_UPDATE_ALLOWED_HOSTS", "\"$allowedHosts\"")
+
         ndk {
             // arm64 ist das Hauptziel, x86_64 nur fuer den Emulator.
             abiFilters += listOf("arm64-v8a", "x86_64")
@@ -60,6 +65,7 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 }
 
@@ -70,6 +76,7 @@ dependencies {
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.documentfile)
     implementation(libs.kotlinx.coroutines.android)
+    implementation(libs.kotlinx.serialization.json)
     implementation(libs.coil.compose)
     implementation(libs.coil.svg)
 
@@ -82,4 +89,5 @@ dependencies {
 
     debugImplementation(libs.androidx.ui.tooling)
     testImplementation(libs.junit)
+    testImplementation(libs.kotlinx.coroutines.test)
 }

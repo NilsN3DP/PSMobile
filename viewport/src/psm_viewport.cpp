@@ -817,8 +817,10 @@ PSM_API void psm_viewport_orbit(psm_viewport *v, float dx, float dy)
      * Mit festem Pixelfaktor war es auf einem 2560er Tablet unbrauchbar
      * hektisch. */
     const float per_px = PI_F / static_cast<float>(std::max(v->width, 1));
-    v->yaw   += dx * per_px;
-    v->pitch += dy * per_px;
+    /* Die Kotlin-Touchschicht normalisiert die Bildschirmrichtung, bevor
+     * sie hier ankommt. Der Viewport arbeitet bewusst mit Kameradelta. */
+    v->yaw   -= dx * per_px;
+    v->pitch -= dy * per_px;
 
     /* Unter das Bett darf man schauen, aber nicht ueber den Pol kippen. */
     const float limit = PI_F * 0.49f;

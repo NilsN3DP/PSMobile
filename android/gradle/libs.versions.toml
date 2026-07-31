@@ -9,6 +9,8 @@ documentfile = "1.0.1"
 coroutines = "1.9.0"
 coil = "2.7.0"
 junit = "4.13.2"
+serializationJson = "1.7.3"
+coroutinesTest = "1.9.0"
 
 [libraries]
 androidx-core-ktx           = { group = "androidx.core",              name = "core-ktx",                 version.ref = "coreKtx" }
@@ -28,6 +30,8 @@ kotlinx-coroutines-android  = { group = "org.jetbrains.kotlinx",      name = "ko
 coil-compose                = { group = "io.coil-kt",                 name = "coil-compose",             version.ref = "coil" }
 coil-svg                    = { group = "io.coil-kt",                 name = "coil-svg",                 version.ref = "coil" }
 junit                       = { group = "junit",                      name = "junit",                    version.ref = "junit" }
+kotlinx-serialization-json = { group = "org.jetbrains.kotlinx",      name = "kotlinx-serialization-json", version.ref = "serializationJson" }
+kotlinx-coroutines-test    = { group = "org.jetbrains.kotlinx",      name = "kotlinx-coroutines-test",    version.ref = "coroutinesTest" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

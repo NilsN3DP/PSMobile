@@ -118,6 +118,111 @@ class FeatureReportTests(unittest.TestCase):
         self.assertIn("bed_shape", result.stdout)
         self.assertEqual(before, after)
 
+    def test_gap_report_keeps_first_gizmo_after_a_leading_comment(self) -> None:
+        """A comment before Move must not hide the first enum member."""
+        with tempfile.TemporaryDirectory() as directory:
+            prusaslicer = pathlib.Path(directory) / "PrusaSlicer"
+            hpp = (
+                prusaslicer
+                / "src/slic3r/GUI/Gizmos/GLGizmosManager.hpp"
+            )
+            hpp.parent.mkdir(parents=True)
+            hpp.write_text(
+                """enum EType {
+    // Order must match index in m_gizmos!
+    Move,
+    Scale,
+    Undefined
+};
+""",
+                encoding="utf-8",
+            )
+            config = prusaslicer / "src/libslic3r/PrintConfig.cpp"
+            config.parent.mkdir(parents=True)
+            config.write_text("", encoding="utf-8")
+            matrix = pathlib.Path(directory) / "matrix.json"
+            matrix.write_text(
+                json.dumps(
+                    {
+                        "schema": 1,
+                        "features": [
+                            {
+                                "id": "mobile-move-and-scale",
+                                "title": "Mobile move and scale",
+                                "platform": "android",
+                                "status": "built",
+                                "evidence": ["README.md"],
+                                "blocked_by": [],
+                                "desktop_gizmos": ["Move", "Scale"],
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            result = self.run_script(
+                "build/scripts/gap-report.py",
+                str(prusaslicer),
+                "android/app/src/main/assets/psui",
+                "--matrix",
+                str(matrix),
+                "--output",
+                "-",
+            )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("PrusaSlicer (ohne SLA)  2", result.stdout)
+        self.assertIn("bei uns im Code         2", result.stdout)
+
+    def test_gap_report_labels_unimplemented_and_excluded_desktop_commands(self) -> None:
+        """A stale matrix mapping and an explicit desktop exclusion stay distinguishable."""
+        with tempfile.TemporaryDirectory() as directory:
+            matrix = pathlib.Path(directory) / "matrix.json"
+            matrix.write_text(
+                json.dumps(
+                    {
+                        "schema": 1,
+                        "features": [
+                            {
+                                "id": "unimplemented-open",
+                                "title": "Unimplemented open command",
+                                "platform": "android",
+                                "status": "not_started",
+                                "evidence": ["README.md"],
+                                "blocked_by": [],
+                                "desktop_menu": ["&Open Project"],
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            result = self.run_script(
+                "build/scripts/gap-report.py",
+                "external/PrusaSlicer",
+                "android/app/src/main/assets/psui",
+                "--matrix",
+                str(matrix),
+                "--output",
+                "-",
+            )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("MATRIX NICHT UMGESETZT  &Open Project", result.stdout)
+        self.assertIn("AUSGENOMMEN: ZIP       Import ZIP Archive", result.stdout)
+
+    def test_gap_report_separates_available_special_dialogs_from_open_ones(self) -> None:
+        """Implemented mobile dialogs must not inflate the remaining parameter gap."""
+        result = self.run_script(
+            "build/scripts/gap-report.py",
+            "external/PrusaSlicer",
+            "android/app/src/main/assets/psui",
+            "--output",
+            "-",
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("in PSMobile erreichbar           330", result.stdout)
+        self.assertIn("ueber Spezialdialog erreichbar  9", result.stdout)
+        self.assertIn("echte Dialog-Luecken             9", result.stdout)
+
     def test_generated_project_covers_profile_script_and_two_beds(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             output = pathlib.Path(directory) / "project.3mf"

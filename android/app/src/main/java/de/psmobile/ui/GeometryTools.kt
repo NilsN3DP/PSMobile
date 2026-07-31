@@ -63,7 +63,7 @@ internal fun GeometryTools(
     service: SlicerService,
     selected: PsmCore.ObjectInfo?,
     volumes: List<PsmCore.VolumeInfo>,
-    extruderCount: Int,
+    extruderOptions: List<ExtruderChoice>,
     surfaceMode: SurfaceToolMode?,
     measureText: String?,
     onSurfaceMode: (SurfaceToolMode?) -> Unit,
@@ -249,9 +249,9 @@ internal fun GeometryTools(
             }
         }
 
-        if (extruderCount > 1) {
+        if (extruderOptions.size > 1) {
             Text(
-                "MMU-Farbe",
+                "Extruder-/ColorMix-Farbe",
                 color = PrusaColors.TextMuted,
                 fontSize = 12.sp,
             )
@@ -259,8 +259,8 @@ internal fun GeometryTools(
                 Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                repeat(extruderCount) { index ->
-                    val state = index + 1
+                extruderOptions.forEach { extruder ->
+                    val state = extruder.id
                     FilterChip(
                         selected = surfaceMode ==
                             SurfaceToolMode.Paint(PsmCore.PaintTool.MMU, state),
@@ -271,7 +271,7 @@ internal fun GeometryTools(
                                 )
                             )
                         },
-                        label = { Text("E$state") },
+                        label = { Text(extruder.label) },
                         modifier = Modifier.height(48.dp),
                     )
                 }

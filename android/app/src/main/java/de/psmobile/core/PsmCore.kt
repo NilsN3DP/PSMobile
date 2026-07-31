@@ -166,6 +166,8 @@ class PsmCore private constructor(private var handle: Long) : Closeable {
         @JvmStatic private external fun nativeExtruderFilamentSet(h: Long, idx: Int, name: String): Int
         @JvmStatic private external fun nativeExtruderColor(h: Long, idx: Int): String
         @JvmStatic private external fun nativeExtruderColorSet(h: Long, idx: Int, rgb: String): Int
+        @JvmStatic private external fun nativeColorMixJson(h: Long): String
+        @JvmStatic private external fun nativeColorMixSetJson(h: Long, json: String): Int
         @JvmStatic private external fun nativeFilamentVendors(h: Long): String
         @JvmStatic private external fun nativeFilamentVendorsSet(h: Long, names: Array<String>): Int
         @JvmStatic private external fun nativePresetDirty(h: Long, type: Int): String
@@ -843,6 +845,16 @@ class PsmCore private constructor(private var handle: Long) : Closeable {
 
     fun setExtruderColor(index: Int, rgb: String) =
         check(nativeExtruderColorSet(requireHandle(), index, rgb), "Farbe je Extruder")
+
+    /**
+     * Vollständige, 3MF-kompatible ColorMix-Konfiguration. Virtuelle
+     * Extruder haben IDs oberhalb der physischen Köpfe und werden vom
+     * Slicer beim Slice-Lauf in deren Mischfolge aufgelöst.
+     */
+    fun colorMixJson(): String = nativeColorMixJson(requireHandle())
+
+    fun setColorMixJson(json: String) =
+        check(nativeColorMixSetJson(requireHandle(), json), "ColorMix-Konfiguration")
 
     /* --- Filamenthersteller ------------------------------------------ */
 

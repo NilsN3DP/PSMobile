@@ -944,6 +944,21 @@ JNIEXPORT jint JNICALL JNI_FN(nativeExtruderColorSet)(JNIEnv *env, jclass, jlong
     return psm_extruder_color_set(sess(h), idx, c.c_str());
 }
 
+JNIEXPORT jstring JNICALL JNI_FN(nativeColorMixJson)(JNIEnv *env, jclass, jlong h)
+{
+    char buf[65536] = { 0 };
+    if (psm_colormix_get_json(sess(h), buf, sizeof(buf)) != PSM_OK)
+        return env->NewStringUTF("");
+    return env->NewStringUTF(buf);
+}
+
+JNIEXPORT jint JNICALL JNI_FN(nativeColorMixSetJson)(JNIEnv *env, jclass, jlong h,
+                                                      jstring json)
+{
+    const std::string source = jstr(env, json);
+    return psm_colormix_set_json(sess(h), source.c_str());
+}
+
 /** Je Zeile: Name \t Zahl der Filamente \t 1 oder 0 fuer eingeblendet. */
 JNIEXPORT jstring JNICALL JNI_FN(nativeFilamentVendors)(JNIEnv *env, jclass, jlong h)
 {

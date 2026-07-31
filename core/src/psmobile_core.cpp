@@ -44,6 +44,7 @@
 #include "libslic3r/BuildVolume.hpp"
 #include "libslic3r/MultipleBeds.hpp"
 #include "libslic3r/Utils.hpp"
+#include "libslic3r/Feature/FullSpectrum/VirtualExtruder.hpp"
 
 #include <LibBGCode/convert/convert.hpp>
 
@@ -115,6 +116,28 @@ Slic3r::ModelObject *find_object(psm_session *s, psm_object_id id)
         if (static_cast<psm_object_id>(o->id().id) == id)
             return o;
     return nullptr;
+}
+
+/*
+ * Modell-/Volumen-Extruder bleiben 1-basiert wie in 3MF. Neben den
+ * physischen Köpfen darf nur eine im aktiven Modell definierte
+ * FullSpectrum-ID verwendet werden – niemals bloß irgendeine große Zahl.
+ * Der Aufrufer hält data_mtx.
+ */
+bool is_selectable_extruder(psm_session *s, int32_t extruder)
+{
+    if (extruder == 0)
+        return true; // Vererbung vom Druckerprofil.
+    if (extruder < 0)
+        return false;
+    if (extruder <= psm_extruder_count(s))
+        return true;
+    return std::any_of(
+        s->model().virtual_extruders.begin(),
+        s->model().virtual_extruders.end(),
+        [extruder](const Slic3r::FullSpectrum::VirtualExtruder &candidate) {
+            return candidate.id == static_cast<unsigned int>(extruder);
+        });
 }
 
 /* Sorgt dafuer, dass ein Objekt genau eine Instanz hat, und liefert sie. */
@@ -328,6 +351,76 @@ extern "C" {
 PSM_API int psm_abi_version(void) { return PSM_ABI_VERSION; }
 
 PSM_API const char *psm_core_version(void) { return SLIC3R_VERSION; }
+
+PSM_API psm_result psm_colormix_get_json(psm_session *s, char *out, size_t out_cap)
+{
+    if (s == nullptr || out == nullptr || out_cap == 0)
+        return PSM_ERR_INVALID_ARG;
+    std::lock_guard<std::recursive_mutex> data_lock(s->data_mtx);
+    try {
+        const size_t physical_count = static_cast<size_t>(std::max(1, psm_extruder_count(s)));
+        std::vector<std::string> colors(physical_count);
+        if (const auto *option = s->config.opt<Slic3r::ConfigOptionStrings>("extruder_colour")) {
+            for (size_t i = 0; i < std::min(colors.size(), option->values.size()); ++i)
+                colors[i] = option->values[i];
+        }
+        // Ein neues bzw. importiertes Profil kann noch keine Farben enthalten.
+        // Der Prusa-Serializer erwartet dennoch fuer jeden Kopf einen gueltigen
+        // Hexwert; ein neutraler Fallback macht das Rezept deshalb lesbar statt
+        // die komplette ColorMix-Abfrage fehlschlagen zu lassen.
+        for (std::string &color : colors)
+            if (color.empty())
+                color = "#808080";
+        const std::string json = Slic3r::FullSpectrum::serialize_virtual_extruders_to_json(
+            colors, s->model().virtual_extruders);
+        if (json.size() + 1 > out_cap) {
+            s->set_error("ColorMix-Konfiguration passt nicht in den Ausgabepuffer");
+            return PSM_ERR_OUT_OF_MEMORY;
+        }
+        copy_str(out, out_cap, json);
+        return PSM_OK;
+    } catch (const std::exception &e) {
+        s->set_error(e.what());
+        return PSM_ERR_GENERIC;
+    }
+}
+
+PSM_API psm_result psm_colormix_set_json(psm_session *s, const char *json)
+{
+    if (s == nullptr || json == nullptr)
+        return PSM_ERR_INVALID_ARG;
+    std::lock_guard<std::recursive_mutex> data_lock(s->data_mtx);
+    try {
+        const std::string source(json);
+        if (source.find("virtual_extruders") == std::string::npos) {
+            s->set_error("ColorMix-JSON enthält keine virtuellen Extruder");
+            return PSM_ERR_PARSE;
+        }
+        const Slic3r::FullSpectrum::FullSpectrumConfig parsed =
+            Slic3r::FullSpectrum::deserialize_virtual_extruders_from_json(source);
+        const auto normalized = Slic3r::FullSpectrum::normalize_virtual_extruders(
+            parsed.virtual_extruders);
+        const auto physical_count = static_cast<unsigned int>(std::max(1, psm_extruder_count(s)));
+        const auto filtered = Slic3r::FullSpectrum::filter_virtual_extruders_for_physical_count(
+            physical_count, normalized);
+
+        // Ein leeres Array löscht bewusst alle Rezepte. Ansonsten darf
+        // kein Teil eines ungültigen Rezepts still verschwinden.
+        if ((! parsed.virtual_extruders.empty()) &&
+            (parsed.virtual_extruders.size() != normalized.size() ||
+             normalized.size() != filtered.size())) {
+            s->set_error("ColorMix-Rezept verweist auf ungültige Köpfe oder Mischanteile");
+            return PSM_ERR_INVALID_ARG;
+        }
+        for (const auto &bed : s->bed_models)
+            bed->virtual_extruders = filtered;
+        s->mark_design_changed();
+        return PSM_OK;
+    } catch (const std::exception &e) {
+        s->set_error(e.what());
+        return PSM_ERR_PARSE;
+    }
+}
 
 PSM_API const char *psm_last_error(void *session)
 {
@@ -1042,9 +1135,11 @@ PSM_API psm_result psm_model_extruder_set(psm_session *s,
                                           int32_t extruder)
 {
     PSM_GUARD_BEGIN(s)
-        if (extruder < 0 || extruder > psm_extruder_count(s))
-            return PSM_ERR_INVALID_ARG;
         std::lock_guard<std::recursive_mutex> data_lock(s->data_mtx);
+        if (! is_selectable_extruder(s, extruder)) {
+            s->set_error("Extruder existiert nicht im aktiven Drucker oder ColorMix-Projekt");
+            return PSM_ERR_INVALID_ARG;
+        }
         Slic3r::ModelObject *object = find_object(s, id);
         if (object == nullptr)
             return PSM_ERR_NOT_FOUND;
@@ -1109,9 +1204,11 @@ PSM_API psm_result psm_model_volume_extruder_set(psm_session *s,
                                                   int32_t extruder)
 {
     PSM_GUARD_BEGIN(s)
-        if (extruder < 0 || extruder > psm_extruder_count(s))
-            return PSM_ERR_INVALID_ARG;
         std::lock_guard<std::recursive_mutex> data_lock(s->data_mtx);
+        if (! is_selectable_extruder(s, extruder)) {
+            s->set_error("Extruder existiert nicht im aktiven Drucker oder ColorMix-Projekt");
+            return PSM_ERR_INVALID_ARG;
+        }
         Slic3r::ModelObject *object = find_object(s, id);
         if (object == nullptr)
             return PSM_ERR_NOT_FOUND;

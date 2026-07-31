@@ -729,6 +729,22 @@ PSM_API psm_result psm_extruder_color_set(psm_session *s, int32_t extruder,
                                           const char *rgb);
 
 /* ------------------------------------------------------------------ */
+/* ColorMix / virtuelle Extruder                                      */
+/* ------------------------------------------------------------------ */
+
+/*
+ * PrusaSlicer speichert ColorMix als JSON im 3MF und expandiert einen
+ * virtuellen Extruder beim Slicen zu seinen physischen Komponenten.
+ * Diese Grenze übernimmt bewusst dieses Format, damit Blend- und
+ * Höhenverlauf-Rezepte ohne paralleles Datenmodell erhalten bleiben.
+ * IDs und physische Extruder sind 1-basiert wie im Desktop.
+ */
+PSM_API psm_result psm_colormix_get_json(psm_session *s,
+                                         char *out, size_t out_cap);
+PSM_API psm_result psm_colormix_set_json(psm_session *s,
+                                         const char *json);
+
+/* ------------------------------------------------------------------ */
 /* Filamenthersteller                                                  */
 /* ------------------------------------------------------------------ */
 

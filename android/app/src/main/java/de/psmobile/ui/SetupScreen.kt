@@ -29,6 +29,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -39,6 +40,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -63,15 +65,27 @@ fun SetupScreen(
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
+    val configuration = LocalConfiguration.current
+    // In landscape (insbesondere auf 8–11"-Tablets) darf der Assistent nicht
+    // wie eine hochskalierte Telefonliste wirken. Die Bedienelemente bleiben
+    // touchsicher, verbrauchen aber sichtbar weniger Hoehe.
+    val compact = configuration.screenWidthDp > configuration.screenHeightDp
+    val pagePadding = if (compact) 16.dp else 24.dp
+    val itemVerticalPadding = if (compact) 7.dp else 12.dp
+    val nozzleHeight = if (compact) 40.dp else 48.dp
+    val finishHeight = if (compact) 50.dp else 58.dp
     // Mit der bisherigen Wahl starten. Sonst muesste man beim blossen
     // Ergaenzen einer Duesengroesse alles aus dem Gedaechtnis neu
     // zusammenklicken - Befund B9.
     var selected by remember(preselected) { mutableStateOf(preselected) }
     var showSla by remember { mutableStateOf(false) }
+    var query by remember { mutableStateOf("") }
     var langMenu by remember { mutableStateOf(false) }
     var lang by remember { mutableStateOf(PsUi.language) }
 
-    val shown = models.filter { showSla || !it.isSla }
+    val shown = models.filter {
+        (showSla || !it.isSla) && it.name.contains(query.trim(), ignoreCase = true)
+    }
 
     Box(
         modifier
@@ -80,14 +94,18 @@ fun SetupScreen(
             .windowInsetsPadding(WindowInsets.safeDrawing),
         Alignment.TopCenter,
     ) {
-        Column(Modifier.widthIn(max = 760.dp).fillMaxSize().padding(24.dp)) {
+        Column(
+            Modifier.widthIn(max = if (compact) 1040.dp else 760.dp)
+                .fillMaxSize()
+                .padding(pagePadding),
+        ) {
 
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
                     Text(
                         PsUi.tr("Configuration Assistant"),
                         color = PrusaColors.TextPrimary,
-                        fontSize = 22.sp,
+                        fontSize = if (compact) 20.sp else 22.sp,
                         fontWeight = FontWeight.SemiBold,
                     )
                     Text(
@@ -131,7 +149,7 @@ fun SetupScreen(
                 }
             }
 
-            HorizontalDivider(Modifier.padding(vertical = 14.dp), color = PrusaColors.Divider)
+            HorizontalDivider(Modifier.padding(vertical = if (compact) 8.dp else 14.dp), color = PrusaColors.Divider)
 
             Row(verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.padding(bottom = 8.dp)) {
@@ -148,6 +166,14 @@ fun SetupScreen(
                 )
             }
 
+            OutlinedTextField(
+                value = query,
+                onValueChange = { query = it },
+                label = { Text("Druckermodell suchen") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+            )
+
             LazyColumn(
                 Modifier.weight(1f),
                 verticalArrangement = Arrangement.spacedBy(4.dp),
@@ -162,7 +188,7 @@ fun SetupScreen(
                             .border(1.dp,
                                     if (on) PrusaColors.Orange else PrusaColors.Divider,
                                     RoundedCornerShape(10.dp))
-                            .padding(horizontal = 14.dp, vertical = 12.dp),
+                            .padding(horizontal = 14.dp, vertical = itemVerticalPadding),
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically,
                             modifier = Modifier.fillMaxWidth().clickable {
@@ -209,7 +235,7 @@ fun SetupScreen(
                                     val vkey = "${m.key}:$v"
                                     val vOn = vkey in selected
                                     Box(
-                                        Modifier.height(48.dp)
+                                        Modifier.height(nozzleHeight)
                                             .clip(RoundedCornerShape(8.dp))
                                             .background(if (vOn) PrusaColors.Orange
                                                         else PrusaColors.Panel)
@@ -232,7 +258,7 @@ fun SetupScreen(
             Button(
                 onClick = { onConfirm(selected.toList()) },
                 enabled = selected.isNotEmpty() && !busy,
-                modifier = Modifier.fillMaxWidth().padding(top = 12.dp).height(58.dp),
+                modifier = Modifier.fillMaxWidth().padding(top = 10.dp).height(finishHeight),
                 shape = RoundedCornerShape(12.dp),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = PrusaColors.Orange,

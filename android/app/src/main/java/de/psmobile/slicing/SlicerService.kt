@@ -13,8 +13,17 @@ import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import de.psmobile.MainActivity
+import de.psmobile.BuildConfig
 import de.psmobile.R
 import de.psmobile.core.PsmCore
+import de.psmobile.slicing.profileupdate.ProfilePackageStore
+import de.psmobile.slicing.profileupdate.ProfileUpdateRepository
+import de.psmobile.slicing.profileupdate.ProfileUpdateState
+import de.psmobile.slicing.profileupdate.ProfileVersion
+import de.psmobile.slicing.profileupdate.HttpUrlConnectionProfileUpdateHttp
+import de.psmobile.slicing.colormix.ColorMixCodec
+import de.psmobile.slicing.colormix.ColorMixRecipe
+import de.psmobile.ui.BedLockPolicy
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -22,6 +31,7 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -74,6 +84,76 @@ class SlicerService : Service() {
     private val _progress = MutableStateFlow<Progress>(Progress.Idle)
     val progress: StateFlow<Progress> = _progress.asStateFlow()
 
+    private val _profileUpdates = MutableStateFlow<ProfileUpdateState>(ProfileUpdateState.Idle)
+    val profileUpdates: StateFlow<ProfileUpdateState> = _profileUpdates.asStateFlow()
+    private var profileUpdateRepository: ProfileUpdateRepository? = null
+
+    fun deferProfileUpdate() { profileUpdateRepository?.later() }
+    fun skipProfileUpdate() { profileUpdateRepository?.skipUntilNewer() }
+    fun downloadProfileUpdate() { profileUpdateRepository?.downloadOffered(scope) }
+
+    /**
+     * Bei einem sofortigen Wechsel wird die Sitzung aus dem geprüften
+     * Profilpaket neu aufgebaut. Ein Slice darf dabei niemals abgewürgt
+     * werden; in diesem Fall bleibt das Paket für den nächsten Start liegen.
+     */
+    fun applyStagedProfileUpdate() {
+        val ready = _profileUpdates.value as? ProfileUpdateState.ReadyToApply ?: return
+        if (_progress.value is Progress.Running) {
+            _profileUpdates.value = ProfileUpdateState.Deferred(
+                ready.manifest,
+                "Der laufende Slice wird nicht unterbrochen. Das Update wird beim Neustart aktiv.",
+            )
+            return
+        }
+        scope.launch(Dispatchers.IO) {
+            val store = ProfilePackageStore(
+                File(filesDir, "profile-resources"),
+                File(filesDir, "profile-resources/fallback"),
+            )
+            val result = runCatching {
+                // 3MF hält Modell, Platten und die aktuelle Zuordnung
+                // zusammen. Damit geht beim Session-Neustart nichts verloren.
+                val sessionCopy = core?.let { oldCore ->
+                    File(cacheDir, "profile-switch").apply { mkdirs() }
+                        .let { dir -> File(dir, "session-before-update.3mf") }
+                        .also { oldCore.saveProject(it.absolutePath) }
+                }
+                synchronized(this@SlicerService) {
+                    core?.close()
+                    core = null
+                    store.activateStaged().getOrThrow()
+                    try {
+                        val refreshed = ensureCore()
+                        sessionCopy?.takeIf(File::isFile)?.let { refreshed.loadProject(it.absolutePath) }
+                    } catch (error: Throwable) {
+                        core?.close()
+                        core = null
+                        store.rollback().getOrThrow()
+                        ensureCore()
+                        throw error
+                    }
+                    refreshBeds()
+                    refreshHistory()
+                    refreshObjects()
+                    refreshPresets()
+                    refreshQuickSettings()
+                }
+            }
+            _profileUpdates.value = result.fold(
+                onSuccess = { ProfileUpdateState.Idle },
+                onFailure = { ProfileUpdateState.Failed(it.message ?: "Profile konnten nicht aktiviert werden") },
+            )
+        }
+    }
+
+    /** Ein echter Speicherdialog ist vor dem Sitzungswechsel erforderlich. */
+    fun profileUpdateNeedsSave(): Boolean =
+        _objects.value.isNotEmpty() ||
+            _presets.value.printerChanges.isNotEmpty() ||
+            _presets.value.printChanges.isNotEmpty() ||
+            _presets.value.filamentChanges.isNotEmpty()
+
     private val _objects = MutableStateFlow<List<PsmCore.ObjectInfo>>(emptyList())
     val objects: StateFlow<List<PsmCore.ObjectInfo>> = _objects.asStateFlow()
 
@@ -116,6 +196,15 @@ class SlicerService : Service() {
     private val _presets = MutableStateFlow(Presets())
     val presets: StateFlow<Presets> = _presets.asStateFlow()
 
+    data class ColorMixState(
+        val available: Boolean = false,
+        val recipes: List<ColorMixRecipe> = emptyList(),
+        val reason: String? = null,
+    )
+
+    private val _colorMix = MutableStateFlow(ColorMixState())
+    val colorMix: StateFlow<ColorMixState> = _colorMix.asStateFlow()
+
     /*
      * Schnelleinstellungen: die fuenf Parameter, die den Alltag abdecken.
      * PrusaSlicer hat einige hundert - die vollstaendige Liste kommt
@@ -134,6 +223,9 @@ class SlicerService : Service() {
         val layerHeight: String = "",
         val fillDensity: String = "",
         val supports: String = "",
+        val supportAuto: String = "",
+        val supportBuildPlateOnly: String = "",
+        val supportStyle: String = "",
         val brim: String = "",
     )
 
@@ -153,6 +245,35 @@ class SlicerService : Service() {
     private val _toolMessage = MutableStateFlow<String?>(null)
     val toolMessage: StateFlow<String?> = _toolMessage.asStateFlow()
     private val heavyMutationActive = AtomicBoolean(false)
+
+    /** Persistent per-project bed locks. SAF URIs are stable across reopen. */
+    private val projectKey = MutableStateFlow("current")
+    private val _lockedBeds = MutableStateFlow<Set<Int>>(emptySet())
+    val lockedBeds: StateFlow<Set<Int>> = _lockedBeds.asStateFlow()
+
+    fun setProjectKey(key: String?) {
+        val normalized = key?.takeIf { it.isNotBlank() } ?: "current"
+        projectKey.value = normalized
+        _lockedBeds.value = prefs.getStringSet("bedLocks:$normalized", emptySet())
+            ?.mapNotNull { it.toIntOrNull() }?.toSet().orEmpty()
+    }
+
+    fun isBedLocked(index: Int): Boolean = index in _lockedBeds.value
+
+    fun toggleBedLock(index: Int) {
+        val next = BedLockPolicy.toggle(_lockedBeds.value, index)
+        _lockedBeds.value = next
+        prefs.edit().putStringSet("bedLocks:${projectKey.value}", next.map(Int::toString).toSet()).apply()
+        _toolMessage.value = if (index in next) "Bett ${index + 1} gesperrt" else "Bett ${index + 1} entsperrt"
+    }
+
+    private fun checkBedUnlocked(index: Int, action: String): Boolean {
+        if (BedLockPolicy.allows(_lockedBeds.value, index)) return true
+        _toolMessage.value = "Bett ${index + 1} ist gesperrt – $action nicht möglich"
+        return false
+    }
+
+    private fun activeBedIndex(): Int = _beds.value.firstOrNull { it.active }?.index ?: 0
 
     fun clearToolMessage() {
         _toolMessage.value = null
@@ -201,6 +322,36 @@ class SlicerService : Service() {
     override fun onCreate() {
         super.onCreate()
         createChannel()
+        startProfileUpdateCheck()
+    }
+
+    private fun startProfileUpdateCheck() {
+        val manifest = runCatching { java.net.URI(BuildConfig.PROFILE_UPDATE_MANIFEST_URL) }.getOrNull()
+            ?: return
+        val hosts = BuildConfig.PROFILE_UPDATE_ALLOWED_HOSTS
+            .split(',').map(String::trim).filter(String::isNotBlank).toSet()
+        val coreVersion = ProfileVersion.parse(PsmCore.coreVersion()) ?: return
+        val resourceRoot = File(filesDir, "profile-resources")
+        val store = ProfilePackageStore(resourceRoot, File(resourceRoot, "fallback"))
+        val repository = ProfileUpdateRepository(
+            manifestUri = manifest,
+            allowedHosts = hosts,
+            coreVersion = coreVersion,
+            activeVersion = store.activeVersion(),
+            http = HttpUrlConnectionProfileUpdateHttp(),
+            packageStore = store,
+            skippedVersion = {
+                prefs.getString("profiles.skipped-version", null)?.let(ProfileVersion::parse)
+            },
+            rememberSkippedVersion = { version ->
+                prefs.edit().putString("profiles.skipped-version", version.toString()).apply()
+            },
+        )
+        profileUpdateRepository = repository
+        scope.launch {
+            repository.state.collect { _profileUpdates.value = it }
+        }
+        repository.checkOnLaunch(scope)
     }
 
     override fun onDestroy() {
@@ -221,6 +372,13 @@ class SlicerService : Service() {
     @Synchronized
     fun ensureCore(): PsmCore {
         core?.let { return it }
+        // Fallback zuerst bereitstellen; ein vollständig geprüftes staged
+        // Profilpaket darf ausschließlich beim kontrollierten Sitzungsstart
+        // aktiv werden.
+        ResourceInstaller.ensureInstalled(this)
+        val resourceRoot = File(filesDir, "profile-resources")
+        val fallback = File(resourceRoot, "fallback")
+        ProfilePackageStore(resourceRoot, fallback).activateStagedOnLaunch()
         val resDir = ResourceInstaller.ensureInstalled(this)
         val dataDir = File(filesDir, "psmdata").apply { mkdirs() }
         val c = PsmCore.create(dataDir.absolutePath, resDir.absolutePath)
@@ -282,9 +440,20 @@ class SlicerService : Service() {
 
     /** Druckerauswahl erneut oeffnen. */
     fun reopenSetup() {
-        val c = core ?: return
-        _printerModels.value = runCatching { c.scanPrinterModels() }.getOrDefault(emptyList())
-        _setupNeeded.value = true
+        // Easy Mode kann sichtbar werden, waehrend die native Session noch
+        // im Hintergrund aufgebaut wird. Nicht still abbrechen: den Aufbau
+        // abwarten und danach den Setup-Dialog auf dem Main-Thread anzeigen.
+        scope.launch(Dispatchers.Default) {
+            val c = runCatching { ensureCore() }.getOrElse {
+                Log.e(TAG, "Drucker-Setup konnte nicht geoeffnet werden", it)
+                return@launch
+            }
+            val models = runCatching { c.scanPrinterModels() }.getOrDefault(emptyList())
+            withContext(Dispatchers.Main) {
+                _printerModels.value = models
+                _setupNeeded.value = true
+            }
+        }
     }
 
     var uiLanguage: String
@@ -360,6 +529,31 @@ class SlicerService : Service() {
                 )
             },
         )
+        refreshColorMix()
+    }
+
+    /** Liest die persistente 3MF-kompatible ColorMix-Konfiguration. */
+    fun refreshColorMix() {
+        val c = core ?: return
+        val result = runCatching { c.colorMixJson() }
+        _colorMix.value = result.fold(
+            onSuccess = { json -> ColorMixState(available = true, recipes = ColorMixCodec.decode(json)) },
+            // Alte ausgelieferte .so-Dateien kennen die neue ABI noch nicht.
+            // Das ist ein klarer Zustand, kein stiller, wirkungsloser Dialog.
+            onFailure = { ColorMixState(available = false, reason = "Slicer-Core ohne ColorMix-ABI") },
+        )
+    }
+
+    fun saveColorMix(recipes: List<ColorMixRecipe>) {
+        val c = core ?: return
+        val physicalColors = _presets.value.extruders.map { it.color.ifBlank { "#808080" } }
+        runCatching { c.setColorMixJson(ColorMixCodec.encode(physicalColors, recipes)) }
+            .onFailure { _toolMessage.value = "ColorMix konnte nicht gespeichert werden: ${it.message}" }
+            .onSuccess {
+                refreshColorMix()
+                invalidateSliceResult()
+                _toolMessage.value = "ColorMix aktualisiert"
+            }
     }
 
     /** Filament eines einzelnen Kopfes - fuer MMU und XL. */
@@ -460,6 +654,8 @@ class SlicerService : Service() {
         data object Bed : Screen
         data class Settings(val tab: String) : Screen
         data object Printers : Screen
+        data object Wizard : Screen
+        data object ColorMix : Screen
     }
 
     private val _screen = MutableStateFlow<Screen>(Screen.Bed)
@@ -530,6 +726,9 @@ class SlicerService : Service() {
             layerHeight = c[QuickKey.LAYER_HEIGHT.configKey].orEmpty(),
             fillDensity = c[QuickKey.FILL_DENSITY.configKey].orEmpty(),
             supports = c[QuickKey.SUPPORTS.configKey].orEmpty(),
+            supportAuto = c["support_material_auto"].orEmpty(),
+            supportBuildPlateOnly = c["support_material_buildplate_only"].orEmpty(),
+            supportStyle = c["support_material_style"].orEmpty(),
             brim = c[QuickKey.BRIM.configKey].orEmpty(),
         )
     }
@@ -544,6 +743,7 @@ class SlicerService : Service() {
     // --- Werkzeuge --------------------------------------------------------
 
     fun clearBed() {
+        if (!checkBedUnlocked(activeBedIndex(), "Leeren")) return
         runCatching { core?.clearBed() }.onFailure { Log.w(TAG, "Bett leeren", it) }
         refreshObjects()
         invalidateSliceResult()
@@ -555,6 +755,7 @@ class SlicerService : Service() {
         runCatching { c.clear() }
             .onFailure { Log.w(TAG, "Neues Projekt", it) }
             .onSuccess {
+                setProjectKey(null)
                 refreshObjects()
                 invalidateSliceResult()
                 showBed()
@@ -653,6 +854,7 @@ class SlicerService : Service() {
 
     fun removeBed(index: Int) {
         val c = core ?: return
+        if (!checkBedUnlocked(index, "Entfernen")) return
         runCatching { c.removeBed(index) }
             .onFailure { Log.w(TAG, "Bett ${index + 1} entfernen", it) }
             .onSuccess {
@@ -663,6 +865,8 @@ class SlicerService : Service() {
 
     fun moveObjectToBed(id: Int, target: Int) {
         val c = core ?: return
+        if (!checkBedUnlocked(target, "Verschieben")) return
+        if (!checkBedUnlocked(activeBedIndex(), "Verschieben")) return
         runCatching { c.moveObjectToBed(id, target) }
             .onFailure { Log.w(TAG, "Objekt auf Bett ${target + 1} verschieben", it) }
             .onSuccess {
@@ -672,12 +876,14 @@ class SlicerService : Service() {
     }
 
     fun arrange() {
+        if (!checkBedUnlocked(activeBedIndex(), "Anordnen")) return
         runCatching { core?.arrange() }
             .onFailure { Log.w(TAG, "Anordnen", it) }
             .onSuccess { refreshObjects(); invalidateSliceResult() }
     }
 
     fun dropToBed(id: Int) {
+        if (!checkBedUnlocked(activeBedIndex(), "Aufs Bett legen")) return
         runCatching { core?.dropToBed(id) }
             .onFailure { Log.w(TAG, "Aufs Bett legen", it) }
             .onSuccess { refreshObjects(); invalidateSliceResult() }
@@ -685,6 +891,8 @@ class SlicerService : Service() {
 
     fun duplicate(id: Int, targetBed: Int? = null): Boolean {
         val c = core ?: return false
+        if (!checkBedUnlocked(activeBedIndex(), "Duplizieren")) return false
+        if (targetBed != null && !checkBedUnlocked(targetBed, "Duplizieren")) return false
         return runCatching {
             val copy = c.duplicate(id)
             if (targetBed != null)
@@ -1125,6 +1333,7 @@ class SlicerService : Service() {
         }
         refreshObjects()
         if (project != null) {
+            setProjectKey(path)
             refreshPresets()
             refreshQuickSettings()
             bumpConfig()
@@ -1137,6 +1346,7 @@ class SlicerService : Service() {
     }
 
     fun removeObject(id: Int) {
+        if (!checkBedUnlocked(activeBedIndex(), "Löschen")) return
         core?.removeModel(id)
         refreshObjects()
         invalidateSliceResult()

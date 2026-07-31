@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "updated": "2026-07-30",
+  "updated": "2026-07-31",
   "features": [
     {
       "id": "android.kotlin_build",
@@ -152,6 +152,7 @@
         "android.device_release_gate"
       ],
       "desktop_gizmos": [
+        "Move",
         "Scale",
         "Rotate"
       ]
@@ -314,6 +315,28 @@
       ]
     },
     {
+      "id": "android.project_file_tools",
+      "title": "Druckbett exportieren, STL reparieren und G-Code wandeln",
+      "platform": "android",
+      "status": "built",
+      "evidence": [
+        "android/app/src/main/java/de/psmobile/MainActivity.kt",
+        "android/app/src/main/java/de/psmobile/ui/ProjectTools.kt",
+        "android/app/src/main/java/de/psmobile/slicing/SlicerService.kt",
+        "android/app/src/main/java/de/psmobile/core/PsmCore.kt",
+        "core/src/psmobile_core.cpp"
+      ],
+      "blocked_by": [
+        "android.device_release_gate"
+      ],
+      "desktop_menu": [
+        "Export Plate as &STL/OBJ",
+        "Convert ASCII G-code to &binary",
+        "Convert binary G-code to &ASCII",
+        "&Repair STL file"
+      ]
+    },
+    {
       "id": "android.prusalink",
       "title": "PrusaLink-Zielwahl, Probe und Upload",
       "platform": "android",
@@ -434,17 +457,32 @@
       ],
       "blocked_by": [
         "android.device_release_gate"
+      ],
+      "desktop_menu": [
+        "&Copy",
+        "&Paste"
       ]
     },
     {
       "id": "android.multiselect",
       "title": "Mehrfachauswahl und Auswahlbefehle",
       "platform": "android",
-      "status": "not_started",
+      "status": "built",
       "evidence": [
-        "docs/10-funktionsvergleich.md"
+        "android/app/src/main/java/de/psmobile/ui/SelectionModel.kt",
+        "android/app/src/main/java/de/psmobile/ui/SlicerScreen.kt",
+        "android/app/src/main/java/de/psmobile/slicing/SlicerService.kt",
+        "android/app/src/test/java/de/psmobile/ui/SelectionModelTest.kt"
       ],
-      "blocked_by": []
+      "blocked_by": [
+        "android.device_release_gate"
+      ],
+      "desktop_menu": [
+        "&Select All",
+        "D&eselect All",
+        "&Delete Selected",
+        "Delete &All"
+      ]
     },
     {
       "id": "android.object_tree",
@@ -473,11 +511,16 @@
       "id": "android.geometry_tools",
       "title": "Flach legen, schneiden und vereinfachen",
       "platform": "android",
-      "status": "not_started",
+      "status": "built",
       "evidence": [
-        "docs/10-funktionsvergleich.md"
+        "android/app/src/main/java/de/psmobile/ui/GeometryTools.kt",
+        "android/app/src/main/java/de/psmobile/slicing/SlicerService.kt",
+        "android/app/src/main/java/de/psmobile/core/PsmCore.kt",
+        "core/src/psmobile_core.cpp"
       ],
-      "blocked_by": [],
+      "blocked_by": [
+        "android.device_release_gate"
+      ],
       "desktop_gizmos": [
         "Flatten",
         "Cut",
@@ -488,11 +531,16 @@
       "id": "android.paint_tools",
       "title": "Supports, Naht, Fuzzy Skin und MMU-Farbe bemalen",
       "platform": "android",
-      "status": "not_started",
+      "status": "built",
       "evidence": [
-        "docs/10-funktionsvergleich.md"
+        "android/app/src/main/java/de/psmobile/ui/GeometryTools.kt",
+        "android/app/src/main/java/de/psmobile/slicing/SlicerService.kt",
+        "android/app/src/main/java/de/psmobile/core/PsmCore.kt",
+        "core/include/psmobile_core.h"
       ],
-      "blocked_by": [],
+      "blocked_by": [
+        "android.device_release_gate"
+      ],
       "desktop_gizmos": [
         "FdmSupports",
         "Seam",
@@ -504,11 +552,16 @@
       "id": "android.measure_emboss",
       "title": "Messen, Text und SVG prägen",
       "platform": "android",
-      "status": "not_started",
+      "status": "built",
       "evidence": [
-        "docs/10-funktionsvergleich.md"
+        "android/app/src/main/java/de/psmobile/ui/GeometryTools.kt",
+        "android/app/src/main/java/de/psmobile/slicing/SlicerService.kt",
+        "android/app/src/main/java/de/psmobile/core/PsmCore.kt",
+        "core/include/psmobile_core.h"
       ],
-      "blocked_by": [],
+      "blocked_by": [
+        "android.device_release_gate"
+      ],
       "desktop_gizmos": [
         "Measure",
         "Emboss",
@@ -519,11 +572,70 @@
       "id": "android.special_dialogs",
       "title": "Bettform, Wischmatrix, Ramming und G-Code-Ersetzungen",
       "platform": "android",
-      "status": "not_started",
+      "status": "built",
       "evidence": [
-        "docs/10-funktionsvergleich.md"
+        "android/app/src/main/java/de/psmobile/ui/SpecialSettingsDialogs.kt",
+        "android/app/src/main/java/de/psmobile/ui/SpecialValueCodec.kt",
+        "android/app/src/main/java/de/psmobile/ui/SettingsScreen.kt",
+        "android/app/src/test/java/de/psmobile/ui/SpecialValueCodecTest.kt"
       ],
-      "blocked_by": []
+      "blocked_by": [
+        "android.device_release_gate"
+      ]
+    },
+    {
+      "id": "android.simple_mode",
+      "title": "Simple Mode: direkte 3D-Arbeitsfläche für Modell, Material, Support und Drucken",
+      "platform": "android",
+      "status": "emulator_tested",
+      "evidence": [
+        "android/app/src/main/java/de/psmobile/ui/SimpleModeScreen.kt",
+        "android/app/src/main/java/de/psmobile/ui/SimpleModeState.kt",
+        "android/app/src/main/java/de/psmobile/ui/SimpleModeLayout.kt",
+        "android/app/src/main/java/de/psmobile/MainActivity.kt",
+        "android/app/src/test/java/de/psmobile/ui/SimpleModeStateTest.kt",
+        "android/app/src/test/java/de/psmobile/ui/SimpleWorkspaceStateTest.kt",
+        "android/app/src/test/java/de/psmobile/ui/SimpleModeLayoutTest.kt",
+        ".superpowers/sdd/2026-07-31-simple-mode-reference-fidelity/task-6-report.md",
+        "docs/release/android-beta-closure-audit.md"
+      ],
+      "verification": [
+        ".superpowers/sdd/2026-07-31-simple-mode-reference-fidelity/task-6-report.md",
+        "docs/release/android-beta-closure-audit.md"
+      ],
+      "blocked_by": [
+        "android.device_release_gate"
+      ]
+    },
+    {
+      "id": "android.advanced_wizard",
+      "title": "Advanced-Assistent für Drucker-, Filament- und Print-Profile",
+      "platform": "android",
+      "status": "built",
+      "evidence": [
+        "android/app/src/main/java/de/psmobile/ui/AdvancedWizardScreen.kt",
+        "android/app/src/main/java/de/psmobile/ui/WorkflowStartScreen.kt",
+        "android/app/src/main/java/de/psmobile/MainActivity.kt",
+        "android/app/src/main/java/de/psmobile/ui/SlicerScreen.kt"
+      ],
+      "blocked_by": [
+        "android.device_release_gate"
+      ]
+    },
+    {
+      "id": "android.bed_locks",
+      "title": "Druckbetten sperren und vor Wechseln schützen",
+      "platform": "android",
+      "status": "built",
+      "evidence": [
+        "android/app/src/main/java/de/psmobile/ui/BedLockPolicy.kt",
+        "android/app/src/main/java/de/psmobile/slicing/SlicerService.kt",
+        "android/app/src/main/java/de/psmobile/ui/SlicerScreen.kt",
+        "android/app/src/test/java/de/psmobile/ui/BedLockTest.kt"
+      ],
+      "blocked_by": [
+        "android.device_release_gate"
+      ]
     },
     {
       "id": "android.tablet_touch_ui",

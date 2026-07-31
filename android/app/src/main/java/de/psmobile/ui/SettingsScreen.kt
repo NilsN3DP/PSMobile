@@ -3,6 +3,7 @@ package de.psmobile.ui
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -43,6 +44,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -76,6 +78,9 @@ fun SettingsScreen(
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
+    val compactNavigation = SettingsLayout.usesCompactNavigation(
+        LocalConfiguration.current.screenWidthDp,
+    )
 
     // PrusaSlicer legt die Extruderseite zur Laufzeit einmal je Duese an -
     // "Extruder 1" bis "Extruder 5". Genauso hier: die Vorlage aus
@@ -104,7 +109,8 @@ fun SettingsScreen(
     // jeweiligen Auswahlfeld hinein und musste zum Bett zurueck, um den
     // Bereich zu wechseln. Am Desktop sind es Reiter; hier auch.
     Row(
-        Modifier.fillMaxWidth().background(PrusaColors.Panel),
+        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())
+            .background(PrusaColors.Panel),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
@@ -127,7 +133,7 @@ fun SettingsScreen(
                     .height(52.dp)
                     .clickable(enabled = !active) { onTabChange(key) }
                     .background(if (active) PrusaColors.Background else PrusaColors.Panel)
-                    .padding(horizontal = 20.dp),
+                    .padding(horizontal = if (compactNavigation) 10.dp else 20.dp),
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
@@ -141,10 +147,19 @@ fun SettingsScreen(
     }
     HorizontalDivider(color = PrusaColors.Divider)
 
-    Row(Modifier.fillMaxSize()) {
+    if (compactNavigation) {
+        SettingsPageRail(
+            pages = pages,
+            pageIndex = pageIndex,
+            onSelect = { pageIndex = it },
+        )
+        HorizontalDivider(color = PrusaColors.Divider)
+    }
+
+    Row(Modifier.fillMaxWidth().weight(1f)) {
 
         // --- Seitenliste, wie der Baum links im Desktop-Dialog ---------
-        Column(
+        if (!compactNavigation) Column(
             Modifier.width(280.dp).fillMaxHeight()
                 .background(PrusaColors.Panel)
                 .verticalScroll(rememberScrollState()),
@@ -203,7 +218,10 @@ fun SettingsScreen(
         }
 
         // --- Parameter der gewaehlten Seite ---------------------------
-        Column(Modifier.weight(1f).fillMaxHeight()) {
+        Column(
+            if (compactNavigation) Modifier.fillMaxSize()
+            else Modifier.weight(1f).fillMaxHeight(),
+        ) {
 
             // Die Stufen entsprechen PrusaSlicers Einfach/Erweitert/Experte.
             Row(
@@ -349,6 +367,52 @@ private data class RenderPage(val page: PsUi.Page, val extruder: Int = -1) {
                 else PsUi.tr(page.title)
     val icon   get() = page.icon
     val groups get() = page.groups
+}
+
+/** Phone navigation mirrors the desktop page tree without reserving 280 dp. */
+@Composable
+private fun SettingsPageRail(
+    pages: List<RenderPage>,
+    pageIndex: Int,
+    onSelect: (Int) -> Unit,
+) {
+    Row(
+        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())
+            .background(PrusaColors.Panel).padding(horizontal = 8.dp, vertical = 6.dp),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        pages.forEachIndexed { index, page ->
+            val active = index == pageIndex
+            Box(
+                Modifier.height(48.dp).clip(RoundedCornerShape(8.dp))
+                    .background(if (active) PrusaColors.Orange else PrusaColors.PanelRaised)
+                    .clickable { onSelect(index) }
+                    .padding(horizontal = 14.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    page.title,
+                    color = if (active) PrusaColors.Background else PrusaColors.TextPrimary,
+                    fontSize = 13.sp,
+                    maxLines = 1,
+                )
+            }
+        }
+        val special = pageIndex == pages.size
+        Box(
+            Modifier.height(48.dp).clip(RoundedCornerShape(8.dp))
+                .background(if (special) PrusaColors.Orange else PrusaColors.PanelRaised)
+                .clickable { onSelect(pages.size) }
+                .padding(horizontal = 14.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                "Spezial",
+                color = if (special) PrusaColors.Background else PrusaColors.TextPrimary,
+                fontSize = 13.sp,
+            )
+        }
+    }
 }
 
 @Composable

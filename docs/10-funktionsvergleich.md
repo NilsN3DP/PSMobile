@@ -1,6 +1,6 @@
 # Funktionsvergleich PrusaSlicer 2.9.6 ↔ PSMobile
 
-Stand: 2026-07-30. Android ist der einzige aktuelle
+Stand: 2026-07-31. Android ist der einzige aktuelle
 Implementierungsfokus. iOS wird erst portiert, wenn der Android-Ablauf
 stabil und auf Geräten geprüft ist.
 
@@ -20,8 +20,11 @@ Gerät lief.
   Zahlenfelder. Android zeigt Grad, die C-ABI bleibt bei Radiant.
 - Auf Bett legen, auf Bettgröße einpassen, spiegeln, duplizieren,
   Instanzzahl und Auto-Arrange.
-- Druck-, Filament- und Druckereinstellungen mit 317 von 370
-  FFF-relevanten `PrintConfig`-Optionen.
+- Flach legen, schneiden, vereinfachen, Objekte/Volumen teilen,
+  Modifier hinzufügen, variable Schichthöhen sowie Text und SVG prägen.
+- Supports, Naht, Fuzzy Skin und MMU-Farbe pro Fläche bemalen; messen.
+- Druck-, Filament- und Druckereinstellungen mit 317 Optionen in den
+  Tabs sowie 13 weiteren Werten über Spezialdialoge und Objektwerkzeuge.
 - Schnelleinstellungen für Schichthöhe, Fülldichte, Supports und Brim.
 - Filament und Farbe je Extruder.
 - Aufklappbarer Objekt-/Volumenbaum mit Volumentyp, Dreieckszahl und
@@ -30,7 +33,28 @@ Gerät lief.
   komplette Touch-Geste oder kombinierte Zahlenaktion ist ein Schritt.
 - Export/Teilen von G-Code und PrusaLink-Code für API-Key oder
   HTTP-Digest.
+- Druckbett als STL oder OBJ exportieren, STL reparieren und G-Code
+  zwischen ASCII und Binary umwandeln.
+- Mehrfachauswahl mit Alles auswählen, Auswahl aufheben und Auswahl
+  löschen; die Objekt-Zwischenablage bleibt bettübergreifend.
+- Easy Mode für den geführten Druckablauf, Advanced-Assistent für die
+  drei Profilarten und sperrbare Druckbetten.
 - Slicing als started Foreground-Service im App-Prozess.
+
+### EasyPrint-Responsive-Smoke (2026-07-31)
+
+Die EasyPrint-Oberfläche wurde auf einem x86_64-Emulator in Compact
+Portrait, Medium und Expanded bedient. Der Compact-Einstieg zeigt einen
+dunklen Root, Modellimport-Einstieg, Profil-Suchen und den festen
+Preview/Print-Dock; Medium verwendet für die Toolbar-Auswahl ein
+Modalsheet, Expanded einen persistenten rechten Kontextbereich. Der
+vollständige Befund einschließlich des offenen Rotationsfehlers beim
+Suchtext steht in
+`.superpowers/sdd/2026-07-31-easyprint-responsive-shell/task-5-report.md`.
+
+Bewusste Unterschiede zur Web-Referenz bleiben: kein übernommenes
+Prusa-Branding, keine Cloud-Spuleninventur und kein separater
+Easy-3D-Renderer.
 
 Neu gebaut und im C-ABI-Vertragstest auf einem x86_64-Emulator geprüft:
 
@@ -73,38 +97,35 @@ Zusätzlich im Compose-UI-Smoke-Test auf demselben Emulator geprüft:
 | Kategorie | Anzahl |
 | --- | ---: |
 | FFF-relevant | 370 |
-| in PSMobile erreichbar | 317 |
-| fehlend | 53 |
+| in `tabs.json` erreichbar | 317 |
+| über Spezialdialog erreichbar | 9 |
+| am Objekt erreichbar | 4 |
+| insgesamt in PSMobile erreichbar | 330 |
+| nicht in `tabs.json` | 53 |
 | davon Messartefakte/interne/veraltete/unsichtbare Werte | 31 |
-| echte Spezialdialog-Lücken | 18 |
+| echte Dialog-Lücken | 9 |
 | gehört an den Objektbaum | 4 |
 
-Die 18 Dialogwerte betreffen Bettform/-textur/-modell,
-Wischvolumenmatrix, Ramming, G-Code-Ersetzungen,
-Profilkompatibilitäten sowie die vollständige Physical-Printer-
-Konfiguration. PSMobiles eigene PrusaLink-Verwaltung ersetzt davon nur
-den lokalen Standardfall; OctoPrint, Repetier, FlashAir, AstroBox, MKS,
-Zertifikatsdateien und Prusa Connect sind nicht abgedeckt.
+Neun bisher als Lücke gezählte Werte sind über mobile Spezialdialoge
+erreichbar: Bettform/-textur/-modell, Wischvolumenmatrix, Ramming,
+G-Code-Ersetzungen und Profilkompatibilitäten. Offen bleiben neun Werte
+der vollständigen Desktop-Physical-Printer-Konfiguration. PSMobiles
+eigene PrusaLink-Verwaltung deckt den lokalen Standardfall ab, nicht
+aber OctoPrint, Repetier, FlashAir, AstroBox, MKS,
+Zertifikatsdateien oder Prusa Connect.
 
 Die vier Objektwerte sind `extruder`, `extruder_colour`,
-`wipe_into_infill` und `wipe_into_objects`. `extruder` ist jetzt über
-den Objekt-/Volumenbaum erreichbar. Eigene Objektfarbe sowie
-„In Infill/Objekte wischen“ fehlen noch; deshalb ist die vollständige
-Multicolor-Parität trotz funktionierender Teilzuweisung noch nicht
-erreicht.
+`wipe_into_infill` und `wipe_into_objects`. Der Extruder ist über den
+Objekt-/Volumenbaum erreichbar; Objektfarbe und „In Infill/Objekte
+wischen“ liegen im mobilen Modellwerkzeug. Damit zählen sie nicht mehr
+als Einstellungs-Lücke.
 
 ## Modellwerkzeuge
 
-Der Desktop deklariert 13 relevante Gizmo-Typen. PSMobile hat
-numerisches Skalieren und Drehen sowie zusätzlich mobiles
-Touch-Verschieben. Noch nicht umgesetzt sind:
-
-- an einer gewählten Fläche flach legen;
-- schneiden und vereinfachen;
-- Supports, Naht, Fuzzy Skin und MMU-Farbe bemalen;
-- messen;
-- Text und SVG prägen;
-- der im Desktop-Enum geführte Hollow-Pfad.
+Der Desktop deklariert 14 relevante Gizmo-Typen. PSMobile deckt davon
+13 ab: Verschieben, Skalieren, Drehen, Flachlegen, Schneiden, Supports,
+Naht, Fuzzy Skin, MMU-Farbe, Messen, Text-/SVG-Prägen und Vereinfachen.
+Offen bleibt allein der im Desktop-Enum geführte Hollow-Pfad.
 
 „Aufs Bett legen“ ist nicht dasselbe wie „Flach legen“: Ersteres senkt
 das Objekt nur auf Z=0, letzteres richtet eine ausgewählte Fläche aus.
@@ -120,10 +141,10 @@ das Objekt nur auf Z=0, letzteres richtet eine ausgewählte Fläche aus.
 | Neues Projekt | Compose-UI im Emulator geprüft, mit Verlustwarnung |
 | Projekt als 3MF speichern / Speichern unter | Core-Roundtrip und SAF-UI im Emulator geprüft |
 | STEP | absichtlich im mobilen Build deaktiviert |
-| ZIP-Archivimport | fehlt |
-| Platte als STL/OBJ exportieren | fehlt |
-| G-Code binär/ASCII konvertieren | fehlt |
-| beschädigte STL reparieren | fehlt |
+| ZIP-Archivimport | bewusst ausgeschlossen |
+| Platte als STL/OBJ exportieren | vorhanden (gebaut) |
+| G-Code binär/ASCII konvertieren | vorhanden (gebaut) |
+| beschädigte STL reparieren | vorhanden (gebaut) |
 
 Der mobile Roundtrip ist umgesetzt: lokale Betten werden beim Speichern
 in PrusaSlicers virtuelle Bettlandschaft zurückübersetzt, Zugangsdaten
@@ -131,20 +152,26 @@ und Post-Processing werden entfernt. Offen bleibt der zusätzliche
 manuelle Vergleich komplexer Projekte mit Desktop-PrusaSlicer,
 insbesondere Custom-G-Code und Wipe-Tower.
 
+### Bewusste Ausschlüsse
+
+ZIP-, STEP- und SLA-Import gehören nicht zum mobilen Umfang. Ebenso
+sind Desktop-Fensterverwaltung (neue Instanz, Beenden, Desktop öffnen)
+und eine hardwareabhängige Print-Host-Warteschlange keine
+Mobile-Paritätsziele. Der Gap-Report kennzeichnet diese Befehle
+ausdrücklich als `AUSGENOMMEN`, statt sie als Implementierungslücken zu
+zählen.
+
 ## Bedienung und Zustandsverwaltung
 
 Jetzt vorhanden sind Undo/Redo, eine projektinterne
-Objekt-Zwischenablage über mehrere Druckbetten sowie der
-Objekt-/Volumenbaum mit Extruder je druckbarem Teil. „+ Kopie“ und
+Objekt-Zwischenablage über mehrere Druckbetten, Mehrfachauswahl sowie
+der Objekt-/Volumenbaum mit Extruder je druckbarem Teil. „+ Kopie“ und
 „− Kopie“ ändern Instanzen getrennt von Kopieren/Einfügen. Modifier,
-Negativvolumen und Support-Blocker werden mit ihrem Typ angezeigt; ihre
-Erzeugungs- und Bearbeitungsdialoge fehlen noch.
+Negativvolumen und Support-Blocker werden mit ihrem Typ angezeigt und
+können als primitive Volumen hinzugefügt werden.
 
-Weiterhin fehlend:
-
-- Mehrfachauswahl;
-- Suchen und „Alles auswählen/Auswahl aufheben“;
-- vollständige Tastatur- und Stiftbedienung.
+Weiterhin offen sind vollständige Tastatur- und Stiftbedienung sowie
+die Geräteprüfung der neu gebauten Touch-Abläufe.
 
 Profiländerungen werden mit Anzahl markiert. Beim Wechsel können die
 Werte übertragen, verworfen oder unter eigenem Profilnamen gespeichert
@@ -194,9 +221,9 @@ Store-/AGPL-Entscheidung.
    ein exakt installiertes Druckerprofil ergänzen.
 3. Custom-G-Code-/Wipe-Tower-Roundtrip gegen Desktop-PrusaSlicer
    ergänzen.
-4. Mehrfachauswahl und Auswahlbefehle bauen; Clipboard und sichtbarer
-   Dirty-Profilzustand sind vorhanden.
-5. Flach legen, schneiden und vereinfachen.
-6. Spezialdialoge für Bett, Wischmatrix und G-Code-Ersetzungen.
-7. Malwerkzeuge, Messen und Prägen.
-8. Erst danach den stabilen Funktionsumfang auf iOS portieren.
+4. Die neu gebauten Modellwerkzeuge, Spezialdialoge, Easy Mode,
+   Assistenten und Bett-Sperren auf realen Geräten prüfen.
+5. Für die verbleibende Desktop-Lücke den Hollow-Pfad bewerten.
+6. Physical-Printer-Dialoge nur dann erweitern, wenn ein unterstütztes
+   Ziel über PrusaLink hinaus erforderlich wird.
+7. Erst danach den stabilen Funktionsumfang auf iOS portieren.

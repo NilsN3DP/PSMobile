@@ -11,6 +11,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.enableEdgeToEdge
+import androidx.core.view.WindowCompat
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -23,7 +24,11 @@ import androidx.lifecycle.lifecycleScope
 import de.psmobile.slicing.SlicerService
 import de.psmobile.core.PsmCore
 import de.psmobile.ui.SlicerScreen
+import de.psmobile.ui.AppMode
+import de.psmobile.ui.SimpleModeScreen
+import de.psmobile.ui.WorkflowStartScreen
 import de.psmobile.ui.theme.PSMobileTheme
+import de.psmobile.ui.theme.PrusaColors
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -33,12 +38,15 @@ class MainActivity : ComponentActivity() {
 
     private var service by mutableStateOf<SlicerService?>(null)
     private var pending3mf by mutableStateOf<File?>(null)
+    private var pending3mfUri: Uri? = null
     private var importNotice by mutableStateOf<String?>(null)
     private var noticeTitle by mutableStateOf("Projekt importiert")
     private var currentProjectUri by mutableStateOf<Uri?>(null)
     private var pendingFileOutput: File? = null
     private var pendingFileName: String = "PSMobile-Datei"
     private var pendingFileDescription: String = "Datei"
+    private var applyProfileUpdateWhenProjectSaved = false
+    private var appMode by mutableStateOf<AppMode?>(null)
     private var pendingSvgTarget:
         Triple<Int, Float, PsmCore.VolumeType>? = null
 
@@ -110,9 +118,21 @@ class MainActivity : ComponentActivity() {
             ?: run { pendingSvgTarget = null }
     }
 
+    private val modelPicker = registerForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri -> uri?.let(::importUri) }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        // Der Startbildschirm darf nicht kurz als helle Android-Fläche
+        // aufblitzen, bevor Simple oder Advanced ihren Inhalt zeichnet.
+        window.statusBarColor = PrusaColors.Background.value.toInt()
+        window.navigationBarColor = PrusaColors.Background.value.toInt()
+        WindowCompat.getInsetsController(window, window.decorView).apply {
+            isAppearanceLightStatusBars = false
+            isAppearanceLightNavigationBars = false
+        }
 
         bindService(
             Intent(this, SlicerService::class.java),
@@ -142,9 +162,29 @@ class MainActivity : ComponentActivity() {
                         onLanguageChange = { svc.uiLanguage = it },
                         preselected = svc.installedPrinters(),
                     )
+                } else if (appMode == null) {
+                    WorkflowStartScreen(
+                        onSimple = { appMode = AppMode.SIMPLE },
+                        onAdvanced = { appMode = AppMode.ADVANCED },
+                        onAdvancedWizard = {
+                            appMode = AppMode.ADVANCED
+                            svc?.showScreen(SlicerService.Screen.Wizard)
+                        },
+                        onLanguageChange = { svc?.uiLanguage = it },
+                    )
+                } else if (appMode == AppMode.SIMPLE) {
+                    SimpleModeScreen(
+                        service = svc!!,
+                        window = this@MainActivity.window,
+                        onPickFile = { modelPicker.launch(arrayOf("model/3mf", "model/stl", "application/octet-stream")) },
+                        onOpenAdvanced = { appMode = AppMode.ADVANCED },
+                        onOpenPrinterSetup = { svc.reopenSetup() },
+                        onStartSlice = { svc.startSlice() },
+                    )
                 } else {
                     SlicerScreen(
                         service = svc,
+                        onOpenSimple = { appMode = AppMode.SIMPLE },
                         onPickFile = { uri -> importUri(uri) },
                         onShare = { uri -> shareGcode(uri) },
                         onPickBackupFolder = { backupPicker.launch(null) },
@@ -156,6 +196,8 @@ class MainActivity : ComponentActivity() {
                         },
                         onSaveProject = { saveProject(saveAs = false) },
                         onSaveProjectAs = { saveProject(saveAs = true) },
+                        canReloadProject = currentProjectUri != null,
+                        onReloadProject = ::reloadCurrentProject,
                         onExportPlate = { exportPlate(it) },
                         onRepairStl = {
                             repairStlPicker.launch(
@@ -180,6 +222,52 @@ class MainActivity : ComponentActivity() {
                                 arrayOf("image/svg+xml", "text/xml")
                             )
                         },
+                    )
+                }
+
+                var showProfileUpdateSaveWarning by remember { mutableStateOf(false) }
+                val profileUpdate by (svc?.profileUpdates?.collectAsState()
+                    ?: remember { mutableStateOf<de.psmobile.slicing.profileupdate.ProfileUpdateState>(de.psmobile.slicing.profileupdate.ProfileUpdateState.Idle) })
+                when (val update = profileUpdate) {
+                    is de.psmobile.slicing.profileupdate.ProfileUpdateState.Offer ->
+                        androidx.compose.material3.AlertDialog(
+                            onDismissRequest = {},
+                            title = { androidx.compose.material3.Text("Neue Drucker- und Materialprofile verfügbar") },
+                            text = { androidx.compose.material3.Text(update.manifest.releaseNotes.joinToString("\n• ", prefix = "• ")) },
+                            confirmButton = { androidx.compose.material3.TextButton(onClick = { svc?.downloadProfileUpdate() }) { androidx.compose.material3.Text("Jetzt aktualisieren") } },
+                            dismissButton = { androidx.compose.foundation.layout.Row {
+                                androidx.compose.material3.TextButton(onClick = { svc?.deferProfileUpdate() }) { androidx.compose.material3.Text("Später") }
+                                androidx.compose.material3.TextButton(onClick = { svc?.skipProfileUpdate() }) { androidx.compose.material3.Text("Erst beim nächsten Update fragen") }
+                            } },
+                        )
+                    is de.psmobile.slicing.profileupdate.ProfileUpdateState.ReadyToApply ->
+                        androidx.compose.material3.AlertDialog(
+                            onDismissRequest = {},
+                            title = { androidx.compose.material3.Text("Profile aktualisiert") },
+                            text = { androidx.compose.material3.Text("Die neuen Profile sind geprüft und können jetzt oder beim nächsten Neustart verwendet werden.") },
+                            confirmButton = { androidx.compose.material3.TextButton(onClick = {
+                                if (svc?.profileUpdateNeedsSave() == true) showProfileUpdateSaveWarning = true
+                                else svc?.applyStagedProfileUpdate()
+                            }) { androidx.compose.material3.Text("Jetzt verwenden") } },
+                            dismissButton = { androidx.compose.material3.TextButton(onClick = { svc?.deferProfileUpdate() }) { androidx.compose.material3.Text("Beim Neustart") } },
+                        )
+                    else -> Unit
+                }
+
+                if (showProfileUpdateSaveWarning) {
+                    androidx.compose.material3.AlertDialog(
+                        onDismissRequest = { showProfileUpdateSaveWarning = false },
+                        title = { androidx.compose.material3.Text("Projekt vor Profilwechsel speichern?") },
+                        text = { androidx.compose.material3.Text("Es ist ein Modell geladen oder es gibt ungespeicherte Profiländerungen. Speichere das 3MF-Projekt, bevor die Slicer-Sitzung mit den neuen Profilen neu startet.") },
+                        confirmButton = { androidx.compose.material3.TextButton(onClick = {
+                            showProfileUpdateSaveWarning = false
+                            applyProfileUpdateWhenProjectSaved = true
+                            saveProject(saveAs = false)
+                        }) { androidx.compose.material3.Text("Projekt speichern & aktualisieren") } },
+                        dismissButton = { androidx.compose.material3.TextButton(onClick = {
+                            showProfileUpdateSaveWarning = false
+                            svc?.deferProfileUpdate()
+                        }) { androidx.compose.material3.Text("Beim Neustart") } },
                     )
                 }
 
@@ -282,6 +370,12 @@ class MainActivity : ComponentActivity() {
      */
     private fun importUri(uri: Uri) {
         val svc = service ?: return
+        runCatching {
+            contentResolver.takePersistableUriPermission(
+                uri,
+                Intent.FLAG_GRANT_READ_URI_PERMISSION,
+            )
+        }
         lifecycleScope.launch {
             val result = withContext(Dispatchers.IO) {
                 runCatching {
@@ -311,6 +405,7 @@ class MainActivity : ComponentActivity() {
                 mime.contains("3dmanufacturing", ignoreCase = true)
             if (is3mf) {
                 pending3mf = file
+                pending3mfUri = uri
             } else {
                 withContext(Dispatchers.IO) {
                     runCatching { svc.loadModel(file.absolutePath) }
@@ -321,7 +416,9 @@ class MainActivity : ComponentActivity() {
 
     private fun import3mf(file: File, mode: SlicerService.ImportMode) {
         val svc = service ?: return
+        val sourceUri = pending3mfUri
         pending3mf = null
+        pending3mfUri = null
         lifecycleScope.launch {
             val result = withContext(Dispatchers.IO) {
                 runCatching { svc.loadModel(file.absolutePath, mode) }
@@ -329,6 +426,9 @@ class MainActivity : ComponentActivity() {
             result
                 .onFailure { svc.reportImportError(it) }
                 .onSuccess { project ->
+                    if (mode == SlicerService.ImportMode.PROJECT) {
+                        svc.setProjectKey(sourceUri?.toString() ?: file.absolutePath)
+                    }
                     if (project != null) {
                         val profile = project.selectedPrinter.ifBlank {
                             project.requestedPrinter
@@ -356,7 +456,7 @@ class MainActivity : ComponentActivity() {
                             details + beds
                         }
                         noticeTitle = "Projekt importiert"
-                        currentProjectUri = null
+                        currentProjectUri = sourceUri
                     }
                 }
         }
@@ -369,6 +469,30 @@ class MainActivity : ComponentActivity() {
             projectCreator.launch(svc.suggestedProjectName())
         } else {
             writeProject(current)
+        }
+    }
+
+    /** Lädt die zuletzt gespeicherte bzw. als Projekt geöffnete 3MF erneut. */
+    private fun reloadCurrentProject() {
+        val svc = service ?: return
+        val uri = currentProjectUri ?: return
+        lifecycleScope.launch {
+            val result = withContext(Dispatchers.IO) {
+                runCatching {
+                    val source = copyDocumentToCache(uri, "project-reload")
+                    svc.loadModel(source.absolutePath, SlicerService.ImportMode.PROJECT)
+                }
+            }
+            result.onFailure { showFileError("Projekt neu laden", it) }
+                .onSuccess { project ->
+                    svc.setProjectKey(uri.toString())
+                    noticeTitle = "Projekt neu geladen"
+                    val name = queryDisplayName(uri) ?: "Projekt"
+                    importNotice = "„$name“ wurde erneut vom Datenträger geladen" +
+                        if (project?.bedCount ?: 1 > 1) {
+                            " (${project?.bedCount} Druckbetten)."
+                        } else "."
+                }
         }
     }
 
@@ -397,11 +521,16 @@ class MainActivity : ComponentActivity() {
                 .onFailure { svc.reportImportError(it) }
                 .onSuccess { bytes ->
                     currentProjectUri = uri
+                    svc.setProjectKey(uri.toString())
                     noticeTitle = "Projekt gespeichert"
                     val name = queryDisplayName(uri) ?: svc.suggestedProjectName()
                     importNotice = "„$name“ wurde als vollständiges 3MF-Projekt " +
                         "mit allen belegten Druckbetten gespeichert " +
                         "(${bytes / 1024} KiB)."
+                    if (applyProfileUpdateWhenProjectSaved) {
+                        applyProfileUpdateWhenProjectSaved = false
+                        svc.applyStagedProfileUpdate()
+                    }
                 }
         }
     }
