@@ -1,0 +1,96 @@
+# iOS-Simulatorbau auf einem gemieteten macOS-Laeufer.
+#
+# Der zweite Weg neben einem selbst gemieteten Mac: GitHub stellt echte
+# Apple-Hardware, man zahlt nach Minute und braucht kein Geraet vor Ort.
+# Am Ende liegen Screenshots aus dem Simulator als Artefakt bereit - das
+# ist der Prototypen-Blick, um den es geht.
+#
+# Voraussetzung: das Repo liegt auf GitHub. Bisher liegt es nur lokal.
+#
+# Bewusst manuell ausgeloest (workflow_dispatch) statt bei jedem Push:
+# der Dependency-Bau dauert Stunden und macOS-Minuten sind teuer.
+
+name: iOS-Simulator
+
+on:
+  workflow_dispatch:
+    inputs:
+      rebuild_deps:
+        description: "Dependencies neu bauen (mehrere Stunden)"
+        type: boolean
+        default: false
+
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 360
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Werkzeuge
+        run: |
+          brew install cmake ninja xcodegen automake autoconf libtool pkg-config
+          xcodebuild -version
+          xcodebuild -showsdks | grep iphone
+
+      # Der teure Teil. Der Cache-Schluessel haengt an der PrusaSlicer-
+      # Version und an den Patches - aendert sich beides nicht, wird nicht
+      # neu gebaut.
+      - name: Dependency-Cache
+        id: deps-cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            build-out/ios-destdir-SIMULATORARM64
+            build-out/dl-cache
+          key: ios-deps-simarm64-${{ hashFiles('patches/*.patch', 'build/scripts/build-ios.sh') }}
+
+      - name: Quellen und Patches
+        run: PSM_IOS_PLATFORM=SIMULATORARM64 build/scripts/macos-bootstrap.sh sources
+
+      - name: Dependencies
+        if: steps.deps-cache.outputs.cache-hit != 'true' || inputs.rebuild_deps
+        run: PSM_IOS_PLATFORM=SIMULATORARM64 build/scripts/macos-bootstrap.sh deps
+
+      - name: Kern
+        run: PSM_IOS_PLATFORM=SIMULATORARM64 build/scripts/macos-bootstrap.sh core
+
+      - name: Ressourcen und Xcode-Projekt
+        run: PSM_IOS_PLATFORM=SIMULATORARM64 build/scripts/macos-bootstrap.sh project
+
+      - name: App fuer den Simulator bauen
+        run: |
+          xcodebuild -project ios/PSMobile.xcodeproj \
+                     -scheme PSMobile \
+                     -destination 'platform=iOS Simulator,name=iPad Pro 11-inch (M4)' \
+                     -derivedDataPath build-out/ios-derived \
+                     CODE_SIGNING_ALLOWED=NO \
+                     build
+
+      # Ohne diesen Schritt haette man einen gruenen Build und trotzdem
+      # keine Ahnung, wie die Oberflaeche aussieht. Genau darum geht es
+      # aber bei einem Prototyp.
+      - name: Im Simulator starten und Bild aufnehmen
+        run: |
+          set -x
+          DEVICE=$(xcrun simctl create psm-ipad \
+                   "com.apple.CoreSimulator.SimDeviceType.iPad-Pro-11-inch-M4" \
+                   "com.apple.CoreSimulator.SimRuntime.iOS-18-0")
+          xcrun simctl boot "$DEVICE"
+          xcrun simctl bootstatus "$DEVICE" -b
+          APP=$(find build-out/ios-derived -name 'PSMobile.app' -type d | head -1)
+          xcrun simctl install "$DEVICE" "$APP"
+          xcrun simctl launch "$DEVICE" de.psmobile
+          sleep 25
+          mkdir -p build-out/screenshots
+          xcrun simctl io "$DEVICE" screenshot build-out/screenshots/ipad-start.png
+          xcrun simctl shutdown "$DEVICE"
+
+      - name: Bilder als Artefakt
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-simulator-screenshots
+          path: build-out/screenshots/
+          if-no-files-found: warn
