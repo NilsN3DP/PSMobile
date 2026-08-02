@@ -251,7 +251,35 @@ fun SetupScreen(
                 Modifier.weight(1f),
                 verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
-                items(shown, key = { it.key }) { m ->
+                // Nach Familien geordnet wie am Desktop, Altgeraete am
+                // Ende. Waehrend einer Suche entfaellt die Gliederung: wer
+                // tippt, will Treffer sehen und keine Zwischenueberschriften.
+                val groups = if (query.isBlank()) PrinterGrouping.grouped(shown)
+                             else listOf(PrinterGrouping.Group("", shown, false))
+
+                groups.forEach { group ->
+                if (group.family.isNotBlank()) {
+                    item(key = "h_${group.family}") {
+                        Row(
+                            Modifier.fillMaxWidth().padding(top = 10.dp, bottom = 2.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                group.family.uppercase(),
+                                color = if (group.isLegacy) PrusaColors.TextMuted
+                                        else PrusaColors.Orange,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.SemiBold,
+                            )
+                            Text(
+                                "  ${group.models.size}",
+                                color = PrusaColors.TextMuted,
+                                fontSize = 11.sp,
+                            )
+                        }
+                    }
+                }
+                items(group.models, key = { it.key }) { m ->
                     val on = selected.any { it.startsWith("${m.key}:") }
                     Column(
                         Modifier.fillMaxWidth()
@@ -279,9 +307,16 @@ fun SetupScreen(
                                 onCheckedChange = null,
                                 colors = CheckboxDefaults.colors(checkedColor = PrusaColors.Orange),
                             )
+                            // Die Familie steht in der Gruppenueberschrift.
+                            // Sie zusaetzlich in jede Zeile zu schreiben,
+                            // wiederholt nur, was zwei Zeilen darueber
+                            // schon steht. Beim Suchen entfaellt die
+                            // Gliederung - dann gehoert sie wieder dazu.
                             val technik = buildString {
                                 append(if (m.isSla) "SLA" else "FFF")
-                                if (m.family.isNotBlank()) append("  ·  ${m.family}")
+                                if (group.family.isBlank() && m.family.isNotBlank()) {
+                                    append("  ·  ${m.family}")
+                                }
                             }
                             if (tight) {
                                 // Eine Zeile statt zwei: das halbiert die
@@ -350,6 +385,7 @@ fun SetupScreen(
                             }
                         }
                     }
+                }
                 }
             }
 
