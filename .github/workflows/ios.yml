@@ -74,6 +74,38 @@ jobs:
       - name: Ressourcen und Xcode-Projekt
         run: build/scripts/macos-bootstrap.sh project
 
+      # Die eigentliche Frage. Dass etwas uebersetzt, heisst nicht, dass
+      # es rechnet - und ein Slicer, der auf iOS zwar startet, aber
+      # falschen G-Code liefert, waere schlimmer als einer, der gar nicht
+      # baut. simctl spawn fuehrt das fuer den Simulator gebaute Binary
+      # in der Simulatorumgebung aus, mit Zugriff auf die Dateien des
+      # Laeufers - derselbe Test, der unter Android auf dem Emulator
+      # laeuft.
+      - name: C-ABI-Vertragstest im Simulator
+        run: |
+          set -eux
+          TEST=$(find build-out/ios-core-SIMULATORARM64 -name psm_contract_tests -type f | head -1)
+          test -n "$TEST"
+
+          python3 build/scripts/make-test-project-3mf.py /tmp/multibed.3mf
+          python3 build/scripts/make-test-project-3mf.py --installed-core-one /tmp/installed.3mf
+
+          DEVICE=$(xcrun simctl create psm-test \
+                   "com.apple.CoreSimulator.SimDeviceType.iPad-Pro-11-inch-M4" \
+                   "com.apple.CoreSimulator.SimRuntime.iOS-18-0")
+          xcrun simctl boot "$DEVICE"
+          xcrun simctl bootstatus "$DEVICE" -b
+
+          mkdir -p /tmp/psmdata
+          xcrun simctl spawn "$DEVICE" "$PWD/$TEST" \
+              /tmp/psmdata \
+              "$PWD/ios/Resources/psresources" \
+              "$PWD/testdata/wuerfel20.stl" \
+              /tmp/multibed.3mf \
+              /tmp/installed.3mf
+
+          xcrun simctl shutdown "$DEVICE"
+
       - name: App fuer den Simulator bauen
         run: |
           xcodebuild -project ios/PSMobile.xcodeproj \

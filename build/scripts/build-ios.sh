@@ -52,6 +52,17 @@ build_deps() {
 
 build_core() {
     log "iOS-Kern (${PLATFORM})"
+
+    # Fuer den Simulator die Testbinaries mitbauen. Sie laufen dort ueber
+    # "xcrun simctl spawn" und beantworten damit die eigentliche Frage:
+    # nicht ob der Kern uebersetzt, sondern ob er auf iOS auch rechnet.
+    # Auf dem Geraet bleiben sie aus - dort braeuchte jedes Binary ein
+    # Signierprofil, ohne etwas beizutragen.
+    WITH_TESTS=OFF
+    case "${PLATFORM}" in
+        SIMULATOR*) WITH_TESTS=ON ;;
+    esac
+
     # Statische Bibliothek: iOS-Apps binden den Kern direkt ein, eine
     # eigene .dylib waere nur zusaetzlicher Signierungsaufwand.
     cmake -S "${PSM_ROOT}" -B "${CORE_BUILD}" -G Ninja \
@@ -59,7 +70,7 @@ build_core() {
         -DPSM_IOS_PLATFORM="${PLATFORM}" \
         -DCMAKE_BUILD_TYPE=Release \
         -DCMAKE_PREFIX_PATH="${PREFIX}" \
-        -DPSM_BUILD_TESTCLI=OFF \
+        -DPSM_BUILD_TESTCLI="${WITH_TESTS}" \
         -DBUILD_SHARED_LIBS=OFF
     cmake --build "${CORE_BUILD}" -j "$(sysctl -n hw.ncpu)"
 }
