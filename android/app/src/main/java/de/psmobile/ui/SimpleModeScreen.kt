@@ -183,6 +183,7 @@ fun SimpleModeScreen(
                 presets = presets,
                 quick = quick,
                 brim = quick.brim,
+                objects = objects,
                 top = overlayTop,
                 maxHeight = overlayMaxHeight,
                 compact = compactChrome,
@@ -343,6 +344,7 @@ private fun SimpleOverlay(
     presets: SlicerService.Presets,
     quick: SlicerService.QuickSettings,
     brim: String,
+    objects: List<PsmCore.ObjectInfo>,
     top: androidx.compose.ui.unit.Dp,
     maxHeight: androidx.compose.ui.unit.Dp,
     compact: Boolean,
@@ -402,7 +404,7 @@ private fun SimpleOverlay(
                         onOpenAdvanced = onOpenAdvanced,
                     )
                     SimplePanel.SUPPORTS -> SimpleSupportsPanel(service, quick)
-                    SimplePanel.ADHESION -> SimpleAdhesionPanel(service, brim)
+                    SimplePanel.ADHESION -> SimpleAdhesionPanel(service, brim, objects)
                     SimplePanel.PRINT_SETTINGS -> SimplePrintSettingsPanel(service, presets, onDismiss, onOpenAdvanced)
                     SimplePanel.WORKSPACE -> Unit
                 }
@@ -416,10 +418,10 @@ private fun SimpleProjectsPanel(onPickFile: () -> Unit, presets: SlicerService.P
     var query by rememberSaveable { mutableStateOf("") }
     val (projectTitle, noPrinter, session) = SimpleModeState.projectSummaryCopy()
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        Text("PROJECTS", style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
+        Text(st("PROJECTS", "PROJEKTE"), style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
         OutlinedButton(onClick = onPickFile) { Text(st("Open model", "Modell öffnen")) }
     }
-    TextField(query, { query = it }, label = { Text("Search project names") }, modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp), singleLine = true)
+    TextField(query, { query = it }, label = { Text(st("Search project names", "Projektnamen durchsuchen")) }, modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp), singleLine = true)
     SimpleProjectRow(
         title = projectTitle,
         printer = presets.selectedPrinter.takeIf { it.isNotBlank() }?.let(EasyModeState::profileDisplayLabel)
@@ -558,10 +560,10 @@ private fun SimpleMaterialPanel(service: SlicerService, presets: SlicerService.P
     }
 
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        Text("MATERIAL PALETTE", style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
+        Text(st("MATERIAL PALETTE", "MATERIALPALETTE"), style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
         OutlinedButton(onClick = {
             presets.extruders.forEach { service.setExtruderFilament(it.index, presets.selectedFilament) }
-        }) { Text("Set all") }
+        }) { Text(st("Set all", "Alle setzen")) }
     }
     Text(st("Choose T1–T8, then choose a material", "T1–T8 antippen, dann Material auswählen"), color = PrusaColors.TextMuted, style = MaterialTheme.typography.bodySmall)
     val heads = presets.extruders.ifEmpty { listOf(SlicerService.Extruder(0, presets.selectedFilament, "#808080")) }
@@ -618,15 +620,15 @@ internal fun SimpleMaterialChooser(
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         TextButton(onClick = onBack) { Text("←") }
         Text(
-            "CHOOSE MATERIAL",
+            st("CHOOSE MATERIAL", "MATERIAL WÄHLEN"),
             color = PrusaColors.TextPrimary,
             style = MaterialTheme.typography.titleLarge,
             modifier = Modifier.weight(1f),
         )
         Text("T${selectedExtruder + 1}", color = PrusaColors.Orange, style = MaterialTheme.typography.labelLarge)
     }
-    Text("FIND A SPOOL", color = PrusaColors.TextMuted, style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(top = 8.dp))
-    TextField(query, { query = it }, label = { Text("search by vendor, material or color") }, modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp), singleLine = true)
+    Text(st("FIND A SPOOL", "SPULE SUCHEN"), color = PrusaColors.TextMuted, style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(top = 8.dp))
+    TextField(query, { query = it }, label = { Text(st("search by vendor, material or color", "nach Hersteller, Material oder Farbe suchen")) }, modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp), singleLine = true)
     // Im Seitenpanel eines Tablets wäre eine horizontale Chip-Leiste
     // abgeschnitten und nur durch verstecktes Wischen erreichbar. FlowRow
     // erhält die Easy-Print-Auswahl, passt sie aber sauber an jede Breite an.
@@ -775,36 +777,79 @@ private fun SimpleSupportsPanel(service: SlicerService, quick: SlicerService.Qui
         quick.supportBuildPlateOnly,
         quick.supportStyle,
     )
-    Text("SUPPORTS", style = MaterialTheme.typography.titleLarge)
-    SimpleReferenceChoice("Disabled", "No supports", selected == SimpleSupportChoice.DISABLED) { choose(SimpleSupportChoice.DISABLED) }
-    Text("Everywhere", style = MaterialTheme.typography.titleMedium)
-    SimpleReferenceChoice("Snug", "Straight supports close to the model.", selected == SimpleSupportChoice.SNUG_EVERYWHERE) { choose(SimpleSupportChoice.SNUG_EVERYWHERE) }
-    SimpleReferenceChoice("Organic", "Tree-shaped supports, easy to remove.", selected == SimpleSupportChoice.ORGANIC_EVERYWHERE) { choose(SimpleSupportChoice.ORGANIC_EVERYWHERE) }
-    Text("Build plate only", style = MaterialTheme.typography.titleMedium)
-    SimpleReferenceChoice("Snug", "Build plate only", selected == SimpleSupportChoice.SNUG_BUILD_PLATE) { choose(SimpleSupportChoice.SNUG_BUILD_PLATE) }
-    SimpleReferenceChoice("Organic", "Build plate only", selected == SimpleSupportChoice.ORGANIC_BUILD_PLATE) { choose(SimpleSupportChoice.ORGANIC_BUILD_PLATE) }
+    Text(st("SUPPORTS", "STÜTZEN"), style = MaterialTheme.typography.titleLarge)
+    SimpleReferenceChoice(st("Disabled", "Aus"), st("No supports", "Keine Stützen"), selected == SimpleSupportChoice.DISABLED) { choose(SimpleSupportChoice.DISABLED) }
+    Text(st("Everywhere", "Überall"), style = MaterialTheme.typography.titleMedium)
+    SimpleReferenceChoice(st("Snug", "Anliegend"), st("Straight supports close to the model.", "Gerade Stützen dicht am Modell."), selected == SimpleSupportChoice.SNUG_EVERYWHERE) { choose(SimpleSupportChoice.SNUG_EVERYWHERE) }
+    SimpleReferenceChoice(st("Organic", "Organisch"), st("Tree-shaped supports, easy to remove.", "Baumförmige Stützen, leicht zu entfernen."), selected == SimpleSupportChoice.ORGANIC_EVERYWHERE) { choose(SimpleSupportChoice.ORGANIC_EVERYWHERE) }
+    Text(st("Build plate only", "Nur vom Druckbett"), style = MaterialTheme.typography.titleMedium)
+    SimpleReferenceChoice(st("Snug", "Anliegend"), st("Build plate only", "Nur vom Druckbett"), selected == SimpleSupportChoice.SNUG_BUILD_PLATE) { choose(SimpleSupportChoice.SNUG_BUILD_PLATE) }
+    SimpleReferenceChoice(st("Organic", "Organisch"), st("Build plate only", "Nur vom Druckbett"), selected == SimpleSupportChoice.ORGANIC_BUILD_PLATE) { choose(SimpleSupportChoice.ORGANIC_BUILD_PLATE) }
 }
 
 @Composable
-private fun SimpleAdhesionPanel(service: SlicerService, brim: String) {
-    Text("INCREASE ADHESION", style = MaterialTheme.typography.titleLarge)
-    SimpleReferenceChoice("Disabled", "No additional bed adhesion", brim == "0") { service.setConfig("brim_width", "0") }
-    SimpleReferenceChoice("Automatic", "Chooses an outline when needed", false) { service.setConfig("brim_width", "5") }
-    SimpleReferenceChoice("Outline around the model", "A brim helps hold edges down while printing.", brim == "5") { service.setConfig("brim_width", "5") }
+private fun SimpleAdhesionPanel(
+    service: SlicerService,
+    brim: String,
+    objects: List<PsmCore.ObjectInfo>,
+) {
+    // "Automatisch" ist bewusst kein dritter Zustand, sondern eine
+    // Entscheidungshilfe: sie beurteilt die Objekte auf dem Bett und setzt
+    // danach eine der beiden echten Einstellungen. Welche das war, sieht
+    // man unmittelbar an der Markierung darueber oder darunter.
+    val advice = AdhesionAdvice.advise(
+        objects.map {
+            AdhesionAdvice.Footprint(it.sizeMm.first, it.sizeMm.second, it.sizeMm.third)
+        }
+    )
+    Text(
+        st("INCREASE ADHESION", "HAFTUNG VERBESSERN"),
+        style = MaterialTheme.typography.titleLarge,
+    )
+    SimpleReferenceChoice(
+        st("Disabled", "Aus"),
+        st("No additional bed adhesion", "Keine zusätzliche Haftung"),
+        brim == "0",
+    ) { service.setConfig("brim_width", "0") }
+    SimpleReferenceChoice(
+        st("Decide automatically", "Automatisch entscheiden"),
+        AdhesionAdvice.explain(advice),
+        selected = false,
+    ) { service.setConfig("brim_width", advice.brimWidthMm.toString()) }
+    SimpleReferenceChoice(
+        st("Outline around the model", "Rand um das Modell"),
+        st(
+            "A brim helps hold edges down while printing.",
+            "Ein Rand hält die Kanten während des Drucks unten.",
+        ),
+        brim != "0",
+    ) { service.setConfig("brim_width", AdhesionAdvice.SUGGESTED_BRIM_MM.toString()) }
 }
 
 @Composable
 private fun SimplePrintSettingsPanel(service: SlicerService, presets: SlicerService.Presets, onDismiss: () -> Unit, onOpenAdvanced: () -> Unit) {
-    Text("PRINT SETTINGS", style = MaterialTheme.typography.titleLarge)
+    Text(st("PRINT SETTINGS", "DRUCKEINSTELLUNGEN"), style = MaterialTheme.typography.titleLarge)
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         SimpleModeState.printSettingsColumns().forEach { title ->
-            Card(Modifier.weight(1f), colors = CardDefaults.cardColors(containerColor = PrusaColors.PanelRaised), shape = RoundedCornerShape(2.dp)) { Text(title, modifier = Modifier.padding(10.dp)) }
+            Card(Modifier.weight(1f), colors = CardDefaults.cardColors(containerColor = PrusaColors.PanelRaised), shape = RoundedCornerShape(2.dp)) { Text(st(title, printSettingsColumnGerman(title)), modifier = Modifier.padding(10.dp)) }
         }
     }
-    if (presets.prints.isEmpty()) TextButton(onClick = onOpenAdvanced) { Text("Print Settings einrichten") }
+    if (presets.prints.isEmpty()) TextButton(onClick = onOpenAdvanced) { Text(st("Set up print settings", "Druckeinstellungen einrichten")) }
     presets.prints.take(10).forEach { profile ->
         OutlinedButton(onClick = { service.selectPreset(PsmCore.PresetType.PRINT, profile); onDismiss() }, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) { Text(if (profile == presets.selectedPrint) "✓ $profile" else profile) }
     }
+}
+
+/**
+ * Die drei Spaltenkoepfe der Druckeinstellungen kommen aus der
+ * Referenzliste in [SimpleModeState] und haben dort bewusst englische
+ * Namen. Die Uebersetzung gehoert deshalb hierher, nicht in die Liste.
+ */
+private fun printSettingsColumnGerman(english: String): String = when (english) {
+    "Print Settings" -> "Druckeinstellungen"
+    "Infill" -> "Füllung"
+    "Shell Thickness" -> "Wandstärke"
+    else -> english
 }
 
 @Composable

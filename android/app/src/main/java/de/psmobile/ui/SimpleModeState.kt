@@ -71,7 +71,13 @@ object SimpleModeState {
         else -> SimpleSupportChoice.SNUG_EVERYWHERE
     }
 
-    fun adhesionChoices() = listOf("Disabled", "Automatic", "Outline around the model")
+    /**
+     * Die mittlere Wahl ist kein eigener Zustand, sondern eine
+     * Entscheidungshilfe: sie beurteilt die Geometrie und setzt danach
+     * eine der beiden echten Einstellungen. Siehe [AdhesionAdvice].
+     */
+    fun adhesionChoices() =
+        listOf("Disabled", "Decide automatically", "Outline around the model")
 
     fun printSettingsColumns() = listOf("Print Settings", "Infill", "Shell Thickness")
 

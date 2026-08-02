@@ -38,7 +38,10 @@ class SimpleModeStateTest {
     @Test
     fun supportAndAdhesionMenusKeepTheReferenceGroups() {
         assertEquals(listOf("Disabled", "Everywhere", "Build plate only"), SimpleModeState.supportGroups())
-        assertEquals(listOf("Disabled", "Automatic", "Outline around the model"), SimpleModeState.adhesionChoices())
+        assertEquals(
+            listOf("Disabled", "Decide automatically", "Outline around the model"),
+            SimpleModeState.adhesionChoices(),
+        )
     }
 
     @Test
