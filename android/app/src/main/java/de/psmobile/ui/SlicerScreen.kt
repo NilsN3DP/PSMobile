@@ -74,6 +74,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -87,6 +88,7 @@ import de.psmobile.core.PsmViewport
 import de.psmobile.core.PsmCore
 import de.psmobile.slicing.SlicerService
 import de.psmobile.ui.theme.PrusaColors
+import de.psmobile.ui.theme.uiScaleFor
 import kotlin.math.roundToInt
 import kotlin.math.sqrt
 
@@ -2559,6 +2561,14 @@ private fun PresetCombo(
 
     if (pickerOpen) {
         val matches = filterPresetOptions(options, query)
+        // Eine feste Obergrenze von 320 dp liess auf einem Tablet die
+        // untere Haelfte des Dialogs leer, obwohl weitere Profile da
+        // waren. PSMobileTheme staucht die Dichte, deshalb muss die
+        // gemeldete Bildschirmhoehe erst zurueckgerechnet werden.
+        val configuration = LocalConfiguration.current
+        val logicalHeightDp = configuration.screenHeightDp /
+            uiScaleFor(configuration.screenWidthDp, configuration.screenHeightDp)
+        val listMaxHeight = (logicalHeightDp * 0.55f).dp
         AlertDialog(
             onDismissRequest = { pickerOpen = false },
             containerColor = PrusaColors.Panel,
@@ -2583,7 +2593,7 @@ private fun PresetCombo(
                         ),
                     )
                     Column(
-                        Modifier.heightIn(max = 320.dp).verticalScroll(rememberScrollState()),
+                        Modifier.heightIn(max = listMaxHeight).verticalScroll(rememberScrollState()),
                         verticalArrangement = Arrangement.spacedBy(6.dp),
                     ) {
                         if (matches.isEmpty()) {
@@ -2623,7 +2633,7 @@ private fun PresetCombo(
             },
             confirmButton = {
                 TextButton(onClick = { pickerOpen = false }) {
-                    Text("Fertig", color = PrusaColors.Orange)
+                    Text(advancedText("Done", "Fertig"), color = PrusaColors.Orange)
                 }
             },
         )
@@ -2887,7 +2897,7 @@ private fun ProgressBlock(progress: SlicerService.Progress) {
         is SlicerService.Progress.Done -> {
             val st = progress.stats
             Column(Modifier.fillMaxWidth()) {
-                Text("Fertig in %.1f s".format(progress.seconds),
+                Text(advancedText("Done in %.1f s", "Fertig in %.1f s").format(progress.seconds),
                      color = PrusaColors.Ok, fontSize = 12.sp)
                 if (st != null) {
                     Text(

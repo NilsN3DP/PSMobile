@@ -148,6 +148,103 @@ Slic3r::ModelInstance *first_instance(Slic3r::ModelObject *o)
     return o->instances.front();
 }
 
+/* Grundflaeche einer Instanz als Rechteck in Bettkoordinaten. */
+static Slic3r::BoundingBoxf footprint_of(const Slic3r::ModelObject *o, size_t idx)
+{
+    const Slic3r::BoundingBoxf3 b = o->instance_bounding_box(idx);
+    return Slic3r::BoundingBoxf(Slic3r::Vec2d(b.min.x(), b.min.y()),
+                                Slic3r::Vec2d(b.max.x(), b.max.y()));
+}
+
+static bool rects_overlap(const Slic3r::BoundingBoxf &a,
+                          const Slic3r::BoundingBoxf &b)
+{
+    return a.min.x() < b.max.x() && b.min.x() < a.max.x() &&
+           a.min.y() < b.max.y() && b.min.y() < a.max.y();
+}
+
+/*
+ * Setzt ein frisch geladenes Objekt auf einen freien Platz.
+ *
+ * Vorher landete jedes geladene Modell auf der Bettmitte. Beim zweiten
+ * Import steckte es dann im ersten - im Viewport sah man nur noch ein
+ * Objekt und hielt den Import fuer fehlgeschlagen. PrusaSlicer Desktop
+ * faellt das nicht auf, weil dort nach dem Laden ohnehin meist arrangiert
+ * wird.
+ *
+ * Gesucht wird auf einem Raster um die Bettmitte, von innen nach aussen,
+ * damit die Anordnung kompakt bleibt. Findet sich nichts - volles oder
+ * unbekanntes Bett -, bleibt es bei der Bettmitte; ein Import darf an der
+ * Platzsuche nicht scheitern.
+ */
+static void place_on_free_spot(Slic3r::Model &model,
+                               Slic3r::ModelObject *dst,
+                               const Slic3r::Vec2d &bed_center,
+                               const Slic3r::BoundingBoxf &bed,
+                               double gap_mm)
+{
+    Slic3r::ModelInstance *inst = first_instance(dst);
+    if (inst == nullptr)
+        return;
+
+    std::vector<Slic3r::BoundingBoxf> taken;
+    for (const Slic3r::ModelObject *o : model.objects) {
+        if (o == dst)
+            continue;
+        for (size_t i = 0; i < o->instances.size(); ++i)
+            taken.push_back(footprint_of(o, i));
+    }
+    if (taken.empty())
+        return;                       /* die Bettmitte ist frei */
+
+    const Slic3r::BoundingBoxf own = footprint_of(dst, 0);
+    const Slic3r::Vec2d size = own.size();
+    const Slic3r::Vec2d start = inst->get_offset().head<2>();
+    const double step_x = size.x() + gap_mm;
+    const double step_y = size.y() + gap_mm;
+    if (step_x <= 0.0 || step_y <= 0.0)
+        return;
+
+    const bool bed_known = bed.max.x() > bed.min.x() && bed.max.y() > bed.min.y();
+
+    /* Ring 0 ist die Bettmitte selbst; sie wird gleich mitgeprueft. */
+    for (int ring = 0; ring < 24; ++ring) {
+        for (int dy = -ring; dy <= ring; ++dy) {
+            for (int dx = -ring; dx <= ring; ++dx) {
+                /* Nur den Rand des Rings, das Innere war schon dran. */
+                if (ring > 0 && std::abs(dx) != ring && std::abs(dy) != ring)
+                    continue;
+
+                const Slic3r::Vec2d shift(dx * step_x, dy * step_y);
+                Slic3r::BoundingBoxf candidate(own.min + shift, own.max + shift);
+
+                if (bed_known &&
+                    (candidate.min.x() < bed.min.x() || candidate.max.x() > bed.max.x() ||
+                     candidate.min.y() < bed.min.y() || candidate.max.y() > bed.max.y()))
+                    continue;
+
+                bool blocked = false;
+                for (const Slic3r::BoundingBoxf &t : taken) {
+                    if (rects_overlap(candidate, t)) {
+                        blocked = true;
+                        break;
+                    }
+                }
+                if (blocked)
+                    continue;
+
+                const Slic3r::Vec3d offset = inst->get_offset();
+                inst->set_offset(Slic3r::Vec3d(start.x() + shift.x(),
+                                               start.y() + shift.y(),
+                                               offset.z()));
+                return;
+            }
+        }
+    }
+    /* Kein freier Platz gefunden - Bettmitte behalten. */
+    (void) bed_center;
+}
+
 /*
  * Zerlegt PrusaSlicers Desktop-Mehrbett-Landschaft in getrennte mobile
  * Modelle. Die 3MF speichert Objekte auf virtuellen Betten mit grossen
@@ -548,6 +645,7 @@ PSM_API psm_result psm_model_load(psm_session *s,
          * PrusaSlicer beim Laden auch macht. Ohne das klebt jedes Modell
          * im Ursprung, also in der vorderen linken Bettecke. */
         Slic3r::Vec2d bed_center(0.0, 0.0);
+        Slic3r::BoundingBoxf bed_bb;
         try {
             const Slic3r::Points bedpts = Slic3r::get_bed_shape(s->config);
             if (bedpts.size() >= 3) {
@@ -556,6 +654,7 @@ PSM_API psm_result psm_model_load(psm_session *s,
                     bb.merge(Slic3r::Vec2d(Slic3r::unscale<double>(p.x()),
                                            Slic3r::unscale<double>(p.y())));
                 bed_center = bb.center();
+                bed_bb     = bb;
             }
         } catch (...) { /* ohne Bett bleibt es beim Ursprung */ }
 
@@ -571,6 +670,9 @@ PSM_API psm_result psm_model_load(psm_session *s,
             inst->set_offset(Slic3r::Vec3d(bed_center.x(), bed_center.y(),
                                            inst->get_offset().z()));
             dst->ensure_on_bed();
+            /* ... und von dort auf den naechsten freien Platz ruecken,
+             * damit ein zweiter Import nicht im ersten steckt. */
+            place_on_free_spot(s->model(), dst, bed_center, bed_bb, 3.0);
             if (out_ids != nullptr && written < out_ids_cap)
                 out_ids[written++] = static_cast<psm_object_id>(dst->id().id);
             ++total;

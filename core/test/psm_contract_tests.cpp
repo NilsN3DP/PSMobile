@@ -50,6 +50,35 @@ int main(int argc, char **argv)
     require(psm_model_info(session, id, &info) == PSM_OK, "object info");
     require(info.triangle_count == 12, "cube has twelve triangles");
 
+    /*
+     * Ein zweiter Import darf nicht im ersten stecken. Vorher landete
+     * jedes geladene Objekt auf der Bettmitte; im Viewport sah man dann
+     * nur noch ein Objekt und hielt den Import fuer fehlgeschlagen.
+     */
+    {
+        psm_object_id second = PSM_INVALID_ID;
+        size_t second_count = 0;
+        require(psm_model_load(session, argv[3], &second, 1, &second_count) == PSM_OK,
+                std::string("load cube twice: ") + psm_last_error(session));
+        require(second_count == 1 && second != id, "second import is its own object");
+
+        psm_object_info a{};
+        psm_object_info b{};
+        require(psm_model_info(session, id, &a) == PSM_OK, "first object info");
+        require(psm_model_info(session, second, &b) == PSM_OK, "second object info");
+
+        const bool apart_in_x = a.bbox_max[0] <= b.bbox_min[0] ||
+                                b.bbox_max[0] <= a.bbox_min[0];
+        const bool apart_in_y = a.bbox_max[1] <= b.bbox_min[1] ||
+                                b.bbox_max[1] <= a.bbox_min[1];
+        require(apart_in_x || apart_in_y,
+                "a second import gets its own free spot instead of the bed centre");
+        require(b.outside_bed == 0, "the free spot stays on the bed");
+
+        require(psm_model_remove(session, second) == PSM_OK, "remove second import");
+        require(psm_model_count(session) == 1, "back to one object");
+    }
+
     require(psm_model_volume_count(session, id) == 1,
             "STL creates one model volume");
     psm_volume_info volume{};
