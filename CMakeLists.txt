@@ -13,7 +13,17 @@ project(PSMobile CXX C)
 # kein Verlass: PrusaSlicers eigenes CMakeLists raeumt sie beim
 # Einbinden ab, danach sucht jedes find_library im Nichts.
 if (NOT PSM_DEPS_ROOT)
-    set(PSM_DEPS_ROOT "${CMAKE_PREFIX_PATH}")
+    if (DEFINED ENV{PSM_DEPS_PREFIX} AND NOT "$ENV{PSM_DEPS_PREFIX}" STREQUAL "")
+        # Der Weg, den beide Bauskripte ohnehin gehen - eindeutig und
+        # unabhaengig davon, was CMAKE_PREFIX_PATH sonst noch aufsammelt.
+        set(PSM_DEPS_ROOT "$ENV{PSM_DEPS_PREFIX}")
+    elseif (CMAKE_PREFIX_PATH)
+        # CMAKE_PREFIX_PATH ist eine Liste, keine Zeichenkette. Wer sie
+        # unbesehen als einen Pfad weiterreicht, baut daraus "a;b/lib":
+        # find_library sucht dann in a und in b/lib/lib, also nirgends.
+        # Die Meldung lautet trotzdem nur "nicht gefunden".
+        list(GET CMAKE_PREFIX_PATH 0 PSM_DEPS_ROOT)
+    endif ()
 endif ()
 
 set(CMAKE_CXX_STANDARD 17)
@@ -116,7 +126,7 @@ target_link_libraries(psmobile_core PRIVATE libslic3r slic3r-arrange-wrapper lib
 # Suchmodi auf ONLY und wuerde die angegebenen Pfade unter
 # CMAKE_FIND_ROOT_PATH neu verwurzeln - dann sucht es im Nirgendwo.
 # Derselbe Stolperstein wie beim Bauen der Abhaengigkeiten.
-message(STATUS "PSM: CMAKE_PREFIX_PATH=[]")
+message(STATUS "PSM: Suche NanoSVG in [${PSM_DEPS_ROOT}/lib]")
 find_library(PSM_NANOSVG     NAMES nanosvg
              PATHS "${PSM_DEPS_ROOT}/lib" NO_DEFAULT_PATH NO_CMAKE_FIND_ROOT_PATH)
 find_library(PSM_NANOSVGRAST NAMES nanosvgrast
@@ -124,7 +134,14 @@ find_library(PSM_NANOSVGRAST NAMES nanosvgrast
 if (PSM_NANOSVG AND PSM_NANOSVGRAST)
     target_link_libraries(psmobile_core PRIVATE "${PSM_NANOSVGRAST}" "${PSM_NANOSVG}")
 else ()
-    message(FATAL_ERROR "NanoSVG nicht gefunden - ohne sie fehlt die Bett-Textur")
+    # Der Pfad gehoert in die Meldung. Ohne ihn sucht man an der falschen
+    # Stelle: die Bibliothek liegt fast immer da, nur zeigt PSM_DEPS_ROOT
+    # woandershin.
+    message(FATAL_ERROR
+        "NanoSVG nicht gefunden - ohne sie fehlt die Bett-Textur.\n"
+        "  gesucht in: ${PSM_DEPS_ROOT}/lib\n"
+        "  nanosvg:     ${PSM_NANOSVG}\n"
+        "  nanosvgrast: ${PSM_NANOSVGRAST}")
 endif ()
 
 # LibVGCodeWrapper.cpp erwartet die Include-Wurzel von PrusaSlicer

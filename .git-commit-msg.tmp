@@ -1,43 +1,23 @@
-iOS-Bau auf einem echten Mac zum Laufen gebracht
+PSM_DEPS_ROOT war eine Liste, kein Pfad
 
-Das Bootstrap-Skript und die iOS-Toolchain waren bisher nie auf einer
-echten Maschine gelaufen. Vier Dinge standen im Weg, alle vier stehen
-jetzt an der Wurzel behoben statt als Handgriff nebenher.
+CMAKE_PREFIX_PATH kann mehrere Eintraege haben, und auf dem Mac hatte
+sie zwei. Wer sie unbesehen als einen Pfad weiterreicht, baut daraus
+"a;b/lib": das angehaengte /lib landet nur am letzten Eintrag, und
+find_library sucht danach in a und in b/lib/lib - also nirgends.
 
-Keine Locale ueber SSH. LANG ist leer, LC_CTYPE steht auf C, und CMake
-packt das Boost-Archiv dann nicht aus: darin stecken Dateinamen mit
-Sonderzeichen. Am Bildschirm faellt das nie auf, weil Terminal.app eine
-Locale setzt - nur der ferngesteuerte Lauf stirbt.
+Auf Android ist das nie aufgefallen, weil die Liste dort nur einen
+Eintrag hatte. Es war die ganze Zeit da, nur unsichtbar.
 
-env.sh wurde ueberschrieben statt ergaenzt. Der homebrew-Schritt trug
-seine Zeile ein, der tools-Schritt loeschte sie wieder, und danach war
-autoreconf verschwunden. Dazu eine Falle, die das unreparierbar machte:
-der Abbruch wegen fehlender autotools kam vor dem Schreiben der Datei,
-also konnte kein weiterer Lauf den Zustand je festhalten. Jetzt schreibt
-eine Funktion die Datei aus dem tatsaechlichen Zustand, und zwar bevor
-bemaengelt wird, was fehlt.
+Jetzt kommt der Pfad aus PSM_DEPS_PREFIX. Das ist der Weg, den beide
+Bauskripte ohnehin gehen, und er ist eindeutig - unabhaengig davon, was
+CMAKE_PREFIX_PATH sonst noch aufsammelt. Bleibt die Umgebungsvariable
+leer, wird der erste Eintrag der Liste genommen statt die ganze Liste.
 
-texinfo fehlte. MPFR laeuft vor dem Bauen durch autoreconf, danach will
-make auch die Dokumentation erzeugen. Ohne makeinfo bricht es mit
-Error 127 ab, einer Meldung, die nicht verraet, welches Programm fehlt.
-
-MACOSX_BUNDLE steht bei CMAKE_SYSTEM_NAME iOS von sich aus auf AN. Fuer
-eine App ist das richtig, fuer die Hilfsprogramme in den Dependencies
-nicht: heatshrink installiert ein Kommandozeilenwerkzeug, und CMake
-verlangt dafuer ein BUNDLE DESTINATION, das es nie geben wird. Diese
-Programme laufen ohnehin nur beim Bauen.
-
-CMAKE_SYSTEM_PROCESSOR blieb leer. Beim Cross-Build leitet CMake es
-nicht ab. Die meisten Projekte stoert das nicht, libjpeg-turbo schon:
-string(TOLOWER ${CMAKE_SYSTEM_PROCESSOR} ...) unquotiert, das leere
-Argument verschwindet, und die Meldung lautet "string no output variable
-specified" - was auf alles Moegliche hindeutet, nur nicht auf die
-Ursache. Zu wissen ist noch: der Wert landet in CMakeSystem.cmake im
-Baurest, ein Nachtragen in der Toolchain allein reicht also nicht, das
-Bauverzeichnis des Teilprojekts muss mit weg.
-
-Stand auf FF738: Xcode 26.3, iOS-SDK 26.2, Werkzeuge ohne Adminrechte
-beschafft, Dependencies bauen durch. Details zum Zugang in der Notiz
-macincloud-mac.
+Dazu zwei Meldungen, die vorher nichts hergaben. Die Statusmeldung gab
+woertlich "CMAKE_PREFIX_PATH=[]" aus - die Variable darin war
+irgendwann verloren gegangen, und der Fehler war damit nicht zu sehen.
+Und der Abbruch nannte nur "NanoSVG nicht gefunden", ohne zu sagen, wo
+gesucht wurde. Genau das war die Antwort: die Bibliothek lag da, der
+Suchpfad zeigte woandershin. Beide nennen jetzt den Pfad.
 
 Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
