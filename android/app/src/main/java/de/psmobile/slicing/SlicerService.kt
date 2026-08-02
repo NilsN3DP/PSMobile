@@ -398,8 +398,63 @@ class SlicerService : Service() {
             _setupNeeded.value = false
             refreshPresets()
             refreshQuickSettings()
+            restoreAutosave(c)
         }
         return c
+    }
+
+    // --- Arbeitsstand ueber das App-Ende hinweg ---------------------------
+    //
+    // Android beendet einen Prozess im Hintergrund ohne Vorwarnung. Wer
+    // ein halbes Bett aufgebaut hatte, fand vorher ein leeres vor. Deshalb
+    // schreibt die App bei jedem Wechsel in den Hintergrund ein
+    // vollstaendiges Projekt und liest es beim naechsten Start zurueck -
+    // dieselbe 3MF-Maschinerie wie "Speichern unter", nur an einen festen
+    // Ort. Ein ausdruecklich gespeichertes Projekt bleibt davon unberuehrt.
+
+    private val autosaveFile: File
+        get() = File(filesDir, "autosave").apply { mkdirs() }.resolve("session.3mf")
+
+    /**
+     * Schreibt den aktuellen Stand weg. Ein leeres Bett loescht die Datei,
+     * sonst kaeme nach "Neues Projekt" beim naechsten Start der alte Stand
+     * zurueck.
+     */
+    fun autosave() {
+        val c = core ?: return
+        if (_setupNeeded.value) return
+        runCatching {
+            if (_objects.value.isEmpty() && _beds.value.size <= 1) {
+                autosaveFile.delete()
+                return
+            }
+            // Erst daneben schreiben, dann umbenennen: ein abgebrochener
+            // Schreibvorgang darf keine halbe Datei hinterlassen, die beim
+            // naechsten Start als Arbeitsstand gilt. Die Endung muss dabei
+            // .3mf bleiben - der Core prueft sie und lehnt sonst ab.
+            val tmp = File(autosaveFile.parentFile, "session-part.3mf")
+            c.saveProject(tmp.absolutePath)
+            if (autosaveFile.exists()) autosaveFile.delete()
+            tmp.renameTo(autosaveFile)
+        }.onFailure { Log.w(TAG, "Arbeitsstand nicht gesichert", it) }
+    }
+
+    private fun restoreAutosave(c: PsmCore) {
+        val file = autosaveFile
+        if (! file.isFile || file.length() == 0L) return
+        runCatching {
+            c.loadProject(file.absolutePath)
+        }.onSuccess {
+            refreshBeds()
+            refreshObjects()
+            refreshPresets()
+            refreshQuickSettings()
+            Log.i(TAG, "Arbeitsstand wiederhergestellt")
+        }.onFailure {
+            // Ein unlesbarer Arbeitsstand darf den Start nicht blockieren.
+            Log.w(TAG, "Arbeitsstand nicht lesbar, wird verworfen", it)
+            file.delete()
+        }
     }
 
     // --- Ersteinrichtung --------------------------------------------------
@@ -756,6 +811,9 @@ class SlicerService : Service() {
             .onFailure { Log.w(TAG, "Neues Projekt", it) }
             .onSuccess {
                 setProjectKey(null)
+                // Sonst holt der naechste Start den eben verworfenen
+                // Stand ueber den Arbeitsstand wieder herein.
+                runCatching { autosaveFile.delete() }
                 refreshObjects()
                 invalidateSliceResult()
                 showBed()

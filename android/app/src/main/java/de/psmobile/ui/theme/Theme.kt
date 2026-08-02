@@ -1,14 +1,18 @@
 package de.psmobile.ui.theme
 
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.sp
 
 /**
  * Farbwelt an PrusaSlicer angelehnt.
@@ -89,6 +93,40 @@ internal const val MIN_SCALE = 0.7f
 /** Wie stark die Schrift dem Kastenmass folgt. */
 internal const val FONT_FOLLOW = 0.6f
 
+/*
+ * Material3 bringt Schriftgroessen fuer eine Telefon-App mit: eine
+ * Dialogueberschrift ist 24 sp, ein Kartentitel 22 sp. Die Bildschirme
+ * dieser App arbeiten dagegen durchgehend mit 11 bis 18 sp, weil auf
+ * einem Tablet viel gleichzeitig sichtbar bleiben soll.
+ *
+ * Solange beide Massstaebe nebeneinander liefen, sah jeder Dialog neben
+ * dem restlichen Fenster aufgeblasen aus - am deutlichsten die
+ * Ueberschrift eines AlertDialog. Die Dichteskalierung aendert daran
+ * nichts, sie trifft beide gleich.
+ *
+ * Deshalb hier eine eigene Staffel in der Hausgroesse. Sie gilt fuer
+ * alles, was Material selbst zeichnet: Dialoge, Karten, Knopftexte.
+ */
+private fun psTypography(): Typography {
+    val base = Typography()
+    fun TextStyle.at(size: Int, line: Int) =
+        copy(fontSize = size.sp, lineHeight = line.sp)
+    return base.copy(
+        headlineLarge  = base.headlineLarge.at(24, 30),
+        headlineMedium = base.headlineMedium.at(20, 26),
+        headlineSmall  = base.headlineSmall.at(17, 23),
+        titleLarge     = base.titleLarge.at(18, 24),
+        titleMedium    = base.titleMedium.at(14, 20),
+        titleSmall     = base.titleSmall.at(13, 18),
+        bodyLarge      = base.bodyLarge.at(14, 20),
+        bodyMedium     = base.bodyMedium.at(13, 18),
+        bodySmall      = base.bodySmall.at(12, 16),
+        labelLarge     = base.labelLarge.at(14, 18),
+        labelMedium    = base.labelMedium.at(12, 16),
+        labelSmall     = base.labelSmall.at(11, 14),
+    )
+}
+
 @Composable
 fun PSMobileTheme(content: @Composable () -> Unit) {
     val configuration = LocalConfiguration.current
@@ -104,6 +142,10 @@ fun PSMobileTheme(content: @Composable () -> Unit) {
     )
 
     CompositionLocalProvider(LocalDensity provides scaled) {
-        MaterialTheme(colorScheme = Scheme, content = content)
+        MaterialTheme(
+            colorScheme = Scheme,
+            typography = remember { psTypography() },
+            content = content,
+        )
     }
 }

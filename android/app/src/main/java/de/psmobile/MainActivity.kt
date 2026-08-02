@@ -345,6 +345,17 @@ class MainActivity : ComponentActivity() {
         handleIncomingIntent(intent)
     }
 
+    /**
+     * Android beendet einen Prozess im Hintergrund ohne Vorwarnung, und
+     * onDestroy laeuft dann nicht mehr. onStop ist der letzte Zeitpunkt,
+     * auf den man sich verlassen kann - deshalb wird der Arbeitsstand
+     * hier gesichert, nicht erst beim Beenden.
+     */
+    override fun onStop() {
+        runCatching { service?.autosave() }
+        super.onStop()
+    }
+
     override fun onDestroy() {
         runCatching { unbindService(connection) }
         super.onDestroy()

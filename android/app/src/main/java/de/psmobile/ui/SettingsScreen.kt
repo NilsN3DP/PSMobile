@@ -96,6 +96,24 @@ fun SettingsScreen(
     }
     var pageIndex by remember(tab) { mutableStateOf(0) }
 
+    // Gemerkte Einstellungen liegen ueber alle Reiter in einem Satz; die
+    // Seite zeigt nur die des aktuellen Reiters. FAVORITES_PAGE ist ein
+    // eigener Index vor der ersten echten Seite.
+    val prefs = remember(context) {
+        context.getSharedPreferences("psmobile", android.content.Context.MODE_PRIVATE)
+    }
+    var favorites by remember {
+        mutableStateOf(prefs.getStringSet("favorites", emptySet())?.toSet().orEmpty())
+    }
+    fun toggleFavorite(key: String) {
+        favorites = FavoriteSettings.toggle(favorites, key)
+        prefs.edit().putStringSet("favorites", favorites).apply()
+    }
+    val tabKeyOrder = remember(tab) { FavoriteSettings.keysOf(PsUi.tabs[tab].orEmpty()) }
+    val favoriteKeys = remember(favorites, tabKeyOrder) {
+        FavoriteSettings.orderedFor(favorites, tabKeyOrder)
+    }
+
     Column(
         modifier
             .fillMaxSize()
@@ -164,6 +182,16 @@ fun SettingsScreen(
                 .background(PrusaColors.Panel)
                 .verticalScroll(rememberScrollState()),
         ) {
+            SettingsPageEntry(
+                title = PsUi.appText("Favourites", "Favoriten") +
+                    if (favoriteKeys.isEmpty()) "" else " · ${favoriteKeys.size}",
+                active = pageIndex == FAVORITES_PAGE,
+                leading = {
+                    Text("★", color = PrusaColors.Orange, fontSize = 16.sp)
+                },
+                onClick = { pageIndex = FAVORITES_PAGE },
+            )
+            HorizontalDivider(color = PrusaColors.Divider)
 
             pages.forEachIndexed { i, page ->
                 val active = i == pageIndex
@@ -208,7 +236,7 @@ fun SettingsScreen(
                     Text("⋯", color = PrusaColors.TextPrimary, fontSize = 14.sp)
                 }
                 Text(
-                    "Spezialdialoge",
+                    PsUi.appText("Special dialogs", "Spezialdialoge"),
                     color = if (specialActive) PrusaColors.Orange else PrusaColors.TextPrimary,
                     fontSize = 14.sp,
                     fontWeight = if (specialActive) FontWeight.SemiBold else FontWeight.Normal,
@@ -248,6 +276,19 @@ fun SettingsScreen(
                         Text(PsUi.tr(label), color = PrusaColors.TextPrimary, fontSize = 13.sp)
                     }
                 }
+            }
+
+            if (pageIndex == FAVORITES_PAGE) {
+                FavoritesPanel(
+                    core = core,
+                    tab = tab,
+                    keys = favoriteKeys,
+                    mode = mode,
+                    configRevision = configRevision,
+                    onToggleFavorite = ::toggleFavorite,
+                    onChanged = onSettingChanged,
+                )
+                return@Column
             }
 
             if (pageIndex == pages.size) {
@@ -323,6 +364,8 @@ fun SettingsScreen(
                                    extruder = index, multiline = entry.option.code,
                                    enabled = entry.enablement?.enabled ?: true,
                                    blockedBy = entry.enablement?.blockedBy.orEmpty(),
+                                   isFavorite = entry.meta.key in favorites,
+                                   onToggleFavorite = { toggleFavorite(entry.meta.key) },
                                    onChanged = onSettingChanged)
                     }
                 }
@@ -381,6 +424,20 @@ private fun SettingsPageRail(
             .background(PrusaColors.Panel).padding(horizontal = 8.dp, vertical = 6.dp),
         horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
+        val favouritesActive = pageIndex == FAVORITES_PAGE
+        Box(
+            Modifier.height(48.dp).clip(RoundedCornerShape(8.dp))
+                .background(if (favouritesActive) PrusaColors.Orange else PrusaColors.PanelRaised)
+                .clickable { onSelect(FAVORITES_PAGE) }
+                .padding(horizontal = 14.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                "★",
+                color = if (favouritesActive) PrusaColors.Background else PrusaColors.Orange,
+                fontSize = 15.sp,
+            )
+        }
         pages.forEachIndexed { index, page ->
             val active = index == pageIndex
             Box(
@@ -407,7 +464,7 @@ private fun SettingsPageRail(
             contentAlignment = Alignment.Center,
         ) {
             Text(
-                "Spezial",
+                PsUi.appText("Special", "Spezial"),
                 color = if (special) PrusaColors.Background else PrusaColors.TextPrimary,
                 fontSize = 13.sp,
             )
@@ -424,6 +481,8 @@ private fun SettingRow(
     multiline: Boolean = false,
     enabled: Boolean = true,
     blockedBy: String = "",
+    isFavorite: Boolean = false,
+    onToggleFavorite: (() -> Unit)? = null,
     onChanged: () -> Unit = {},
 ) {
     // Die Revision gehoert in den Schluessel: sonst zeigt die Zeile nach
@@ -465,6 +524,25 @@ private fun SettingRow(
             Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
         ) {
+            // Der Stern merkt die Zeile fuer die Favoritenseite. Er steht
+            // vor der Beschriftung, weil er zur Zeile gehoert und nicht
+            // zum Wert - rechts waere er ein weiteres Bedienelement in
+            // einer Reihe, in der schon eines steht.
+            onToggleFavorite?.let { toggle ->
+                Box(
+                    Modifier
+                        .size(44.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .clickable(onClick = toggle),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        if (isFavorite) "★" else "☆",
+                        color = if (isFavorite) PrusaColors.Orange else PrusaColors.TextMuted,
+                        fontSize = 16.sp,
+                    )
+                }
+            }
             Text(
                 PsUi.tr(meta.label).ifBlank { meta.key },
                 color = PrusaColors.TextPrimary,
@@ -669,6 +747,119 @@ private fun GcodeField(
                     fontSize = 12.sp,
                     fontWeight = FontWeight.SemiBold,
                     modifier = Modifier.clickable { onCommit(text) },
+                )
+            }
+        }
+    }
+}
+
+/** Eigener Seitenindex vor der ersten echten Seite. */
+private const val FAVORITES_PAGE = -1
+
+/** Ein Eintrag in der Seitenliste links - Symbol, Titel, Auswahlzustand. */
+@Composable
+private fun SettingsPageEntry(
+    title: String,
+    active: Boolean,
+    leading: @Composable () -> Unit,
+    onClick: () -> Unit,
+) {
+    Row(
+        Modifier.fillMaxWidth().height(56.dp)
+            .background(if (active) PrusaColors.PanelRaised else PrusaColors.Panel)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(Modifier.size(20.dp), contentAlignment = Alignment.Center) { leading() }
+        Text(
+            title,
+            color = if (active) PrusaColors.Orange else PrusaColors.TextPrimary,
+            fontSize = 14.sp,
+            fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal,
+            modifier = Modifier.padding(start = 10.dp),
+        )
+    }
+}
+
+/**
+ * Die selbst zusammengestellte Seite.
+ *
+ * Sie zeigt dieselben Zeilen wie die Fachseiten, nur eben die gemerkten.
+ * Die Stufe Simple/Advanced/Expert gilt auch hier: ein Expertenwert
+ * verschwindet, wenn man auf Simple zurueckschaltet. Er bleibt aber
+ * gemerkt, sonst muesste man ihn nach jedem Stufenwechsel neu suchen -
+ * deshalb steht die Zahl im Seitentitel und der Hinweis unten.
+ */
+@Composable
+private fun FavoritesPanel(
+    core: PsmCore,
+    tab: String,
+    keys: List<String>,
+    mode: PsmCore.Mode,
+    configRevision: Int,
+    onToggleFavorite: (String) -> Unit,
+    onChanged: () -> Unit,
+) {
+    val entries = remember(keys, mode, configRevision) {
+        keys.mapNotNull { key -> core.configMeta(key)?.let { key to it } }
+            .filter { (_, meta) -> meta.mode.ordinal <= mode.ordinal }
+    }
+    val hiddenByMode = keys.size - entries.size
+
+    if (keys.isEmpty()) {
+        Box(Modifier.fillMaxSize().padding(32.dp), contentAlignment = Alignment.Center) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text("☆", color = PrusaColors.TextMuted, fontSize = 40.sp)
+                Text(
+                    PsUi.appText("No favourites yet", "Noch keine Favoriten"),
+                    color = PrusaColors.TextPrimary,
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.padding(top = 10.dp),
+                )
+                Text(
+                    PsUi.appText(
+                        "Tap the star next to a setting to keep it here.",
+                        "Den Stern neben einer Einstellung antippen, dann steht sie hier.",
+                    ),
+                    color = PrusaColors.TextMuted,
+                    fontSize = 13.sp,
+                    modifier = Modifier.padding(top = 4.dp),
+                )
+            }
+        }
+        return
+    }
+
+    LazyColumn(
+        Modifier.fillMaxSize().padding(horizontal = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        items(entries, key = { it.first }) { (key, meta) ->
+            val enablement = remember(key, configRevision) {
+                runCatching { core.enablement(key) }.getOrNull()
+            }
+            SettingRow(
+                core, meta, configRevision,
+                extruder = if (tab == "filament") 0 else -1,
+                enabled = enablement?.enabled ?: true,
+                blockedBy = enablement?.blockedBy.orEmpty(),
+                isFavorite = true,
+                onToggleFavorite = { onToggleFavorite(key) },
+                onChanged = onChanged,
+            )
+        }
+        if (hiddenByMode > 0) {
+            item(key = "hidden_by_mode") {
+                Text(
+                    PsUi.appText(
+                        "$hiddenByMode more are hidden by the current mode.",
+                        "$hiddenByMode weitere sind in dieser Stufe ausgeblendet.",
+                    ),
+                    color = PrusaColors.TextMuted,
+                    fontSize = 12.sp,
+                    modifier = Modifier.padding(vertical = 12.dp),
                 )
             }
         }
