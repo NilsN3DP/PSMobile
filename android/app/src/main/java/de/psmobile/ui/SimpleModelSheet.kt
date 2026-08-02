@@ -6,7 +6,10 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -40,6 +43,10 @@ import de.psmobile.ui.theme.PrusaColors
 
 /** Die C-ABI erlaubt 36 Druckbetten; siehe PSM_MAX_BEDS. */
 private const val MAX_BEDS = 36
+
+/** Hoehe einer Modellzeile und wie viele davon ohne Scrollen sichtbar sind. */
+private val ROW_HEIGHT = 52.dp
+private const val VISIBLE_ROWS = 3
 
 private fun t(english: String, german: String) = SimpleModeState.text(english, german)
 
@@ -88,18 +95,18 @@ internal fun SimpleModelSheet(
     Column(
         modifier
             .padding(end = 12.dp, bottom = bottomInset + 12.dp)
-            .widthIn(max = 460.dp)
+            .widthIn(max = 380.dp)
             .background(PrusaColors.Panel, RoundedCornerShape(2.dp))
             .border(1.dp, PrusaColors.Divider, RoundedCornerShape(2.dp)),
     ) {
         Row(
-            Modifier.fillMaxWidth().padding(start = 14.dp, end = 4.dp),
+            Modifier.fillMaxWidth().padding(start = 10.dp, end = 2.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
                 SimpleModelSheetState.headline(picked),
                 color = PrusaColors.TextPrimary,
-                style = MaterialTheme.typography.titleMedium,
+                style = MaterialTheme.typography.labelLarge,
                 modifier = Modifier.weight(1f),
             )
             if (picked.isEmpty()) {
@@ -142,7 +149,16 @@ internal fun SimpleModelSheet(
 
         if (expanded) {
             HorizontalDivider(color = PrusaColors.Divider)
-            Column(Modifier.heightIn(max = 260.dp).verticalScroll(rememberScrollState())) {
+            // Gedeckelte Hoehe statt frei mitwachsend: sonst schob sich
+            // das Blatt mit jeder weiteren Datei weiter ueber das Bett,
+            // bis vom Modell nichts mehr zu sehen war. Bis zu drei Zeilen
+            // sind sichtbar, der Rest wird gescrollt. Bei weniger als
+            // drei bleibt kein Leerraum stehen.
+            Column(
+                Modifier
+                    .height(ROW_HEIGHT * objects.size.coerceAtMost(VISIBLE_ROWS))
+                    .verticalScroll(rememberScrollState()),
+            ) {
                 objects.forEach { obj ->
                     SimpleModelRow(
                         obj = obj,
@@ -152,6 +168,43 @@ internal fun SimpleModelSheet(
                         onToggle = { picked = SimpleModelSheetState.toggle(picked, obj.id) },
                         onSelect = { onSelect(obj.id) },
                     )
+                }
+            }
+
+            // Verschieben legt bei Bedarf ein weiteres Bett an. Ohne eine
+            // Auswahl kaeme man dort nie wieder hin - das Objekt waere
+            // verschwunden statt verschoben.
+            if (beds.size > 1) {
+                HorizontalDivider(color = PrusaColors.Divider)
+                Row(
+                    Modifier.fillMaxWidth()
+                        .horizontalScroll(rememberScrollState())
+                        .padding(horizontal = 8.dp, vertical = 6.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    beds.forEachIndexed { index, bed ->
+                        val active = index == activeBed
+                        Box(
+                            Modifier
+                                .heightIn(min = 36.dp)
+                                .clip(RoundedCornerShape(2.dp))
+                                .background(
+                                    if (active) PrusaColors.Orange else PrusaColors.PanelRaised
+                                )
+                                .clickable { service.selectBed(index) }
+                                .padding(horizontal = 12.dp, vertical = 8.dp),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text(
+                                t("Bed ", "Bett ") + (index + 1) + " · " + bed.objectCount,
+                                color = if (active) PrusaColors.Background
+                                        else PrusaColors.TextPrimary,
+                                style = MaterialTheme.typography.labelSmall,
+                                maxLines = 1,
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -236,28 +289,30 @@ private fun SimpleModelRow(
     Row(
         Modifier
             .fillMaxWidth()
+            .height(ROW_HEIGHT)
             .background(
                 if (checked || highlighted) PrusaColors.PanelRaised else PrusaColors.Panel
             )
             .clickable { if (selectionMode) onToggle() else onSelect() }
-            .padding(horizontal = 12.dp, vertical = 8.dp),
+            .padding(horizontal = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(
-            Modifier.size(44.dp).clip(RoundedCornerShape(2.dp)).clickable(onClick = onToggle),
+            Modifier.size(36.dp).clip(RoundedCornerShape(2.dp)).clickable(onClick = onToggle),
             contentAlignment = Alignment.Center,
         ) {
             Text(
                 if (checked) "☑" else "☐",
                 color = if (checked) PrusaColors.Orange else PrusaColors.TextMuted,
-                fontSize = 17.sp,
+                fontSize = 15.sp,
             )
         }
+        ObjectProportionThumb(obj)
         Column(Modifier.weight(1f).padding(start = 8.dp)) {
             Text(
                 obj.name,
                 color = PrusaColors.TextPrimary,
-                style = MaterialTheme.typography.bodyMedium,
+                style = MaterialTheme.typography.labelMedium,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
@@ -267,13 +322,44 @@ private fun SimpleModelRow(
                 ) + if (obj.instances > 1) " · " + obj.instances + "×" else "",
                 color = PrusaColors.TextMuted,
                 style = MaterialTheme.typography.labelSmall,
+                maxLines = 1,
             )
         }
         // Rechts der Kopf, mit dem gedruckt wird - wie die Spule in EasyPrint.
         Text(
             "T" + obj.extruder.coerceAtLeast(1),
             color = PrusaColors.Orange,
-            style = MaterialTheme.typography.labelLarge,
+            style = MaterialTheme.typography.labelMedium,
+        )
+    }
+}
+
+/**
+ * Kleine Vorschau je Zeile.
+ *
+ * Ein echtes gerendertes Miniaturbild braeuchte einen zweiten
+ * Offscreen-Durchlauf im Viewport je Objekt; das steht als eigene
+ * Aufgabe an. Bis dahin zeigt der Platzhalter wenigstens die
+ * tatsaechlichen Proportionen des Huellquaders - damit lassen sich
+ * flache Platten und hohe Tuerme in der Liste bereits unterscheiden,
+ * statt dass alle Zeilen gleich aussehen.
+ */
+@Composable
+private fun ObjectProportionThumb(obj: PsmCore.ObjectInfo) {
+    val w = obj.sizeMm.first.coerceAtLeast(0.1f)
+    val d = obj.sizeMm.second.coerceAtLeast(0.1f)
+    val h = obj.sizeMm.third.coerceAtLeast(0.1f)
+    val longest = maxOf(w, d, h)
+    val boxW = (26f * (maxOf(w, d) / longest)).coerceAtLeast(4f)
+    val boxH = (26f * (h / longest)).coerceAtLeast(4f)
+    Box(
+        Modifier.size(36.dp).background(PrusaColors.Background, RoundedCornerShape(2.dp)),
+        contentAlignment = Alignment.Center,
+    ) {
+        Box(
+            Modifier
+                .size(boxW.dp, boxH.dp)
+                .background(PrusaColors.Orange, RoundedCornerShape(1.dp)),
         )
     }
 }

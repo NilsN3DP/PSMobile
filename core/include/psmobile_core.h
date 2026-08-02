@@ -593,6 +593,25 @@ PSM_API size_t psm_preset_count(psm_session *s, psm_preset_type type);
 PSM_API psm_result psm_preset_name_at(psm_session *s, psm_preset_type type,
                                       size_t index, char *out, size_t out_cap);
 
+/**
+ * Auch Profile auflisten, die zum gewaehlten Drucker nicht passen -
+ * PrusaSlicers "Show incompatible print and filament presets".
+ *
+ * Standardmaessig aus. Mobil war die Liste anfangs immer gefiltert, weil
+ * ohne Suche niemand durch tausende Filamente scrollt; mit Suche ist die
+ * vollstaendige Liste wieder handhabbar.
+ */
+PSM_API psm_result psm_preset_show_incompatible(psm_session *s, int32_t on);
+PSM_API int32_t    psm_preset_shows_incompatible(psm_session *s);
+
+/**
+ * Ob der n-te Eintrag zum gewaehlten Drucker passt (1) oder nicht (0).
+ * Damit kann die Oberflaeche unpassende Eintraege kennzeichnen, statt
+ * sie entweder zu verstecken oder ununterscheidbar mitzulisten.
+ */
+PSM_API psm_result psm_preset_compatible_at(psm_session *s, psm_preset_type type,
+                                            size_t index, int32_t *out);
+
 /** Waehlt ein Preset. Inkompatible Kombinationen werden abgelehnt. */
 PSM_API psm_result psm_preset_select(psm_session *s, psm_preset_type type, const char *name);
 

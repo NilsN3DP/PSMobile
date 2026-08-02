@@ -883,6 +883,27 @@ JNIEXPORT jint JNICALL JNI_FN(nativePresetSelect)(JNIEnv *env, jclass, jlong h,
     return psm_preset_select(sess(h), static_cast<psm_preset_type>(type), n.c_str());
 }
 
+JNIEXPORT jint JNICALL JNI_FN(nativePresetShowIncompatible)(JNIEnv *, jclass,
+                                                            jlong h, jboolean on)
+{
+    return psm_preset_show_incompatible(sess(h), on ? 1 : 0);
+}
+
+JNIEXPORT jboolean JNICALL JNI_FN(nativePresetShowsIncompatible)(JNIEnv *, jclass, jlong h)
+{
+    return psm_preset_shows_incompatible(sess(h)) != 0 ? JNI_TRUE : JNI_FALSE;
+}
+
+JNIEXPORT jboolean JNICALL JNI_FN(nativePresetCompatibleAt)(JNIEnv *, jclass, jlong h,
+                                                            jint type, jint index)
+{
+    int32_t ok = 0;
+    if (psm_preset_compatible_at(sess(h), static_cast<psm_preset_type>(type),
+                                 static_cast<size_t>(index), &ok) != PSM_OK)
+        return JNI_TRUE;   /* im Zweifel nicht als unpassend markieren */
+    return ok != 0 ? JNI_TRUE : JNI_FALSE;
+}
+
 /* --- Extruder, geaenderte Werte, Filamenthersteller ------------------- */
 /*
  * Alle Listen kommen als String-Array oder als "\n"-getrennter String

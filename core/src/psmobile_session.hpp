@@ -84,6 +84,19 @@ struct psm_session
     std::string                            history_label;
     static constexpr size_t                HISTORY_LIMIT = 20;
 
+    /*
+     * Ob auch Profile aufgelistet werden, die zum gewaehlten Drucker
+     * nicht passen. PrusaSlicer nennt das "Show incompatible print and
+     * filament presets" und haelt es in den Einstellungen vor.
+     *
+     * Mobil war die Liste anfangs immer gefiltert, weil ohne Suche
+     * niemand durch achthundert Filamente scrollt. Seit die Materialwahl
+     * eine Suche hat, ist die vollstaendige Liste wieder handhabbar -
+     * und wer ein fremdes Filament bewusst einsetzen will, kam vorher
+     * gar nicht daran.
+     */
+    bool                                   show_incompatible = false;
+
     psm_session();
 
     Slic3r::Model &model()

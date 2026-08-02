@@ -1961,6 +1961,9 @@ private fun Sidebar(
                                 filamentPickerIndex = null
                             },
                             onOpenAdvanced = { onOpenSettings("filament") },
+                            incompatible = presets.incompatibleFilaments,
+                            showIncompatible = presets.showIncompatible,
+                            onShowIncompatible = service::setShowIncompatiblePresets,
                         )
                     } else {
                     // Beschriftungen wie im Original, uebersetzt aus dessen Katalog.

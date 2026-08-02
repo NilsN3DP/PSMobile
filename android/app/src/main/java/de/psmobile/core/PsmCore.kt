@@ -136,6 +136,10 @@ class PsmCore private constructor(private var handle: Long) : Closeable {
         @JvmStatic private external fun nativePresetNameAt(h: Long, type: Int, index: Int): String
         @JvmStatic private external fun nativePresetSelect(h: Long, type: Int, name: String): Int
         @JvmStatic private external fun nativePresetSelected(h: Long, type: Int): String
+        @JvmStatic private external fun nativePresetShowIncompatible(h: Long, on: Boolean): Int
+        @JvmStatic private external fun nativePresetShowsIncompatible(h: Long): Boolean
+        @JvmStatic private external fun nativePresetCompatibleAt(
+            h: Long, type: Int, index: Int): Boolean
         @JvmStatic private external fun nativeConfigGet(h: Long, key: String): String?
         @JvmStatic private external fun nativeConfigSet(h: Long, key: String, value: String): Int
         @JvmStatic private external fun nativePresetConfigGet(
@@ -785,6 +789,34 @@ class PsmCore private constructor(private var handle: Long) : Closeable {
         val n = nativePresetCount(h, type.raw)
         return (0 until n).map { nativePresetNameAt(h, type.raw, it) }
     }
+
+    /** Name und ob der Eintrag zum gewaehlten Drucker passt. */
+    data class PresetEntry(val name: String, val compatible: Boolean)
+
+    fun presetEntries(type: PresetType): List<PresetEntry> {
+        val h = requireHandle()
+        val n = nativePresetCount(h, type.raw)
+        return (0 until n).map {
+            PresetEntry(
+                nativePresetNameAt(h, type.raw, it),
+                nativePresetCompatibleAt(h, type.raw, it),
+            )
+        }
+    }
+
+    /**
+     * Auch Profile auflisten, die zum gewaehlten Drucker nicht passen.
+     * Entspricht PrusaSlicers "Show incompatible print and filament
+     * presets" und ist standardmaessig aus.
+     */
+    var showIncompatiblePresets: Boolean
+        get() = nativePresetShowsIncompatible(requireHandle())
+        set(value) {
+            check(
+                nativePresetShowIncompatible(requireHandle(), value),
+                "Unpassende Profile ein-/ausblenden",
+            )
+        }
 
     fun selectPreset(type: PresetType, name: String) =
         check(nativePresetSelect(requireHandle(), type.raw, name), "Preset waehlen")

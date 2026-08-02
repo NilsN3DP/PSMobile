@@ -185,6 +185,14 @@ class SlicerService : Service() {
          * Farbe.
          */
         val extruders: List<Extruder> = emptyList(),
+        /**
+         * Die Filamente, die zum gewaehlten Drucker nicht passen. Sie
+         * stehen nur dann ueberhaupt in [filaments], wenn der Nutzer sie
+         * ausdruecklich eingeblendet hat - dann aber gekennzeichnet,
+         * statt ununterscheidbar dazwischen.
+         */
+        val incompatibleFilaments: Set<String> = emptySet(),
+        val showIncompatible: Boolean = false,
     ) {
         fun changes(type: PsmCore.PresetType): List<PsmCore.Change> = when (type) {
             PsmCore.PresetType.PRINTER -> printerChanges
@@ -396,6 +404,10 @@ class SlicerService : Service() {
             runCatching { c.installPresets(chosen.toList()) }
                 .onFailure { Log.w(TAG, "Profile nicht geladen: ${it.message}") }
             _setupNeeded.value = false
+            runCatching {
+                c.showIncompatiblePresets =
+                    prefs.getBoolean("presets.show-incompatible", false)
+            }
             refreshPresets()
             refreshQuickSettings()
             restoreAutosave(c)
@@ -560,10 +572,16 @@ class SlicerService : Service() {
         } else {
             allPrinters
         }
+        val filamentEntries = runCatching {
+            c.presetEntries(PsmCore.PresetType.FILAMENT)
+        }.getOrElse { emptyList() }
         _presets.value = Presets(
             printers = printers,
             prints = c.presetNames(PsmCore.PresetType.PRINT),
-            filaments = c.presetNames(PsmCore.PresetType.FILAMENT),
+            filaments = filamentEntries.map { it.name },
+            incompatibleFilaments = filamentEntries.filterNot { it.compatible }
+                .map { it.name }.toSet(),
+            showIncompatible = runCatching { c.showIncompatiblePresets }.getOrDefault(false),
             selectedPrinter = selectedPrinter,
             selectedPrint = c.selectedPreset(PsmCore.PresetType.PRINT),
             selectedFilament = c.selectedPreset(PsmCore.PresetType.FILAMENT),
@@ -639,6 +657,23 @@ class SlicerService : Service() {
      * Druck- und Filamentprofile ueberhaupt kompatibel sind. Nach jeder
      * Auswahl muessen die Listen deshalb neu gelesen werden.
      */
+    /**
+     * Auch Profile zeigen, die zum gewaehlten Drucker nicht passen.
+     *
+     * Die Wahl gilt fuer die Sitzung und wird gemerkt: wer sie einmal
+     * gebraucht hat, braucht sie meist wieder, und sie beim naechsten
+     * Start still zurueckzusetzen waere die unangenehmere Ueberraschung.
+     */
+    fun setShowIncompatiblePresets(on: Boolean) {
+        val c = core ?: return
+        runCatching { c.showIncompatiblePresets = on }
+            .onFailure { Log.w(TAG, "Unpassende Profile umschalten: ${it.message}") }
+            .onSuccess {
+                prefs.edit().putBoolean("presets.show-incompatible", on).apply()
+                refreshPresets()
+            }
+    }
+
     fun selectPreset(type: PsmCore.PresetType, name: String) {
         val c = core ?: return
         runCatching { c.selectPreset(type, name) }

@@ -572,6 +572,9 @@ private fun SimpleMaterialPanel(service: SlicerService, presets: SlicerService.P
                 chooserOpen = false
             },
             onOpenAdvanced = onOpenAdvanced,
+            incompatible = presets.incompatibleFilaments,
+            showIncompatible = presets.showIncompatible,
+            onShowIncompatible = service::setShowIncompatiblePresets,
         )
         return
     }
@@ -632,6 +635,9 @@ internal fun SimpleMaterialChooser(
     onBack: () -> Unit,
     onChoose: (String) -> Unit,
     onOpenAdvanced: () -> Unit,
+    incompatible: Set<String> = emptySet(),
+    showIncompatible: Boolean? = null,
+    onShowIncompatible: ((Boolean) -> Unit)? = null,
 ) {
     var query by rememberSaveable { mutableStateOf("") }
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -657,6 +663,32 @@ internal fun SimpleMaterialChooser(
     ) {
         SimpleModeState.materialTypes().forEach { type -> OutlinedButton(onClick = { query = type }) { Text(type) } }
     }
+    // Ohne Suche waere die vollstaendige Liste unbrauchbar - mit Suche
+    // ist sie es nicht mehr, und wer ein fremdes Filament bewusst
+    // einsetzt, kam vorher gar nicht daran. Unpassende bleiben aber
+    // sichtbar als solche markiert.
+    if (showIncompatible != null && onShowIncompatible != null) {
+        Row(
+            Modifier.fillMaxWidth().padding(top = 8.dp)
+                .clickable { onShowIncompatible(!showIncompatible) },
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                if (showIncompatible) "☑" else "☐",
+                color = if (showIncompatible) PrusaColors.Orange else PrusaColors.TextMuted,
+                fontSize = 17.sp,
+                modifier = Modifier.padding(end = 8.dp),
+            )
+            Text(
+                st(
+                    "Also show materials for other printers",
+                    "Auch Materialien für andere Drucker zeigen",
+                ),
+                color = PrusaColors.TextMuted,
+                style = MaterialTheme.typography.bodySmall,
+            )
+        }
+    }
     val matches = EasyModeState.filterPresets(filaments, query).take(15)
     if (matches.isEmpty()) {
         TextButton(onClick = onOpenAdvanced) { Text(st("Set up filament", "Filament einrichten")) }
@@ -664,15 +696,31 @@ internal fun SimpleMaterialChooser(
         matches.chunked(3).forEach { row ->
             Row(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 row.forEach { filament ->
+                    val fits = filament !in incompatible
                     Column(
                         Modifier.weight(1f).height(112.dp)
                             .background(PrusaColors.PanelRaised, RoundedCornerShape(2.dp))
+                            .then(
+                                if (fits) Modifier
+                                else Modifier.border(
+                                    1.dp, PrusaColors.Danger, RoundedCornerShape(2.dp)
+                                )
+                            )
                             .clickable { onChoose(filament) }.padding(10.dp),
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.SpaceBetween,
                     ) {
                         Text(filament.substringBeforeLast(" ", filament), color = PrusaColors.TextPrimary, textAlign = TextAlign.Center, style = MaterialTheme.typography.labelMedium, maxLines = 2)
-                        Text("━━━━", color = PrusaColors.Orange, fontSize = 18.sp)
+                        if (fits) {
+                            Text("━━━━", color = PrusaColors.Orange, fontSize = 18.sp)
+                        } else {
+                            Text(
+                                st("other printer", "anderer Drucker"),
+                                color = PrusaColors.Danger,
+                                style = MaterialTheme.typography.labelSmall,
+                                maxLines = 1,
+                            )
+                        }
                     }
                 }
                 repeat(3 - row.size) { Spacer(Modifier.weight(1f)) }

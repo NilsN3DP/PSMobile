@@ -47,7 +47,7 @@ void copy_str(char *dst, size_t cap, const std::string &src)
  *
  * Das "- default -" wird uebersprungen, solange es echte Profile gibt.
  */
-std::vector<size_t> usable_indices(const PresetCollection &c)
+std::vector<size_t> usable_indices(const PresetCollection &c, bool include_incompatible)
 {
     std::vector<size_t> out;
     out.reserve(64);
@@ -55,7 +55,9 @@ std::vector<size_t> usable_indices(const PresetCollection &c)
         const Preset &p = c.preset(i);
         if (p.is_default && c.size() > c.num_default_presets())
             continue;
-        if (! p.is_visible || ! p.is_compatible)
+        if (! p.is_visible)
+            continue;
+        if (! include_incompatible && ! p.is_compatible)
             continue;
         out.push_back(i);
     }
@@ -78,7 +80,7 @@ std::vector<size_t> usable_indices(const PresetCollection &c)
  * Ohne diesen Umweg blieben von 5762 Filamenten alle stehen, statt der
  * paar hundert, die zum gewaehlten Drucker passen.
  */
-std::vector<size_t> usable_filament_indices(psm_session *s)
+std::vector<size_t> usable_filament_indices(psm_session *s, bool include_incompatible)
 {
     const PresetCollection &fc = s->presets->filaments;
     std::vector<size_t> out;
@@ -93,7 +95,9 @@ std::vector<size_t> usable_filament_indices(psm_session *s)
         const Preset &p = fc.preset(i);
         if (p.is_default && fc.size() > fc.num_default_presets())
             continue;
-        if (! p.is_visible || ! ef.filament(i).is_compatible)
+        if (! p.is_visible)
+            continue;
+        if (! include_incompatible && ! ef.filament(i).is_compatible)
             continue;
         out.push_back(i);
     }
@@ -110,6 +114,18 @@ PresetCollection *collection_for(psm_session *s, psm_preset_type type)
         case PSM_PRESET_PRINTER:  return &s->presets->printers;
         default:                  return nullptr;
     }
+}
+
+/* Passt der Eintrag an dieser Sammlungsposition zum gewaehlten Drucker? */
+static bool preset_is_compatible(psm_session *s, psm_preset_type type, size_t index)
+{
+    if (type == PSM_PRESET_FILAMENT) {
+        if (s->presets->extruders_filaments.empty())
+            return false;
+        return s->presets->extruders_filaments.front().filament(index).is_compatible;
+    }
+    PresetCollection *c = collection_for(s, type);
+    return c != nullptr && c->preset(index).is_compatible;
 }
 
 psm_config_type map_type(ConfigOptionType t)
@@ -385,9 +401,9 @@ PSM_API psm_result psm_presets_install(psm_session *s,
          * ist aber nur ein Bruchteil. Die Rohsumme zu melden waere
          * irrefuehrend. */
         psm_emit_log(PSM_LOG_INFO,
-                     std::to_string(usable_indices(s->presets->printers).size()) + " Drucker, " +
-                     std::to_string(usable_indices(s->presets->prints).size()) + " Druckprofile, " +
-                     std::to_string(usable_filament_indices(s).size()) + " Filamente nutzbar" +
+                     std::to_string(usable_indices(s->presets->printers, false).size()) + " Drucker, " +
+                     std::to_string(usable_indices(s->presets->prints, false).size()) + " Druckprofile, " +
+                     std::to_string(usable_filament_indices(s, false).size()) + " Filamente nutzbar" +
                      " (von " + std::to_string(loaded) + "/" +
                      std::to_string(s->presets->prints.size()) + "/" +
                      std::to_string(s->presets->filaments.size()) + " geladen)");
@@ -412,7 +428,60 @@ PSM_API size_t psm_preset_count(psm_session *s, psm_preset_type type)
     if (c == nullptr)
         return 0;
     return (type == PSM_PRESET_FILAMENT)
-        ? usable_filament_indices(s).size() : usable_indices(*c).size();
+        ? usable_filament_indices(s, s->show_incompatible).size()
+        : usable_indices(*c, s->show_incompatible).size();
+}
+
+/*
+ * Auch unpassende Profile auflisten - PrusaSlicers "Show incompatible
+ * print and filament presets".
+ *
+ * Der Drucker bleibt dabei ungefiltert: eine Druckerliste, die zum
+ * gewaehlten Drucker nicht passende Drucker enthaelt, ergibt keinen Sinn.
+ */
+PSM_API psm_result psm_preset_show_incompatible(psm_session *s, int32_t on)
+{
+    if (s == nullptr)
+        return PSM_ERR_INVALID_ARG;
+    std::lock_guard<std::recursive_mutex> data_lock(s->data_mtx);
+    s->show_incompatible = (on != 0);
+    return PSM_OK;
+}
+
+PSM_API int32_t psm_preset_shows_incompatible(psm_session *s)
+{
+    if (s == nullptr)
+        return 0;
+    std::lock_guard<std::recursive_mutex> data_lock(s->data_mtx);
+    return s->show_incompatible ? 1 : 0;
+}
+
+/*
+ * Ob der Eintrag zum gewaehlten Drucker passt. Nur so kann die
+ * Oberflaeche unpassende Eintraege kennzeichnen, statt sie entweder zu
+ * verstecken oder ununterscheidbar mitzulisten.
+ */
+PSM_API psm_result psm_preset_compatible_at(psm_session *s, psm_preset_type type,
+                                            size_t index, int32_t *out)
+{
+    if (s == nullptr || out == nullptr)
+        return PSM_ERR_INVALID_ARG;
+    try {
+        std::lock_guard<std::recursive_mutex> data_lock(s->data_mtx);
+        PresetCollection *c = collection_for(s, type);
+        if (c == nullptr)
+            return PSM_ERR_NOT_FOUND;
+        const std::vector<size_t> idx = (type == PSM_PRESET_FILAMENT)
+            ? usable_filament_indices(s, s->show_incompatible)
+            : usable_indices(*c, s->show_incompatible);
+        if (index >= idx.size())
+            return PSM_ERR_INVALID_ARG;
+        *out = preset_is_compatible(s, type, idx[index]) ? 1 : 0;
+        return PSM_OK;
+    } catch (const std::exception &e) {
+        s->set_error(e.what());
+        return PSM_ERR_GENERIC;
+    }
 }
 
 PSM_API psm_result psm_preset_name_at(psm_session *s, psm_preset_type type,
@@ -426,7 +495,8 @@ PSM_API psm_result psm_preset_name_at(psm_session *s, psm_preset_type type,
         if (c == nullptr)
             return PSM_ERR_NOT_FOUND;
         const std::vector<size_t> idx = (type == PSM_PRESET_FILAMENT)
-            ? usable_filament_indices(s) : usable_indices(*c);
+            ? usable_filament_indices(s, s->show_incompatible)
+            : usable_indices(*c, s->show_incompatible);
         if (index >= idx.size())
             return PSM_ERR_INVALID_ARG;
         copy_str(out, out_cap, c->preset(idx[index]).name);
@@ -446,7 +516,10 @@ PSM_API psm_result psm_preset_select(psm_session *s, psm_preset_type type, const
         PresetCollection *c = collection_for(s, type);
         if (c == nullptr)
             return PSM_ERR_NOT_FOUND;
-        if (! c->select_preset_by_name(name, false)) {
+        /* Wer unpassende Profile bewusst einblendet, muss sie auch
+         * waehlen koennen - sonst listet die Oberflaeche Eintraege, die
+         * beim Antippen nichts tun. */
+        if (! c->select_preset_by_name(name, s->show_incompatible)) {
             s->set_error(std::string("Preset nicht waehlbar: ") + name);
             return PSM_ERR_NOT_FOUND;
         }
