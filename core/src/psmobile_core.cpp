@@ -173,19 +173,22 @@ static bool rects_overlap(const Slic3r::BoundingBoxf &a,
  * wird.
  *
  * Gesucht wird auf einem Raster um die Bettmitte, von innen nach aussen,
- * damit die Anordnung kompakt bleibt. Findet sich nichts - volles oder
- * unbekanntes Bett -, bleibt es bei der Bettmitte; ein Import darf an der
- * Platzsuche nicht scheitern.
+ * damit die Anordnung kompakt bleibt. Liefert false, wenn kein Platz
+ * blieb - der Aufrufer weicht dann auf das naechste Bett aus.
+ *
+ * Ein leeres Bett gilt immer als Erfolg: passt das Objekt dort nicht,
+ * passt es nirgends, und weiterzuwandern wuerde nur leere Betten
+ * erzeugen. Es bleibt dann mittig liegen und wird als ausserhalb des
+ * Betts gemeldet.
  */
-static void place_on_free_spot(Slic3r::Model &model,
+static bool place_on_free_spot(Slic3r::Model &model,
                                Slic3r::ModelObject *dst,
-                               const Slic3r::Vec2d &bed_center,
                                const Slic3r::BoundingBoxf &bed,
                                double gap_mm)
 {
     Slic3r::ModelInstance *inst = first_instance(dst);
     if (inst == nullptr)
-        return;
+        return true;
 
     std::vector<Slic3r::BoundingBoxf> taken;
     for (const Slic3r::ModelObject *o : model.objects) {
@@ -195,7 +198,7 @@ static void place_on_free_spot(Slic3r::Model &model,
             taken.push_back(footprint_of(o, i));
     }
     if (taken.empty())
-        return;                       /* die Bettmitte ist frei */
+        return true;                  /* die Bettmitte ist frei */
 
     const Slic3r::BoundingBoxf own = footprint_of(dst, 0);
     const Slic3r::Vec2d size = own.size();
@@ -203,7 +206,7 @@ static void place_on_free_spot(Slic3r::Model &model,
     const double step_x = size.x() + gap_mm;
     const double step_y = size.y() + gap_mm;
     if (step_x <= 0.0 || step_y <= 0.0)
-        return;
+        return true;
 
     const bool bed_known = bed.max.x() > bed.min.x() && bed.max.y() > bed.min.y();
 
@@ -237,12 +240,11 @@ static void place_on_free_spot(Slic3r::Model &model,
                 inst->set_offset(Slic3r::Vec3d(start.x() + shift.x(),
                                                start.y() + shift.y(),
                                                offset.z()));
-                return;
+                return true;
             }
         }
     }
-    /* Kein freier Platz gefunden - Bettmitte behalten. */
-    (void) bed_center;
+    return false;
 }
 
 /*
@@ -660,23 +662,62 @@ PSM_API psm_result psm_model_load(psm_session *s,
 
         size_t written = 0;
         size_t total   = 0;
+        size_t spilled = 0;
         for (Slic3r::ModelObject *src : loaded.objects) {
-            Slic3r::ModelObject *dst = s->model().add_object(*src);
-            Slic3r::ModelInstance *inst = first_instance(dst);
+            /*
+             * Auf welches Bett das Objekt kommt, entscheidet sich hier.
+             * Es beginnt beim aktiven Bett; ist dort kein Platz mehr,
+             * geht es eines weiter und notfalls auf ein neu angelegtes.
+             * Ohne das landete bei einem vollen Bett alles Weitere wieder
+             * auf der Mitte und steckte ineinander.
+             */
+            size_t bed = s->active_bed;
+            Slic3r::ModelObject *dst = nullptr;
+            while (true) {
+                Slic3r::Model &m = *s->bed_models[bed];
+                dst = m.add_object(*src);
+                Slic3r::ModelInstance *inst = first_instance(dst);
 
-            /* Objekt um seinen eigenen Schwerpunkt zentrieren und dann
-             * auf die Bettmitte setzen. */
-            dst->center_around_origin(false);
-            inst->set_offset(Slic3r::Vec3d(bed_center.x(), bed_center.y(),
-                                           inst->get_offset().z()));
-            dst->ensure_on_bed();
-            /* ... und von dort auf den naechsten freien Platz ruecken,
-             * damit ein zweiter Import nicht im ersten steckt. */
-            place_on_free_spot(s->model(), dst, bed_center, bed_bb, 3.0);
+                /* Objekt um seinen eigenen Schwerpunkt zentrieren und
+                 * dann auf die Bettmitte setzen. */
+                dst->center_around_origin(false);
+                inst->set_offset(Slic3r::Vec3d(bed_center.x(), bed_center.y(),
+                                               inst->get_offset().z()));
+                dst->ensure_on_bed();
+                if (place_on_free_spot(m, dst, bed_bb, 3.0))
+                    break;
+
+                /* Kein Platz: wieder herausnehmen und ein Bett weiter. */
+                m.delete_object(m.objects.size() - 1);
+                dst = nullptr;
+                if (bed + 1 >= PSM_MAX_BEDS)
+                    break;             /* alle Betten voll */
+                if (bed + 1 >= s->bed_models.size())
+                    s->bed_models.emplace_back(std::make_unique<Slic3r::Model>());
+                ++bed;
+                ++spilled;
+            }
+
+            if (dst == nullptr) {
+                /* Auch das letzte Bett ist voll. Dann lieber mittig
+                 * ablegen als das Objekt stillschweigend fallenlassen -
+                 * es wird als ausserhalb des Betts gemeldet. */
+                Slic3r::Model &m = *s->bed_models[PSM_MAX_BEDS - 1];
+                dst = m.add_object(*src);
+                Slic3r::ModelInstance *inst = first_instance(dst);
+                dst->center_around_origin(false);
+                inst->set_offset(Slic3r::Vec3d(bed_center.x(), bed_center.y(),
+                                               inst->get_offset().z()));
+                dst->ensure_on_bed();
+            }
+
             if (out_ids != nullptr && written < out_ids_cap)
                 out_ids[written++] = static_cast<psm_object_id>(dst->id().id);
             ++total;
         }
+        if (spilled > 0)
+            emit_log(PSM_LOG_INFO,
+                     "Druckbett voll - weitere Objekte auf das naechste gelegt");
 
         if (out_count != nullptr)
             *out_count = total;

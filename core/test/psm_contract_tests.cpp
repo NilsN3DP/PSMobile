@@ -79,6 +79,46 @@ int main(int argc, char **argv)
         require(psm_model_count(session) == 1, "back to one object");
     }
 
+    /*
+     * Ist das Bett voll, muessen weitere Objekte auf das naechste
+     * ausweichen statt sich auf der Mitte zu stapeln. Der Wuerfel ist
+     * 20 mm gross, auf ein MK4-Bett passen davon ueber hundert - deshalb
+     * hier so lange laden, bis ein zweites Bett entsteht.
+     */
+    {
+        const size_t before_beds = psm_bed_count(session);
+        require(before_beds == 1, "one bed before the flood");
+        size_t loaded_total = 1;
+        for (int i = 0; i < 200 && psm_bed_count(session) == before_beds; ++i) {
+            psm_object_id extra = PSM_INVALID_ID;
+            size_t extra_count = 0;
+            require(psm_model_load(session, argv[3], &extra, 1, &extra_count) == PSM_OK,
+                    std::string("flood the bed: ") + psm_last_error(session));
+            ++loaded_total;
+        }
+        require(psm_bed_count(session) > before_beds,
+                "a full bed spills onto the next one instead of stacking");
+        require(psm_bed_object_count(session, 1) >= 1,
+                "the second bed actually holds the overflow");
+        require(psm_bed_object_count(session, 0) + psm_bed_object_count(session, 1) ==
+                    loaded_total,
+                "no object is lost while spilling");
+
+        // Aufraeumen: der Rest des Vertragstests erwartet ein Bett mit
+        // genau einem Objekt.
+        require(psm_bed_remove(session, 1) == PSM_OK, "remove the overflow bed");
+        require(psm_bed_select(session, 0) == PSM_OK, "back to the first bed");
+        while (psm_model_count(session) > 1) {
+            psm_object_id ids[256]{};
+            size_t n = 0;
+            require(psm_model_list(session, ids, 256, &n) == PSM_OK, "list objects");
+            require(n > 1, "more than one object to clean up");
+            require(psm_model_remove(session, ids[n - 1]) == PSM_OK, "clean up flood");
+        }
+        require(psm_model_count(session) == 1, "one object left after cleanup");
+        require(psm_bed_count(session) == 1, "one bed left after cleanup");
+    }
+
     require(psm_model_volume_count(session, id) == 1,
             "STL creates one model volume");
     psm_volume_info volume{};
