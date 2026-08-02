@@ -1016,7 +1016,13 @@ class SlicerService : Service() {
                 }
                 refreshObjects()
                 Log.w(TAG, "$what: ${it.message}")
-                _toolMessage.value = "$what fehlgeschlagen: ${it.message}"
+                // PsmCore liefert bereits „<Werkzeug> fehlgeschlagen: …“.
+                // Nicht noch einmal voranstellen, sonst wird die Meldung
+                // auf dem schmalen sichtbaren Arbeitsbereich unnötig lang.
+                val prefix = "$what fehlgeschlagen: "
+                val reason = it.message.orEmpty().removePrefix(prefix)
+                    .ifBlank { "Unbekannter Fehler" }
+                _toolMessage.value = "$prefix$reason"
             }
             .onSuccess {
                 refreshObjects()

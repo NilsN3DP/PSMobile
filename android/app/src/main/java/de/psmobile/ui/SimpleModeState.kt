@@ -21,14 +21,18 @@ enum class SimpleSupportChoice {
 }
 
 object SimpleModeState {
+    /** Simple Mode owns a few curated phrases absent from the desktop PO catalog. */
+    fun text(english: String, german: String): String =
+        if (PsUi.language == "de") german else english
+
     fun visibleBrand() = "Simple Mode"
 
     fun toolbarLabels() = listOf(
-        "Projekte",
-        "Drucker",
+        "Projects",
+        "Printer",
         "Material",
-        "Einstellen",
-        "Vorschau",
+        "Settings",
+        "Preview",
         "G-Code",
     )
 
@@ -70,4 +74,17 @@ object SimpleModeState {
     fun adhesionChoices() = listOf("Disabled", "Automatic", "Outline around the model")
 
     fun printSettingsColumns() = listOf("Print Settings", "Infill", "Shell Thickness")
+
+    fun projectSummaryCopy(): Triple<String, String, String> = Triple(
+        text("Current project", "Aktuelles Projekt"),
+        text("No printer selected", "Drucker nicht gewählt"),
+        text("This session", "Diese Sitzung"),
+    )
+
+    fun backDestination(panel: SimplePanel): SimplePanel = when (panel) {
+        SimplePanel.SUPPORTS,
+        SimplePanel.ADHESION,
+        SimplePanel.PRINT_SETTINGS -> SimplePanel.SETTINGS
+        else -> SimplePanel.WORKSPACE
+    }
 }

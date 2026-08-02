@@ -1,27 +1,36 @@
 package de.psmobile.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -29,9 +38,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
 import de.psmobile.core.PsmCore
 import de.psmobile.slicing.SlicerService
 import de.psmobile.ui.theme.PrusaColors
@@ -46,11 +57,107 @@ internal sealed interface SurfaceToolMode {
     ) : SurfaceToolMode
 }
 
+/** Text that tells the user what the next touch on the model will do. */
+internal fun surfaceToolInstruction(mode: SurfaceToolMode): String = when (mode) {
+    SurfaceToolMode.Flatten ->
+        PsUi.appText("Tap a model face that should rest on the print bed.", "Tippe auf eine Modellfläche, die auf dem Druckbett liegen soll.")
+    SurfaceToolMode.Measure ->
+        PsUi.appText("Tap two points on the model to measure their distance.", "Tippe nacheinander zwei Punkte auf dem Modell, um den Abstand zu messen.")
+    is SurfaceToolMode.Paint -> when (mode.tool) {
+        PsmCore.PaintTool.SUPPORT -> if (mode.state == 2)
+            PsUi.appText("Paint faces where automatic supports must be blocked.", "Streiche über Flächen, auf denen kein automatischer Support entstehen soll.")
+        else
+            PsUi.appText("Paint faces where supports should be generated.", "Streiche über die Flächen, auf denen Support erzeugt werden soll.")
+        PsmCore.PaintTool.SEAM ->
+            PsUi.appText("Paint the face where the seam should be preferred.", "Streiche über die Fläche, auf der die Naht bevorzugt liegen soll.")
+        PsmCore.PaintTool.FUZZY ->
+            PsUi.appText("Paint faces that should receive a rough fuzzy surface.", "Streiche über die Flächen, die eine raue Fuzzy-Oberfläche erhalten sollen.")
+        PsmCore.PaintTool.MMU ->
+            PsUi.appText("Paint faces that should print with the selected extruder.", "Streiche über Flächen, die mit dem gewählten Extruder gedruckt werden sollen.")
+    }
+}
+
+private fun surfaceToolTitle(mode: SurfaceToolMode): String = when (mode) {
+    SurfaceToolMode.Flatten -> PsUi.appText("Lay on face", "Fläche flach legen")
+    SurfaceToolMode.Measure -> PsUi.appText("Measure", "Messen")
+    is SurfaceToolMode.Paint -> when (mode.tool) {
+        PsmCore.PaintTool.SUPPORT -> if (mode.state == 2) PsUi.appText("Block supports", "Support blockieren") else PsUi.appText("Paint supports", "Support malen")
+        PsmCore.PaintTool.SEAM -> PsUi.appText("Paint seam", "Naht malen")
+        PsmCore.PaintTool.FUZZY -> PsUi.appText("Paint fuzzy skin", "Fuzzy Skin malen")
+        PsmCore.PaintTool.MMU -> PsUi.appText("Paint extruder / ColorMix colour", "Extruder-/ColorMix-Farbe malen")
+    }
+}
+
+/** A concise outcome statement for a tool card, before a potentially disruptive action. */
+internal fun geometryToolDescription(label: String): String = when (label) {
+    "Fläche flach legen" -> PsUi.appText("Orient the model on a selected face.", "Modell über eine gewählte Fläche ausrichten.")
+    "Schneiden" -> PsUi.appText("Set a horizontal cut line.", "Horizontale Schnittlinie einstellen.")
+    "Vereinfachen" -> PsUi.appText("Reduce triangles · undo is available.", "Dreiecke reduzieren · Rückgängig möglich.")
+    "In Objekte teilen" -> PsUi.appText("Edit disconnected meshes separately.", "Getrennte Netze separat bearbeiten.")
+    "In Volumen teilen" -> PsUi.appText("Edit parts in the same object separately.", "Teile im selben Objekt getrennt bearbeiten.")
+    "Modifier hinzufügen" -> PsUi.appText("Add a region for cutouts, supports or settings.", "Bereich für Ausschnitt, Support oder Einstellungen.")
+    "Variable Schichthöhen" -> PsUi.appText("Fine details, faster simple areas.", "Details fein, einfache Bereiche schneller drucken.")
+    "Text prägen" -> PsUi.appText("Add text as a raised or cut volume.", "Text als erhabenes oder ausgeschnittenes Volumen.")
+    "SVG prägen" -> PsUi.appText("Add SVG as a raised or cut volume.", "SVG als erhabenes oder ausgeschnittenes Volumen.")
+    "Messen" -> PsUi.appText("Tap two points on the model.", "Zwei Punkte auf dem Modell antippen.")
+    "Support malen" -> PsUi.appText("Enforce supports only on selected faces.", "Support nur auf gewählten Flächen erzwingen.")
+    "Support blockieren" -> PsUi.appText("Block automatic supports locally.", "Automatischen Support lokal verhindern.")
+    "Naht malen" -> PsUi.appText("Set the preferred Z-seam position.", "Bevorzugte Position der Z-Naht festlegen.")
+    "Fuzzy Skin malen" -> PsUi.appText("Apply a rough surface only locally.", "Raue Oberfläche nur lokal anwenden.")
+    "Bemalung beenden" -> PsUi.appText("Leave the active surface tool safely.", "Aktives Flächenwerkzeug sicher verlassen.")
+    else -> PsUi.appText("Tool for the selected model.", "Werkzeug für das ausgewählte Modell.")
+}
+
+private fun geometryToolLabel(label: String): String = when (label) {
+    "Fläche flach legen" -> PsUi.appText("Lay on face", label)
+    "Schneiden" -> PsUi.appText("Cut", label)
+    "Vereinfachen" -> PsUi.appText("Simplify", label)
+    "In Objekte teilen" -> PsUi.appText("Split into objects", label)
+    "In Volumen teilen" -> PsUi.appText("Split into volumes", label)
+    "Modifier hinzufügen" -> PsUi.appText("Add modifier", label)
+    "Variable Schichthöhen" -> PsUi.appText("Variable layer heights", label)
+    "Text prägen" -> PsUi.appText("Emboss text", label)
+    "SVG prägen" -> PsUi.appText("Emboss SVG", label)
+    "Messen" -> PsUi.appText("Measure", label)
+    "Support malen" -> PsUi.appText("Paint supports", label)
+    "Support blockieren" -> PsUi.appText("Block supports", label)
+    "Naht malen" -> PsUi.appText("Paint seam", label)
+    "Fuzzy Skin malen" -> PsUi.appText("Paint fuzzy skin", label)
+    "Bemalung beenden" -> PsUi.appText("Finish painting", label)
+    else -> label
+}
+
 private enum class GeometryDialog {
     CUT,
     SIMPLIFY,
     ADD_VOLUME,
-    LAYERS,
+}
+
+internal data class LayerPreviewSegment(val fromZ: Double, val toZ: Double, val heightMm: Double)
+
+/** Converts profile control points into the colored vertical bands shown to the user. */
+internal fun layerProfilePreviewSegments(
+    objectHeight: Double,
+    points: List<Pair<Double, Double>>,
+): List<LayerPreviewSegment> {
+    val sorted = points.sortedBy { it.first }
+    return sorted.mapIndexedNotNull { index, (z, layerHeight) ->
+        val end = sorted.getOrNull(index + 1)?.first ?: objectHeight
+        if (end > z && layerHeight > 0.0) LayerPreviewSegment(z, end, layerHeight) else null
+    }
+}
+
+/** The cut dialog exposes the useful output combinations without three cramped toggles. */
+internal enum class CutResult(val label: String) {
+    BOTH("Beide"),
+    UPPER("Nur oben"),
+    LOWER("Nur unten"),
+}
+
+internal fun retainedCutParts(result: CutResult): Pair<Boolean, Boolean> = when (result) {
+    CutResult.BOTH -> true to true
+    CutResult.UPPER -> true to false
+    CutResult.LOWER -> false to true
 }
 
 /**
@@ -71,6 +178,7 @@ internal fun GeometryTools(
     onRepairStl: () -> Unit,
     onConvertGcode: () -> Unit,
     onAddSvg: (Int, Float, PsmCore.VolumeType) -> Unit,
+    onOpenLayerEditor: (Int) -> Unit,
 ) {
     if (selected == null) {
         Text(
@@ -96,51 +204,68 @@ internal fun GeometryTools(
     var brushRadius by remember { mutableStateOf(3f) }
 
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        ToolHeading("Geometrie")
+        surfaceMode?.let { mode ->
+            ActiveSurfaceToolCard(
+                title = surfaceToolTitle(mode),
+                instruction = surfaceToolInstruction(mode),
+                onCancel = { onSurfaceMode(null) },
+            )
+        }
+        ToolHeading(PsUi.appText("Geometry", "Geometrie"))
+        ToolSectionHint(PsUi.appText("Change the shape, split the model or add local regions.", "Form ändern, Modell aufteilen oder lokale Bereiche ergänzen."))
         ToolButtonRow(
             "Fläche flach legen",
+            geometryToolDescription("Fläche flach legen"),
             surfaceMode is SurfaceToolMode.Flatten,
             { onSurfaceMode(
                 if (surfaceMode is SurfaceToolMode.Flatten) null
                 else SurfaceToolMode.Flatten
             ) },
             "Schneiden",
+            geometryToolDescription("Schneiden"),
             false,
             { dialog = GeometryDialog.CUT },
         )
         ToolButtonRow(
             "Vereinfachen",
+            geometryToolDescription("Vereinfachen"),
             false,
             { dialog = GeometryDialog.SIMPLIFY },
             "In Objekte teilen",
+            geometryToolDescription("In Objekte teilen"),
             false,
             { service.splitIntoObjects(selected.id) },
         )
         ToolButtonRow(
             "In Volumen teilen",
+            geometryToolDescription("In Volumen teilen"),
             false,
             { service.splitIntoVolumes(selected.id) },
             "Modifier hinzufügen",
+            geometryToolDescription("Modifier hinzufügen"),
             false,
             { dialog = GeometryDialog.ADD_VOLUME },
         )
-        OutlinedButton(
-            onClick = { dialog = GeometryDialog.LAYERS },
-            modifier = Modifier.fillMaxWidth().height(52.dp),
-            shape = RoundedCornerShape(10.dp),
-        ) { Text("Variable Schichthöhen") }
+        ToolActionCard(
+            label = "Variable Schichthöhen",
+            description = geometryToolDescription("Variable Schichthöhen"),
+            onClick = { onOpenLayerEditor(selected.id) },
+            modifier = Modifier.fillMaxWidth(),
+        )
         ToolButtonRow(
             "Text prägen",
+            geometryToolDescription("Text prägen"),
             false,
             { textDialog = true },
             "SVG prägen",
+            geometryToolDescription("SVG prägen"),
             false,
             { svgDialog = true },
         )
 
         val removable = volumes.filter { it.type != PsmCore.VolumeType.MODEL_PART }
         if (removable.isNotEmpty()) {
-            ToolHeading("Modifier im Objekt")
+            ToolHeading(PsUi.appText("Modifiers in object", "Modifier im Objekt"))
             removable.forEach { volume ->
                 Row(
                     Modifier
@@ -154,7 +279,7 @@ internal fun GeometryTools(
                 ) {
                     Column(Modifier.weight(1f)) {
                         Text(
-                            volume.name.ifBlank { "Volumen ${volume.index + 1}" },
+                            volume.name.ifBlank { "${PsUi.appText("Volume", "Volumen")} ${volume.index + 1}" },
                             color = PrusaColors.TextPrimary,
                             maxLines = 1,
                         )
@@ -169,21 +294,24 @@ internal fun GeometryTools(
                             service.removeVolume(selected.id, volume.index)
                         },
                         modifier = Modifier.height(48.dp),
-                    ) { Text("Entfernen", color = PrusaColors.Danger) }
+                    ) { Text(PsUi.appText("Remove", "Entfernen"), color = PrusaColors.Danger) }
                 }
             }
         }
 
         HorizontalDivider(color = PrusaColors.Divider)
-        ToolHeading("Oberfläche")
+        ToolHeading(PsUi.appText("Surface", "Oberfläche"))
+        ToolSectionHint(PsUi.appText("Activate a tool, then tap or paint directly on the model.", "Ein Werkzeug aktivieren und danach direkt auf dem Modell tippen oder streichen."))
         ToolButtonRow(
             "Messen",
+            geometryToolDescription("Messen"),
             surfaceMode is SurfaceToolMode.Measure,
             { onSurfaceMode(
                 if (surfaceMode is SurfaceToolMode.Measure) null
                 else SurfaceToolMode.Measure
             ) },
             "Support malen",
+            geometryToolDescription("Support malen"),
             (surfaceMode as? SurfaceToolMode.Paint)?.tool ==
                 PsmCore.PaintTool.SUPPORT,
             {
@@ -196,6 +324,7 @@ internal fun GeometryTools(
         )
         ToolButtonRow(
             "Support blockieren",
+            geometryToolDescription("Support blockieren"),
             (surfaceMode as? SurfaceToolMode.Paint)?.let {
                 it.tool == PsmCore.PaintTool.SUPPORT && it.state == 2
             } == true,
@@ -207,6 +336,7 @@ internal fun GeometryTools(
                 )
             },
             "Naht malen",
+            geometryToolDescription("Naht malen"),
             (surfaceMode as? SurfaceToolMode.Paint)?.tool ==
                 PsmCore.PaintTool.SEAM,
             {
@@ -217,6 +347,7 @@ internal fun GeometryTools(
         )
         ToolButtonRow(
             "Fuzzy Skin malen",
+            geometryToolDescription("Fuzzy Skin malen"),
             (surfaceMode as? SurfaceToolMode.Paint)?.tool ==
                 PsmCore.PaintTool.FUZZY,
             {
@@ -225,11 +356,12 @@ internal fun GeometryTools(
                 )
             },
             "Bemalung beenden",
+            geometryToolDescription("Bemalung beenden"),
             false,
             { onSurfaceMode(null) },
         )
 
-        Text("Pinselradius · mm", color = PrusaColors.TextMuted, fontSize = 12.sp)
+        Text(PsUi.appText("Brush radius · mm", "Pinselradius · mm"), color = PrusaColors.TextMuted, fontSize = 12.sp)
         Row(
             Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -245,13 +377,15 @@ internal fun GeometryTools(
                     },
                     label = { Text("${radius.toInt()} mm") },
                     modifier = Modifier.height(48.dp),
+                    colors = prusaFilterChipColors(),
+                    border = prusaFilterChipBorder(brushRadius == radius),
                 )
             }
         }
 
         if (extruderOptions.size > 1) {
             Text(
-                "Extruder-/ColorMix-Farbe",
+                PsUi.appText("Extruder / ColorMix colour", "Extruder-/ColorMix-Farbe"),
                 color = PrusaColors.TextMuted,
                 fontSize = 12.sp,
             )
@@ -273,6 +407,10 @@ internal fun GeometryTools(
                         },
                         label = { Text(extruder.label) },
                         modifier = Modifier.height(48.dp),
+                        colors = prusaFilterChipColors(),
+                        border = prusaFilterChipBorder(
+                            surfaceMode == SurfaceToolMode.Paint(PsmCore.PaintTool.MMU, state),
+                        ),
                     )
                 }
             }
@@ -286,7 +424,7 @@ internal fun GeometryTools(
                 TextButton(
                     onClick = { service.clearPaint(selected.id, tool) },
                     modifier = Modifier.height(48.dp),
-                ) { Text("${tool.displayName()} löschen", fontSize = 12.sp) }
+                ) { Text("${tool.displayName()} ${PsUi.appText("clear", "löschen")}", fontSize = 12.sp) }
             }
         }
         measureText?.let {
@@ -305,11 +443,12 @@ internal fun GeometryTools(
         }
 
         HorizontalDivider(color = PrusaColors.Divider)
-        ToolHeading("Multicolor-Objekt")
+        ToolHeading(PsUi.appText("Multicolour object", "Multicolor-Objekt"))
+        ToolSectionHint(PsUi.appText("Object colour and wipe behaviour apply only to the selected model.", "Objektfarbe und Wipe-Verhalten gelten nur für das ausgewählte Modell."))
         OutlinedTextField(
             value = colour,
             onValueChange = { colour = it },
-            label = { Text("Objektfarbe · #RRGGBB") },
+            label = { Text(PsUi.appText("Object colour · #RRGGBB", "Objektfarbe · #RRGGBB")) },
             singleLine = true,
             modifier = Modifier.fillMaxWidth(),
         )
@@ -386,16 +525,144 @@ internal fun GeometryTools(
                 dialog = null
             },
         )
-        GeometryDialog.LAYERS -> LayerProfileDialog(
-            objectHeight = selected.sizeMm.third.toDouble(),
-            initial = service.layerProfile(selected.id),
-            onDismiss = { dialog = null },
-            onApply = {
-                service.setLayerProfile(selected.id, it)
-                dialog = null
-            },
-        )
         null -> Unit
+    }
+}
+
+/**
+ * Inspector-sized editor for variable layer heights. The profile rows may
+ * scroll; navigation and apply/reset actions deliberately never do.
+ */
+@Composable
+internal fun LayerProfileToolPage(
+    objectHeight: Double,
+    initial: List<Pair<Double, Double>>,
+    onBack: () -> Unit,
+    onApply: (List<Pair<Double, Double>>) -> Unit,
+    onReset: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    var editor by remember(objectHeight, initial) {
+        mutableStateOf(LayerProfileEditorState.fromProfile(objectHeight, initial))
+    }
+
+    Column(
+        modifier.fillMaxSize(),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        TextButton(
+            onClick = onBack,
+            modifier = Modifier.height(40.dp),
+        ) { Text("← " + PsUi.appText("Tools", "Werkzeuge"), color = PrusaColors.TextPrimary) }
+        Text(
+            PsUi.appText("Variable layer heights", "Variable Schichthöhen"),
+            color = PrusaColors.TextPrimary,
+            fontSize = 16.sp,
+            fontWeight = FontWeight.SemiBold,
+        )
+        Text(
+            PsUi.appText("Fine areas are orange, coarse areas grey.", "Feine Bereiche sind orange, grobe grau."),
+            color = PrusaColors.TextMuted,
+            fontSize = 12.sp,
+        )
+        LayerProfilePreview(editor.previewSegments, objectHeight)
+        Column(
+            Modifier.weight(1f).verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            editor.rows.forEachIndexed { index, row ->
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    SizeField(
+                        "Z",
+                        row.first,
+                        { editor = editor.updateRow(index, z = it) },
+                        Modifier.weight(1f),
+                    )
+                    SizeField(
+                        PsUi.appText("Height", "Höhe"),
+                        row.second,
+                        { editor = editor.updateRow(index, height = it) },
+                        Modifier.weight(1f),
+                    )
+                    // Creation remains beside the very first visible row.
+                    // A separate button below a scrolling list vanished on
+                    // landscape tablets, leaving an apparently static tool.
+                    Column(Modifier.width(56.dp).height(56.dp)) {
+                        TextButton(
+                            onClick = { editor = editor.addPoint() },
+                            modifier = Modifier.fillMaxWidth().height(28.dp),
+                        ) { Text("+") }
+                        TextButton(
+                            enabled = editor.rows.size > 2,
+                            onClick = { editor = editor.removePoint(index) },
+                            modifier = Modifier.fillMaxWidth().height(28.dp),
+                        ) { Text("−") }
+                    }
+                }
+            }
+        }
+
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(
+                enabled = editor.canApply,
+                onClick = { onApply(editor.validPoints) },
+                modifier = Modifier.weight(2f).height(52.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = PrusaColors.Orange,
+                    contentColor = PrusaColors.TextPrimary,
+                ),
+            ) { Text(PsUi.appText("Apply", "Übernehmen")) }
+            OutlinedButton(
+                onClick = onReset,
+                modifier = Modifier.weight(1f).height(48.dp),
+            ) { Text(PsUi.appText("Reset", "Reset")) }
+        }
+    }
+}
+
+@Composable
+private fun LayerProfilePreview(
+    segments: List<LayerPreviewSegment>,
+    objectHeight: Double,
+) {
+    val display = if (segments.isEmpty()) {
+        layerProfilePreviewSegments(objectHeight, listOf(0.0 to 0.2))
+    } else segments
+    Row(
+        Modifier.fillMaxWidth().height(62.dp)
+            .clip(RoundedCornerShape(9.dp))
+            .background(PrusaColors.PanelRaised)
+            .padding(8.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(
+            Modifier.width(26.dp).height(46.dp).clip(RoundedCornerShape(4.dp)),
+        ) {
+            val largest = display.maxOfOrNull { it.heightMm } ?: 0.2
+            display.asReversed().forEach { segment ->
+                val ratio = ((segment.toZ - segment.fromZ) / objectHeight)
+                    .toFloat().coerceAtLeast(0.02f)
+                val fine = segment.heightMm < largest * 0.75
+                Box(
+                    Modifier.fillMaxWidth().weight(ratio)
+                        .background(if (fine) PrusaColors.Orange else PrusaColors.Divider),
+                )
+            }
+        }
+        Column {
+            Text(
+                PsUi.appText("${display.size} height ranges", "${display.size} Höhenbereiche"),
+                color = PrusaColors.TextPrimary,
+                fontSize = 13.sp,
+            )
+            Text(
+                display.joinToString(" · ") { "${"%.2f".format(it.heightMm)} mm" },
+                color = PrusaColors.TextMuted,
+                fontSize = 11.sp,
+                maxLines = 1,
+            )
+        }
     }
 }
 
@@ -410,11 +677,23 @@ private fun ToolHeading(text: String) {
 }
 
 @Composable
+private fun ToolSectionHint(text: String) {
+    Text(
+        text,
+        color = PrusaColors.TextMuted,
+        fontSize = 12.sp,
+        lineHeight = 16.sp,
+    )
+}
+
+@Composable
 private fun ToolButtonRow(
     first: String,
+    firstDescription: String,
     firstActive: Boolean,
     onFirst: () -> Unit,
     second: String,
+    secondDescription: String,
     secondActive: Boolean,
     onSecond: () -> Unit,
 ) {
@@ -422,21 +701,34 @@ private fun ToolButtonRow(
         Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        ToolButton(first, firstActive, onFirst, Modifier.weight(1f))
-        ToolButton(second, secondActive, onSecond, Modifier.weight(1f))
+        ToolActionCard(
+            label = first,
+            description = firstDescription,
+            active = firstActive,
+            onClick = onFirst,
+            modifier = Modifier.weight(1f),
+        )
+        ToolActionCard(
+            label = second,
+            description = secondDescription,
+            active = secondActive,
+            onClick = onSecond,
+            modifier = Modifier.weight(1f),
+        )
     }
 }
 
 @Composable
-private fun ToolButton(
+private fun ToolActionCard(
     label: String,
-    active: Boolean,
+    description: String,
     onClick: () -> Unit,
+    active: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     Button(
         onClick = onClick,
-        modifier = modifier.height(56.dp),
+        modifier = modifier.height(76.dp),
         shape = RoundedCornerShape(10.dp),
         colors = ButtonDefaults.buttonColors(
             containerColor =
@@ -444,7 +736,40 @@ private fun ToolButton(
             contentColor = PrusaColors.TextPrimary,
         ),
     ) {
-        Text(label, fontSize = 12.sp, maxLines = 2)
+        Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+            Text(geometryToolLabel(label), fontSize = 12.sp, maxLines = 1, fontWeight = FontWeight.SemiBold)
+            Text(
+                description,
+                fontSize = 10.sp,
+                lineHeight = 13.sp,
+                color = if (active) PrusaColors.TextPrimary else PrusaColors.TextMuted,
+                maxLines = 2,
+            )
+        }
+    }
+}
+
+@Composable
+private fun ActiveSurfaceToolCard(
+    title: String,
+    instruction: String,
+    onCancel: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(PrusaColors.Orange.copy(alpha = 0.16f), RoundedCornerShape(12.dp))
+            .padding(12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(title, color = PrusaColors.Orange, fontWeight = FontWeight.SemiBold)
+            Text(instruction, color = PrusaColors.TextPrimary, fontSize = 12.sp)
+        }
+        OutlinedButton(onClick = onCancel, modifier = Modifier.height(44.dp)) {
+            Text("Beenden")
+        }
     }
 }
 
@@ -466,12 +791,15 @@ private fun CutDialog(
     onApply: (Float, Boolean, Boolean, Boolean) -> Unit,
 ) {
     var z by remember { mutableStateOf((objectHeight * 0.5f).toString()) }
-    var upper by remember { mutableStateOf(true) }
-    var lower by remember { mutableStateOf(true) }
+    var cutResult by remember { mutableStateOf(CutResult.BOTH) }
     var asParts by remember { mutableStateOf(false) }
     val parsed = NumberCodec.parseFloat(z)
+    val (upper, lower) = retainedCutParts(cutResult)
     AlertDialog(
         onDismissRequest = onDismiss,
+        containerColor = PrusaColors.Panel,
+        titleContentColor = PrusaColors.TextPrimary,
+        textContentColor = PrusaColors.TextPrimary,
         title = { Text("Horizontal schneiden") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -481,8 +809,32 @@ private fun CutDialog(
                     label = { Text("Höhe über Bett · mm") },
                     singleLine = true,
                 )
-                CheckRow("Oberen Teil behalten", upper) { upper = it }
-                CheckRow("Unteren Teil behalten", lower) { lower = it }
+                Text("Teile behalten", color = PrusaColors.TextMuted, fontSize = 12.sp)
+                Row(
+                    Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    CutResult.entries.forEach { option ->
+                        FilterChip(
+                            selected = cutResult == option,
+                            onClick = { cutResult = option },
+                            label = { Text(option.label) },
+                            modifier = Modifier.height(48.dp),
+                            colors = FilterChipDefaults.filterChipColors(
+                                containerColor = PrusaColors.PanelRaised,
+                                labelColor = PrusaColors.TextPrimary,
+                                selectedContainerColor = PrusaColors.PanelRaised,
+                                selectedLabelColor = PrusaColors.Orange,
+                            ),
+                            border = FilterChipDefaults.filterChipBorder(
+                                enabled = true,
+                                selected = cutResult == option,
+                                borderColor = PrusaColors.Divider,
+                                selectedBorderColor = PrusaColors.Orange,
+                            ),
+                        )
+                    }
+                }
                 CheckRow("Als Teile eines Objekts", asParts) { asParts = it }
             }
         },
@@ -508,6 +860,9 @@ private fun SimplifyDialog(
     val parsed = NumberCodec.parseFloat(percent)
     AlertDialog(
         onDismissRequest = onDismiss,
+        containerColor = PrusaColors.Panel,
+        titleContentColor = PrusaColors.TextPrimary,
+        textContentColor = PrusaColors.TextPrimary,
         title = { Text("Mesh vereinfachen") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -558,6 +913,7 @@ private fun AddVolumeDialog(
         PsmCore.VolumeType.SUPPORT_ENFORCER,
     )
     var role by remember { mutableStateOf(PsmCore.VolumeType.MODIFIER) }
+    var rolePickerOpen by remember { mutableStateOf(false) }
     var shape by remember { mutableStateOf(PsmCore.PrimitiveShape.BOX) }
     var x by remember { mutableStateOf("10") }
     var y by remember { mutableStateOf("10") }
@@ -568,20 +924,20 @@ private fun AddVolumeDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
+        containerColor = PrusaColors.Panel,
+        titleContentColor = PrusaColors.TextPrimary,
+        textContentColor = PrusaColors.TextPrimary,
         title = { Text("Modifier hinzufügen") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Row(
-                    Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                OutlinedButton(
+                    onClick = { rolePickerOpen = true },
+                    modifier = Modifier.fillMaxWidth().height(56.dp),
+                    shape = RoundedCornerShape(10.dp),
                 ) {
-                    roles.forEach {
-                        FilterChip(
-                            selected = role == it,
-                            onClick = { role = it },
-                            label = { Text(it.displayName()) },
-                            modifier = Modifier.height(48.dp),
-                        )
+                    Column(Modifier.fillMaxWidth()) {
+                        Text("Rolle", color = PrusaColors.TextMuted, fontSize = 11.sp)
+                        Text(role.displayName(), color = PrusaColors.TextPrimary)
                     }
                 }
                 Row(
@@ -594,6 +950,8 @@ private fun AddVolumeDialog(
                             onClick = { shape = it },
                             label = { Text(it.displayName()) },
                             modifier = Modifier.height(48.dp),
+                            colors = prusaFilterChipColors(),
+                            border = prusaFilterChipBorder(shape == it),
                         )
                     }
                 }
@@ -617,6 +975,34 @@ private fun AddVolumeDialog(
             TextButton(onClick = onDismiss) { Text("Abbrechen") }
         },
     )
+
+    if (rolePickerOpen) {
+        AlertDialog(
+            onDismissRequest = { rolePickerOpen = false },
+            containerColor = PrusaColors.Panel,
+            titleContentColor = PrusaColors.TextPrimary,
+            textContentColor = PrusaColors.TextPrimary,
+            title = { Text("Modifier-Rolle wählen") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    roles.forEach { option ->
+                        OutlinedButton(
+                            onClick = {
+                                role = option
+                                rolePickerOpen = false
+                            },
+                            modifier = Modifier.fillMaxWidth().height(52.dp),
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                contentColor = if (role == option)
+                                    PrusaColors.Orange else PrusaColors.TextPrimary,
+                            ),
+                        ) { Text(option.displayName()) }
+                    }
+                }
+            },
+            confirmButton = {},
+        )
+    }
 }
 
 @Composable
@@ -632,6 +1018,14 @@ private fun SizeField(
         label = { Text("$label · mm") },
         singleLine = true,
         modifier = modifier,
+        colors = TextFieldDefaults.colors(
+            focusedTextColor = PrusaColors.TextPrimary,
+            unfocusedTextColor = PrusaColors.TextPrimary,
+            focusedLabelColor = PrusaColors.Orange,
+            unfocusedLabelColor = PrusaColors.TextMuted,
+            focusedContainerColor = PrusaColors.PanelRaised,
+            unfocusedContainerColor = PrusaColors.PanelRaised,
+        ),
     )
 }
 
@@ -659,74 +1053,151 @@ private fun LayerProfileDialog(
         parsed.size >= 2 &&
         parsed.all { it.first >= 0.0 && it.second > 0.0 } &&
         parsed.zipWithNext().all { (a, b) -> b.first > a.first }
+    val previewSegments = if (valid) layerProfilePreviewSegments(objectHeight, parsed) else emptyList()
 
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Variable Schichthöhen") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
+    Dialog(onDismissRequest = onDismiss) {
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .widthIn(max = 560.dp)
+                // Ohne feste Obergrenze misst der Dialog seine volle
+                // Formularhöhe und wird auf kleinen Tablets unten von der
+                // Systemnavigation abgeschnitten. Die innere Spalte scrollt.
+                .heightIn(max = 600.dp)
+                .padding(18.dp),
+            shape = RoundedCornerShape(18.dp),
+            color = PrusaColors.Panel,
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(18.dp)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
                 Text(
-                    "Z-Punkte müssen streng steigen.",
+                    "Variable Schichthöhen",
+                    color = PrusaColors.TextPrimary,
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                Text(
+                    "Vorschau am Modell · fein = orange, grob = grau. Z-Punkte müssen streng steigen.",
                     color = PrusaColors.TextMuted,
                     fontSize = 12.sp,
                 )
-                rows.forEachIndexed { index, pair ->
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        SizeField(
-                            "Z",
-                            pair.first,
-                            { value ->
-                                rows = rows.toMutableList().also {
-                                    it[index] = value to it[index].second
-                                }
-                            },
-                            Modifier.weight(1f),
-                        )
-                        SizeField(
-                            "Höhe",
-                            pair.second,
-                            { value ->
-                                rows = rows.toMutableList().also {
-                                    it[index] = it[index].first to value
-                                }
-                            },
-                            Modifier.weight(1f),
-                        )
-                        TextButton(
-                            enabled = rows.size > 2,
-                            onClick = {
-                                rows = rows.toMutableList().also {
-                                    it.removeAt(index)
-                                }
-                            },
-                            modifier = Modifier.width(52.dp).height(56.dp),
-                        ) { Text("−") }
+                if (previewSegments.isNotEmpty()) {
+                    Row(
+                        Modifier.fillMaxWidth().height(74.dp),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(
+                            Modifier.width(42.dp).height(74.dp)
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(PrusaColors.PanelRaised),
+                        ) {
+                            val maxHeight = previewSegments.maxOf { it.heightMm }.coerceAtLeast(0.01)
+                            previewSegments.asReversed().forEach { segment ->
+                                val ratio = ((segment.toZ - segment.fromZ) / objectHeight)
+                                    .toFloat().coerceAtLeast(0.02f)
+                                val fine = (segment.heightMm / maxHeight) < 0.75
+                                Box(
+                                    Modifier.fillMaxWidth().weight(ratio)
+                                        .background(if (fine) PrusaColors.Orange else PrusaColors.Divider),
+                                )
+                            }
+                        }
+                        Column {
+                            Text("${previewSegments.size} Höhenbereiche", color = PrusaColors.TextPrimary, fontSize = 13.sp)
+                            Text(
+                                previewSegments.joinToString(" · ") { "${"%.2f".format(it.heightMm)} mm" },
+                                color = PrusaColors.TextMuted,
+                                fontSize = 11.sp,
+                                maxLines = 2,
+                            )
+                        }
                     }
+                }
+                rows.forEachIndexed { index, pair ->
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            SizeField(
+                                "Z",
+                                pair.first,
+                                { value ->
+                                    rows = rows.toMutableList().also {
+                                        it[index] = value to it[index].second
+                                    }
+                                },
+                                Modifier.weight(1f),
+                            )
+                            SizeField(
+                                "Höhe",
+                                pair.second,
+                                { value ->
+                                    rows = rows.toMutableList().also {
+                                        it[index] = it[index].first to value
+                                    }
+                                },
+                                Modifier.weight(1f),
+                            )
+                            TextButton(
+                                enabled = rows.size > 2,
+                                onClick = {
+                                    rows = rows.toMutableList().also {
+                                        it.removeAt(index)
+                                    }
+                                },
+                                modifier = Modifier.width(52.dp).height(56.dp),
+                            ) { Text("−") }
+                        }
                 }
                 OutlinedButton(
                     onClick = {
-                        val lastZ = parsed.lastOrNull()?.first ?: 0.0
-                        rows = rows + ((lastZ + 1.0).toString() to "0.2")
+                        rows = insertLayerProfilePoint(rows, objectHeight)
                     },
                     modifier = Modifier.fillMaxWidth().height(48.dp),
                 ) { Text("Punkt hinzufügen") }
-            }
-        },
-        confirmButton = {
-            TextButton(
-                enabled = valid,
-                onClick = { onApply(parsed) },
-            ) { Text("Übernehmen") }
-        },
-        dismissButton = {
-            Row {
-                TextButton(onClick = { onApply(emptyList()) }) {
-                    Text("Zurücksetzen")
+                HorizontalDivider(color = PrusaColors.Divider)
+                Button(
+                    enabled = valid,
+                    onClick = { onApply(parsed) },
+                    modifier = Modifier.fillMaxWidth().height(48.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = PrusaColors.Orange,
+                        contentColor = PrusaColors.TextPrimary,
+                    ),
+                ) { Text("Übernehmen") }
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    TextButton(onClick = onDismiss, modifier = Modifier.weight(1f).height(44.dp)) {
+                        Text("Abbrechen")
+                    }
+                    TextButton(onClick = { onApply(emptyList()) }, modifier = Modifier.weight(1f).height(44.dp)) {
+                        Text("Zurücksetzen")
+                    }
                 }
-                TextButton(onClick = onDismiss) { Text("Abbrechen") }
             }
-        },
-    )
+        }
+    }
+}
+
+/** Inserts an editable point inside the final segment instead of past the model's top. */
+internal fun insertLayerProfilePoint(
+    rows: List<Pair<String, String>>,
+    objectHeight: Double,
+): List<Pair<String, String>> {
+    if (rows.size < 2) return rows + ("0.0" to "0.2")
+    val beforeEnd = NumberCodec.parseDouble(rows[rows.lastIndex - 1].first) ?: 0.0
+    val end = NumberCodec.parseDouble(rows.last().first) ?: objectHeight.coerceAtLeast(0.01)
+    val upperBound = minOf(end, objectHeight).coerceAtLeast(0.01)
+    if (upperBound <= 0.02) return rows
+    val middle = ((beforeEnd + upperBound) / 2.0).coerceIn(0.01, upperBound - 0.01)
+    if (middle <= beforeEnd) return rows
+    return rows.toMutableList().also { it.add(it.lastIndex, middle.toString() to rows.last().second) }
 }
 
 @Composable
@@ -775,6 +1246,9 @@ private fun TextEmbossDialog(
     val parsedDepth = NumberCodec.parseFloat(depth)
     AlertDialog(
         onDismissRequest = onDismiss,
+        containerColor = PrusaColors.Panel,
+        titleContentColor = PrusaColors.TextPrimary,
+        textContentColor = PrusaColors.TextPrimary,
         title = { Text("Text prägen") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -832,6 +1306,9 @@ private fun SvgEmbossDialog(
     val parsedDepth = NumberCodec.parseFloat(depth)
     AlertDialog(
         onDismissRequest = onDismiss,
+        containerColor = PrusaColors.Panel,
+        titleContentColor = PrusaColors.TextPrimary,
+        textContentColor = PrusaColors.TextPrimary,
         title = { Text("SVG prägen") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -883,7 +1360,26 @@ private fun EmbossRolePicker(
                 onClick = { onSelect(value) },
                 label = { Text(value.displayName()) },
                 modifier = Modifier.height(48.dp),
+                colors = prusaFilterChipColors(),
+                border = prusaFilterChipBorder(selected == value),
             )
         }
     }
 }
+
+/** Keeps every selectable option in the Advanced tools visually in the app theme. */
+@Composable
+private fun prusaFilterChipColors() = FilterChipDefaults.filterChipColors(
+    containerColor = PrusaColors.PanelRaised,
+    labelColor = PrusaColors.TextPrimary,
+    selectedContainerColor = PrusaColors.PanelRaised,
+    selectedLabelColor = PrusaColors.Orange,
+)
+
+@Composable
+private fun prusaFilterChipBorder(selected: Boolean) = FilterChipDefaults.filterChipBorder(
+    enabled = true,
+    selected = selected,
+    borderColor = PrusaColors.Divider,
+    selectedBorderColor = PrusaColors.Orange,
+)

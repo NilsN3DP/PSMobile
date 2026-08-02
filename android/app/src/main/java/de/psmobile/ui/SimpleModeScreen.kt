@@ -9,6 +9,8 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
@@ -23,6 +25,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -42,6 +46,10 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.material3.Icon
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AccountCircle
+import androidx.compose.material.icons.filled.NotificationsNone
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -61,6 +69,9 @@ import androidx.core.view.WindowCompat
 import de.psmobile.core.PsmCore
 import de.psmobile.slicing.SlicerService
 import de.psmobile.ui.theme.PrusaColors
+import de.psmobile.ui.theme.uiScaleFor
+
+private fun st(english: String, german: String): String = SimpleModeState.text(english, german)
 
 /** Workspace-first Simple Mode, deliberately separate from Advanced Mode chrome. */
 @Composable
@@ -86,32 +97,55 @@ fun SimpleModeScreen(
     )
     val compactChrome = placement == ToolbarPlacement.COMPACT_HORIZONTAL
     val navigationBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
-    val workspaceActionBottom = 64.dp + navigationBottom
+    val statusTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+    val workspaceActionBottom = navigationBottom
+    // PSMobileTheme staucht die Dichte auf kleinen bzw. von Emulatoren als
+    // klein gemeldeten Fenstern. Configuration bleibt dabei unskaliert;
+    // fuer eine sichtbare Sheet-Hoehe brauchen wir daher die Compose-
+    // Koordinaten, nicht die rohen Bildschirm-dp.
+    val logicalHeightDp = configuration.screenHeightDp /
+        uiScaleFor(configuration.screenWidthDp, configuration.screenHeightDp)
     // Das Referenzmenü beginnt direkt unter der Toolbar. Auf einem Tablet im
     // Querformat darf es nie unter die Systemnavigation laufen.
-    val overlayTop = if (compactChrome) 108.dp else 136.dp
+    val overlayTop = statusTop + if (compactChrome) 108.dp else 136.dp
     val overlayMaxHeight = if (compactChrome) {
-        (configuration.screenHeightDp - 108).coerceAtLeast(220).dp
-    } else if (configuration.screenWidthDp >= 600) 720.dp else 600.dp
+        // Das Overlay endet oberhalb der Gestennavigation. Andernfalls
+        // verdeckt sie bei breiten Emulatoren die letzte Einstellkarte.
+        (logicalHeightDp - 108 - statusTop.value - navigationBottom.value)
+            .toInt()
+            .coerceAtLeast(220).dp
+    } else {
+        minOf(
+            if (configuration.screenWidthDp >= 600) 720.dp else 600.dp,
+            (logicalHeightDp - 136 - statusTop.value - navigationBottom.value).dp,
+        )
+    }
 
     LaunchedEffect(controller) { controller.onScaled = service::notifyViewportChanged }
     SimpleDarkSystemBars(window)
     // Die System-Zurück-Geste schließt erst das aktuelle Simple-Menü. Ohne
     // diesen Handler beendet sie den Slicer trotz offenem Overlay.
     BackHandler(enabled = panel != SimplePanel.WORKSPACE) {
-        panel = SimplePanel.WORKSPACE
+        panel = SimpleModeState.backDestination(panel)
     }
 
     Box(Modifier.fillMaxSize().background(PrusaColors.Background)) {
         SimpleSceneWorkspace(
             service = service,
             sceneRevision = sceneRevision,
-            selectedId = selectedId,
-            onSelect = { selectedId = it.takeIf { id -> id >= 0 } },
-            controller = controller,
-            modifier = Modifier.fillMaxSize(),
+        selectedId = selectedId,
+        onSelect = { selectedId = it.takeIf { id -> id >= 0 } },
+        controller = controller,
+        inputEnabled = panel == SimplePanel.WORKSPACE,
+        onBlockedInput = {
+            if (panel != SimplePanel.WORKSPACE) panel = SimplePanel.WORKSPACE
+        },
+        modifier = Modifier.fillMaxSize(),
         )
-        Column(Modifier.align(Alignment.TopCenter).fillMaxWidth()) {
+        Column(
+            Modifier.align(Alignment.TopCenter).fillMaxWidth()
+                .windowInsetsPadding(WindowInsets.statusBars),
+        ) {
             SimpleHeader(
                 printer = SimpleModeState.printerLabel(presets.selectedPrinter),
                 compact = compactChrome,
@@ -137,30 +171,28 @@ fun SimpleModeScreen(
             shape = RoundedCornerShape(2.dp),
             colors = ButtonDefaults.buttonColors(containerColor = PrusaColors.Orange),
             modifier = Modifier.align(Alignment.BottomEnd).padding(end = 12.dp, bottom = workspaceActionBottom + 12.dp).heightIn(min = 56.dp),
-        ) { Text("＋ Modell hinzufügen") }
-        SimpleBottomNavigation(
-            modifier = Modifier.align(Alignment.BottomCenter),
-            onOpenProjects = { panel = SimplePanel.PROJECTS },
-            onOpenSettings = { panel = SimplePanel.SETTINGS },
-            onOpenAdvanced = onOpenAdvanced,
-        )
-    }
-
-    if (panel != SimplePanel.WORKSPACE) {
-        SimpleOverlay(
-            panel = panel,
-            service = service,
-            presets = presets,
-            quick = quick,
-            brim = quick.brim,
-            top = overlayTop,
-            maxHeight = overlayMaxHeight,
-            onDismiss = { panel = SimplePanel.WORKSPACE },
-            onNavigate = { panel = it },
-            onPickFile = onPickFile,
-            onOpenAdvanced = onOpenAdvanced,
-            onOpenPrinterSetup = onOpenPrinterSetup,
-        )
+        ) { Text("＋ " + st("Add model", "Modell hinzufügen")) }
+        // Das Overlay muss in derselben Box wie die SurfaceView liegen.
+        // Als Geschwister ausserhalb dieser Box konnte die native 3D-View
+        // Beruehrungen neben dem Menue abfangen; ein Tippen ausserhalb
+        // schloss das Menue dann nicht.
+        if (panel != SimplePanel.WORKSPACE) {
+            SimpleOverlay(
+                panel = panel,
+                service = service,
+                presets = presets,
+                quick = quick,
+                brim = quick.brim,
+                top = overlayTop,
+                maxHeight = overlayMaxHeight,
+                compact = compactChrome,
+                onDismiss = { panel = SimplePanel.WORKSPACE },
+                onNavigate = { panel = it },
+                onPickFile = onPickFile,
+                onOpenAdvanced = onOpenAdvanced,
+                onOpenPrinterSetup = onOpenPrinterSetup,
+            )
+        }
     }
 }
 
@@ -171,6 +203,8 @@ private fun SimpleSceneWorkspace(
     selectedId: Int?,
     onSelect: (Int) -> Unit,
     controller: SceneController,
+    inputEnabled: Boolean,
+    onBlockedInput: () -> Unit,
     modifier: Modifier,
 ) = SceneView(
     core = service.coreOrNull,
@@ -179,6 +213,8 @@ private fun SimpleSceneWorkspace(
     onSelect = onSelect,
     invalidateKey = SimpleWorkspaceState.invalidateKey(sceneRevision),
     controller = controller,
+    inputEnabled = inputEnabled,
+    onBlockedInput = onBlockedInput,
     modifier = modifier,
 )
 
@@ -189,18 +225,34 @@ private fun SimpleHeader(printer: String, compact: Boolean) = Row(
     verticalAlignment = Alignment.CenterVertically,
     horizontalArrangement = Arrangement.SpaceBetween,
 ) {
-    Text("●", color = PrusaColors.TextMuted,
-        style = if (compact) MaterialTheme.typography.titleLarge else MaterialTheme.typography.headlineMedium)
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(
-            "◆  ${SimpleModeState.visibleBrand()}",
-            color = PrusaColors.TextPrimary,
-            style = if (compact) MaterialTheme.typography.titleLarge else MaterialTheme.typography.headlineSmall,
-        )
+    Icon(
+        Icons.Default.AccountCircle,
+        contentDescription = null,
+        tint = PrusaColors.TextMuted,
+        modifier = Modifier.size(if (compact) 28.dp else 34.dp),
+    )
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Box(
+            Modifier.size(if (compact) 23.dp else 28.dp)
+                .background(PrusaColors.Orange, RoundedCornerShape(4.dp)),
+            contentAlignment = Alignment.Center,
+        ) { Text("S", color = PrusaColors.Background, fontSize = if (compact) 13.sp else 16.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold) }
+        Spacer(Modifier.width(8.dp))
+        Column(horizontalAlignment = Alignment.Start) {
+            Text(
+                SimpleModeState.visibleBrand(),
+                color = PrusaColors.TextPrimary,
+                style = if (compact) MaterialTheme.typography.titleLarge else MaterialTheme.typography.headlineSmall,
+            )
         if (printer.isNotBlank()) Text(printer, color = PrusaColors.TextMuted, style = MaterialTheme.typography.labelSmall)
+        }
     }
-    Text("♧", color = PrusaColors.Orange,
-        style = if (compact) MaterialTheme.typography.titleLarge else MaterialTheme.typography.headlineMedium)
+    Icon(
+        Icons.Default.NotificationsNone,
+        contentDescription = null,
+        tint = PrusaColors.Orange,
+        modifier = Modifier.size(if (compact) 28.dp else 34.dp),
+    )
 }
 
 @Composable
@@ -266,11 +318,11 @@ private fun SimpleToolbarButton(
 }
 
 private fun simpleToolbarLabel(label: String): String = when (label) {
-    "Projekte" -> "▣\nProjekte"
-    "Drucker" -> "▤\nDrucker"
-    "Material" -> "◎\nMaterial"
-    "Einstellen" -> "☷\nEinstell."
-    "Vorschau" -> "▱\nVorschau"
+    "Projects" -> "▣\n" + st("Projects", "Projekte")
+    "Printer" -> "▤\n" + st("Printer", "Drucker")
+    "Material" -> "◎\n" + st("Material", "Material")
+    "Settings" -> "☷\n" + st("Settings", "Einstell.")
+    "Preview" -> "▱\n" + st("Preview", "Vorschau")
     "G-Code" -> "➤  G-Code"
     else -> label
 }
@@ -279,29 +331,8 @@ private fun simpleToolbarLabel(label: String): String = when (label) {
 private fun SimpleUndoRedo(onUndo: () -> Unit, onRedo: () -> Unit, modifier: Modifier) = Row(
     modifier.background(PrusaColors.Panel, RoundedCornerShape(4.dp)),
 ) {
-    TextButton(onClick = onUndo, modifier = Modifier.height(52.dp).width(72.dp)) { Text("↶\nUndo") }
-    TextButton(onClick = onRedo, modifier = Modifier.height(52.dp).width(72.dp)) { Text("↷\nRedo") }
-}
-
-@Composable
-private fun SimpleBottomNavigation(
-    modifier: Modifier,
-    onOpenProjects: () -> Unit,
-    onOpenSettings: () -> Unit,
-    onOpenAdvanced: () -> Unit,
-) = Row(
-    modifier.fillMaxWidth().background(PrusaColors.Panel).padding(vertical = 10.dp),
-    horizontalArrangement = Arrangement.SpaceEvenly,
-) {
-    listOf(
-        "Projekte" to onOpenProjects,
-        "Einstellungen" to onOpenSettings,
-        "Advanced" to onOpenAdvanced,
-    ).forEach { (label, action) ->
-        TextButton(onClick = action, modifier = Modifier.height(48.dp)) {
-            Text(label, color = PrusaColors.TextMuted, style = MaterialTheme.typography.labelMedium)
-        }
-    }
+    TextButton(onClick = onUndo, modifier = Modifier.height(52.dp).width(72.dp)) { Text("↶\n" + st("Undo", "Rückgängig")) }
+    TextButton(onClick = onRedo, modifier = Modifier.height(52.dp).width(72.dp)) { Text("↷\n" + st("Redo", "Wiederholen")) }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -314,6 +345,7 @@ private fun SimpleOverlay(
     brim: String,
     top: androidx.compose.ui.unit.Dp,
     maxHeight: androidx.compose.ui.unit.Dp,
+    compact: Boolean,
     onDismiss: () -> Unit,
     onNavigate: (SimplePanel) -> Unit,
     onPickFile: () -> Unit,
@@ -326,12 +358,27 @@ private fun SimpleOverlay(
     Box(
         Modifier
             .fillMaxSize()
-            .background(PrusaColors.Background.copy(alpha = 0.72f))
             .padding(top = top),
         contentAlignment = Alignment.TopCenter,
     ) {
+        // Der abgedunkelte Arbeitsbereich ist gleichzeitig die klare,
+        // touchfreundliche Schliessen-Flaeche des Kontextmenues.
+        Box(
+            Modifier.fillMaxSize()
+                .background(PrusaColors.Background.copy(alpha = 0.72f))
+                .clickable(onClick = onDismiss),
+        )
         Surface(
-            modifier = Modifier.fillMaxWidth(0.92f).heightIn(max = maxHeight),
+            modifier = Modifier.fillMaxWidth(if (compact) 0.78f else 0.92f).then(
+                if (panel == SimplePanel.SETTINGS) {
+                    // Der Hub besteht aus zwei Kartenzeilen. Ohne eine
+                    // definierte Containerhoehe misst verticalScroll nur
+                    // die erste Zeile und schneidet die dritte Karte ab.
+                    Modifier.height(minOf(560.dp, maxHeight))
+                } else {
+                    Modifier.heightIn(max = maxHeight)
+                }
+            ),
             color = PrusaColors.Panel,
             shape = RoundedCornerShape(3.dp),
             shadowElevation = 12.dp,
@@ -339,12 +386,21 @@ private fun SimpleOverlay(
             Column(
                 Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(16.dp),
             ) {
-                TextButton(onClick = onDismiss) { Text("← Zurück") }
+                val onBack = {
+                    val destination = SimpleModeState.backDestination(panel)
+                    if (destination == SimplePanel.WORKSPACE) onDismiss() else onNavigate(destination)
+                }
+                TextButton(onClick = onBack) { Text("← " + st("Back", "Zurück")) }
                 when (panel) {
                     SimplePanel.PROJECTS -> SimpleProjectsPanel(onPickFile, presets)
                     SimplePanel.PRINTER -> SimplePrinterPanel(service, presets, onDismiss, onOpenPrinterSetup)
                     SimplePanel.MATERIAL -> SimpleMaterialPanel(service, presets, onDismiss, onOpenAdvanced)
-                    SimplePanel.SETTINGS -> SimpleSettingsPanel(onPanel = onNavigate)
+                    SimplePanel.SETTINGS -> SimpleSettingsPanel(
+                        quick = quick,
+                        brim = brim,
+                        onPanel = onNavigate,
+                        onOpenAdvanced = onOpenAdvanced,
+                    )
                     SimplePanel.SUPPORTS -> SimpleSupportsPanel(service, quick)
                     SimplePanel.ADHESION -> SimpleAdhesionPanel(service, brim)
                     SimplePanel.PRINT_SETTINGS -> SimplePrintSettingsPanel(service, presets, onDismiss, onOpenAdvanced)
@@ -358,16 +414,19 @@ private fun SimpleOverlay(
 @Composable
 private fun SimpleProjectsPanel(onPickFile: () -> Unit, presets: SlicerService.Presets) {
     var query by rememberSaveable { mutableStateOf("") }
+    val (projectTitle, noPrinter, session) = SimpleModeState.projectSummaryCopy()
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Text("PROJECTS", style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
-        OutlinedButton(onClick = onPickFile) { Text("Modell öffnen") }
+        OutlinedButton(onClick = onPickFile) { Text(st("Open model", "Modell öffnen")) }
     }
     TextField(query, { query = it }, label = { Text("Search project names") }, modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp), singleLine = true)
     SimpleProjectRow(
-        title = "Aktuelles Projekt",
-        printer = presets.selectedPrinter.ifBlank { "Drucker nicht gewählt" },
-        material = presets.selectedFilament.ifBlank { "Material nicht gewählt" },
-        detail = "Diese Sitzung",
+        title = projectTitle,
+        printer = presets.selectedPrinter.takeIf { it.isNotBlank() }?.let(EasyModeState::profileDisplayLabel)
+            ?: noPrinter,
+        material = presets.selectedFilament.takeIf { it.isNotBlank() }?.let(EasyModeState::profileDisplayLabel)
+            ?: st("No material selected", "Material nicht gewählt"),
+        detail = session,
     )
 }
 
@@ -391,30 +450,92 @@ private fun SimpleProjectRow(title: String, printer: String, material: String, d
 
 @Composable
 private fun SimplePrinterPanel(service: SlicerService, presets: SlicerService.Presets, onDismiss: () -> Unit, onSetup: () -> Unit) {
-    Text("PRINTER", style = MaterialTheme.typography.titleLarge)
+    Text(st("PRINTER", "DRUCKER"), style = MaterialTheme.typography.titleLarge)
+    Text(
+        st("Choose a printer model · select the nozzle in the slice summary", "Druckermodell wählen · die Düse wird in der Slice-Übersicht festgelegt"),
+        color = PrusaColors.TextMuted,
+        style = MaterialTheme.typography.bodySmall,
+        modifier = Modifier.padding(top = 4.dp, bottom = 10.dp),
+    )
     val models = remember(presets.printers) { EasyModeState.printerModelsWithNozzles(presets.printers) }
-    if (models.isEmpty()) TextButton(onClick = onSetup) { Text("Drucker einrichten") }
-    models.forEach { model ->
-        Text(model.label, style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 14.dp, bottom = 6.dp))
-        Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            model.variants.forEach { choice ->
-                val selected = choice.rawPreset == presets.selectedPrinter
-                Column(
-                    Modifier.width(190.dp)
-                        .background(if (selected) PrusaColors.PanelRaised else PrusaColors.Background, RoundedCornerShape(2.dp))
-                        .border(1.dp, if (selected) PrusaColors.Orange else PrusaColors.Divider, RoundedCornerShape(2.dp))
-                        .clickable { service.selectPreset(PsmCore.PresetType.PRINTER, choice.rawPreset); onDismiss() }
-                        .padding(12.dp),
-                    verticalArrangement = Arrangement.spacedBy(5.dp),
-                ) {
-                    Text("▤", color = PrusaColors.Orange, fontSize = 25.sp)
-                    Text(choice.label, color = PrusaColors.TextPrimary, style = MaterialTheme.typography.titleSmall)
-                    Text("Düse ${choice.label.substringAfterLast(" ", "intern")}", color = PrusaColors.TextMuted, style = MaterialTheme.typography.labelSmall)
-                    Text(if (selected) "Ausgewählt" else "Antippen zum Auswählen", color = if (selected) PrusaColors.Orange else PrusaColors.TextMuted, style = MaterialTheme.typography.labelSmall)
-                }
+    if (models.isEmpty()) {
+        EmptySimplePanel(st("No printer configured", "Noch kein Drucker eingerichtet"), st("Set up printer", "Drucker einrichten"), onSetup)
+        return
+    }
+    models.flatMap { model -> model.variants.map { model to it } }.chunked(2).forEach { row ->
+        Row(
+            Modifier.fillMaxWidth().padding(bottom = 10.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            row.forEach { (model, choice) ->
+                SimplePrinterCard(
+                    model = model.label,
+                    nozzle = choice.label,
+                    selected = choice.rawPreset == presets.selectedPrinter,
+                    onClick = {
+                        service.selectPreset(PsmCore.PresetType.PRINTER, choice.rawPreset)
+                        onDismiss()
+                    },
+                    modifier = Modifier.weight(1f),
+                )
             }
+            if (row.size == 1) Spacer(Modifier.weight(1f))
         }
     }
+}
+
+@Composable
+private fun SimplePrinterCard(
+    model: String,
+    nozzle: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) = Column(
+    modifier
+        .heightIn(min = 162.dp)
+        .background(if (selected) PrusaColors.PanelRaised else PrusaColors.Background, RoundedCornerShape(4.dp))
+        .border(1.dp, if (selected) PrusaColors.Orange else PrusaColors.Divider, RoundedCornerShape(4.dp))
+        .clickable(onClick = onClick)
+        .padding(12.dp),
+    verticalArrangement = Arrangement.spacedBy(5.dp),
+) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        SimplePrinterGlyph()
+        Column(Modifier.padding(start = 10.dp).weight(1f)) {
+            Text(model, color = PrusaColors.TextPrimary, style = MaterialTheme.typography.titleSmall, maxLines = 2)
+            Text(
+                if (selected) st("SELECTED · OFFLINE", "AUSGEWÄHLT · OFFLINE") else "OFFLINE",
+                color = if (selected) PrusaColors.Orange else PrusaColors.TextMuted,
+                style = MaterialTheme.typography.labelSmall,
+            )
+        }
+    }
+    HorizontalDivider(color = PrusaColors.Divider)
+    Text(st("Nozzle", "Düse") + "  $nozzle", color = PrusaColors.TextPrimary, style = MaterialTheme.typography.labelMedium)
+    Text(st("Material is chosen in the next step", "Material wird im nächsten Schritt gewählt"), color = PrusaColors.TextMuted, style = MaterialTheme.typography.labelSmall, maxLines = 1)
+}
+
+@Composable
+private fun SimplePrinterGlyph() = Box(
+    Modifier.width(62.dp).height(72.dp)
+        .background(PrusaColors.Panel, RoundedCornerShape(5.dp))
+        .border(1.dp, PrusaColors.Divider, RoundedCornerShape(5.dp)),
+    contentAlignment = Alignment.Center,
+) {
+    Box(
+        Modifier.width(38.dp).height(48.dp)
+            .background(PrusaColors.Background, RoundedCornerShape(2.dp))
+            .border(1.dp, PrusaColors.TextMuted.copy(alpha = 0.4f), RoundedCornerShape(2.dp)),
+    )
+    Box(
+        Modifier.align(Alignment.CenterEnd).width(3.dp).height(42.dp)
+            .background(PrusaColors.Orange, RoundedCornerShape(2.dp)),
+    )
+    Box(
+        Modifier.align(Alignment.BottomCenter).width(28.dp).height(3.dp)
+            .background(PrusaColors.TextMuted, RoundedCornerShape(2.dp)),
+    )
 }
 
 @Composable
@@ -423,7 +544,7 @@ private fun SimpleMaterialPanel(service: SlicerService, presets: SlicerService.P
     var chooserOpen by rememberSaveable { mutableStateOf(false) }
     if (chooserOpen) {
         SimpleMaterialChooser(
-            presets = presets,
+            filaments = presets.filaments,
             selectedExtruder = selectedExtruder,
             onBack = { chooserOpen = false },
             onChoose = { filament ->
@@ -442,7 +563,7 @@ private fun SimpleMaterialPanel(service: SlicerService, presets: SlicerService.P
             presets.extruders.forEach { service.setExtruderFilament(it.index, presets.selectedFilament) }
         }) { Text("Set all") }
     }
-    Text("Kopf antippen, dann Material auswählen", color = PrusaColors.TextMuted, style = MaterialTheme.typography.bodySmall)
+    Text(st("Choose T1–T8, then choose a material", "T1–T8 antippen, dann Material auswählen"), color = PrusaColors.TextMuted, style = MaterialTheme.typography.bodySmall)
     val heads = presets.extruders.ifEmpty { listOf(SlicerService.Extruder(0, presets.selectedFilament, "#808080")) }
     heads.chunked(2).forEach { row ->
         Row(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -458,15 +579,21 @@ private fun SimpleMaterialPanel(service: SlicerService, presets: SlicerService.P
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Box(Modifier.size(14.dp).background(androidx.compose.ui.graphics.Color(android.graphics.Color.parseColor(extruder.color.ifBlank { "#808080" })), RoundedCornerShape(7.dp)))
-                        Text("  Kopf ${extruder.index + 1}", color = PrusaColors.TextPrimary, style = MaterialTheme.typography.labelLarge)
+                        Text("  T${extruder.index + 1}", color = PrusaColors.TextPrimary, style = MaterialTheme.typography.labelLarge)
                     }
-                    Text(extruder.filament.ifBlank { "Material auswählen" }, color = PrusaColors.TextMuted, style = MaterialTheme.typography.bodySmall, maxLines = 1)
+                    Text(
+                        extruder.filament.takeIf { it.isNotBlank() }?.let(EasyModeState::profileDisplayLabel)
+                            ?: st("Choose material", "Material auswählen"),
+                        color = PrusaColors.TextMuted,
+                        style = MaterialTheme.typography.bodySmall,
+                        maxLines = 1,
+                    )
                 }
             }
             if (row.size == 1) Spacer(Modifier.weight(1f))
         }
     }
-    Text("Farbe für Kopf ${selectedExtruder + 1}", color = PrusaColors.TextMuted, modifier = Modifier.padding(top = 12.dp))
+    Text(st("Colour for", "Farbe für") + " T${selectedExtruder + 1}", color = PrusaColors.TextMuted, modifier = Modifier.padding(top = 12.dp))
     Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         listOf("#E53935", "#FB8C00", "#FDD835", "#43A047", "#1E88E5", "#8E24AA", "#212121", "#F5F5F5").forEach { color ->
             Box(
@@ -479,8 +606,9 @@ private fun SimpleMaterialPanel(service: SlicerService, presets: SlicerService.P
 }
 
 @Composable
-private fun SimpleMaterialChooser(
-    presets: SlicerService.Presets,
+@OptIn(ExperimentalLayoutApi::class)
+internal fun SimpleMaterialChooser(
+    filaments: List<String>,
     selectedExtruder: Int,
     onBack: () -> Unit,
     onChoose: (String) -> Unit,
@@ -489,17 +617,30 @@ private fun SimpleMaterialChooser(
     var query by rememberSaveable { mutableStateOf("") }
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         TextButton(onClick = onBack) { Text("←") }
-        Text("CHOOSE MATERIAL", style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
-        Text("Kopf ${selectedExtruder + 1}", color = PrusaColors.Orange, style = MaterialTheme.typography.labelLarge)
+        Text(
+            "CHOOSE MATERIAL",
+            color = PrusaColors.TextPrimary,
+            style = MaterialTheme.typography.titleLarge,
+            modifier = Modifier.weight(1f),
+        )
+        Text("T${selectedExtruder + 1}", color = PrusaColors.Orange, style = MaterialTheme.typography.labelLarge)
     }
     Text("FIND A SPOOL", color = PrusaColors.TextMuted, style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(top = 8.dp))
     TextField(query, { query = it }, label = { Text("search by vendor, material or color") }, modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp), singleLine = true)
-    Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+    // Im Seitenpanel eines Tablets wäre eine horizontale Chip-Leiste
+    // abgeschnitten und nur durch verstecktes Wischen erreichbar. FlowRow
+    // erhält die Easy-Print-Auswahl, passt sie aber sauber an jede Breite an.
+    FlowRow(
+        Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+        maxItemsInEachRow = 5,
+    ) {
         SimpleModeState.materialTypes().forEach { type -> OutlinedButton(onClick = { query = type }) { Text(type) } }
     }
-    val matches = EasyModeState.filterPresets(presets.filaments, query).take(15)
+    val matches = EasyModeState.filterPresets(filaments, query).take(15)
     if (matches.isEmpty()) {
-        TextButton(onClick = onOpenAdvanced) { Text("Filament einrichten") }
+        TextButton(onClick = onOpenAdvanced) { Text(st("Set up filament", "Filament einrichten")) }
     } else {
         matches.chunked(3).forEach { row ->
             Row(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -522,11 +663,106 @@ private fun SimpleMaterialChooser(
 }
 
 @Composable
-private fun SimpleSettingsPanel(onPanel: (SimplePanel) -> Unit) {
-    Text("EINSTELLEN", style = MaterialTheme.typography.titleLarge)
-    listOf("Supports" to SimplePanel.SUPPORTS, "Haftung" to SimplePanel.ADHESION, "Print Settings" to SimplePanel.PRINT_SETTINGS).forEach { (label, panel) ->
-        OutlinedButton(onClick = { onPanel(panel) }, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) { Text(label) }
+private fun SimpleSettingsPanel(
+    quick: SlicerService.QuickSettings,
+    brim: String,
+    onPanel: (SimplePanel) -> Unit,
+    onOpenAdvanced: () -> Unit,
+) {
+    Text(st("SETTINGS", "EINSTELLEN"), style = MaterialTheme.typography.titleLarge)
+    Text(
+        st("The most important choices for this print.", "Die wichtigsten Entscheidungen für diesen Druck."),
+        color = PrusaColors.TextMuted,
+        style = MaterialTheme.typography.bodySmall,
+        modifier = Modifier.padding(top = 4.dp, bottom = 10.dp),
+    )
+    val supportsOn = quick.supports == "1"
+    val cards = listOf(
+        SimpleSettingCardData(
+            st("Supports", "Stützen"),
+            if (supportsOn) {
+                "${if (quick.supportBuildPlateOnly == "1") st("Build plate only", "Nur Druckbett") else st("Everywhere", "Überall")} · ${quick.supportStyle.ifBlank { "Snug" }}"
+            } else {
+                st("No supports", "Keine Stützen")
+            },
+            "⌂",
+            supportsOn,
+            SimplePanel.SUPPORTS,
+        ),
+        SimpleSettingCardData(
+            st("Adhesion", "Haftung"),
+            if (brim == "0") st("No additional bed adhesion", "Keine zusätzliche Haftung") else st("Outline around the model", "Rand um das Modell"),
+            "▱",
+            brim != "0",
+            SimplePanel.ADHESION,
+        ),
+        SimpleSettingCardData(
+            "Print Settings",
+            st("Quality, infill and shell thickness", "Qualität, Infill und Wandstärke"),
+            "☷",
+            true,
+            SimplePanel.PRINT_SETTINGS,
+        ),
+    )
+    cards.chunked(2).forEach { row ->
+        Row(
+            Modifier.fillMaxWidth().padding(bottom = 10.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            row.forEach { card ->
+                SimpleSettingsCard(card, { onPanel(card.panel) }, Modifier.weight(1f))
+            }
+            if (row.size == 1) Spacer(Modifier.weight(1f))
+        }
     }
+    TextButton(
+        onClick = onOpenAdvanced,
+        modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+    ) { Text(st("Open Advanced Mode", "Advanced Mode öffnen"), color = PrusaColors.TextMuted) }
+}
+
+private data class SimpleSettingCardData(
+    val title: String,
+    val detail: String,
+    val icon: String,
+    val enabled: Boolean,
+    val panel: SimplePanel,
+)
+
+@Composable
+private fun SimpleSettingsCard(
+    card: SimpleSettingCardData,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) = Column(
+    modifier
+        .heightIn(min = 122.dp)
+        .background(PrusaColors.PanelRaised, RoundedCornerShape(4.dp))
+        .border(1.dp, if (card.enabled) PrusaColors.Orange.copy(alpha = 0.65f) else PrusaColors.Divider, RoundedCornerShape(4.dp))
+        .clickable(onClick = onClick)
+        .padding(14.dp),
+    verticalArrangement = Arrangement.spacedBy(8.dp),
+) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Box(
+            Modifier.size(46.dp).background(PrusaColors.Panel, RoundedCornerShape(4.dp)),
+            contentAlignment = Alignment.Center,
+        ) { Text(card.icon, color = if (card.enabled) PrusaColors.Orange else PrusaColors.TextMuted, fontSize = 25.sp) }
+        Spacer(Modifier.width(10.dp))
+        Text(card.title, color = PrusaColors.TextPrimary, style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
+    }
+    Text(card.detail, color = PrusaColors.TextMuted, style = MaterialTheme.typography.bodySmall, maxLines = 2)
+    Text(st("Open", "Öffnen") + "  ›", color = PrusaColors.Orange, style = MaterialTheme.typography.labelLarge)
+}
+
+@Composable
+private fun EmptySimplePanel(message: String, action: String, onClick: () -> Unit) = Column(
+    Modifier.fillMaxWidth().background(PrusaColors.PanelRaised, RoundedCornerShape(4.dp)).padding(18.dp),
+    horizontalAlignment = Alignment.CenterHorizontally,
+    verticalArrangement = Arrangement.spacedBy(10.dp),
+) {
+    Text(message, color = PrusaColors.TextMuted)
+    OutlinedButton(onClick = onClick) { Text(action) }
 }
 
 @Composable

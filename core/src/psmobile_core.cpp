@@ -1319,7 +1319,14 @@ PSM_API psm_result psm_model_set_instances(psm_session *s, psm_object_id id, int
             Slic3r::ModelInstance *src = o->instances.front();
             Slic3r::ModelInstance *dst = o->add_instance(*src);
             Slic3r::Vec3d off = dst->get_offset();
-            const double step = o->bounding_box_exact().size().x() + 5.0;
+            /* bounding_box_exact() umfasst alle bereits vorhandenen
+             * Instanzen. Würde sie hier bei jeder Kopie erneut verwendet,
+             * würden die Abstände quadratisch anwachsen (20, 45, 95, ...)
+             * und eine harmlose Serie von Kopien ausserhalb der virtuellen
+             * Bettkoordinaten landen. Die Ausdehnung einer einzelnen,
+             * kopierten Instanz bleibt dagegen konstant. */
+            const double step = std::max(
+                1.0, o->instance_bounding_box(0).size().x()) + 5.0;
             off.x() += step * static_cast<double>(o->instances.size() - 1);
             dst->set_offset(off);
         }
@@ -1484,6 +1491,22 @@ PSM_API psm_result psm_arrange(psm_session *s, float gap_mm)
             ? static_cast<double>(gap_mm)
             : Slic3r::min_object_distance(s->config);
         cfg.set_distance_from_objects(dist);
+
+        /* Die mobile Ebene ist immer ein lokales Einzelbett. Nach dem
+         * Öffnen eines Mehrbett-3MF kennt MultipleBeds noch die frühere
+         * Desktop-Landschaft; neue Instanzen besitzen dort folglich keinen
+         * gültigen Bettindex (-1). arrange_objects konsultiert diese globale
+         * Zuordnung trotz des lokalen Model-Arguments. Deshalb jede lokale
+         * Instanz vor dem Arrange explizit auf Bett 0 abbilden. */
+        Slic3r::s_multiple_beds.clear_inst_map();
+        for (Slic3r::ModelObject *object : s->model().objects) {
+            for (Slic3r::ModelInstance *instance : object->instances) {
+                Slic3r::s_multiple_beds.set_instance_bed(
+                    instance->id(), instance->printable, 0);
+            }
+        }
+        Slic3r::s_multiple_beds.inst_map_updated();
+        Slic3r::s_multiple_beds.set_active_bed(0);
 
         s->history_checkpoint("Objekte anordnen");
         Slic3r::arrange_objects(s->model(), bed, cfg);

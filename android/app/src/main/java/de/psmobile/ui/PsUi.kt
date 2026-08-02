@@ -4,6 +4,10 @@ import android.content.Context
 import android.util.Log
 import org.json.JSONObject
 
+/** Copy owned by PSMobile rather than PrusaSlicer's PO catalog. */
+internal fun applicationText(language: String, english: String, german: String): String =
+    if (language.startsWith("de")) german else english
+
 /**
  * Zugriff auf die aus PrusaSlicer uebernommene Oberflaechen-Definition.
  *
@@ -95,6 +99,10 @@ object PsUi {
      * englische Text und damit korrekt, nicht ein Platzhalter.
      */
     fun tr(source: String): String = strings[source] ?: source
+
+    /** Localizes application-specific copy that is not present in the PO catalog. */
+    fun appText(english: String, german: String): String =
+        applicationText(language, english, german)
 
     // --- Lesen ------------------------------------------------------------
 

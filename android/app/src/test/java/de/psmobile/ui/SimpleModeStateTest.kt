@@ -12,11 +12,17 @@ class SimpleModeStateTest {
     }
 
     @Test
-    fun compactToolbarHasReferenceActionOrder() {
+    fun englishToolbarUsesEnglishLabelsInsteadOfGermanFallbacks() {
         assertEquals(
-            listOf("Projekte", "Drucker", "Material", "Einstellen", "Vorschau", "G-Code"),
+            listOf("Projects", "Printer", "Material", "Settings", "Preview", "G-Code"),
             SimpleModeState.toolbarLabels(),
         )
+    }
+
+    @Test
+    fun simpleProjectSummaryUsesEnglishWhenTheAppLanguageIsEnglish() {
+        assertEquals("Current project", applicationText("en", "Current project", "Aktuelles Projekt"))
+        assertEquals("This session", applicationText("en", "This session", "Diese Sitzung"))
     }
 
     @Test
@@ -72,5 +78,13 @@ class SimpleModeStateTest {
     @Test
     fun printSettingsUsesTheThreeReferenceColumns() {
         assertEquals(listOf("Print Settings", "Infill", "Shell Thickness"), SimpleModeState.printSettingsColumns())
+    }
+
+    @Test
+    fun nested_simple_settings_go_back_to_settings_before_workspace() {
+        assertEquals(SimplePanel.SETTINGS, SimpleModeState.backDestination(SimplePanel.SUPPORTS))
+        assertEquals(SimplePanel.SETTINGS, SimpleModeState.backDestination(SimplePanel.ADHESION))
+        assertEquals(SimplePanel.SETTINGS, SimpleModeState.backDestination(SimplePanel.PRINT_SETTINGS))
+        assertEquals(SimplePanel.WORKSPACE, SimpleModeState.backDestination(SimplePanel.MATERIAL))
     }
 }

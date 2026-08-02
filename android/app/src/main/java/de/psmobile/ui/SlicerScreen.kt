@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.safeDrawing
@@ -46,14 +47,18 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.runtime.Composable
@@ -76,6 +81,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.zIndex
 import de.psmobile.core.PsmViewport
 import de.psmobile.core.PsmCore
@@ -106,6 +112,8 @@ private val SIDEBAR_WIDTH = 380.dp
 private val TOOL_SIZE = 64.dp
 private val TOOL_RAIL_WIDTH = 80.dp
 private val TOUCH_TARGET = 48.dp
+
+private fun advancedText(english: String, german: String): String = PsUi.appText(english, german)
 
 private enum class InspectorSection {
     PROFILES,
@@ -193,6 +201,7 @@ private fun SlicerContent(
     val volumes by service.volumes.collectAsState()
     val sceneRevision by service.sceneRevision.collectAsState()
     val configRevision by service.configRevision.collectAsState()
+    val toolMessage by service.toolMessage.collectAsState()
     var selectedId by remember { mutableStateOf<Int?>(null) }
     var selectedIds by remember { mutableStateOf<Set<Int>>(emptySet()) }
     // Android hat hier keine sinnvolle System-Zwischenablage fuer
@@ -262,6 +271,11 @@ private fun SlicerContent(
     }
 
     val selected = objects.firstOrNull { it.id == selectedId }
+    // Die Höhe ist Objekt-spezifisch. Nicht cachen: Der Layer-Dialog kann
+    // das Profil bei unverändertem Objekt-ID direkt ändern. Die Anzeige im
+    // Arbeitsbereich muss unmittelbar nach „Übernehmen“ den echten Kernwert
+    // lesen, nicht bis zu einer zufälligen nächsten Szenenänderung warten.
+    val selectedLayerProfile = selected?.let { service.layerProfile(it.id) }.orEmpty()
     val activeBed = beds.firstOrNull { it.active }?.index ?: 0
     val extruderOptions = buildList {
         repeat(presets.extruders.size.coerceAtLeast(1)) { index ->
@@ -345,10 +359,25 @@ private fun SlicerContent(
         // Tablets und im Hochformat liegt er als einblendbares Panel ueber
         // dem Bett, statt die eigentliche Arbeitsflaeche zu zerquetschen.
         val permanentInspector = maxWidth >= 1000.dp
+        // Unterhalb dieser Breite passen Projektaktionen, Bettwaehler,
+        // Simple und Panel nicht mehr nebeneinander. Statt den Bettwaehler
+        // stumm abzuschneiden, ruecken die Abstaende enger zusammen.
+        val tightChrome = maxWidth < 700.dp
+        // Die Breite war fest, ohne Bezug zum Fenster. Auf einem rund
+        // 535 dp breiten Fenster belegte das Panel damit 380 dp - fast
+        // drei Viertel - und legte sich ueber die Ansichtsleiste am
+        // unteren Rand. Deshalb zusaetzlich eine Obergrenze relativ zum
+        // verfuegbaren Platz.
+        val usable = maxWidth - TOOL_RAIL_WIDTH
         val inspectorWidth = when {
-            maxWidth < 460.dp -> maxWidth - 16.dp
-            maxWidth >= 1280.dp -> 400.dp
-            else -> SIDEBAR_WIDTH
+            // Sehr schmal: als volles Blatt neben der Werkzeugleiste.
+            maxWidth < 460.dp -> usable
+            else -> minOf(
+                if (maxWidth >= 1280.dp) 400.dp else SIDEBAR_WIDTH,
+                // Mehr als gut die Haelfte darf der Inspektor nie
+                // beanspruchen, sonst bleibt vom Bett nichts uebrig.
+                usable * 0.55f,
+            )
         }
         var inspectorOpen by remember(permanentInspector) {
             mutableStateOf(permanentInspector)
@@ -376,7 +405,11 @@ private fun SlicerContent(
                         selectedId = null
                     }
                     "deleteall" -> service.clearBed()
-                    "arrange"   -> service.arrange()
+                    // Die mobile Arbeitsfläche zeigt immer genau das aktive
+                    // Bett. "Aktuelle Platte anordnen" ist daher keine
+                    // zweite, eingeschränkte Operation, sondern dieselbe
+                    // getestete Arrange-Funktion auf diesem Bett.
+                    "arrange", "arrangecurrent" -> service.arrange()
                     "copy"      -> selected?.let { copiedObjectId = it.id }
                     "paste"     -> copiedObjectId?.let {
                         if (!service.duplicate(it, activeBed))
@@ -388,6 +421,9 @@ private fun SlicerContent(
                     "fewer"     -> selected?.let {
                         service.setInstances(it.id, (it.instances - 1).coerceAtLeast(1))
                     }
+                    "splitobjects" -> selected?.let { service.splitIntoObjects(it.id) }
+                    "splitvolumes" -> selected?.let { service.splitIntoVolumes(it.id) }
+                    "settings" -> service.showScreen(SlicerService.Screen.Settings("print"))
                 }
             }
 
@@ -415,6 +451,7 @@ private fun SlicerContent(
                     showInspectorAction = !permanentInspector,
                     inspectorOpen = inspectorOpen,
                     onToggleInspector = { inspectorOpen = !inspectorOpen },
+                    tight = tightChrome,
                 )
 
                 // Echter GLES-Viewport auf Basis der Shader aus PrusaSlicer.
@@ -463,6 +500,53 @@ private fun SlicerContent(
                         controller = sceneController,
                         modifier = Modifier.fillMaxSize(),
                     )
+                    // Variable Schichthöhe darf keine unsichtbare
+                    // Hintergrund-Einstellung sein: Nach dem Übernehmen
+                    // bleibt eine kompakte, farbige Höhenkarte direkt im
+                    // Arbeitsbereich sichtbar. Sie gehört zum aktuell
+                    // ausgewählten Modell und verschwindet bei Preview bzw.
+                    // wenn die Inspectorfläche offen ist.
+                    if (!previewMode && !inspectorOpen && selected != null && selectedLayerProfile.isNotEmpty()) {
+                        LayerProfileSceneOverlay(
+                            objectHeight = selected.sizeMm.third.toDouble(),
+                            profile = selectedLayerProfile,
+                            modifier = Modifier
+                                .align(Alignment.CenterEnd)
+                                .padding(end = 18.dp, bottom = 96.dp),
+                        )
+                    }
+                    // Ein Werkzeugfehler darf nicht ausschliesslich im
+                    // Seitenpanel stehen: Bei geschlossenem Panel wäre er
+                    // für Touch-Nutzung unsichtbar. Die kompakte Meldung
+                    // bleibt direkt am Arbeitsbereich und kann weggetippt
+                    // werden.
+                    toolMessage?.let { message ->
+                        Surface(
+                            modifier = Modifier
+                                // Der Inspector liegt als Overlay über dem
+                                // rechten Arbeitsbereich. Eine mittige
+                                // Meldung wäre dort teilweise oder komplett
+                                // verdeckt. Links neben dem Panel bleibt sie
+                                // auf Tablet und im schmalen Querformat immer
+                                // antipp- und lesbar.
+                                .align(Alignment.TopStart)
+                                .padding(top = 14.dp, start = 126.dp, end = 18.dp)
+                                .widthIn(max = 420.dp)
+                                .clickable { service.clearToolMessage() },
+                            shape = RoundedCornerShape(10.dp),
+                            color = PrusaColors.Panel.copy(alpha = 0.96f),
+                            shadowElevation = 6.dp,
+                        ) {
+                            Text(
+                                message,
+                                color = PrusaColors.Orange,
+                                fontSize = 13.sp,
+                                maxLines = 3,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                            )
+                        }
+                    }
                     // Ansicht und Editor/Preview stehen in EINER Leiste.
                     // Zwei frei schwebende Leisten ueberlappten sich auf
                     // kleineren Tablets, obwohl jede fuer sich gut passte.
@@ -670,11 +754,16 @@ private fun SlicerContent(
     if (confirmNewProject) {
         AlertDialog(
             onDismissRequest = { confirmNewProject = false },
-            title = { Text("Neues Projekt") },
+            containerColor = PrusaColors.Panel,
+            titleContentColor = PrusaColors.TextPrimary,
+            textContentColor = PrusaColors.TextPrimary,
+            title = { Text(advancedText("New project", "Neues Projekt")) },
             text = {
                 Text(
-                    "Das aktuelle Projekt wird geschlossen. Nicht gespeicherte " +
-                        "Änderungen gehen verloren."
+                    advancedText(
+                        "The current project will be closed. Unsaved changes will be lost.",
+                        "Das aktuelle Projekt wird geschlossen. Nicht gespeicherte Änderungen gehen verloren.",
+                    )
                 )
             },
             confirmButton = {
@@ -683,11 +772,11 @@ private fun SlicerContent(
                         confirmNewProject = false
                         onNewProject()
                     },
-                ) { Text("Neu anlegen", color = PrusaColors.Danger) }
+                ) { Text(advancedText("Create new", "Neu anlegen"), color = PrusaColors.Danger) }
             },
             dismissButton = {
                 TextButton(onClick = { confirmNewProject = false }) {
-                    Text("Abbrechen")
+                    Text(advancedText("Cancel", "Abbrechen"))
                 }
             },
         )
@@ -696,21 +785,26 @@ private fun SlicerContent(
     if (confirmReloadProject) {
         AlertDialog(
             onDismissRequest = { confirmReloadProject = false },
-            title = { Text("Projekt neu laden") },
+            containerColor = PrusaColors.Panel,
+            titleContentColor = PrusaColors.TextPrimary,
+            textContentColor = PrusaColors.TextPrimary,
+            title = { Text(advancedText("Reload project", "Projekt neu laden")) },
             text = {
                 Text(
-                    "Die gespeicherte 3MF-Datei wird erneut vom Datenträger geladen. " +
-                        "Nicht gespeicherte Änderungen im aktuellen Projekt gehen verloren."
+                    advancedText(
+                        "The saved 3MF file will be reloaded from storage. Unsaved changes in the current project will be lost.",
+                        "Die gespeicherte 3MF-Datei wird erneut vom Datenträger geladen. Nicht gespeicherte Änderungen im aktuellen Projekt gehen verloren.",
+                    )
                 )
             },
             confirmButton = {
                 TextButton(onClick = {
                     confirmReloadProject = false
                     onReloadProject()
-                }) { Text("Neu laden") }
+                }) { Text(advancedText("Reload", "Neu laden")) }
             },
             dismissButton = {
-                TextButton(onClick = { confirmReloadProject = false }) { Text("Abbrechen") }
+                TextButton(onClick = { confirmReloadProject = false }) { Text(advancedText("Cancel", "Abbrechen")) }
             },
         )
     }
@@ -743,9 +837,8 @@ private fun ToolStrip(
     // Welche Werkzeuge ohne Auswahl sinnlos sind - entspricht den
     // enabling_callbacks im Original.
     val needsSelection = setOf("delete", "copy", "more", "fewer",
-                               "splitobjects", "splitvolumes", "settings")
-    val notYet = setOf("layersediting",
-                       "arrangecurrent", "splitobjects", "splitvolumes", "settings")
+                               "splitobjects", "splitvolumes")
+    val notYet = setOf("layersediting")
 
     Column(
         Modifier
@@ -803,19 +896,20 @@ private fun ToolButton(tool: PsUi.Tool, enabled: Boolean, onClick: () -> Unit) {
 
 /** Kurze Rail-Texte; der vollstaendige Desktop-Tooltip bleibt am Icon. */
 private fun shortToolLabel(tool: PsUi.Tool): String = when (tool.name) {
-    "add" -> "Import"
-    "undo" -> "Zurück"
-    "redo" -> "Vor"
-    "delete" -> "Löschen"
-    "deleteall" -> "Leeren"
-    "arrange", "arrangecurrent" -> "Anordnen"
-    "copy" -> "Kopieren"
-    "paste" -> "Einfügen"
-    "more" -> "+ Kopie"
-    "fewer" -> "− Kopie"
-    "splitobjects" -> "Objekte"
-    "splitvolumes" -> "Volumen"
-    "settings" -> "Optionen"
+    "add" -> advancedText("Import", "Import")
+    "undo" -> advancedText("Undo", "Zurück")
+    "redo" -> advancedText("Redo", "Vor")
+    "delete" -> advancedText("Delete", "Löschen")
+    "deleteall" -> advancedText("Clear", "Leeren")
+    "arrange" -> advancedText("Arrange", "Anordnen")
+    "arrangecurrent" -> advancedText("Current bed", "Akt. Bett")
+    "copy" -> advancedText("Copy", "Kopieren")
+    "paste" -> advancedText("Paste", "Einfügen")
+    "more" -> advancedText("+ copy", "+ Kopie")
+    "fewer" -> advancedText("− copy", "− Kopie")
+    "splitobjects" -> advancedText("Objects", "Objekte")
+    "splitvolumes" -> advancedText("Volumes", "Volumen")
+    "settings" -> advancedText("Options", "Optionen")
     else -> PsUi.tr(tool.tooltip)
 }
 
@@ -838,7 +932,7 @@ private fun ExtruderRow(
     filaments: List<String>,
     onFilament: (String) -> Unit,
     onColor: (String) -> Unit,
-    onEdit: () -> Unit,
+    onPickFilament: () -> Unit,
 ) {
     var pickColor by remember { mutableStateOf(false) }
 
@@ -873,8 +967,28 @@ private fun ExtruderRow(
                 Text("–", color = PrusaColors.TextMuted, fontSize = 13.sp)
         }
 
-        Box(Modifier.weight(1f)) {
-            PresetCombo(filaments, extruder.filament, onEdit = onEdit, onSelect = onFilament)
+        Row(
+            Modifier
+                .weight(1f)
+                .height(52.dp)
+                .clip(RoundedCornerShape(9.dp))
+                .background(PrusaColors.PanelRaised)
+                .border(1.dp, PrusaColors.Divider, RoundedCornerShape(9.dp))
+                .clickable(onClick = onPickFilament)
+                .padding(horizontal = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text(
+                    extruder.filament.ifBlank { advancedText("Choose material", "Material auswählen") },
+                    color = PrusaColors.TextPrimary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    fontSize = 14.sp,
+                )
+                Text(advancedText("Choose spool & material", "Spule & Material wählen"), color = PrusaColors.TextMuted, fontSize = 11.sp)
+            }
+            Text("›", color = PrusaColors.Orange, fontSize = 24.sp)
         }
     }
 
@@ -885,6 +999,124 @@ private fun ExtruderRow(
             onDismiss = { pickColor = false },
         )
     }
+}
+
+/** Same visual entry point for a single-nozzle printer and a multi-head bank. */
+@Composable
+private fun MaterialPickerButton(selected: String, onClick: () -> Unit) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .height(56.dp)
+            .clip(RoundedCornerShape(10.dp))
+            .background(PrusaColors.PanelRaised)
+            .border(1.dp, PrusaColors.Divider, RoundedCornerShape(10.dp))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(
+                selected.ifBlank { advancedText("Choose material", "Material auswählen") },
+                color = PrusaColors.TextPrimary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                fontSize = 14.sp,
+            )
+            Text(advancedText("Choose spool & material", "Spule & Material wählen"), color = PrusaColors.TextMuted, fontSize = 11.sp)
+        }
+        Text("›", color = PrusaColors.Orange, fontSize = 24.sp)
+    }
+}
+
+/**
+ * A compact head bank for MMU/INDX/XL printers.
+ *
+ * The previous layout rendered one complete preset selector per head. That is
+ * fine for two nozzles, but turns an INDX 8T into an eight-screen-long list.
+ * The bank keeps every physical head visible in one compact line and opens exactly one generous
+ * editor below it, so colour and material are still independently editable.
+ */
+@Composable
+private fun ExtruderBank(
+    extruders: List<SlicerService.Extruder>,
+    selectedIndex: Int,
+    filaments: List<String>,
+    onSelect: (Int) -> Unit,
+    onFilament: (Int, String) -> Unit,
+    onColor: (Int, String) -> Unit,
+    onPickFilament: (Int) -> Unit,
+) {
+    if (extruders.isEmpty()) return
+    val normalized = normalizedExtruderIndex(selectedIndex, extruders.size)
+    val selected = extruders[normalized]
+
+    Text(
+        PsUi.appText(
+            "Choose T1–T8 · colour and material per tool",
+            "T1–T8 auswählen · Farbe und Material je Werkzeug",
+        ),
+        color = PrusaColors.TextMuted,
+        fontSize = 12.sp,
+    )
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        extruderHeadGroups(extruders.size, columns = 8).forEach { group ->
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                group.forEach { index ->
+                    val head = extruders[index]
+                    val active = index == normalized
+                    Column(
+                        Modifier
+                            .weight(1f)
+                            .height(52.dp)
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(if (active) PrusaColors.PanelRaised else PrusaColors.Panel)
+                            .border(
+                                if (active) 2.dp else 1.dp,
+                                if (active) PrusaColors.Orange else PrusaColors.Divider,
+                                RoundedCornerShape(10.dp),
+                            )
+                            .clickable { onSelect(index) }
+                            .padding(horizontal = 8.dp, vertical = 7.dp),
+                        verticalArrangement = Arrangement.SpaceBetween,
+                    ) {
+                        Text(
+                            "T${index + 1}",
+                            color = if (active) PrusaColors.TextPrimary else PrusaColors.TextMuted,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            maxLines = 1,
+                        )
+                        Box(
+                            Modifier
+                                .fillMaxWidth()
+                                .height(14.dp)
+                                .clip(RoundedCornerShape(5.dp))
+                                .background(parseColor(head.color) ?: PrusaColors.Divider),
+                        )
+                    }
+                }
+                repeat(4 - group.size) { Spacer(Modifier.weight(1f)) }
+            }
+        }
+    }
+    Text(
+        advancedText("Edit T${selected.index + 1}", "T${selected.index + 1} bearbeiten"),
+        color = PrusaColors.TextPrimary,
+        fontSize = 13.sp,
+        fontWeight = FontWeight.SemiBold,
+        modifier = Modifier.padding(top = 4.dp),
+    )
+    ExtruderRow(
+        extruder = selected,
+        filaments = filaments,
+        onFilament = { onFilament(selected.index, it) },
+        onColor = { onColor(selected.index, it) },
+        onPickFilament = { onPickFilament(selected.index) },
+    )
 }
 
 /**
@@ -931,20 +1163,48 @@ private fun ColorPickerDialog(
     )
     var manual by remember { mutableStateOf(current) }
 
-    androidx.compose.material3.AlertDialog(
-        onDismissRequest = onDismiss,
-        containerColor = PrusaColors.Panel,
-        title = { Text("Farbe des Extruders", color = PrusaColors.TextPrimary, fontSize = 17.sp) },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                // Sechs je Reihe: bei 48 dp Zielgroesse passt das in die
-                // Dialogbreite, ohne dass man zielen muss.
-                swatches.chunked(6).forEach { row ->
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    Dialog(onDismissRequest = onDismiss) {
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(max = 620.dp)
+                .padding(18.dp),
+            shape = RoundedCornerShape(18.dp),
+            color = PrusaColors.Panel,
+        ) {
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(18.dp)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Text(
+                    advancedText("Extruder colour", "Farbe des Extruders"),
+                    color = PrusaColors.TextPrimary,
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                Text(
+                    advancedText(
+                        "Choose a colour for this tool or enter your own hex value.",
+                        "Farbe für dieses Werkzeug wählen oder einen eigenen Hex-Wert eingeben.",
+                    ),
+                    color = PrusaColors.TextMuted,
+                    fontSize = 12.sp,
+                )
+                // Fünf klare Spalten behalten eine mindestens 44-dp große
+                // Trefferfläche auch bei der schmalen Seitenansicht.
+                swatches.chunked(5).forEach { row ->
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
                         row.forEach { hex ->
                             Box(
                                 Modifier
-                                    .size(48.dp)
+                                    .weight(1f)
+                                    .height(48.dp)
                                     .clip(RoundedCornerShape(8.dp))
                                     .background(parseColor(hex) ?: Color.Gray)
                                     .border(
@@ -956,36 +1216,51 @@ private fun ColorPickerDialog(
                                     .clickable { onPick(hex) },
                             )
                         }
+                        repeat(5 - row.size) { Spacer(Modifier.weight(1f)) }
                     }
                 }
 
-                androidx.compose.material3.OutlinedTextField(
+                OutlinedTextField(
                     value = manual,
                     onValueChange = { manual = it },
-                    label = { Text("Eigener Wert, z. B. #3399FF") },
+                    label = { Text(advancedText("Custom value, e.g. #3399FF", "Eigener Wert, z. B. #3399FF")) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
+                    colors = TextFieldDefaults.colors(
+                        focusedTextColor = PrusaColors.TextPrimary,
+                        unfocusedTextColor = PrusaColors.TextPrimary,
+                        focusedLabelColor = PrusaColors.Orange,
+                        unfocusedLabelColor = PrusaColors.TextMuted,
+                        focusedContainerColor = PrusaColors.PanelRaised,
+                        unfocusedContainerColor = PrusaColors.PanelRaised,
+                    ),
                 )
-            }
-        },
-        confirmButton = {
-            androidx.compose.material3.TextButton(
-                onClick = { onPick(manual.trim()) },
-                enabled = manual.isBlank() || parseColor(manual.trim()) != null,
-            ) { Text("Übernehmen", color = PrusaColors.Orange) }
-        },
-        dismissButton = {
-            Row {
-                // Ohne eigene Farbe gilt wieder die des Filaments.
-                androidx.compose.material3.TextButton(onClick = { onPick("") }) {
-                    Text("Vom Filament", color = PrusaColors.TextMuted)
+                HorizontalDivider(color = PrusaColors.Divider)
+                Button(
+                    onClick = { onPick(manual.trim()) },
+                    enabled = manual.isBlank() || parseColor(manual.trim()) != null,
+                    modifier = Modifier.fillMaxWidth().height(48.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = PrusaColors.Orange,
+                        contentColor = PrusaColors.TextPrimary,
+                    ),
+                ) { Text(advancedText("Apply", "Übernehmen")) }
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    TextButton(
+                        onClick = { onPick("") },
+                        modifier = Modifier.weight(1f).height(44.dp),
+                    ) { Text(advancedText("Use filament", "Vom Filament"), maxLines = 1) }
+                    TextButton(
+                        onClick = onDismiss,
+                        modifier = Modifier.weight(1f).height(44.dp),
+                    ) { Text(advancedText("Cancel", "Abbrechen"), maxLines = 1) }
                 }
-                androidx.compose.material3.TextButton(onClick = onDismiss) {
-                    Text("Abbrechen", color = PrusaColors.TextMuted)
-                }
             }
-        },
-    )
+        }
+    }
 }
 
 /**
@@ -1030,6 +1305,69 @@ private fun ViewModeTabs(
                     .clickable(enabled = enabled && !on) { onSelect(isPreview) }
                     .heightIn(min = TOUCH_TARGET)
                     .padding(horizontal = 16.dp, vertical = 12.dp),
+            )
+        }
+    }
+}
+
+/** Persistent viewport legend for an applied variable-layer profile. */
+@Composable
+private fun LayerProfileSceneOverlay(
+    objectHeight: Double,
+    profile: List<Pair<Double, Double>>,
+    modifier: Modifier = Modifier,
+) {
+    val segments = layerProfilePreviewSegments(objectHeight.coerceAtLeast(0.01), profile)
+    if (segments.isEmpty()) return
+    val maxLayer = segments.maxOf { it.heightMm }.coerceAtLeast(0.01)
+    Surface(
+        modifier = modifier.width(164.dp),
+        shape = RoundedCornerShape(10.dp),
+        color = PrusaColors.Panel.copy(alpha = 0.94f),
+        shadowElevation = 8.dp,
+    ) {
+        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(
+                "Schichthöhen aktiv",
+                color = PrusaColors.TextPrimary,
+                style = MaterialTheme.typography.labelLarge,
+            )
+            Row(Modifier.fillMaxWidth().height(88.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Column(
+                    Modifier.width(26.dp)
+                        .clip(RoundedCornerShape(5.dp))
+                        .background(PrusaColors.PanelRaised),
+                ) {
+                    segments.asReversed().forEach { segment ->
+                        val size = ((segment.toZ - segment.fromZ) / objectHeight)
+                            .toFloat().coerceAtLeast(0.03f)
+                        val fine = segment.heightMm / maxLayer < 0.75
+                        Box(
+                            Modifier.fillMaxWidth().weight(size)
+                                .background(if (fine) PrusaColors.Orange else PrusaColors.Divider),
+                        )
+                    }
+                }
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text(
+                        "am ausgewählten Modell",
+                        color = PrusaColors.TextMuted,
+                        style = MaterialTheme.typography.labelSmall,
+                        maxLines = 2,
+                    )
+                    Text(
+                        segments.joinToString(" · ") { "%.2f mm".format(it.heightMm) },
+                        color = PrusaColors.TextPrimary,
+                        style = MaterialTheme.typography.labelSmall,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
+            Text(
+                "orange = fein · grau = grob",
+                color = PrusaColors.TextMuted,
+                style = MaterialTheme.typography.labelSmall,
             )
         }
     }
@@ -1161,11 +1499,11 @@ private fun ViewBar(controller: SceneController, modifier: Modifier = Modifier) 
     ) {
         val views = listOf(
             "Iso" to PsmViewport.View.ISO,
-            "Oben" to PsmViewport.View.TOP,
-            "Vorn" to PsmViewport.View.FRONT,
-            "Hinten" to PsmViewport.View.BACK,
-            "Links" to PsmViewport.View.LEFT,
-            "Rechts" to PsmViewport.View.RIGHT,
+            PsUi.appText("Top", "Oben") to PsmViewport.View.TOP,
+            PsUi.appText("Front", "Vorn") to PsmViewport.View.FRONT,
+            PsUi.appText("Back", "Hinten") to PsmViewport.View.BACK,
+            PsUi.appText("Left", "Links") to PsmViewport.View.LEFT,
+            PsUi.appText("Right", "Rechts") to PsmViewport.View.RIGHT,
         )
         views.forEach { (label, v) ->
             Box(
@@ -1204,21 +1542,22 @@ private fun WorkspaceBar(
     showInspectorAction: Boolean,
     inspectorOpen: Boolean,
     onToggleInspector: () -> Unit,
+    tight: Boolean = false,
 ) {
     Row(
         Modifier
             .fillMaxWidth()
             .height(68.dp)
             .background(PrusaColors.Panel)
-            .padding(horizontal = 10.dp, vertical = 8.dp),
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
+            .padding(horizontal = if (tight) 6.dp else 10.dp, vertical = 8.dp),
+        horizontalArrangement = Arrangement.spacedBy(if (tight) 6.dp else 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Row(
             Modifier
                 .weight(1f)
                 .horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            horizontalArrangement = Arrangement.spacedBy(if (tight) 6.dp else 10.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             ProjectBar(
@@ -1227,6 +1566,7 @@ private fun WorkspaceBar(
                 onSaveAs = onSaveAs,
                 onReload = onReload,
                 enabled = actionsEnabled,
+                tight = tight,
             )
             Box(
                 Modifier
@@ -1243,8 +1583,11 @@ private fun WorkspaceBar(
                 onToggleLock = onToggleBedLock,
             )
         }
-        ProjectAction("Simple", actionsEnabled, onOpenSimple)
+        ProjectAction("Simple", actionsEnabled, onOpenSimple, tight = tight)
         if (showInspectorAction) {
+            // Im Hochformat schnitt die feste Beschriftung den Bettwaehler
+            // links ab. Das Rastersymbol allein traegt die Aussage, der
+            // Name steht nur, wenn Platz dafuer da ist.
             Box(
                 Modifier
                     .height(50.dp)
@@ -1254,7 +1597,7 @@ private fun WorkspaceBar(
                         else PrusaColors.PanelRaised
                     )
                     .clickable(onClick = onToggleInspector)
-                    .padding(horizontal = 16.dp),
+                    .padding(horizontal = if (tight) 12.dp else 16.dp),
                 contentAlignment = Alignment.Center,
             ) {
                 Row(
@@ -1263,16 +1606,18 @@ private fun WorkspaceBar(
                 ) {
                     Icon(
                         Icons.Default.GridView,
-                        contentDescription = null,
+                        contentDescription = PsUi.appText("Panel", "Panel"),
                         tint = if (inspectorOpen) Color.White else PrusaColors.TextPrimary,
                         modifier = Modifier.size(22.dp),
                     )
-                    Text(
-                        "Panel",
-                        color = if (inspectorOpen) Color.White else PrusaColors.TextPrimary,
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.SemiBold,
-                    )
+                    if (!tight) {
+                        Text(
+                            "Panel",
+                            color = if (inspectorOpen) Color.White else PrusaColors.TextPrimary,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                    }
                 }
             }
         }
@@ -1291,6 +1636,7 @@ private fun ProjectBar(
     onReload: (() -> Unit)?,
     enabled: Boolean,
     modifier: Modifier = Modifier,
+    tight: Boolean = false,
 ) {
     Row(
         modifier
@@ -1299,15 +1645,22 @@ private fun ProjectBar(
             .padding(3.dp),
         horizontalArrangement = Arrangement.spacedBy(3.dp),
     ) {
-        ProjectAction("Neu", enabled, onNew)
-        ProjectAction("Speichern", enabled, onSave)
-        ProjectAction("Speichern unter", enabled, onSaveAs)
-        if (onReload != null) ProjectAction("Neu laden", enabled, onReload)
+        ProjectAction(advancedText("New", "Neu"), enabled, onNew, tight)
+        ProjectAction(advancedText("Save", "Speichern"), enabled, onSave, tight)
+        ProjectAction(advancedText("Save as", "Speichern unter"), enabled, onSaveAs, tight)
+        if (onReload != null) {
+            ProjectAction(advancedText("Reload", "Neu laden"), enabled, onReload, tight)
+        }
     }
 }
 
 @Composable
-private fun ProjectAction(label: String, enabled: Boolean, onClick: () -> Unit) {
+private fun ProjectAction(
+    label: String,
+    enabled: Boolean,
+    onClick: () -> Unit,
+    tight: Boolean = false,
+) {
     Box(
         Modifier
             .height(50.dp)
@@ -1317,7 +1670,7 @@ private fun ProjectAction(label: String, enabled: Boolean, onClick: () -> Unit) 
                 else PrusaColors.PanelRaised.copy(alpha = 0.5f)
             )
             .clickable(enabled = enabled, onClick = onClick)
-            .padding(horizontal = 16.dp),
+            .padding(horizontal = if (tight) 10.dp else 16.dp),
         contentAlignment = Alignment.Center,
     ) {
         Text(
@@ -1325,6 +1678,7 @@ private fun ProjectAction(label: String, enabled: Boolean, onClick: () -> Unit) 
             color = if (enabled) PrusaColors.TextPrimary else PrusaColors.TextMuted,
             fontSize = 14.sp,
             fontWeight = FontWeight.SemiBold,
+            maxLines = 1,
         )
     }
 }
@@ -1361,7 +1715,7 @@ private fun BedSelector(
     ) {
         beds.forEach { bed ->
             Text(
-                "${if (bed.index in lockedBeds) "🔒 " else ""}Bett ${bed.index + 1} · ${bed.objectCount}",
+                "${if (bed.index in lockedBeds) "🔒 " else ""}${advancedText("Bed", "Bett")} ${bed.index + 1} · ${bed.objectCount}",
                 color = if (bed.active) Color.White else PrusaColors.TextPrimary,
                 fontSize = 14.sp,
                 fontWeight = if (bed.active) FontWeight.SemiBold else FontWeight.Normal,
@@ -1386,7 +1740,7 @@ private fun BedSelector(
                 .clickable(onClick = onAdd),
             contentAlignment = Alignment.Center,
         ) {
-            Icon(Icons.Default.Add, contentDescription = "Druckbett hinzufügen",
+            Icon(Icons.Default.Add, contentDescription = advancedText("Add print bed", "Druckbett hinzufügen"),
                  tint = PrusaColors.TextPrimary)
         }
 
@@ -1399,7 +1753,7 @@ private fun BedSelector(
                     .clickable { onRemove(active.index) },
                 contentAlignment = Alignment.Center,
             ) {
-                Icon(Icons.Default.Delete, contentDescription = "Aktives Druckbett entfernen",
+                Icon(Icons.Default.Delete, contentDescription = advancedText("Remove active print bed", "Aktives Druckbett entfernen"),
                      tint = PrusaColors.TextMuted)
             }
         }
@@ -1448,10 +1802,15 @@ private fun Sidebar(
     val isRunning = progress is SlicerService.Progress.Running
     var sendMenu by remember { mutableStateOf(false) }
     var section by remember { mutableStateOf(InspectorSection.PROFILES) }
+    var selectedExtruderIndex by remember(presets.selectedPrinter) { mutableStateOf(0) }
+    var filamentPickerIndex by remember { mutableStateOf<Int?>(null) }
     var pendingPresetSwitch by remember { mutableStateOf<PendingPresetSwitch?>(null) }
     var savePresetFor by remember { mutableStateOf<PsmCore.PresetType?>(null) }
     var savePresetName by remember { mutableStateOf("") }
     var objectQuery by remember { mutableStateOf("") }
+    var headEditorRequest by remember { mutableStateOf(0) }
+    var layerEditorObjectId by remember { mutableStateOf<Int?>(null) }
+    val inspectorScroll = rememberScrollState()
     val toolMessage by service.toolMessage.collectAsState()
 
     fun requestPresetSwitch(
@@ -1475,6 +1834,32 @@ private fun Sidebar(
             section = InspectorSection.OBJECTS
     }
 
+    LaunchedEffect(filamentPickerIndex) {
+        inspectorScroll.scrollTo(0)
+    }
+
+    // Ein Tabwechsel darf keinen Scrollstand aus dem vorherigen Bereich
+    // übernehmen. Sonst öffnet etwa „Werkzeuge“ mitten in der Profilliste
+    // und die Orientierung bzw. die Tab-Leiste wirken verschwunden.
+    LaunchedEffect(section) {
+        inspectorScroll.scrollTo(0)
+    }
+
+    LaunchedEffect(section, selected?.id) {
+        if (section != InspectorSection.TOOLS || layerEditorObjectId != selected?.id) {
+            layerEditorObjectId = null
+        }
+    }
+
+    // Bei mehreren Köpfen liegt der Editor direkt nach der Bank. Ein
+    // Kopfwechsel soll ihn daher sichtbar machen, statt weiteres Scrollen
+    // als versteckte Voraussetzung für Material- und Farbwahl zu verlangen.
+    LaunchedEffect(headEditorRequest) {
+        if (headEditorRequest > 0) {
+            inspectorScroll.animateScrollTo(extruderEditorScrollTarget(presets.extruders.size))
+        }
+    }
+
     Column(
         modifier
             .background(PrusaColors.Panel)
@@ -1488,15 +1873,18 @@ private fun Sidebar(
         ) {
             Column(Modifier.weight(1f)) {
                 Text(
-                    "Arbeitsbereich",
+                    PsUi.appText("Workspace", "Arbeitsbereich"),
                     color = PrusaColors.TextPrimary,
                     fontSize = 18.sp,
                     fontWeight = FontWeight.SemiBold,
                 )
                 Text(
                     beds.firstOrNull { it.active }?.let {
-                        "Bett ${it.index + 1} · ${it.objectCount} Objekte"
-                    } ?: "Kein Druckbett",
+                        PsUi.appText(
+                            "Bed ${it.index + 1} · ${it.objectCount} objects",
+                            "Bett ${it.index + 1} · ${it.objectCount} Objekte",
+                        )
+                    } ?: PsUi.appText("No print bed", "Kein Druckbett"),
                     color = PrusaColors.TextMuted,
                     fontSize = 12.sp,
                 )
@@ -1512,7 +1900,7 @@ private fun Sidebar(
                 ) {
                     Icon(
                         Icons.Default.Close,
-                        contentDescription = "Panel schließen",
+                        contentDescription = PsUi.appText("Close panel", "Panel schließen"),
                         tint = PrusaColors.TextPrimary,
                     )
                 }
@@ -1525,15 +1913,54 @@ private fun Sidebar(
             onSelect = { section = it },
         )
 
-        Column(
-            Modifier.weight(1f).verticalScroll(rememberScrollState()),
+        val editingLayersFor = layerEditorObjectId
+        if (editingLayersFor != null && selected?.id == editingLayersFor) {
+            LayerProfileToolPage(
+                objectHeight = selected.sizeMm.third.toDouble(),
+                initial = service.layerProfile(editingLayersFor),
+                onBack = { layerEditorObjectId = null },
+                onApply = { points ->
+                    service.setLayerProfile(editingLayersFor, points)
+                    layerEditorObjectId = null
+                },
+                onReset = {
+                    service.setLayerProfile(editingLayersFor, emptyList())
+                    layerEditorObjectId = null
+                },
+                modifier = Modifier.weight(1f),
+            )
+        } else Column(
+            Modifier.weight(1f).verticalScroll(inspectorScroll),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             when (section) {
                 InspectorSection.PROFILES -> {
+                    val materialHead = filamentPickerIndex
+                    if (materialHead != null) {
+                        // Same composable as Simple Mode, deliberately kept in this
+                        // sidebar composition so its device scale stays identical.
+                        SimpleMaterialChooser(
+                            filaments = presets.filaments,
+                            selectedExtruder = materialHead,
+                            onBack = { filamentPickerIndex = null },
+                            onChoose = { filament ->
+                                if (presets.extruders.size > 1) {
+                                    service.setExtruderFilament(materialHead, filament)
+                                } else {
+                                    requestPresetSwitch(
+                                        PsmCore.PresetType.FILAMENT,
+                                        presets.selectedFilament,
+                                        filament,
+                                    )
+                                }
+                                filamentPickerIndex = null
+                            },
+                            onOpenAdvanced = { onOpenSettings("filament") },
+                        )
+                    } else {
                     // Beschriftungen wie im Original, uebersetzt aus dessen Katalog.
                     SectionLabel(PsUi.tr("Printer"))
-                    PresetCombo(presets.printers, presets.selectedPrinter,
+                    PresetCombo(PsUi.tr("Printer"), presets.printers, presets.selectedPrinter,
                                 dirtyCount = presets.printerChanges.size,
                                 onEdit = { onOpenSettings("printer") }) {
                         requestPresetSwitch(
@@ -1544,7 +1971,7 @@ private fun Sidebar(
                     }
 
                     SectionLabel(PsUi.tr("Print settings"))
-                    PresetCombo(presets.prints, presets.selectedPrint,
+                    PresetCombo(PsUi.tr("Print settings"), presets.prints, presets.selectedPrint,
                                 dirtyCount = presets.printChanges.size,
                                 onEdit = { onOpenSettings("print") }) {
                         requestPresetSwitch(
@@ -1559,26 +1986,26 @@ private fun Sidebar(
                     // Koepfe - ohne eigene Wahl je Kopf bekaemen alle dasselbe.
                     if (presets.extruders.size <= 1) {
                         SectionLabel(PsUi.tr("Filament"))
-                        PresetCombo(presets.filaments, presets.selectedFilament,
-                                    dirtyCount = presets.filamentChanges.size,
-                                    onEdit = { onOpenSettings("filament") }) {
-                            requestPresetSwitch(
-                                PsmCore.PresetType.FILAMENT,
-                                presets.selectedFilament,
-                                it,
-                            )
-                        }
+                        MaterialPickerButton(
+                            selected = presets.selectedFilament,
+                            onClick = { filamentPickerIndex = 0 },
+                        )
                     } else {
                         SectionLabel(PsUi.tr("Filament") + " · ${presets.extruders.size} Extruder")
-                        presets.extruders.forEach { ex ->
-                            ExtruderRow(
-                                extruder = ex,
-                                filaments = presets.filaments,
-                                onFilament = { service.setExtruderFilament(ex.index, it) },
-                                onColor = { service.setExtruderColor(ex.index, it) },
-                                onEdit = { onOpenSettings("filament") },
-                            )
-                        }
+                        ExtruderBank(
+                            extruders = presets.extruders,
+                            selectedIndex = selectedExtruderIndex,
+                            filaments = presets.filaments,
+                            onSelect = {
+                                selectedExtruderIndex = it
+                                headEditorRequest += 1
+                            },
+                            onFilament = { index, filament ->
+                                service.setExtruderFilament(index, filament)
+                            },
+                            onColor = { index, color -> service.setExtruderColor(index, color) },
+                            onPickFilament = { index -> filamentPickerIndex = index },
+                        )
                     }
 
                     HorizontalDivider(
@@ -1598,7 +2025,7 @@ private fun Sidebar(
                         shape = RoundedCornerShape(10.dp),
                     ) {
                         Text(
-                            "Drucker verwalten",
+                            advancedText("Manage printers", "Drucker verwalten"),
                             color = PrusaColors.TextPrimary,
                             fontSize = 14.sp,
                         )
@@ -1609,7 +2036,7 @@ private fun Sidebar(
                         shape = RoundedCornerShape(10.dp),
                     ) {
                         Text(
-                            "Advanced-Assistent öffnen",
+                            PsUi.appText("Open Advanced wizard", "Advanced-Assistent öffnen"),
                             color = PrusaColors.TextPrimary,
                             fontSize = 14.sp,
                         )
@@ -1622,6 +2049,7 @@ private fun Sidebar(
                         ) {
                             Text("ColorMix", color = PrusaColors.TextPrimary, fontSize = 14.sp)
                         }
+                    }
                     }
                 }
 
@@ -1637,13 +2065,16 @@ private fun Sidebar(
                         ) {
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                 Text(
-                                    "Noch keine Objekte",
+                                    PsUi.appText("No objects yet", "Noch keine Objekte"),
                                     color = PrusaColors.TextPrimary,
                                     fontSize = 16.sp,
                                     fontWeight = FontWeight.SemiBold,
                                 )
                                 Text(
-                                    "Über + in der Werkzeugleiste importieren",
+                                    PsUi.appText(
+                                        "Import with + in the tool rail",
+                                        "Über + in der Werkzeugleiste importieren",
+                                    ),
                                     color = PrusaColors.TextMuted,
                                     fontSize = 13.sp,
                                     modifier = Modifier.padding(top = 6.dp),
@@ -1655,7 +2086,7 @@ private fun Sidebar(
                             value = objectQuery,
                             onValueChange = { objectQuery = it },
                             singleLine = true,
-                            label = { Text("Objekte suchen") },
+                            label = { Text(advancedText("Search objects", "Objekte suchen")) },
                             modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp),
                         )
                         Row(
@@ -1666,12 +2097,12 @@ private fun Sidebar(
                             TextButton(
                                 onClick = onSelectAll,
                                 modifier = Modifier.height(48.dp),
-                            ) { Text("Alle auswählen") }
+                            ) { Text(PsUi.appText("Select all", "Alle auswählen")) }
                             TextButton(
                                 onClick = onClearSelection,
                                 enabled = selectedIds.isNotEmpty(),
                                 modifier = Modifier.height(48.dp),
-                            ) { Text("Aufheben") }
+                            ) { Text(PsUi.appText("Clear", "Aufheben")) }
                             Spacer(Modifier.weight(1f))
                             Text(
                                 "${selectedIds.size}/${objects.size}",
@@ -1727,7 +2158,7 @@ private fun Sidebar(
                                     modifier = Modifier.size(22.dp),
                                 )
                                 Text(
-                                    "Auswahl bearbeiten",
+                                    advancedText("Edit selection", "Auswahl bearbeiten"),
                                     modifier = Modifier.padding(start = 10.dp),
                                     fontSize = 15.sp,
                                 )
@@ -1782,6 +2213,7 @@ private fun Sidebar(
                         onRepairStl = onRepairStl,
                         onConvertGcode = onConvertGcode,
                         onAddSvg = onAddSvg,
+                        onOpenLayerEditor = { layerEditorObjectId = it },
                     )
                 }
             }
@@ -1800,7 +2232,8 @@ private fun Sidebar(
             ),
         ) {
             Text(
-                if (isRunning) "Abbrechen" else "Jetzt slicen",
+                if (isRunning) PsUi.appText("Cancel", "Abbrechen")
+                else PsUi.appText("Slice now", "Jetzt slicen"),
                 fontWeight = FontWeight.SemiBold,
                 fontSize = 17.sp,
             )
@@ -1828,7 +2261,7 @@ private fun Sidebar(
                 ) {
                     Text(
                         only?.let { "An ${it.name} senden" }
-                            ?: "Zieldrucker auswählen"
+                            ?: advancedText("Choose target printer", "Zieldrucker auswählen")
                     )
                 }
                 DropdownMenu(
@@ -1877,6 +2310,9 @@ private fun Sidebar(
     pendingPresetSwitch?.let { pending ->
         AlertDialog(
             onDismissRequest = { pendingPresetSwitch = null },
+            containerColor = PrusaColors.Panel,
+            titleContentColor = PrusaColors.TextPrimary,
+            textContentColor = PrusaColors.TextPrimary,
             title = { Text("Ungespeicherte Profiländerungen") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -1947,6 +2383,9 @@ private fun Sidebar(
     savePresetFor?.let { type ->
         AlertDialog(
             onDismissRequest = { savePresetFor = null },
+            containerColor = PrusaColors.Panel,
+            titleContentColor = PrusaColors.TextPrimary,
+            textContentColor = PrusaColors.TextPrimary,
             title = { Text("Eigenes Profil speichern") },
             text = {
                 OutlinedTextField(
@@ -1982,10 +2421,10 @@ private fun InspectorTabs(
     onSelect: (InspectorSection) -> Unit,
 ) {
     val tabs = listOf(
-        InspectorSection.PROFILES to "Profile",
-        InspectorSection.OBJECTS to "Objekte",
-        InspectorSection.TRANSFORM to "Bearbeiten",
-        InspectorSection.TOOLS to "Werkzeuge",
+        InspectorSection.PROFILES to PsUi.appText("Profiles", "Profile"),
+        InspectorSection.OBJECTS to PsUi.appText("Objects", "Objekte"),
+        InspectorSection.TRANSFORM to PsUi.appText("Edit", "Bearbeiten"),
+        InspectorSection.TOOLS to PsUi.appText("Tools", "Werkzeuge"),
     )
     Row(
         Modifier
@@ -2043,15 +2482,32 @@ private fun SectionLabel(text: String) {
  * Tastaturfokus, was hier nur stoert. Eine flache Flaeche mit Menue
  * trifft die Desktop-Optik besser und ist mit 48 dp gut treffbar.
  */
+internal fun filterPresetOptions(options: List<String>, query: String): List<String> =
+    options.filter { it.contains(query.trim(), ignoreCase = true) }
+
+/** The visual chooser intentionally stays short; its full result list scrolls in settings. */
+internal fun advancedFilamentCards(options: List<String>, query: String): List<String> =
+    filterPresetOptions(options, query).take(12)
+
+/**
+ * Presetauswahl mit einer suchbaren, modal verankerten Liste.
+ *
+ * Das fruehere [DropdownMenu] war auf einem Tablet nur an das einzelne
+ * Feld gebunden: lange Drucker- oder Filamentnamen wurden so riesig und
+ * ueberdeckten die nachfolgenden Profilfelder. Ein Dialog hat eine feste,
+ * fingerfreundliche Begrenzung und bleibt bei Drehung des Geraets stabil.
+ */
 @Composable
 private fun PresetCombo(
+    title: String,
     options: List<String>,
     selected: String,
     dirtyCount: Int = 0,
     onEdit: () -> Unit,
     onSelect: (String) -> Unit,
 ) {
-    var expanded by remember { mutableStateOf(false) }
+    var pickerOpen by remember { mutableStateOf(false) }
+    var query by remember(title) { mutableStateOf("") }
 
     Box(Modifier.fillMaxWidth()) {
         Row(
@@ -2061,7 +2517,10 @@ private fun PresetCombo(
                 .clip(RoundedCornerShape(9.dp))
                 .background(PrusaColors.PanelRaised)
                 .border(1.dp, PrusaColors.Divider, RoundedCornerShape(9.dp))
-                .clickable(enabled = options.isNotEmpty()) { expanded = true }
+                .clickable(enabled = options.isNotEmpty()) {
+                    query = ""
+                    pickerOpen = true
+                }
                 .padding(horizontal = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -2075,8 +2534,10 @@ private fun PresetCombo(
                 )
                 if (dirtyCount > 0) {
                     Text(
-                        "$dirtyCount ungespeicherte Änderung" +
-                            if (dirtyCount == 1) "" else "en",
+                        advancedText(
+                            "$dirtyCount unsaved change" + if (dirtyCount == 1) "" else "s",
+                            "$dirtyCount ungespeicherte Änderung" + if (dirtyCount == 1) "" else "en",
+                        ),
                         color = PrusaColors.Orange,
                         maxLines = 1,
                         fontSize = 11.sp,
@@ -2091,26 +2552,78 @@ private fun PresetCombo(
             ) { PsIcon("cog.svg", Modifier.size(20.dp)) }
         }
 
-        DropdownMenu(
-            expanded = expanded,
-            onDismissRequest = { expanded = false },
-            modifier = Modifier.background(PrusaColors.PanelRaised),
-        ) {
-            options.forEach { name ->
-                DropdownMenuItem(
-                    text = {
-                        Text(
-                            name,
-                            color = if (name == selected) PrusaColors.Orange else PrusaColors.TextPrimary,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            fontSize = 14.sp,
-                        )
-                    },
-                    onClick = { expanded = false; onSelect(name) },
-                )
-            }
-        }
+    }
+
+    if (pickerOpen) {
+        val matches = filterPresetOptions(options, query)
+        AlertDialog(
+            onDismissRequest = { pickerOpen = false },
+            containerColor = PrusaColors.Panel,
+            titleContentColor = PrusaColors.TextPrimary,
+            textContentColor = PrusaColors.TextPrimary,
+            title = { Text(title, color = PrusaColors.TextPrimary) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(
+                        value = query,
+                        onValueChange = { query = it },
+                        singleLine = true,
+                        label = { Text(advancedText("Search", "Suchen")) },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = TextFieldDefaults.colors(
+                            focusedTextColor = PrusaColors.TextPrimary,
+                            unfocusedTextColor = PrusaColors.TextPrimary,
+                            focusedLabelColor = PrusaColors.Orange,
+                            unfocusedLabelColor = PrusaColors.TextMuted,
+                            focusedContainerColor = PrusaColors.PanelRaised,
+                            unfocusedContainerColor = PrusaColors.PanelRaised,
+                        ),
+                    )
+                    Column(
+                        Modifier.heightIn(max = 320.dp).verticalScroll(rememberScrollState()),
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        if (matches.isEmpty()) {
+                            Text(advancedText("No matching profiles", "Keine passenden Profile"), color = PrusaColors.TextMuted)
+                        }
+                        matches.forEach { name ->
+                            FilterChip(
+                                selected = name == selected,
+                                onClick = {
+                                    pickerOpen = false
+                                    onSelect(name)
+                                },
+                                label = {
+                                    Text(
+                                        name,
+                                        maxLines = 2,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = FilterChipDefaults.filterChipColors(
+                                    containerColor = PrusaColors.PanelRaised,
+                                    labelColor = PrusaColors.TextPrimary,
+                                    selectedContainerColor = PrusaColors.PanelRaised,
+                                    selectedLabelColor = PrusaColors.Orange,
+                                ),
+                                border = FilterChipDefaults.filterChipBorder(
+                                    enabled = true,
+                                    selected = name == selected,
+                                    borderColor = PrusaColors.Divider,
+                                    selectedBorderColor = PrusaColors.Orange,
+                                ),
+                            )
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { pickerOpen = false }) {
+                    Text("Fertig", color = PrusaColors.Orange)
+                }
+            },
+        )
     }
 }
 

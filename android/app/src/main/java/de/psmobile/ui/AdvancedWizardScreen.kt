@@ -5,6 +5,9 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
@@ -28,22 +31,22 @@ import de.psmobile.slicing.SlicerService
 @Composable
 fun AdvancedWizardScreen(service: SlicerService, onClose: () -> Unit) {
     val presets by service.presets.collectAsState()
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text("Advanced-Assistent", style = MaterialTheme.typography.headlineMedium)
-        Text("Drucker, Filament und Print Settings nachladen oder direkt auswählen.")
+    Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing).verticalScroll(rememberScrollState()).padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Text(PsUi.appText("Advanced wizard", "Advanced-Assistent"), style = MaterialTheme.typography.headlineMedium)
+        Text(PsUi.appText("Load printers, filament and Print Settings, or choose them directly.", "Drucker, Filament und Print Settings nachladen oder direkt auswählen."))
         OutlinedButton(onClick = service::reopenSetup, modifier = Modifier.fillMaxWidth()) {
-            Text("Druckermodelle hinzufügen oder entfernen")
+            Text(PsUi.appText("Add or remove printer models", "Druckermodelle hinzufügen oder entfernen"))
         }
-        WizardChoice("Drucker", presets.selectedPrinter, presets.printers) {
+        WizardChoice(PsUi.appText("Printer", "Drucker"), presets.selectedPrinter, presets.printers) {
             service.selectPreset(PsmCore.PresetType.PRINTER, it)
         }
-        WizardChoice("Filament", presets.selectedFilament, presets.filaments) {
+        WizardChoice(PsUi.appText("Filament", "Filament"), presets.selectedFilament, presets.filaments) {
             service.selectPreset(PsmCore.PresetType.FILAMENT, it)
         }
         WizardChoice("Print Settings", presets.selectedPrint, presets.prints) {
             service.selectPreset(PsmCore.PresetType.PRINT, it)
         }
-        Button(onClick = onClose, modifier = Modifier.fillMaxWidth()) { Text("Arbeitsfläche öffnen") }
+        Button(onClick = onClose, modifier = Modifier.fillMaxWidth()) { Text(PsUi.appText("Open workspace", "Arbeitsfläche öffnen")) }
     }
 }
 
@@ -57,14 +60,14 @@ private fun WizardChoice(title: String, selected: String, options: List<String>,
             OutlinedTextField(
                 value = query,
                 onValueChange = { query = it },
-                label = { Text("Suchen") },
+                label = { Text(PsUi.appText("Search", "Suchen")) },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
             )
             matches.take(24).forEach { option ->
                 FilterChip(selected = option == selected, onClick = { onSelect(option) }, label = { Text(option) })
             }
-            if (matches.size > 24) Text("${matches.size - 24} weitere Treffer – Suche verfeinern.")
+            if (matches.size > 24) Text(PsUi.appText("${matches.size - 24} more matches – refine search.", "${matches.size - 24} weitere Treffer – Suche verfeinern."))
         }
     }
 }

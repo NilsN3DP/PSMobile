@@ -144,8 +144,8 @@ fun ObjectPanel(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
-                if (scaleToolActive) "Mit zwei Fingern skalieren · an"
-                else                 "Mit zwei Fingern skalieren",
+                if (scaleToolActive) PsUi.appText("Two-finger scale · on", "Mit zwei Fingern skalieren · an")
+                else                 PsUi.appText("Two-finger scale", "Mit zwei Fingern skalieren"),
                 color = if (scaleToolActive) Color.White else PrusaColors.TextMuted,
                 fontSize = 13.sp,
                 fontWeight = if (scaleToolActive) FontWeight.SemiBold else FontWeight.Normal,
@@ -195,14 +195,14 @@ fun ObjectPanel(
             SmallButton(PsUi.tr("Place on bed"), Modifier.weight(1f)) {
                 service.dropToBed(obj.id)
             }
-            SmallButton("Aufs Bett einpassen", Modifier.weight(1f)) {
+            SmallButton(PsUi.appText("Fit to bed", "Aufs Bett einpassen"), Modifier.weight(1f)) {
                 service.scaleToBed(obj.id)
             }
         }
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            listOf("Spiegeln X" to PsmCore.Axis.X,
-                   "Spiegeln Y" to PsmCore.Axis.Y,
-                   "Spiegeln Z" to PsmCore.Axis.Z).forEach { (label, axis) ->
+            listOf(PsUi.appText("Mirror X", "Spiegeln X") to PsmCore.Axis.X,
+                   PsUi.appText("Mirror Y", "Spiegeln Y") to PsmCore.Axis.Y,
+                   PsUi.appText("Mirror Z", "Spiegeln Z") to PsmCore.Axis.Z).forEach { (label, axis) ->
                 SmallButton(label, Modifier.weight(1f)) { service.mirror(obj.id, axis) }
             }
         }
@@ -211,7 +211,7 @@ fun ObjectPanel(
             var moveMenu by remember { mutableStateOf(false) }
             val active = beds.firstOrNull { it.active }?.index ?: 0
             Box(Modifier.fillMaxWidth()) {
-                SmallButton("Auf anderes Bett verschieben", Modifier.fillMaxWidth()) {
+                SmallButton(PsUi.appText("Move to another bed", "Auf anderes Bett verschieben"), Modifier.fillMaxWidth()) {
                     moveMenu = true
                 }
                 DropdownMenu(
@@ -222,7 +222,7 @@ fun ObjectPanel(
                         DropdownMenuItem(
                             text = {
                                 Text(
-                                    "Bett ${bed.index + 1} · ${bed.objectCount} Objekte",
+                                    "${PsUi.appText("Bed", "Bett")} ${bed.index + 1} · ${bed.objectCount} ${PsUi.appText("objects", "Objekte")}",
                                     color = PrusaColors.TextPrimary,
                                 )
                             },

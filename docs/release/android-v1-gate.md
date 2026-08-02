@@ -57,6 +57,7 @@ nicht ausgefülltes Feld ist kein stillschweigender Erfolg.
 | „Nur eingerichtete Drucker“ | Build bestanden; Profilliste wird aus den PrusaLink-Zuordnungen gefiltert, Hardware-Fixture offen |
 | Responsive Tablet-Layout, Querformat | bestanden bei 1280 × 800 dp; Arbeitskopfzeile, Profil-/Objekt-/Bearbeiten-Inspektor und gemeinsame Ansichtsleiste ohne Überdeckung |
 | Responsive Tablet-Layout, Hochformat | bestanden bei 800 × 1280 dp; 3D-Fläche bleibt frei und der Inspektor öffnet als 380-dp-Overlay mit fest sichtbarer Panel- und Schließen-Aktion |
+| Variable Schichthöhen als Werkzeugseite | bestanden bei 1200 × 800 und 800 × 1200; erste Z-/Höhenzeile sowie Anwenden/Reset bleiben sichtbar, Punktliste scrollt, Anwenden kehrt zu Werkzeugen zurück und aktiviert die Modellrückmeldung |
 | Touch-Zielgrößen | bestanden; Hauptaktionen, Objektbaum, Transformationsfelder, Setup, Einstellungen und Druckereditor auf mindestens 48 dp angehoben |
 | Slice aus der Compose-UI | bestanden; 600 Layer, fertiger G-Code und Exportaktion |
 | G-Code-Vorschau und Teilen | bestanden; Layer-Slider sichtbar, Android-Teilen zeigt `PSMobile Test Cube.gcode` |

@@ -27,8 +27,9 @@ bool close_to(float actual, float expected, float epsilon = 0.0001f)
 
 int main(int argc, char **argv)
 {
-    require(argc == 5,
-            "usage: psm_contract_tests DATADIR RESDIR MODEL PROJECT3MF");
+    require(argc == 6,
+            "usage: psm_contract_tests DATADIR RESDIR MODEL PROJECT3MF "
+            "INSTALLED_PROFILE_PROJECT3MF");
     require(psm_abi_version() == PSM_ABI_VERSION, "ABI version");
 
     std::filesystem::create_directories(argv[1]);
@@ -469,6 +470,57 @@ int main(int argc, char **argv)
     require(psm_history_undo_count(session) == 0 &&
             psm_history_redo_count(session) == 0,
             "opening a project starts a clean history");
+    /* Mobile keeps each virtual desktop bed in its own local Model. The
+     * global MultipleBeds map must therefore be re-established before
+     * arranging newly added instances on one local bed. */
+    require(psm_bed_select(session, 0) == PSM_OK,
+            "select first local bed for arrange regression");
+    psm_object_id arrange_ids[4]{};
+    size_t arrange_count = 0;
+    require(psm_model_list(session, arrange_ids, 4, &arrange_count) == PSM_OK &&
+            arrange_count == 1,
+            "one local object available for arrange regression");
+    require(psm_model_set_instances(session, arrange_ids[0], 12) == PSM_OK,
+            "create twelve local instances for arrange regression");
+    require(psm_arrange(session, 0.f) == PSM_OK,
+            std::string("arrange local multibed instances: ") +
+                psm_last_error(session));
+    psm_object_info arranged_info{};
+    require(psm_model_info(session, arrange_ids[0], &arranged_info) == PSM_OK &&
+            arranged_info.instance_count == 12,
+            "arrange preserves all local instances");
+
+    /*
+     * Der vorherige Projektfall deckt bewusst den Fallback auf ein
+     * projektlokales Profil ab. Dieser zweite Fall installiert dagegen
+     * nur das passende CORE-One-Modell vorab und erwartet deshalb, dass
+     * load_config_model den vorhandenen Namen unveraendert auswaehlt.
+     */
+    const std::filesystem::path installed_data =
+        std::filesystem::path(argv[1]) / "installed-profile-data";
+    psm_session *installed_session = psm_session_create(
+        installed_data.string().c_str(), argv[2]);
+    require(installed_session != nullptr,
+            "create session for installed profile fixture");
+    const char *core_one_key[] = {"PrusaResearch:COREONE:0.4"};
+    require(psm_presets_install(installed_session, core_one_key, 1) == PSM_OK,
+            std::string("install exact CORE One profile: ") +
+                psm_last_error(installed_session));
+    psm_project_import_info installed_project{};
+    require(psm_project_load_3mf(installed_session, argv[5],
+                                 &installed_project) == PSM_OK,
+            std::string("load installed-profile fixture: ") +
+                psm_last_error(installed_session));
+    require(std::string(installed_project.requested_printer) ==
+                "Prusa CORE One 0.4 nozzle",
+            "installed fixture requests exact CORE One preset");
+    require(std::string(installed_project.selected_printer) ==
+                "Prusa CORE One 0.4 nozzle",
+            "installed CORE One preset selected without project-local fallback");
+    require(std::string(installed_project.selected_print) ==
+                "0.20mm SPEED @COREONE 0.4",
+            "installed compatible print profile selected");
+    psm_session_destroy(installed_session);
 
     /*
      * Strukturierte Desktop-Sonderwerte. compatible_printers kommt in

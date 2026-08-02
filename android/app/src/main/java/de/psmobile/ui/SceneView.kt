@@ -117,6 +117,8 @@ fun SceneView(
     onSurfaceTap: ((PsmViewport.SurfaceHit) -> Unit)? = null,
     invalidateKey: Any,
     controller: SceneController,
+    inputEnabled: Boolean = true,
+    onBlockedInput: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     if (core == null) return
@@ -144,6 +146,11 @@ fun SceneView(
 
             view.selectedId = selectedId ?: -1
             view.surfaceTap = onSurfaceTap
+            // Ein Compose-Overlay liegt visuell ueber GLSurfaceView, die
+            // native View kann Beruehrungen aber trotzdem zuerst erhalten.
+            // In diesem Zustand darf sie sie nicht konsumieren.
+            view.inputEnabled = inputEnabled
+            view.onBlockedInput = onBlockedInput
             view.queueEvent {
                 holder.viewport?.setSelections(selectedIds, selectedId)
                 holder.viewport?.invalidate()
@@ -188,6 +195,8 @@ private class SceneGLView(
     @Volatile private var dragObject = false
     @Volatile var selectedId = -1
     @Volatile var surfaceTap: ((PsmViewport.SurfaceHit) -> Unit)? = null
+    @Volatile var inputEnabled = true
+    @Volatile var onBlockedInput: (() -> Unit)? = null
     /*
      * Welcher Griff angefasst wurde. Bleibt fuer die Dauer des Zuges
      * fest - laesst man ihn beim Ziehen los, springt das Objekt sonst
@@ -227,6 +236,13 @@ private class SceneGLView(
     }
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
+        if (!inputEnabled) {
+            // GLSurfaceView liegt technisch ueber Compose. Deshalb erreicht
+            // ein Tap auf den abgedunkelten Hintergrund nicht dessen
+            // clickable. Er ist hier semantisch ein "Menue schliessen".
+            if (event.actionMasked == MotionEvent.ACTION_UP) onBlockedInput?.invoke()
+            return true
+        }
         val vp = holder.viewport ?: return false
 
         when (event.actionMasked) {
@@ -307,11 +323,12 @@ private class SceneGLView(
                                 else -> false
                             }
                             if (handled) post { controller.onScaled?.invoke() }
-                            // Der Renderer erwartet ein Kameradelta, die
-                            // Geste dagegen ein Inhaltsdelta. Horizontal
-                            // deshalb einmal spiegeln: Wischen nach rechts
-                            // dreht das Bett sichtbar nach rechts.
-                            else vp.orbit(-dx, dy)
+                            // Der native Viewport zieht dx bereits von
+                            // seinem Kamerawinkel ab. Das Touchdelta darf
+                            // daher nicht ein zweites Mal gespiegelt werden:
+                            // Wischen nach rechts folgt unmittelbar der
+                            // sichtbaren Drehbewegung des Druckbetts.
+                            else vp.orbit(dx, dy)
                         }
                         requestRender()
                     }

@@ -33,6 +33,14 @@ object EasyModeState {
         option = RegexOption.IGNORE_CASE,
     )
 
+    /** Project-local presets occasionally carry a temporary cache file name. */
+    fun profileDisplayLabel(rawPreset: String): String =
+        rawPreset.substringBefore(" (")
+            .substringAfterLast('/')
+            .substringAfterLast('\\')
+            .replace(Regex("^\\d+-"), "")
+            .ifBlank { rawPreset }
+
     fun profileQueryAfterChange(
         queries: Map<String, String>,
         panel: EasyPanel,
@@ -96,7 +104,7 @@ object EasyModeState {
         rawPresets
             .map { rawPreset ->
                 EasyPrinterChoice(
-                    label = rawPreset.replace(nozzleSuffix, "").trim(),
+                    label = profileDisplayLabel(rawPreset).replace(nozzleSuffix, "").trim(),
                     rawPreset = rawPreset,
                 )
             }
@@ -105,12 +113,18 @@ object EasyModeState {
 
     fun printerModelsWithNozzles(rawPresets: List<String>): List<EasyPrinterModelChoice> =
         rawPresets
-            .groupBy { rawPreset -> rawPreset.replace(nozzleSuffix, "").trim() }
+            .map { rawPreset -> rawPreset to profileDisplayLabel(rawPreset) }
+            .groupBy { (_, displayName) -> displayName.replace(nozzleSuffix, "").trim() }
             .map { (label, presets) ->
                 EasyPrinterModelChoice(
                     label = label,
                     variants = presets
-                        .map { EasyPrinterChoice(it.substringAfter(label).removePrefix(" ").ifBlank { "Standard" }, it) }
+                        .map { (rawPreset, displayName) ->
+                            EasyPrinterChoice(
+                                displayName.substringAfter(label).removePrefix(" ").ifBlank { "Standard" },
+                                rawPreset,
+                            )
+                        }
                         .sortedBy { it.label },
                 )
             }

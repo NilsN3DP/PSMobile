@@ -42,6 +42,10 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import de.psmobile.core.PsmCore
@@ -66,14 +70,29 @@ fun SetupScreen(
 ) {
     val context = LocalContext.current
     val configuration = LocalConfiguration.current
-    // In landscape (insbesondere auf 8–11"-Tablets) darf der Assistent nicht
-    // wie eine hochskalierte Telefonliste wirken. Die Bedienelemente bleiben
-    // touchsicher, verbrauchen aber sichtbar weniger Hoehe.
-    val compact = configuration.screenWidthDp > configuration.screenHeightDp
-    val pagePadding = if (compact) 16.dp else 24.dp
-    val itemVerticalPadding = if (compact) 7.dp else 12.dp
-    val nozzleHeight = if (compact) 40.dp else 48.dp
-    val finishHeight = if (compact) 50.dp else 58.dp
+    // Frueher stand hier
+    //     val compact = screenWidthDp > screenHeightDp
+    // also "compact" = Querformat. Auf einem kleinen Fenster im
+    // Hochformat war das false, und der Assistent nahm die GROSSEN
+    // Masse - von der Druckerliste blieben anderthalb Zeilen uebrig.
+    //
+    // Massgeblich ist nicht die Ausrichtung, sondern ob eine der Kanten
+    // knapp ist. Die Entscheidung liegt jetzt in UiScale, damit nicht
+    // jeder Bildschirm seine eigene trifft.
+    val tight = UiScale.density(
+        widthDp = configuration.screenWidthDp,
+        heightDp = configuration.screenHeightDp,
+    ) == UiDensity.TIGHT
+
+    val pagePadding = if (tight) 12.dp else 24.dp
+    val itemVerticalPadding = if (tight) 6.dp else 12.dp
+    val nozzleHeight = if (tight) 38.dp else 48.dp
+    val finishHeight = if (tight) 46.dp else 58.dp
+    // Ueberschrift und Zeilen duerfen mitschrumpfen; die Zielflaechen
+    // bleiben ueber die Hoehen oben trotzdem fingergerecht.
+    val titleSize = if (tight) 18.sp else 22.sp
+    val rowTitleSize = if (tight) 14.sp else 15.sp
+    val sectionGap = if (tight) 6.dp else 14.dp
     // Mit der bisherigen Wahl starten. Sonst muesste man beim blossen
     // Ergaenzen einer Duesengroesse alles aus dem Gedaechtnis neu
     // zusammenklicken - Befund B9.
@@ -95,7 +114,7 @@ fun SetupScreen(
         Alignment.TopCenter,
     ) {
         Column(
-            Modifier.widthIn(max = if (compact) 1040.dp else 760.dp)
+            Modifier.widthIn(max = if (tight) 1040.dp else 760.dp)
                 .fillMaxSize()
                 .padding(pagePadding),
         ) {
@@ -105,13 +124,34 @@ fun SetupScreen(
                     Text(
                         PsUi.tr("Configuration Assistant"),
                         color = PrusaColors.TextPrimary,
-                        fontSize = if (compact) 20.sp else 22.sp,
+                        fontSize = titleSize,
                         fontWeight = FontWeight.SemiBold,
                     )
+                    // Auf engen Schirmen faellt der Untertitel weg. Er
+                    // erklaert nichts, was die Liste darunter nicht selbst
+                    // zeigt, kostet aber eine Zeile, die dann der Liste
+                    // fehlt.
+                    if (!tight) {
+                        Text(
+                            PsUi.tr("Select all printers, you want to use."),
+                            color = PrusaColors.TextMuted,
+                            fontSize = 13.sp,
+                        )
+                    }
+                }
+
+                // Eng: SLA-Schalter und Zaehler wandern in die Titelzeile,
+                // statt eine eigene zu belegen.
+                if (tight) {
+                    Checkbox(
+                        checked = showSla,
+                        onCheckedChange = { showSla = it },
+                        colors = CheckboxDefaults.colors(checkedColor = PrusaColors.Orange),
+                    )
+                    Text(PsUi.tr("SLA materials"), color = PrusaColors.TextMuted, fontSize = 12.sp)
                     Text(
-                        PsUi.tr("Select all printers, you want to use."),
-                        color = PrusaColors.TextMuted,
-                        fontSize = 13.sp,
+                        "  ${selected.map { it.substringBeforeLast(':') }.distinct().size} / ${shown.size}  ",
+                        color = PrusaColors.TextMuted, fontSize = 12.sp,
                     )
                 }
 
@@ -149,30 +189,63 @@ fun SetupScreen(
                 }
             }
 
-            HorizontalDivider(Modifier.padding(vertical = if (compact) 8.dp else 14.dp), color = PrusaColors.Divider)
+            HorizontalDivider(Modifier.padding(vertical = sectionGap), color = PrusaColors.Divider)
 
-            Row(verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.padding(bottom = 8.dp)) {
-                Checkbox(
-                    checked = showSla,
-                    onCheckedChange = { showSla = it },
-                    colors = CheckboxDefaults.colors(checkedColor = PrusaColors.Orange),
-                )
-                Text(PsUi.tr("SLA materials"), color = PrusaColors.TextMuted, fontSize = 13.sp)
-                Box(Modifier.weight(1f))
-                Text(
-                    "${selected.map { it.substringBeforeLast(':') }.distinct().size} / ${shown.size}",
-                    color = PrusaColors.TextMuted, fontSize = 13.sp,
-                )
+            if (!tight) {
+                Row(verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(bottom = 8.dp)) {
+                    Checkbox(
+                        checked = showSla,
+                        onCheckedChange = { showSla = it },
+                        colors = CheckboxDefaults.colors(checkedColor = PrusaColors.Orange),
+                    )
+                    Text(PsUi.tr("SLA materials"), color = PrusaColors.TextMuted, fontSize = 13.sp)
+                    Box(Modifier.weight(1f))
+                    Text(
+                        "${selected.map { it.substringBeforeLast(':') }.distinct().size} / ${shown.size}",
+                        color = PrusaColors.TextMuted, fontSize = 13.sp,
+                    )
+                }
             }
 
-            OutlinedTextField(
-                value = query,
-                onValueChange = { query = it },
-                label = { Text("Druckermodell suchen") },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
-            )
+            if (tight) {
+                // OutlinedTextField bringt sein Label und rund 56 dp
+                // Mindesthoehe mit. Bei 400 dp Gesamthoehe ist das ein
+                // Siebtel des Schirms fuer ein Suchfeld - hier deshalb
+                // ein flaches Feld mit Platzhalter statt Label.
+                Row(
+                    Modifier.fillMaxWidth()
+                        .padding(bottom = 6.dp)
+                        .height(40.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(PrusaColors.PanelRaised)
+                        .padding(horizontal = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Box(Modifier.weight(1f)) {
+                        if (query.isEmpty()) {
+                            Text(PsUi.tr("Search printer model"),
+                                 color = PrusaColors.TextMuted, fontSize = 13.sp)
+                        }
+                        BasicTextField(
+                            value = query,
+                            onValueChange = { query = it },
+                            singleLine = true,
+                            textStyle = TextStyle(color = PrusaColors.TextPrimary, fontSize = 13.sp),
+                            cursorBrush = SolidColor(PrusaColors.Orange),
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
+                }
+            } else {
+                OutlinedTextField(
+                    value = query,
+                    onValueChange = { query = it },
+                    label = { Text(PsUi.tr("Search printer model")) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                )
+            }
 
             LazyColumn(
                 Modifier.weight(1f),
@@ -206,15 +279,40 @@ fun SetupScreen(
                                 onCheckedChange = null,
                                 colors = CheckboxDefaults.colors(checkedColor = PrusaColors.Orange),
                             )
-                            Column(Modifier.weight(1f).padding(start = 8.dp)) {
-                                Text(m.name, color = PrusaColors.TextPrimary, fontSize = 15.sp)
-                                Text(
-                                    buildString {
-                                        append(if (m.isSla) "SLA" else "FFF")
-                                        if (m.family.isNotBlank()) append("  ·  ${m.family}")
-                                    },
-                                    color = PrusaColors.TextMuted, fontSize = 12.sp,
-                                )
+                            val technik = buildString {
+                                append(if (m.isSla) "SLA" else "FFF")
+                                if (m.family.isNotBlank()) append("  ·  ${m.family}")
+                            }
+                            if (tight) {
+                                // Eine Zeile statt zwei: das halbiert die
+                                // Zeilenhoehe und damit die Zahl der
+                                // sichtbaren Drucker. Technik und Familie
+                                // stehen gedimmt hinter dem Namen.
+                                Row(
+                                    Modifier.weight(1f).padding(start = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    Text(
+                                        m.name,
+                                        color = PrusaColors.TextPrimary,
+                                        fontSize = rowTitleSize,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                        modifier = Modifier.weight(1f, fill = false),
+                                    )
+                                    Text(
+                                        "   $technik",
+                                        color = PrusaColors.TextMuted,
+                                        fontSize = 11.sp,
+                                        maxLines = 1,
+                                    )
+                                }
+                            } else {
+                                Column(Modifier.weight(1f).padding(start = 8.dp)) {
+                                    Text(m.name, color = PrusaColors.TextPrimary,
+                                         fontSize = rowTitleSize)
+                                    Text(technik, color = PrusaColors.TextMuted, fontSize = 12.sp)
+                                }
                             }
                         }
 

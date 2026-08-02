@@ -238,6 +238,28 @@ class FeatureReportTests(unittest.TestCase):
             self.assertIn("post_process = must-not-run", config)
             self.assertEqual(model.count("<item objectid="), 2)
 
+    def test_generated_installed_profile_fixture_uses_an_exact_core_one_preset(self) -> None:
+        """The installed-profile contract needs a real bundled profile name."""
+        with tempfile.TemporaryDirectory() as directory:
+            output = pathlib.Path(directory) / "installed-core-one.3mf"
+            result = self.run_script(
+                "build/scripts/make-test-project-3mf.py",
+                "--installed-core-one",
+                str(output),
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            with zipfile.ZipFile(output) as archive:
+                config = archive.read("Metadata/Slic3r_PE.config").decode()
+            self.assertIn(
+                "printer_settings_id = Prusa CORE One 0.4 nozzle", config
+            )
+            self.assertIn(
+                "print_settings_id = 0.20mm SPEED @COREONE 0.4", config
+            )
+            self.assertIn(
+                "filament_settings_id = Prusament PLA @COREONE", config
+            )
+
     def test_toggle_source_is_reproducible_and_has_one_definition(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             output = pathlib.Path(directory) / "toggles.cpp"

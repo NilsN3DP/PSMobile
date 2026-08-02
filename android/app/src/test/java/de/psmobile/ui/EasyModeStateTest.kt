@@ -127,4 +127,23 @@ class EasyModeStateTest {
             "Prusa CORE One 0.6 nozzle",
         ))
     }
+
+    @Test
+    fun project_local_printer_does_not_expose_its_cache_timestamp() {
+        val local = "7221171563878-PSMobile Test Cube.3mf (embedded configuration)"
+
+        assertEquals("PSMobile Test Cube.3mf", EasyModeState.printerModelLabel(local))
+        assertEquals(
+            "PSMobile Test Cube.3mf",
+            EasyModeState.printerModelsWithNozzles(listOf(local)).single().label,
+        )
+    }
+
+    @Test
+    fun project_local_filament_does_not_expose_its_cache_path() {
+        assertEquals(
+            "PSMobile Test Cube.3mf",
+            EasyModeState.profileDisplayLabel("/data/user/0/de.psmobile/cache/import/7-PSMobile Test Cube.3mf (material)"),
+        )
+    }
 }

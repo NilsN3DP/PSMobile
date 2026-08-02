@@ -6,6 +6,24 @@ import de.psmobile.slicing.profileupdate.ProfilePackageStore
 import java.io.File
 
 /**
+ * Vendor profiles resolve bed resources below their own vendor directory.
+ * INDX reuses the bundled CORE One assets, so materialize those two files at
+ * the vendor-relative location expected by the native profile loader.
+ */
+internal fun ensureIndxBedAssets(resources: File) {
+    val shared = File(resources, "profiles/PrusaResearch")
+    val vendorAssets = File(resources, "profiles/PSMobileINDX/PrusaResearch")
+    listOf("coreone_indx.stl", "coreone_indx.svg").forEach { name ->
+        val source = File(shared, name)
+        val target = File(vendorAssets, name)
+        if (source.isFile && !target.isFile) {
+            target.parentFile?.mkdirs()
+            source.copyTo(target)
+        }
+    }
+}
+
+/**
  * Entpackt die PrusaSlicer-Ressourcen (Profile, Shader) aus den Assets
  * ins Dateisystem.
  *
@@ -63,6 +81,7 @@ object ResourceInstaller {
 
     /** INDX is kept app-owned until it ships in the upstream vendor bundle. */
     private fun ensureIndxBundle(resources: File) {
+        ensureIndxBedAssets(resources)
         val file = File(resources, "profiles/PSMobileINDX.ini")
         if (file.isFile) return
         file.parentFile?.mkdirs()

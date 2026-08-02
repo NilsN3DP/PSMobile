@@ -6,6 +6,9 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -38,24 +41,24 @@ fun ColorMixScreen(service: SlicerService, onClose: () -> Unit) {
     var ratio by remember { mutableStateOf(0.5f) }
 
     Column(
-        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp),
+        Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing).verticalScroll(rememberScrollState()).padding(20.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         Text("ColorMix", color = PrusaColors.TextPrimary, style = MaterialTheme.typography.headlineMedium)
         Text(
-            "Ein virtueller Extruder wechselt während des Drucks zwischen zwei oder drei Köpfen. Das erzeugt einen gemischten Farbeindruck – kein physisches Schmelzmischen.",
+            PsUi.appText("A virtual extruder alternates between two or three heads during printing. It creates a mixed colour appearance — it does not physically melt-mix filament.", "Ein virtueller Extruder wechselt während des Drucks zwischen zwei oder drei Köpfen. Das erzeugt einen gemischten Farbeindruck – kein physisches Schmelzmischen."),
             color = PrusaColors.TextMuted,
         )
         if (!state.available) {
             Text(
-                "Der installierte Slicer-Core enthält die ColorMix-ABI noch nicht. Das Rezept wird erst nach dem nächsten Native-Core-Build aktiviert.",
+                PsUi.appText("The installed slicer core does not yet contain the ColorMix ABI. Recipes will activate after the next native-core build.", "Der installierte Slicer-Core enthält die ColorMix-ABI noch nicht. Das Rezept wird erst nach dem nächsten Native-Core-Build aktiviert."),
                 color = PrusaColors.TextMuted,
             )
-            OutlinedButton(onClick = onClose, modifier = Modifier.fillMaxWidth()) { Text("Zurück") }
+            OutlinedButton(onClick = onClose, modifier = Modifier.fillMaxWidth()) { Text(PsUi.appText("Back", "Zurück")) }
             return@Column
         }
 
-        Text("Köpfe auswählen (2–3)", color = PrusaColors.TextPrimary)
+        Text(PsUi.appText("Choose heads (2–3)", "Köpfe auswählen (2–3)"), color = PrusaColors.TextPrimary)
         Row(
             Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -70,12 +73,12 @@ fun ColorMixScreen(service: SlicerService, onClose: () -> Unit) {
                             selectedHeads + head.index
                         } else selectedHeads
                     },
-                    label = { Text("Kopf ${head.index + 1}") },
+                    label = { Text("T${head.index + 1}") },
                 )
             }
         }
         if (selectedHeads.size == 2) {
-            Text("Anteil des ersten Kopfs: ${(ratio * 100).toInt()} %", color = PrusaColors.TextMuted)
+            Text(PsUi.appText("First-head share: ${(ratio * 100).toInt()} %", "Anteil des ersten Kopfs: ${(ratio * 100).toInt()} %"), color = PrusaColors.TextMuted)
             Slider(value = ratio, onValueChange = { ratio = it }, valueRange = 0.1f..0.9f)
         }
         Button(
@@ -93,20 +96,20 @@ fun ColorMixScreen(service: SlicerService, onClose: () -> Unit) {
             },
             enabled = selectedHeads.size in 2..3,
             modifier = Modifier.fillMaxWidth(),
-        ) { Text("Mischfarbe hinzufügen") }
+        ) { Text(PsUi.appText("Add mixed colour", "Mischfarbe hinzufügen")) }
 
         state.recipes.forEach { recipe ->
             Column(Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
-                Text("Virtueller Extruder ${recipe.id}", color = PrusaColors.TextPrimary)
+                Text(PsUi.appText("Virtual extruder ${recipe.id}", "Virtueller Extruder ${recipe.id}"), color = PrusaColors.TextPrimary)
                 Text(
-                    recipe.components.joinToString(" · ") { "Kopf ${it.head + 1}: ${(it.ratio * 100).toInt()} %" },
+                    recipe.components.joinToString(" · ") { "T${it.head + 1}: ${(it.ratio * 100).toInt()} %" },
                     color = PrusaColors.TextMuted,
                 )
                 OutlinedButton(onClick = { service.saveColorMix(state.recipes.filterNot { it.id == recipe.id }) }) {
-                    Text("Entfernen")
+                    Text(PsUi.appText("Remove", "Entfernen"))
                 }
             }
         }
-        OutlinedButton(onClick = onClose, modifier = Modifier.fillMaxWidth()) { Text("Fertig") }
+        OutlinedButton(onClick = onClose, modifier = Modifier.fillMaxWidth()) { Text(PsUi.appText("Done", "Fertig")) }
     }
 }

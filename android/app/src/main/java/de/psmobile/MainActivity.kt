@@ -8,9 +8,9 @@ import android.net.Uri
 import android.os.Bundle
 import android.os.IBinder
 import androidx.activity.ComponentActivity
+import androidx.activity.enableEdgeToEdge
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.activity.enableEdgeToEdge
 import androidx.core.view.WindowCompat
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -33,6 +33,18 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
+
+/**
+ * Native projects may refer to their temporary cache copy as the active
+ * printer profile. Cache paths and nanosecond prefixes are implementation
+ * details, not useful information in an import confirmation.
+ */
+internal fun importDisplayName(value: String): String =
+    value.substringBefore(" (")
+        .substringAfterLast('/')
+        .substringAfterLast('\\')
+        .replace(Regex("^\\d+-"), "")
+        .ifBlank { "Projektprofil" }
 
 class MainActivity : ComponentActivity() {
 
@@ -433,15 +445,16 @@ class MainActivity : ComponentActivity() {
                         val profile = project.selectedPrinter.ifBlank {
                             project.requestedPrinter
                         }
+                        val profileLabel = importDisplayName(profile)
                         val details = when {
                             !project.configLoaded ->
                                 "Die 3MF enthielt keine Projektkonfiguration. Die Objekte wurden " +
                                     "mit ihrer gespeicherten Anordnung übernommen."
                             project.exactInstalledPrinter ->
-                                "Das passende Druckerprofil „$profile“ wurde automatisch ausgewählt."
+                                "Das passende Druckerprofil „$profileLabel“ wurde automatisch ausgewählt."
                             else ->
                                 "Die eingebettete Druckerkonfiguration wurde als projektlokales " +
-                                    "Profil „$profile“ aktiviert."
+                                    "Profil „$profileLabel“ aktiviert."
                         }
                         val beds = if (project.bedCount > 1) {
                             "\n\n${project.bedCount} Druckbetten wurden übernommen und können " +

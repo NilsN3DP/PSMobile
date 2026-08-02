@@ -4,6 +4,9 @@ Stand: 2026-07-31. Android ist der einzige aktuelle
 Implementierungsfokus. iOS wird erst portiert, wenn der Android-Ablauf
 stabil und auf Geräten geprüft ist.
 
+Der Abgleich einer von aussen zusammengetragenen Restliste gegen den
+tatsaechlichen Quellstand steht in `docs/11-abgleich-2026-08-02.md`.
+
 Die maschinenlesbare Wahrheitsquelle ist
 `docs/feature-matrix.json`. `build/scripts/feature-report.py --check`
 prüft Status und Evidenzpfade. Dabei bedeutet `coded` ausdrücklich

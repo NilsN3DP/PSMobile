@@ -26,6 +26,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import de.psmobile.core.PsmCore
@@ -187,16 +188,26 @@ fun QuickSettings(
             Triple(PsUi.tr("Bottom"), "bottom_solid_layers", layerH),
         ).forEach { (label, key, factor) ->
             val n = values[key]?.toIntOrNull() ?: 0
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(label, color = PrusaColors.TextPrimary,
-                     fontSize = 13.sp, modifier = Modifier.width(88.dp))
+            // Der Stepper ist 140 dp breit und unteilbar. Stand die
+            // Millimeterangabe daneben, blieben ihr in einem schmalen
+            // Inspektor wenige dp - Compose brach sie dann Zeichen fuer
+            // Zeichen um und die Zeile wurde ueber 100 dp hoch. Deshalb
+            // traegt die linke Spalte beide Texte und nimmt den Rest.
+            Row(
+                Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(Modifier.weight(1f).padding(end = 8.dp)) {
+                    Text(label, color = PrusaColors.TextPrimary,
+                         fontSize = 13.sp, maxLines = 1)
+                    Text(
+                        "%.2f mm".format(n * factor),
+                        color = PrusaColors.TextMuted,
+                        fontSize = 12.sp,
+                        maxLines = 1,
+                    )
+                }
                 Stepper(n) { set(key, it.toString()) }
-                Text(
-                    "%.2f mm".format(n * factor),
-                    color = PrusaColors.TextMuted,
-                    fontSize = 12.sp,
-                    modifier = Modifier.padding(start = 10.dp),
-                )
             }
         }
     }
@@ -274,10 +285,14 @@ private fun Toggle(on: Boolean, onChange: (Boolean) -> Unit) {
 private fun Stepper(value: Int, onChange: (Int) -> Unit) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         StepButton("−") { if (value > 0) onChange(value - 1) }
+        // Ohne ausdrueckliche Zentrierung klebt die Zahl am linken Rand
+        // ihrer 44-dp-Spalte, also direkt am Minus, und der Abstand zum
+        // Plus wirkt doppelt so gross.
         Text(
             value.toString(),
             color = PrusaColors.TextPrimary,
             fontSize = 14.sp,
+            textAlign = TextAlign.Center,
             modifier = Modifier.width(44.dp),
         )
         StepButton("+") { onChange(value + 1) }
