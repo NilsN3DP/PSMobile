@@ -136,6 +136,8 @@ fun SlicerScreen(
     onOpenSimple: () -> Unit,
     onPickFile: (List<android.net.Uri>) -> Unit,
     onShare: (android.net.Uri) -> Unit,
+    usbTarget: String?,
+    onExportToUsb: () -> Unit,
     onPickBackupFolder: () -> Unit,
     onNewProject: () -> Unit,
     onSaveProject: () -> Unit,
@@ -159,6 +161,8 @@ fun SlicerScreen(
         onOpenSimple = onOpenSimple,
         onPickFile = onPickFile,
         onShare = onShare,
+        usbTarget = usbTarget,
+        onExportToUsb = onExportToUsb,
         onPickBackupFolder = onPickBackupFolder,
         onNewProject = onNewProject,
         onSaveProject = onSaveProject,
@@ -178,6 +182,8 @@ private fun SlicerContent(
     onOpenSimple: () -> Unit,
     onPickFile: (List<android.net.Uri>) -> Unit,
     onShare: (android.net.Uri) -> Unit,
+    usbTarget: String?,
+    onExportToUsb: () -> Unit,
     onPickBackupFolder: () -> Unit,
     onNewProject: () -> Unit,
     onSaveProject: () -> Unit,
@@ -651,6 +657,8 @@ private fun SlicerContent(
                     onConvertGcode = onConvertGcode,
                     onAddSvg = onAddSvg,
                     onShare = onShare,
+                    usbTarget = usbTarget,
+                    onExportToUsb = onExportToUsb,
                     onOpenSettings = { service.showScreen(SlicerService.Screen.Settings(it)) },
                     onManagePrinters = { service.showScreen(SlicerService.Screen.Printers) },
                     linkPrinters = linkPrinters,
@@ -731,6 +739,8 @@ private fun SlicerContent(
                 onConvertGcode = onConvertGcode,
                 onAddSvg = onAddSvg,
                 onShare = onShare,
+                usbTarget = usbTarget,
+                onExportToUsb = onExportToUsb,
                 onOpenSettings = { service.showScreen(SlicerService.Screen.Settings(it)) },
                 onManagePrinters = { service.showScreen(SlicerService.Screen.Printers) },
                 linkPrinters = linkPrinters,
@@ -1792,6 +1802,8 @@ private fun Sidebar(
     onConvertGcode: () -> Unit,
     onAddSvg: (Int, Float, PsmCore.VolumeType) -> Unit,
     onShare: (android.net.Uri) -> Unit,
+    usbTarget: String?,
+    onExportToUsb: () -> Unit,
     onOpenSettings: (String) -> Unit,
     onManagePrinters: () -> Unit,
     linkPrinters: List<de.psmobile.net.PrusaLink.Printer>,
@@ -2310,7 +2322,21 @@ private fun Sidebar(
                 shape = RoundedCornerShape(10.dp),
             ) {
                 Icon(Icons.Default.Share, contentDescription = null, Modifier.size(18.dp))
-                Text("G-Code exportieren", Modifier.padding(start = 8.dp))
+                Text(advancedText("Export G-code", "G-Code exportieren"),
+                     Modifier.padding(start = 8.dp))
+            }
+            // Nur wenn wirklich etwas angeschlossen ist. Ein Knopf, der
+            // beim Antippen "kein Stick da" sagt, ist schlechter als
+            // keiner.
+            usbTarget?.let { label ->
+                OutlinedButton(
+                    onClick = onExportToUsb,
+                    modifier = Modifier.fillMaxWidth().height(52.dp).padding(top = 6.dp),
+                    shape = RoundedCornerShape(10.dp),
+                ) {
+                    Text("⏻", color = PrusaColors.Orange)
+                    Text(label, Modifier.padding(start = 8.dp))
+                }
             }
         }
     }

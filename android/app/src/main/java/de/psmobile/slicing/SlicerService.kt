@@ -534,6 +534,22 @@ class SlicerService : Service() {
      * Ueber FileProvider und nicht als file://-URI: Android untersagt
      * seit Nougat, file://-URIs an andere Apps weiterzureichen.
      */
+    /**
+     * Der fertige G-Code als Datei, mit dem Namen aus dem Druckprofil.
+     *
+     * Gegenstueck zu [shareableGcodeUri] fuer Wege, die keinen
+     * FileProvider-URI brauchen, sondern die Datei selbst - etwa der
+     * Export auf einen Wechselspeicher.
+     */
+    fun gcodeFileForExport(): File {
+        val src = lastGcode ?: error("Es liegt noch kein G-Code vor.")
+        val outDir = File(cacheDir, "usb-export").apply { mkdirs() }
+        val dst = File(outDir, suggestedGcodeName())
+        outDir.listFiles()?.forEach { if (it != dst) it.delete() }
+        src.copyTo(dst, overwrite = true)
+        return dst
+    }
+
     fun shareableGcodeUri(): android.net.Uri? {
         val src = lastGcode ?: return null
         val outDir = File(cacheDir, "share").apply { mkdirs() }

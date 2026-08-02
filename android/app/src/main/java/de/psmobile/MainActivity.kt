@@ -7,6 +7,7 @@ import android.content.ServiceConnection
 import android.net.Uri
 import android.os.Bundle
 import android.os.IBinder
+import android.os.storage.StorageManager
 import androidx.activity.ComponentActivity
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.compose.setContent
@@ -19,6 +20,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import de.psmobile.ui.PsUi
+import de.psmobile.ui.RemovableStorage
 import de.psmobile.ui.SetupScreen
 import androidx.lifecycle.lifecycleScope
 import de.psmobile.slicing.SlicerService
@@ -111,6 +113,62 @@ class MainActivity : ComponentActivity() {
             pendingFileOutput = null
     }
 
+    /**
+     * Wie fileCreator, aber der Dialog geht gleich auf dem Wechselspeicher
+     * auf.
+     *
+     * Android laesst kein direktes Schreiben auf ein OTG-Volume zu - der
+     * Weg fuehrt immer ueber den Dokumentenanbieter. Was hier gewonnen
+     * wird, ist der Startordner: statt im zuletzt benutzten Verzeichnis
+     * steht man auf dem Stick.
+     */
+    private var pendingInitialUri: Uri? = null
+
+    private val fileCreatorOnVolume = registerForActivityResult(
+        object : ActivityResultContracts.CreateDocument("application/octet-stream") {
+            override fun createIntent(context: Context, input: String): Intent =
+                super.createIntent(context, input).apply {
+                    pendingInitialUri?.let {
+                        putExtra(android.provider.DocumentsContract.EXTRA_INITIAL_URI, it)
+                    }
+                }
+        }
+    ) { uri ->
+        pendingInitialUri = null
+        if (uri != null)
+            writePendingFile(uri)
+        else
+            pendingFileOutput = null
+    }
+
+    /**
+     * Der angeschlossene Wechselspeicher, oder null.
+     *
+     * Wird bei jedem Aufruf neu gefragt: ein Stick kann jederzeit
+     * angesteckt oder abgezogen werden, und ein gemerkter Wert waere dann
+     * eine Luege.
+     */
+    private fun removableTarget(): Pair<RemovableStorage.Volume, Uri>? {
+        val manager = getSystemService(StorageManager::class.java) ?: return null
+        val volumes = manager.storageVolumes
+        val described = volumes.map {
+            RemovableStorage.Volume(
+                description = it.getDescription(this).orEmpty(),
+                isRemovable = it.isRemovable,
+                isPrimary = it.isPrimary,
+                isMounted = it.state == android.os.Environment.MEDIA_MOUNTED,
+            )
+        }
+        val chosen = RemovableStorage.target(described) ?: return null
+        val volume = volumes.getOrNull(described.indexOf(chosen)) ?: return null
+        // createOpenDocumentTreeIntent liefert den Wurzel-URI des Volumes;
+        // mehr als dessen EXTRA_INITIAL_URI wird hier nicht gebraucht.
+        val root = volume.createOpenDocumentTreeIntent()
+            .getParcelableExtra<Uri>(android.provider.DocumentsContract.EXTRA_INITIAL_URI)
+            ?: return null
+        return chosen to root
+    }
+
     private val repairStlPicker = registerForActivityResult(
         ActivityResultContracts.OpenDocument()
     ) { uri ->
@@ -199,6 +257,13 @@ class MainActivity : ComponentActivity() {
                         onOpenSimple = { appMode = AppMode.SIMPLE },
                         onPickFile = { uris -> importUris(uris) },
                         onShare = { uri -> shareGcode(uri) },
+                        // Bei jeder Neuzeichnung neu gefragt: ein Stick
+                        // kann jederzeit angesteckt oder abgezogen
+                        // werden.
+                        usbTarget = removableTarget()?.let {
+                            RemovableStorage.label(it.first)
+                        },
+                        onExportToUsb = { exportGcodeToVolume() },
                         onPickBackupFolder = { backupPicker.launch(null) },
                         onNewProject = {
                             svc?.newProject()
@@ -762,6 +827,39 @@ class MainActivity : ComponentActivity() {
     }
 
     /** G-Code an Files, Drive, PrusaLink-Apps o. ae. weiterreichen. */
+    /**
+     * G-Code auf den angeschlossenen Stick schreiben.
+     *
+     * Der Dateiname kommt aus output_filename_format des Druckprofils -
+     * derselbe wie beim Teilen. Wer den G-Code auf einen Stick zieht,
+     * steckt ihn gleich in den Drucker; dort ist der sprechende Name
+     * mehr wert als irgendwo sonst.
+     */
+    private fun exportGcodeToVolume() {
+        val svc = service ?: return
+        val (volume, root) = removableTarget() ?: run {
+            showFileError(
+                "USB-Export",
+                IllegalStateException("Kein Wechselspeicher angeschlossen."),
+            )
+            return
+        }
+        lifecycleScope.launch {
+            val result = withContext(Dispatchers.IO) {
+                runCatching { svc.gcodeFileForExport() }
+            }
+            result
+                .onFailure { showFileError("USB-Export", it) }
+                .onSuccess { file ->
+                    pendingFileOutput = file
+                    pendingFileName = file.name
+                    pendingFileDescription = "G-Code auf ${volume.description}"
+                    pendingInitialUri = root
+                    fileCreatorOnVolume.launch(file.name)
+                }
+        }
+    }
+
     private fun shareGcode(uri: Uri) {
         val send = Intent(Intent.ACTION_SEND).apply {
             type = "text/plain"          // G-Code hat keinen eigenen MIME-Typ
