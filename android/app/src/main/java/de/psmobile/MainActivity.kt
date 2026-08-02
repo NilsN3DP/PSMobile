@@ -459,8 +459,13 @@ class MainActivity : ComponentActivity() {
                     .substringAfterLast('/')
                     .substringAfterLast('\\')
                     .ifBlank { "modell.stl" }
-                val dest = File(cacheDir, "import").apply { mkdirs() }
-                    .resolve("${System.nanoTime()}-$safeName")
+                // Die Eindeutigkeit gehoert in den Ordner, nicht in den
+                // Dateinamen: libslic3r uebernimmt den Dateinamen als
+                // Objektnamen, und im Objektbaum stand dadurch
+                // "57617737825603-teil_01.stl" statt "teil_01.stl".
+                val dest = File(cacheDir, "import/${System.nanoTime()}")
+                    .apply { mkdirs() }
+                    .resolve(safeName)
                 contentResolver.openInputStream(uri)?.use { input ->
                     dest.outputStream().use { input.copyTo(it) }
                 } ?: error("Datei nicht lesbar: $uri")

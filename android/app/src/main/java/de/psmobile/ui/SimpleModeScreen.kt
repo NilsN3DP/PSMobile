@@ -85,6 +85,7 @@ fun SimpleModeScreen(
 ) {
     val presets by service.presets.collectAsState()
     val objects by service.objects.collectAsState()
+    val beds by service.beds.collectAsState()
     val quick by service.quickSettings.collectAsState()
     val sceneRevision by service.sceneRevision.collectAsState()
     val configuration = LocalConfiguration.current
@@ -166,12 +167,28 @@ fun SimpleModeScreen(
             onRedo = service::redo,
             modifier = Modifier.align(Alignment.BottomStart).padding(start = 12.dp, bottom = workspaceActionBottom + 12.dp),
         )
-        Button(
-            onClick = onPickFile,
-            shape = RoundedCornerShape(2.dp),
-            colors = ButtonDefaults.buttonColors(containerColor = PrusaColors.Orange),
-            modifier = Modifier.align(Alignment.BottomEnd).padding(end = 12.dp, bottom = workspaceActionBottom + 12.dp).heightIn(min = 56.dp),
-        ) { Text("＋ " + st("Add model", "Modell hinzufügen")) }
+        if (objects.isEmpty()) {
+            Button(
+                onClick = onPickFile,
+                shape = RoundedCornerShape(2.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = PrusaColors.Orange),
+                modifier = Modifier.align(Alignment.BottomEnd).padding(end = 12.dp, bottom = workspaceActionBottom + 12.dp).heightIn(min = 56.dp),
+            ) { Text("＋ " + st("Add model", "Modell hinzufügen")) }
+        } else {
+            // Sobald etwas auf dem Bett liegt, uebernimmt das Modelle-Blatt
+            // sowohl das Hinzufuegen als auch Anordnen, Klonen und
+            // Entfernen - so wie in EasyPrint.
+            SimpleModelSheet(
+                service = service,
+                objects = objects,
+                beds = beds,
+                selectedId = selectedId,
+                onSelect = { selectedId = it },
+                onPickFile = onPickFile,
+                bottomInset = workspaceActionBottom,
+                modifier = Modifier.align(Alignment.BottomEnd),
+            )
+        }
         // Das Overlay muss in derselben Box wie die SurfaceView liegen.
         // Als Geschwister ausserhalb dieser Box konnte die native 3D-View
         // Beruehrungen neben dem Menue abfangen; ein Tippen ausserhalb

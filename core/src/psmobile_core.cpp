@@ -148,6 +148,20 @@ Slic3r::ModelInstance *first_instance(Slic3r::ModelObject *o)
     return o->instances.front();
 }
 
+/* Das Druckbett als Rechteck, oder leer wenn es keines gibt. */
+static Slic3r::BoundingBoxf session_bed_box(psm_session *s)
+{
+    Slic3r::BoundingBoxf bb;
+    try {
+        const Slic3r::Points bedpts = Slic3r::get_bed_shape(s->config);
+        if (bedpts.size() >= 3)
+            for (const Slic3r::Point &p : bedpts)
+                bb.merge(Slic3r::Vec2d(Slic3r::unscale<double>(p.x()),
+                                       Slic3r::unscale<double>(p.y())));
+    } catch (...) { /* ohne Bett bleibt das Rechteck leer */ }
+    return bb;
+}
+
 /* Grundflaeche einer Instanz als Rechteck in Bettkoordinaten. */
 static Slic3r::BoundingBoxf footprint_of(const Slic3r::ModelObject *o, size_t idx)
 {
@@ -242,6 +256,40 @@ static bool place_on_free_spot(Slic3r::Model &model,
                                                offset.z()));
                 return true;
             }
+        }
+    }
+
+    /*
+     * Das Raster um die Mitte laesst an den Raendern Platz liegen: bei
+     * 210 mm Betttiefe und 43 mm Schritt liegen die Reihen bei 0, +-43
+     * und +-86, und die aeusseren fallen knapp aus dem Bett. Ein volles
+     * Bett verlor so eine ganze Reihe und der Rest wanderte zu frueh auf
+     * ein zweites. Deshalb zum Schluss noch zeilenweise vom vorderen
+     * linken Rand her suchen - dichter, dafuer nicht mittig, und nur
+     * noetig wenn es ohnehin eng wird.
+     */
+    if (! bed_known)
+        return false;
+    const Slic3r::Vec2d own_size = own.size();
+    for (double y = bed.min.y(); y + own_size.y() <= bed.max.y() + 1e-6; y += step_y) {
+        for (double x = bed.min.x(); x + own_size.x() <= bed.max.x() + 1e-6; x += step_x) {
+            const Slic3r::Vec2d corner(x, y);
+            Slic3r::BoundingBoxf candidate(corner, corner + own_size);
+            bool blocked = false;
+            for (const Slic3r::BoundingBoxf &t : taken) {
+                if (rects_overlap(candidate, t)) {
+                    blocked = true;
+                    break;
+                }
+            }
+            if (blocked)
+                continue;
+            const Slic3r::Vec2d shift = corner - own.min;
+            const Slic3r::Vec3d offset = inst->get_offset();
+            inst->set_offset(Slic3r::Vec3d(start.x() + shift.x(),
+                                           start.y() + shift.y(),
+                                           offset.z()));
+            return true;
         }
     }
     return false;
@@ -1604,6 +1652,13 @@ PSM_API psm_result psm_model_duplicate(psm_session *s, psm_object_id id, psm_obj
         Slic3r::ModelObject *copy = s->model().add_object(*o);
         first_instance(copy);
         copy->ensure_on_bed();
+        /* Eine Kopie exakt auf dem Original ist so unbrauchbar wie ein
+         * zweiter Import auf der Bettmitte: man sieht nur ein Objekt und
+         * haelt die Aktion fuer wirkungslos. Deshalb dieselbe Platzsuche
+         * wie beim Laden. Ist das Bett voll, bleibt die Kopie liegen -
+         * anders als beim Import darf sie nicht auf ein anderes Bett
+         * wandern, denn dupliziert wird ausdruecklich auf diesem hier. */
+        place_on_free_spot(s->model(), copy, session_bed_box(s), 3.0);
         if (out_new_id != nullptr)
             *out_new_id = static_cast<psm_object_id>(copy->id().id);
         s->mark_design_changed();
