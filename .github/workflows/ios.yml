@@ -1,0 +1,187 @@
+# iOS auf einem gemieteten macOS-Laeufer bauen.
+#
+# Der zweite Weg neben einem selbst gemieteten Mac: GitHub stellt echte
+# Apple-Hardware, man zahlt nach Minute und braucht kein Geraet vor Ort.
+#
+# Zwei Ziele, die sich nicht ersetzen:
+#
+#   simulator  laeuft nur im iPad-Simulator auf dem Laeufer. Ergebnis
+#              sind Screenshots - der schnelle Blick auf die Oberflaeche.
+#
+#   device     unsignierte .ipa fuer ein echtes iPad. Sie laesst sich
+#              mit Sideloadly oder AltStore vom Windows-Rechner aus
+#              aufspielen, dabei wird sie mit der eigenen Apple-ID
+#              signiert. Kein Mac noetig, auch nicht zum Installieren.
+#
+# Voraussetzung: das Repo liegt auf GitHub. Bisher liegt es nur lokal.
+#
+# Bewusst manuell ausgeloest: der Dependency-Bau dauert Stunden, und
+# macOS-Minuten sind teuer.
+
+name: iOS
+
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: "Was gebaut werden soll"
+        type: choice
+        options: [simulator, device, both]
+        default: simulator
+      rebuild_deps:
+        description: "Dependencies neu bauen statt aus dem Cache"
+        type: boolean
+        default: false
+
+jobs:
+  simulator:
+    if: inputs.target == 'simulator' || inputs.target == 'both'
+    runs-on: macos-15
+    timeout-minutes: 360
+    env:
+      PSM_IOS_PLATFORM: SIMULATORARM64
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Werkzeuge
+        run: |
+          brew install cmake ninja xcodegen automake autoconf libtool pkg-config
+          xcodebuild -version
+          xcodebuild -showsdks | grep iphone
+
+      # Der teure Teil. Der Schluessel haengt an den Patches und am
+      # Bauskript - aendert sich beides nicht, wird nicht neu gebaut.
+      - name: Dependency-Cache
+        id: deps-cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            build-out/ios-destdir-SIMULATORARM64
+            build-out/dl-cache
+          key: ios-deps-simarm64-${{ hashFiles('patches/*.patch', 'build/scripts/build-ios.sh') }}
+
+      - name: Quellen und Patches
+        run: build/scripts/macos-bootstrap.sh sources
+
+      - name: Dependencies
+        if: steps.deps-cache.outputs.cache-hit != 'true' || inputs.rebuild_deps
+        run: build/scripts/macos-bootstrap.sh deps
+
+      - name: Kern
+        run: build/scripts/macos-bootstrap.sh core
+
+      - name: Ressourcen und Xcode-Projekt
+        run: build/scripts/macos-bootstrap.sh project
+
+      - name: App fuer den Simulator bauen
+        run: |
+          xcodebuild -project ios/PSMobile.xcodeproj \
+                     -scheme PSMobile \
+                     -destination 'platform=iOS Simulator,name=iPad Pro 11-inch (M4)' \
+                     -derivedDataPath build-out/ios-derived \
+                     CODE_SIGNING_ALLOWED=NO \
+                     build
+
+      # Ohne diesen Schritt haette man einen gruenen Build und trotzdem
+      # keine Ahnung, wie die Oberflaeche aussieht - worum es bei einem
+      # Prototyp aber gerade geht.
+      - name: Im Simulator starten und Bild aufnehmen
+        run: |
+          set -x
+          DEVICE=$(xcrun simctl create psm-ipad \
+                   "com.apple.CoreSimulator.SimDeviceType.iPad-Pro-11-inch-M4" \
+                   "com.apple.CoreSimulator.SimRuntime.iOS-18-0")
+          xcrun simctl boot "$DEVICE"
+          xcrun simctl bootstatus "$DEVICE" -b
+          APP=$(find build-out/ios-derived -name 'PSMobile.app' -type d | head -1)
+          xcrun simctl install "$DEVICE" "$APP"
+          xcrun simctl launch "$DEVICE" de.psmobile
+          sleep 25
+          mkdir -p build-out/screenshots
+          xcrun simctl io "$DEVICE" screenshot build-out/screenshots/ipad-start.png
+          xcrun simctl shutdown "$DEVICE"
+
+      - name: Bilder als Artefakt
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-simulator-screenshots
+          path: build-out/screenshots/
+          if-no-files-found: warn
+
+  device:
+    if: inputs.target == 'device' || inputs.target == 'both'
+    runs-on: macos-15
+    timeout-minutes: 360
+    env:
+      PSM_IOS_PLATFORM: OS64
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Werkzeuge
+        run: |
+          brew install cmake ninja xcodegen automake autoconf libtool pkg-config
+          xcodebuild -version
+
+      # Eigener Cache: Geraet und Simulator sind getrennte Bauten und
+      # duerfen sich ihre Dependencies nicht teilen.
+      - name: Dependency-Cache
+        id: deps-cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            build-out/ios-destdir-OS64
+            build-out/dl-cache
+          key: ios-deps-os64-${{ hashFiles('patches/*.patch', 'build/scripts/build-ios.sh') }}
+
+      - name: Quellen und Patches
+        run: build/scripts/macos-bootstrap.sh sources
+
+      - name: Dependencies
+        if: steps.deps-cache.outputs.cache-hit != 'true' || inputs.rebuild_deps
+        run: build/scripts/macos-bootstrap.sh deps
+
+      - name: Kern
+        run: build/scripts/macos-bootstrap.sh core
+
+      - name: Ressourcen und Xcode-Projekt
+        run: build/scripts/macos-bootstrap.sh project
+
+      # Unsigniert bauen. Ein Signierschluessel wuerde ein
+      # Apple-Entwicklerkonto und hinterlegte Geheimnisse brauchen -
+      # unnoetig, weil Sideloadly und AltStore beim Aufspielen ohnehin
+      # mit der Apple-ID des Nutzers neu signieren.
+      - name: App fuer das Geraet bauen
+        run: |
+          xcodebuild -project ios/PSMobile.xcodeproj \
+                     -scheme PSMobile \
+                     -destination 'generic/platform=iOS' \
+                     -derivedDataPath build-out/ios-derived \
+                     CODE_SIGNING_ALLOWED=NO \
+                     CODE_SIGNING_REQUIRED=NO \
+                     CODE_SIGN_IDENTITY="" \
+                     build
+
+      # Eine .ipa ist ein ZIP mit der App in einem Ordner namens Payload -
+      # mehr nicht. xcodebuild -exportArchive kaeme hier nicht in Frage,
+      # weil es ein Signierprofil verlangt.
+      - name: Als .ipa verpacken
+        run: |
+          set -eux
+          APP=$(find build-out/ios-derived -name 'PSMobile.app' -type d | head -1)
+          test -n "$APP"
+          rm -rf build-out/ipa
+          mkdir -p build-out/ipa/Payload
+          cp -R "$APP" build-out/ipa/Payload/
+          ( cd build-out/ipa && zip -qry PSMobile-unsigned.ipa Payload )
+          ls -lh build-out/ipa/PSMobile-unsigned.ipa
+
+      - name: .ipa als Artefakt
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: PSMobile-unsigned-ipa
+          path: build-out/ipa/PSMobile-unsigned.ipa
+          if-no-files-found: error
