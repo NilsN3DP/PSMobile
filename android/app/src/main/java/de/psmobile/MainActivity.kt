@@ -131,8 +131,8 @@ class MainActivity : ComponentActivity() {
     }
 
     private val modelPicker = registerForActivityResult(
-        ActivityResultContracts.OpenDocument()
-    ) { uri -> uri?.let(::importUri) }
+        ActivityResultContracts.OpenMultipleDocuments()
+    ) { uris -> importUris(uris) }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -197,7 +197,7 @@ class MainActivity : ComponentActivity() {
                     SlicerScreen(
                         service = svc,
                         onOpenSimple = { appMode = AppMode.SIMPLE },
-                        onPickFile = { uri -> importUri(uri) },
+                        onPickFile = { uris -> importUris(uris) },
                         onShare = { uri -> shareGcode(uri) },
                         onPickBackupFolder = { backupPicker.launch(null) },
                         onNewProject = {
@@ -380,49 +380,105 @@ class MainActivity : ComponentActivity() {
      * ein content://-URI keinen hat. Bei grossen Modellen ist das eine
      * spuerbare Kopie - deshalb im IO-Dispatcher, nicht im UI-Thread.
      */
-    private fun importUri(uri: Uri) {
-        val svc = service ?: return
+    private fun importUri(uri: Uri) = importUris(listOf(uri))
+
+    /**
+     * Importiert die gesamte Auswahl der Reihe nach.
+     *
+     * Eine Baugruppe besteht selten aus genau einem Teil, deshalb darf
+     * der Dateiwaehler mehrere Dateien liefern. Sie muessen aber
+     * nacheinander durch den Core, nicht nebenlaeufig - sonst
+     * ueberholen sich Kopiervorgang und Modellaufbau gegenseitig.
+     *
+     * Bei genau einer 3MF bleibt die gewohnte Rueckfrage "Nur Objekte
+     * oder als Projekt". In einer Sammelauswahl entfaellt sie: ein
+     * Projekt ersetzt das Bett und wuerde die uebrigen Dateien derselben
+     * Auswahl wieder wegwerfen. Dort kommen 3MF-Dateien daher nur als
+     * Objekte herein, und der Abschlusshinweis sagt das ausdruecklich.
+     */
+    private fun importUris(uris: List<Uri>) {
+        if (uris.isEmpty()) return
+        val ask = de.psmobile.ui.ImportSelection.askAboutProject(uris.size)
+        lifecycleScope.launch {
+            var loaded = 0
+            var projectsAsObjects = 0
+            for (uri in uris) {
+                when (importOne(uri, askAboutProject = ask)) {
+                    ImportOutcome.FAILED -> Unit
+                    ImportOutcome.LOADED -> loaded++
+                    ImportOutcome.AWAITING_DECISION -> Unit
+                    ImportOutcome.LOADED_PROJECT_AS_OBJECTS -> {
+                        loaded++
+                        projectsAsObjects++
+                    }
+                }
+            }
+            if (!ask) {
+                noticeTitle = de.psmobile.ui.PsUi.appText("Files loaded", "Dateien geladen")
+                importNotice = de.psmobile.ui.ImportSelection.summary(
+                    loaded = loaded,
+                    total = uris.size,
+                    projectsAsObjects = projectsAsObjects,
+                )
+            }
+        }
+    }
+
+    private enum class ImportOutcome {
+        FAILED,
+        LOADED,
+        LOADED_PROJECT_AS_OBJECTS,
+
+        /** 3MF wartet auf die Rueckfrage; der Hinweis kommt von dort. */
+        AWAITING_DECISION,
+    }
+
+    private suspend fun importOne(uri: Uri, askAboutProject: Boolean): ImportOutcome {
+        val svc = service ?: return ImportOutcome.FAILED
         runCatching {
             contentResolver.takePersistableUriPermission(
                 uri,
                 Intent.FLAG_GRANT_READ_URI_PERMISSION,
             )
         }
-        lifecycleScope.launch {
-            val result = withContext(Dispatchers.IO) {
-                runCatching {
-                    val name = queryDisplayName(uri) ?: uri.lastPathSegment ?: "modell.stl"
-                    val safeName = name
-                        .substringAfterLast('/')
-                        .substringAfterLast('\\')
-                        .ifBlank { "modell.stl" }
-                    val dest = File(cacheDir, "import").apply { mkdirs() }
-                        .resolve("${System.nanoTime()}-$safeName")
-                    contentResolver.openInputStream(uri)?.use { input ->
-                        dest.outputStream().use { input.copyTo(it) }
-                    } ?: error("Datei nicht lesbar: $uri")
-                    dest
-                }
+        val result = withContext(Dispatchers.IO) {
+            runCatching {
+                val name = queryDisplayName(uri) ?: uri.lastPathSegment ?: "modell.stl"
+                val safeName = name
+                    .substringAfterLast('/')
+                    .substringAfterLast('\\')
+                    .ifBlank { "modell.stl" }
+                val dest = File(cacheDir, "import").apply { mkdirs() }
+                    .resolve("${System.nanoTime()}-$safeName")
+                contentResolver.openInputStream(uri)?.use { input ->
+                    dest.outputStream().use { input.copyTo(it) }
+                } ?: error("Datei nicht lesbar: $uri")
+                dest
             }
-            // Fehler muessen sichtbar werden. Vorher verschluckte ein
-            // blankes runCatching sie, und in der UI passierte wortlos
-            // nichts - der schlimmste Fehlerzustand ueberhaupt.
-            val file = result.getOrElse {
-                svc.reportImportError(it)
-                return@launch
-            }
-            val mime = contentResolver.getType(uri).orEmpty()
-            val is3mf = file.extension.equals("3mf", ignoreCase = true) ||
-                mime.contains("3mf", ignoreCase = true) ||
-                mime.contains("3dmanufacturing", ignoreCase = true)
-            if (is3mf) {
-                pending3mf = file
-                pending3mfUri = uri
-            } else {
-                withContext(Dispatchers.IO) {
-                    runCatching { svc.loadModel(file.absolutePath) }
-                }.onFailure { svc.reportImportError(it) }
-            }
+        }
+        // Fehler muessen sichtbar werden. Vorher verschluckte ein
+        // blankes runCatching sie, und in der UI passierte wortlos
+        // nichts - der schlimmste Fehlerzustand ueberhaupt.
+        val file = result.getOrElse {
+            svc.reportImportError(it)
+            return ImportOutcome.FAILED
+        }
+        val mime = contentResolver.getType(uri).orEmpty()
+        val is3mf = file.extension.equals("3mf", ignoreCase = true) ||
+            mime.contains("3mf", ignoreCase = true) ||
+            mime.contains("3dmanufacturing", ignoreCase = true)
+        if (is3mf && askAboutProject) {
+            pending3mf = file
+            pending3mfUri = uri
+            return ImportOutcome.AWAITING_DECISION
+        }
+        val ok = withContext(Dispatchers.IO) {
+            runCatching { svc.loadModel(file.absolutePath, SlicerService.ImportMode.OBJECTS) }
+        }.onFailure { svc.reportImportError(it) }.isSuccess
+        return when {
+            !ok -> ImportOutcome.FAILED
+            is3mf -> ImportOutcome.LOADED_PROJECT_AS_OBJECTS
+            else -> ImportOutcome.LOADED
         }
     }
 

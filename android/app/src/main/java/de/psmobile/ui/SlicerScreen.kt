@@ -132,7 +132,7 @@ private data class PendingPresetSwitch(
 fun SlicerScreen(
     service: SlicerService?,
     onOpenSimple: () -> Unit,
-    onPickFile: (android.net.Uri) -> Unit,
+    onPickFile: (List<android.net.Uri>) -> Unit,
     onShare: (android.net.Uri) -> Unit,
     onPickBackupFolder: () -> Unit,
     onNewProject: () -> Unit,
@@ -174,7 +174,7 @@ fun SlicerScreen(
 private fun SlicerContent(
     service: SlicerService,
     onOpenSimple: () -> Unit,
-    onPickFile: (android.net.Uri) -> Unit,
+    onPickFile: (List<android.net.Uri>) -> Unit,
     onShare: (android.net.Uri) -> Unit,
     onPickBackupFolder: () -> Unit,
     onNewProject: () -> Unit,
@@ -187,9 +187,12 @@ private fun SlicerContent(
     onConvertGcode: () -> Unit,
     onAddSvg: (Int, Float, PsmCore.VolumeType) -> Unit,
 ) {
+    // Mehrere Dateien auf einmal: eine Baugruppe besteht selten aus
+    // genau einem Teil, und der Umweg ueber sechs einzelne Auswahlen
+    // ist auf einem Tablet besonders muehsam.
     val picker = rememberLauncherForActivityResult(
-        ActivityResultContracts.OpenDocument()
-    ) { uri -> uri?.let(onPickFile) }
+        ActivityResultContracts.OpenMultipleDocuments()
+    ) { uris -> if (uris.isNotEmpty()) onPickFile(uris) }
 
     val objects by service.objects.collectAsState()
     val beds by service.beds.collectAsState()
