@@ -43,7 +43,11 @@ jobs:
     timeout-minutes: 360
     env:
       PSM_IOS_PLATFORM: SIMULATORARM64
-      DEPS_KEY: ios-deps-simarm64-${{ hashFiles('patches/*.patch', 'build/scripts/build-ios.sh') }}
+      # hashFiles gehoert hier NICHT hin: es braucht den Arbeitsordner,
+      # den es zum Zeitpunkt der env-Auswertung noch nicht gibt. GitHub
+      # lehnt die ganze Datei ab und meldet bei jedem Push einen
+      # fehlgeschlagenen Lauf. Der Schluessel steht deshalb direkt in den
+      # Cache-Schritten, wo hashFiles erlaubt ist.
 
     steps:
       - uses: actions/checkout@v4
@@ -75,8 +79,8 @@ jobs:
             build-out/ios-deps-SIMULATORARM64
             build-out/ios-destdir-SIMULATORARM64
             build-out/dl-cache
-          key: ${{ env.DEPS_KEY }}-none
-          restore-keys: ${{ env.DEPS_KEY }}-
+          key: ios-deps-simarm64-${{ hashFiles('patches/*.patch', 'build/scripts/build-ios.sh') }}-none
+          restore-keys: ios-deps-simarm64-${{ hashFiles('patches/*.patch', 'build/scripts/build-ios.sh') }}-
 
       - name: Quellen und Patches
         run: build/scripts/macos-bootstrap.sh sources
@@ -105,7 +109,7 @@ jobs:
             build-out/ios-deps-SIMULATORARM64
             build-out/ios-destdir-SIMULATORARM64
             build-out/dl-cache
-          key: ${{ env.DEPS_KEY }}-${{ github.run_id }}
+          key: ios-deps-simarm64-${{ hashFiles('patches/*.patch', 'build/scripts/build-ios.sh') }}-${{ github.run_id }}
 
       - name: Anhalten, solange die Dependencies unfertig sind
         if: steps.deps.outputs.unfinished == 'true'
