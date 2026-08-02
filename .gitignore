@@ -8,19 +8,15 @@
 **/build/
 !/build/
 /build/*
+# Die Skripte unter build/scripts sind Quelltext, keine Bauausgabe.
+#
+# Hier stand eine Positivliste, in die jedes neue Skript einzeln
+# eingetragen werden musste. Das wurde vergessen: dreizehn Skripte lagen
+# nur auf der Freigabe, darunter env.sh, bootstrap.sh, build-deps.sh,
+# build-apk.sh und extract-ui.py - also die halbe Baukette. Waere die
+# Freigabe verloren gegangen, waere sie mit ihr weg gewesen.
 !/build/scripts/
-/build/scripts/*
-!/build/scripts/build-core.sh
-!/build/scripts/extract-toggles.py
-!/build/scripts/feature-report.py
-!/build/scripts/gap-report.py
-!/build/scripts/make-test-project-3mf.py
-!/build/scripts/native-fingerprint.py
-!/build/scripts/run-core-tests.sh
-!/build/scripts/stage-native.sh
-!/build/scripts/tests/
-/build/scripts/tests/*
-!/build/scripts/tests/test_feature_reports.py
+!/build/docker/
 **/.cxx/
 *.o
 *.a
