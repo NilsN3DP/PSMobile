@@ -211,41 +211,67 @@ internal fun SimpleModelSheet(
     }
 
     if (moveOpen) {
-        val targets = SimpleModelSheetState.moveTargets(bedCount, activeBed, MAX_BEDS)
-        AlertDialog(
-            onDismissRequest = { moveOpen = false },
-            containerColor = PrusaColors.Panel,
-            titleContentColor = PrusaColors.TextPrimary,
-            textContentColor = PrusaColors.TextPrimary,
-            title = { Text(t("Move to bed", "Auf Bett verschieben")) },
-            text = {
-                Column {
-                    targets.forEach { target ->
-                        val isNew = target >= beds.size
-                        OutlinedButton(
-                            onClick = {
-                                if (isNew) service.addBed()
-                                picked.forEach { service.moveObjectToBed(it, target) }
-                                picked = emptySet()
-                                moveOpen = false
-                            },
-                            modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-                        ) {
-                            Text(
-                                if (isNew) t("New bed", "Neues Bett")
-                                else t("Bed ", "Bett ") + (target + 1)
-                            )
-                        }
-                    }
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = { moveOpen = false }) {
-                    Text(t("Cancel", "Abbrechen"), color = PrusaColors.Orange)
-                }
-            },
+        MoveToBedDialog(
+            service = service,
+            beds = beds,
+            activeBed = activeBed,
+            ids = picked,
+            onDone = { picked = emptySet(); moveOpen = false },
+            onDismiss = { moveOpen = false },
         )
     }
+}
+
+/**
+ * Objekte auf ein anderes Bett schieben.
+ *
+ * Wird von zwei Stellen gebraucht - der Auswahl im Modelle-Blatt und der
+ * Leiste am einzelnen Objekt -, deshalb hier einmal statt zweimal.
+ */
+@Composable
+internal fun MoveToBedDialog(
+    service: SlicerService,
+    beds: List<PsmCore.Bed>,
+    activeBed: Int,
+    ids: Set<Int>,
+    onDone: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val targets = SimpleModelSheetState.moveTargets(
+        beds.size.coerceAtLeast(1), activeBed, MAX_BEDS,
+    )
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = PrusaColors.Panel,
+        titleContentColor = PrusaColors.TextPrimary,
+        textContentColor = PrusaColors.TextPrimary,
+        title = { Text(t("Move to bed", "Auf Bett verschieben")) },
+        text = {
+            Column {
+                targets.forEach { target ->
+                    val isNew = target >= beds.size
+                    OutlinedButton(
+                        onClick = {
+                            if (isNew) service.addBed()
+                            ids.forEach { service.moveObjectToBed(it, target) }
+                            onDone()
+                        },
+                        modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                    ) {
+                        Text(
+                            if (isNew) t("New bed", "Neues Bett")
+                            else t("Bed ", "Bett ") + (target + 1)
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text(t("Cancel", "Abbrechen"), color = PrusaColors.Orange)
+            }
+        },
+    )
 }
 
 @Composable

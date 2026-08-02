@@ -1879,9 +1879,23 @@ PSM_API psm_result psm_model_cut_z(psm_session *s,
         s->history_checkpoint("Objekt schneiden");
         std::vector<psm_object_id> ids;
         ids.reserve(parts.size());
+        const Slic3r::BoundingBoxf cut_bed = session_bed_box(s);
+        bool first_part = true;
         for (const Slic3r::ModelObject *part : parts) {
             Slic3r::ModelObject *copy = s->model().add_object(*part);
             copy->ensure_on_bed();
+            /* ensure_on_bed setzt beide Haelften auf Z=0 - danach liegen
+             * sie mit gleicher Grundflaeche uebereinander, und man sieht
+             * nur eine. Die erste behaelt den Platz des Originals, jede
+             * weitere rueckt daneben.
+             *
+             * Das Original steht dabei noch in der Liste, und das ist
+             * Absicht: seine Grundflaeche ist genau die, die auch die
+             * erste Haelfte belegt. Die Platzsuche meidet sie damit von
+             * selbst, ohne dass es eine Sonderregel braucht. */
+            if (! first_part)
+                place_on_free_spot(s->model(), copy, cut_bed, 3.0);
+            first_part = false;
             ids.push_back(static_cast<psm_object_id>(copy->id().id));
         }
         s->model().delete_object(source_index);

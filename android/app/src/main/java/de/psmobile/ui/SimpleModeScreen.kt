@@ -162,6 +162,22 @@ fun SimpleModeScreen(
                 onStartSlice = onStartSlice,
             )
         }
+        // Leiste am ausgewaehlten Objekt. Nur wenn kein Menue offen ist -
+        // sonst schwebt sie ueber dem Overlay und lenkt vom eigentlichen
+        // Dialog ab.
+        val selectedObject = objects.firstOrNull { it.id == selectedId }
+        if (selectedObject != null && panel == SimplePanel.WORKSPACE) {
+            SimpleObjectBar(
+                service = service,
+                obj = selectedObject,
+                beds = beds,
+                activeBed = beds.indexOfFirst { it.active }.coerceAtLeast(0),
+                onClearSelection = { selectedId = null },
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .padding(top = statusTop + if (compactChrome) 116.dp else 148.dp),
+            )
+        }
         SimpleUndoRedo(
             onUndo = service::undo,
             onRedo = service::redo,
