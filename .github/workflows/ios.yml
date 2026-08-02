@@ -29,9 +29,12 @@ on:
         options: [simulator, device, both]
         default: simulator
       rebuild_deps:
-        description: "Dependencies neu bauen statt aus dem Cache"
+        description: "Dependencies von vorn bauen statt fortzusetzen"
         type: boolean
         default: false
+      deps_minutes:
+        description: "Zeitfenster fuer den Dependency-Bau in Minuten"
+        default: "150"
 
 jobs:
   simulator:
@@ -40,33 +43,77 @@ jobs:
     timeout-minutes: 360
     env:
       PSM_IOS_PLATFORM: SIMULATORARM64
+      DEPS_KEY: ios-deps-simarm64-${{ hashFiles('patches/*.patch', 'build/scripts/build-ios.sh') }}
 
     steps:
       - uses: actions/checkout@v4
 
       - name: Werkzeuge
         run: |
-          brew install cmake ninja xcodegen automake autoconf libtool pkg-config
+          # coreutils wegen gtimeout - macOS bringt kein timeout mit.
+          brew install cmake ninja xcodegen automake autoconf libtool pkg-config coreutils
           xcodebuild -version
           xcodebuild -showsdks | grep iphone
 
-      # Der teure Teil. Der Schluessel haengt an den Patches und am
-      # Bauskript - aendert sich beides nicht, wird nicht neu gebaut.
-      - name: Dependency-Cache
-        id: deps-cache
-        uses: actions/cache@v4
+      # Fortsetzbar statt alles-oder-nichts.
+      #
+      # Ein kostenloses Konto hat 200 macOS-Minuten im Monat, der
+      # Dependency-Bau braucht mehr. Deshalb wird nicht nur das Ergebnis
+      # zwischengespeichert, sondern auch der halbfertige Bauordner - und
+      # zwar auch dann, wenn das Zeitfenster ausgelaufen ist. Jeder Lauf
+      # bringt einen so ein Stueck weiter, statt jedes Mal bei null zu
+      # beginnen.
+      #
+      # Der Schluessel traegt die Laufnummer, weil ein bestehender
+      # Cache-Eintrag nicht ueberschrieben werden kann. restore-keys
+      # greift dann den jeweils neuesten passenden Stand.
+      - name: Bisherigen Fortschritt holen
+        if: '! inputs.rebuild_deps'
+        uses: actions/cache/restore@v4
         with:
           path: |
+            build-out/ios-deps-SIMULATORARM64
             build-out/ios-destdir-SIMULATORARM64
             build-out/dl-cache
-          key: ios-deps-simarm64-${{ hashFiles('patches/*.patch', 'build/scripts/build-ios.sh') }}
+          key: ${{ env.DEPS_KEY }}-none
+          restore-keys: ${{ env.DEPS_KEY }}-
 
       - name: Quellen und Patches
         run: build/scripts/macos-bootstrap.sh sources
 
-      - name: Dependencies
-        if: steps.deps-cache.outputs.cache-hit != 'true' || inputs.rebuild_deps
-        run: build/scripts/macos-bootstrap.sh deps
+      - name: Dependencies, zeitbegrenzt
+        id: deps
+        run: |
+          set +e
+          gtimeout "${{ inputs.deps_minutes }}m" build/scripts/macos-bootstrap.sh deps
+          rc=$?
+          set -e
+          if [ "$rc" = "124" ]; then
+              echo "unfinished=true" >> "$GITHUB_OUTPUT"
+              echo "::warning::Zeitfenster ausgeschoepft. Der Fortschritt wird gesichert - einfach erneut starten."
+              exit 0
+          fi
+          exit "$rc"
+
+      # Auch nach einem Abbruch sichern: der halbfertige Stand ist genau
+      # das, was den naechsten Lauf kuerzer macht.
+      - name: Fortschritt sichern
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            build-out/ios-deps-SIMULATORARM64
+            build-out/ios-destdir-SIMULATORARM64
+            build-out/dl-cache
+          key: ${{ env.DEPS_KEY }}-${{ github.run_id }}
+
+      - name: Anhalten, solange die Dependencies unfertig sind
+        if: steps.deps.outputs.unfinished == 'true'
+        run: |
+          echo "Die Dependencies sind noch nicht fertig."
+          echo "Der Stand liegt im Cache. Denselben Ablauf einfach noch einmal starten -"
+          echo "er setzt dort fort, wo dieser Lauf aufgehoert hat."
+          exit 1
 
       - name: Kern
         run: build/scripts/macos-bootstrap.sh core
