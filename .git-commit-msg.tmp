@@ -1,0 +1,40 @@
+App-Einstellungen als eigene Seite, ueber die Startseite erreichbar
+
+Bisher waren Programmeinstellungen dort verstreut, wo sie zufaellig
+gebraucht wurden: die Sprache oben rechts auf der Startseite, der
+Schalter fuer unpassende Materialien mitten in der Filamentauswahl.
+Wer eine davon suchte, musste wissen, wo sie das letzte Mal aufgetaucht
+war. Jetzt stehen sie zusammen auf einer Seite, getrennt nach dem, was
+sie betreffen: Darstellung, Leistung, Profile, Arbeitsstand.
+
+Jeder Schalter nennt darunter seinen Grund. Eine Einstellung, deren
+Wirkung man erraten muss, wird entweder nie angefasst oder einmal
+falsch.
+
+Neu dabei sind zwei Punkte, die es vorher nicht gab:
+
+- Modellvorschau in Listen abschaltbar. Sie kostet Zeit je Objekt;
+  bei langen Listen soll man sie loswerden koennen, ohne dass die
+  Liste selbst verschwindet.
+- Startmodus. Wer immer im selben Modus arbeitet, will nicht bei
+  jedem Start gefragt werden.
+
+Der feste Startmodus zieht zwei Folgen nach sich, die beide behandelt
+sind. Erstens sieht man die Startseite dann nie wieder, also waere die
+Einstellung, die einen dorthin gebracht hat, nicht mehr erreichbar -
+dieselbe Falle wie bei den unerreichbaren Betten. Deshalb fuehrt jetzt
+aus beiden Modi ein Weg hin: in Simple unter Settings, in Advanced als
+Zahnrad in der Kopfzeile. Zweitens zeichnet Simple damit schon im
+ersten Bild, bevor der Dienst gebunden ist; vorher deckte die
+Startseite diese Luecke ab, jetzt tut es ein Ladezeichen. Ohne das
+stuerzte die App beim Start ab (svc!! auf null).
+
+Der Schluessel fuer unpassende Materialien bleibt der alte, damit die
+bestehende Einstellung der Nutzer erhalten bleibt.
+
+Am Emulator geprueft: Seite von der Startseite und aus beiden Modi
+erreichbar, Startmodus Simple ueberlebt force-stop und fuehrt direkt
+in den Arbeitsbereich, Rueckweg ueber Settings, Zuruecksetzen auf
+"Ask every time" wirkt sofort.
+
+Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>

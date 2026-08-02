@@ -19,6 +19,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import de.psmobile.ui.AppSettings
+import de.psmobile.ui.AppSettingsScreen
 import de.psmobile.ui.PsUi
 import de.psmobile.ui.RemovableStorage
 import de.psmobile.ui.SetupScreen
@@ -29,6 +31,12 @@ import de.psmobile.ui.SlicerScreen
 import de.psmobile.ui.AppMode
 import de.psmobile.ui.SimpleModeScreen
 import de.psmobile.ui.WorkflowStartScreen
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
 import de.psmobile.ui.theme.PSMobileTheme
 import de.psmobile.ui.theme.PrusaColors
 import kotlinx.coroutines.Dispatchers
@@ -61,6 +69,26 @@ class MainActivity : ComponentActivity() {
     private var pendingFileDescription: String = "Datei"
     private var applyProfileUpdateWhenProjectSaved = false
     private var appMode by mutableStateOf<AppMode?>(null)
+    private var showAppSettings by mutableStateOf(false)
+
+    private val appPrefs by lazy {
+        getSharedPreferences("psmobile", Context.MODE_PRIVATE)
+    }
+
+    /**
+     * Einen Schalter wirksam machen.
+     *
+     * Der Wert steht schon in den Preferences - hier geht es nur um die
+     * Stellen, die ihn nicht selbst nachlesen, sondern im Kern oder im
+     * Dienst gesetzt werden muessen.
+     */
+    private fun applyAppSetting(key: String, on: Boolean) {
+        when (key) {
+            AppSettings.KEY_SHOW_INCOMPATIBLE -> service?.setShowIncompatiblePresets(on)
+            // Modellvorschau und Arbeitsstand liest die jeweilige Stelle
+            // selbst aus den Preferences.
+        }
+    }
     private var pendingSvgTarget:
         Triple<Int, Float, PsmCore.VolumeType>? = null
 
@@ -195,6 +223,13 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        // Wer den Modus immer gleich waehlt, soll nicht jedes Mal gefragt
+        // werden. Zurueck zur Frage kommt man ueber die App-Einstellungen.
+        appMode = when (appPrefs.getString(AppSettings.KEY_START_MODE, AppSettings.START_ASK)) {
+            AppSettings.START_SIMPLE -> AppMode.SIMPLE
+            AppSettings.START_ADVANCED -> AppMode.ADVANCED
+            else -> null
+        }
         // Der Startbildschirm darf nicht kurz als helle Android-Fläche
         // aufblitzen, bevor Simple oder Advanced ihren Inhalt zeichnet.
         window.statusBarColor = PrusaColors.Background.value.toInt()
@@ -232,6 +267,14 @@ class MainActivity : ComponentActivity() {
                         onLanguageChange = { svc.uiLanguage = it },
                         preselected = svc.installedPrinters(),
                     )
+                } else if (showAppSettings) {
+                    AppSettingsScreen(
+                        prefs = appPrefs,
+                        language = svc?.uiLanguage ?: "en",
+                        onLanguageChange = { svc?.uiLanguage = it },
+                        onToggleChanged = { key, on -> applyAppSetting(key, on) },
+                        onClose = { showAppSettings = false },
+                    )
                 } else if (appMode == null) {
                     WorkflowStartScreen(
                         onSimple = { appMode = AppMode.SIMPLE },
@@ -240,8 +283,17 @@ class MainActivity : ComponentActivity() {
                             appMode = AppMode.ADVANCED
                             svc?.showScreen(SlicerService.Screen.Wizard)
                         },
+                        onAppSettings = { showAppSettings = true },
                         onLanguageChange = { svc?.uiLanguage = it },
                     )
+                } else if (appMode == AppMode.SIMPLE && svc == null) {
+                    // Bei festem Startmodus zeichnet Simple schon im ersten
+                    // Bild, der Dienst ist dann noch nicht gebunden. Vorher
+                    // deckte die Startseite diese Luecke ab.
+                    Box(
+                        Modifier.fillMaxSize().background(PrusaColors.Background),
+                        contentAlignment = Alignment.Center,
+                    ) { CircularProgressIndicator(color = PrusaColors.Orange) }
                 } else if (appMode == AppMode.SIMPLE) {
                     SimpleModeScreen(
                         service = svc!!,
@@ -249,12 +301,14 @@ class MainActivity : ComponentActivity() {
                         onPickFile = { modelPicker.launch(arrayOf("model/3mf", "model/stl", "application/octet-stream")) },
                         onOpenAdvanced = { appMode = AppMode.ADVANCED },
                         onOpenPrinterSetup = { svc.reopenSetup() },
+                        onAppSettings = { showAppSettings = true },
                         onStartSlice = { svc.startSlice() },
                     )
                 } else {
                     SlicerScreen(
                         service = svc,
                         onOpenSimple = { appMode = AppMode.SIMPLE },
+                        onAppSettings = { showAppSettings = true },
                         onPickFile = { uris -> importUris(uris) },
                         onShare = { uri -> shareGcode(uri) },
                         // Bei jeder Neuzeichnung neu gefragt: ein Stick

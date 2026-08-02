@@ -76,6 +76,7 @@ internal fun SimpleModelSheet(
     var expanded by rememberSaveable { mutableStateOf(true) }
     var picked by remember { mutableStateOf(emptySet<Int>()) }
     var moveOpen by remember { mutableStateOf(false) }
+    val showThumbs = remember(objects.size) { service.thumbnailsEnabled() }
 
     // Geloeschte oder verschobene Objekte duerfen nicht als Geister in der
     // Auswahl bleiben - sonst nennt die Kopfzeile eine Zahl, zu der es
@@ -165,6 +166,7 @@ internal fun SimpleModelSheet(
                         checked = obj.id in picked,
                         highlighted = obj.id == selectedId && picked.isEmpty(),
                         selectionMode = picked.isNotEmpty(),
+                        showThumb = showThumbs,
                         onToggle = { picked = SimpleModelSheetState.toggle(picked, obj.id) },
                         onSelect = { onSelect(obj.id) },
                     )
@@ -309,6 +311,7 @@ private fun SimpleModelRow(
     checked: Boolean,
     highlighted: Boolean,
     selectionMode: Boolean,
+    showThumb: Boolean,
     onToggle: () -> Unit,
     onSelect: () -> Unit,
 ) {
@@ -333,7 +336,7 @@ private fun SimpleModelRow(
                 fontSize = 15.sp,
             )
         }
-        ObjectProportionThumb(obj)
+        if (showThumb) ObjectProportionThumb(obj)
         Column(Modifier.weight(1f).padding(start = 8.dp)) {
             Text(
                 obj.name,

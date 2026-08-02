@@ -45,6 +45,7 @@ fun WorkflowStartScreen(
     onSimple: () -> Unit,
     onAdvanced: () -> Unit,
     onAdvancedWizard: () -> Unit,
+    onAppSettings: () -> Unit,
     onLanguageChange: (String) -> Unit,
 ) {
     val context = LocalContext.current
@@ -156,6 +157,18 @@ fun WorkflowStartScreen(
                     ) {
                         Text(
                             SimpleModeState.text("Set up profiles or printers", "Profile oder Drucker einrichten") + "  ›",
+                            color = PrusaColors.TextMuted,
+                        )
+                    }
+                    // Einstellungen der App, nicht des Drucks. Vom
+                    // Startbildschirm aus, weil man sie vor der Arbeit
+                    // setzt und danach selten wieder anfasst.
+                    TextButton(
+                        onClick = onAppSettings,
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 44.dp),
+                    ) {
+                        Text(
+                            SimpleModeState.text("App settings", "App-Einstellungen") + "  ›",
                             color = PrusaColors.TextMuted,
                         )
                     }

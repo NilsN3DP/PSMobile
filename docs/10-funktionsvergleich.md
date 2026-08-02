@@ -128,7 +128,17 @@ als Einstellungs-Lücke.
 Der Desktop deklariert 14 relevante Gizmo-Typen. PSMobile deckt davon
 13 ab: Verschieben, Skalieren, Drehen, Flachlegen, Schneiden, Supports,
 Naht, Fuzzy Skin, MMU-Farbe, Messen, Text-/SVG-Prägen und Vereinfachen.
-Offen bleibt allein der im Desktop-Enum geführte Hollow-Pfad.
+
+Der vierzehnte, Aushöhlen, ist **keine Lücke, sondern liegt ausserhalb
+des Zuschnitts**. `GLGizmoHollow::on_is_activable()` prüft als Erstes
+`printer_technology() != ptSLA` und lehnt bei einem FDM-Drucker ab — das
+Werkzeug ist am Desktop dort gar nicht aktivierbar. Fachlich ist das
+schlüssig: Harz braucht Hohlräume samt Ablauflöchern gegen Saugwirkung
+und Materialverbrauch, beim FDM übernimmt das die Füllung, die man auf
+0 % stellt. Aushöhlen fällt damit unter dieselbe Entscheidung, die SLA
+insgesamt ausschliesst.
+
+Damit ist die Gizmo-Abdeckung für FDM **vollständig**.
 
 „Aufs Bett legen“ ist nicht dasselbe wie „Flach legen“: Ersteres senkt
 das Objekt nur auf Z=0, letzteres richtet eine ausgewählte Fläche aus.

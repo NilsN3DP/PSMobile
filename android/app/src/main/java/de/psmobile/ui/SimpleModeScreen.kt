@@ -81,6 +81,7 @@ fun SimpleModeScreen(
     onPickFile: () -> Unit,
     onOpenAdvanced: () -> Unit,
     onOpenPrinterSetup: () -> Unit,
+    onAppSettings: () -> Unit,
     onStartSlice: () -> Unit,
 ) {
     val presets by service.presets.collectAsState()
@@ -225,6 +226,7 @@ fun SimpleModeScreen(
                 onPickFile = onPickFile,
                 onOpenAdvanced = onOpenAdvanced,
                 onOpenPrinterSetup = onOpenPrinterSetup,
+                onAppSettings = onAppSettings,
             )
         }
     }
@@ -386,6 +388,7 @@ private fun SimpleOverlay(
     onPickFile: () -> Unit,
     onOpenAdvanced: () -> Unit,
     onOpenPrinterSetup: () -> Unit,
+    onAppSettings: () -> Unit,
 ) {
     // Die Referenz benutzt ein kompaktes, an der Toolbar verankertes Panel,
     // kein vollbreites Smartphone-Sheet.  So bleibt der Druckraum sichtbar
@@ -435,6 +438,7 @@ private fun SimpleOverlay(
                         brim = brim,
                         onPanel = onNavigate,
                         onOpenAdvanced = onOpenAdvanced,
+                        onAppSettings = onAppSettings,
                     )
                     SimplePanel.SUPPORTS -> SimpleSupportsPanel(service, quick)
                     SimplePanel.ADHESION -> SimpleAdhesionPanel(service, brim, objects)
@@ -751,6 +755,7 @@ private fun SimpleSettingsPanel(
     brim: String,
     onPanel: (SimplePanel) -> Unit,
     onOpenAdvanced: () -> Unit,
+    onAppSettings: () -> Unit,
 ) {
     Text(st("SETTINGS", "EINSTELLEN"), style = MaterialTheme.typography.titleLarge)
     Text(
@@ -802,6 +807,12 @@ private fun SimpleSettingsPanel(
         onClick = onOpenAdvanced,
         modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
     ) { Text(st("Open Advanced Mode", "Advanced Mode öffnen"), color = PrusaColors.TextMuted) }
+    // Programm statt Werkstueck: Sprache, Startmodus, Vorschau. Steht hier,
+    // weil man die Startseite nicht mehr sieht, wenn der Modus fest ist.
+    TextButton(
+        onClick = onAppSettings,
+        modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+    ) { Text(st("App settings", "App-Einstellungen"), color = PrusaColors.TextMuted) }
 }
 
 private data class SimpleSettingCardData(

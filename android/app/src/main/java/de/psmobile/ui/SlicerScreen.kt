@@ -134,6 +134,7 @@ private data class PendingPresetSwitch(
 fun SlicerScreen(
     service: SlicerService?,
     onOpenSimple: () -> Unit,
+    onAppSettings: () -> Unit,
     onPickFile: (List<android.net.Uri>) -> Unit,
     onShare: (android.net.Uri) -> Unit,
     usbTarget: String?,
@@ -159,6 +160,7 @@ fun SlicerScreen(
     SlicerContent(
         service = service,
         onOpenSimple = onOpenSimple,
+        onAppSettings = onAppSettings,
         onPickFile = onPickFile,
         onShare = onShare,
         usbTarget = usbTarget,
@@ -180,6 +182,7 @@ fun SlicerScreen(
 private fun SlicerContent(
     service: SlicerService,
     onOpenSimple: () -> Unit,
+    onAppSettings: () -> Unit,
     onPickFile: (List<android.net.Uri>) -> Unit,
     onShare: (android.net.Uri) -> Unit,
     usbTarget: String?,
@@ -458,6 +461,7 @@ private fun SlicerContent(
                         { confirmReloadProject = true }
                     } else null,
                     onOpenSimple = onOpenSimple,
+        onAppSettings = onAppSettings,
                     actionsEnabled = progress !is SlicerService.Progress.Running,
                     showInspectorAction = !permanentInspector,
                     inspectorOpen = inspectorOpen,
@@ -1553,6 +1557,7 @@ private fun WorkspaceBar(
     onSaveAs: () -> Unit,
     onReload: (() -> Unit)?,
     onOpenSimple: () -> Unit,
+    onAppSettings: () -> Unit,
     actionsEnabled: Boolean,
     showInspectorAction: Boolean,
     inspectorOpen: Boolean,
@@ -1599,6 +1604,10 @@ private fun WorkspaceBar(
             )
         }
         ProjectAction("Simple", actionsEnabled, onOpenSimple, tight = tight)
+        // Wer den Startmodus fest eingestellt hat, sieht die Startseite nie
+        // wieder - ohne diesen Weg waere die Einstellung nicht mehr
+        // erreichbar, die ihn dorthin gebracht hat.
+        ProjectAction("⚙", actionsEnabled, onAppSettings, tight = tight)
         if (showInspectorAction) {
             // Im Hochformat schnitt die feste Beschriftung den Bettwaehler
             // links ab. Das Rastersymbol allein traegt die Aussage, der

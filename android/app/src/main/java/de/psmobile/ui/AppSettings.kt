@@ -1,0 +1,103 @@
+package de.psmobile.ui
+
+/**
+ * Einstellungen der App selbst - nicht des Drucks.
+ *
+ * Bisher lagen sie verstreut: die Sprache als Klappmenue auf dem
+ * Startbildschirm, "unpassende Materialien zeigen" als Haken mitten in
+ * der Materialwahl, der Startmodus gar nicht einstellbar. Wer etwas
+ * davon aendern wollte, musste wissen, an welcher Stelle im Ablauf es
+ * versteckt ist.
+ *
+ * Hier stehen sie an einem Ort, mit Standardwerten und Begruendungen.
+ * Die Werte selbst liegen in denselben SharedPreferences wie bisher -
+ * bestehende Einstellungen bleiben also erhalten.
+ */
+object AppSettings {
+
+    enum class Group { APPEARANCE, PERFORMANCE, PROFILES, WORK }
+
+    /**
+     * Ein Schalter.
+     *
+     * @param key      Schluessel in den SharedPreferences
+     * @param default  Wert, solange nichts gesetzt wurde
+     * @param why      warum es ihn gibt - erscheint unter dem Schalter.
+     *                 Eine Einstellung ohne Begruendung zwingt zum
+     *                 Ausprobieren.
+     */
+    data class Toggle(
+        val key: String,
+        val group: Group,
+        val title: Pair<String, String>,
+        val why: Pair<String, String>,
+        val default: Boolean,
+    )
+
+    /** Modellvorschau in Listen - der Leistungsschalter. */
+    const val KEY_THUMBNAILS = "ui.thumbnails"
+
+    /** Auch Profile zeigen, die zum Drucker nicht passen. */
+    const val KEY_SHOW_INCOMPATIBLE = "presets.show-incompatible"
+
+    /** Arbeitsstand beim Verlassen sichern und beim Start zurueckholen. */
+    const val KEY_AUTOSAVE = "work.autosave"
+
+    /** Beim Start immer denselben Modus oeffnen statt zu fragen. */
+    const val KEY_START_MODE = "ui.start-mode"
+
+    /** Werte fuer KEY_START_MODE. */
+    const val START_ASK = "ask"
+    const val START_SIMPLE = "simple"
+    const val START_ADVANCED = "advanced"
+
+    val toggles: List<Toggle> = listOf(
+        Toggle(
+            key = KEY_THUMBNAILS,
+            group = Group.PERFORMANCE,
+            title = "Model previews in lists" to "Modellvorschau in Listen",
+            why = "Costs a little time per object. Turn it off if long lists feel sluggish."
+                to "Kostet je Objekt etwas Rechenzeit. Bei langen Listen abschaltbar.",
+            default = true,
+        ),
+        Toggle(
+            key = KEY_SHOW_INCOMPATIBLE,
+            group = Group.PROFILES,
+            title = "Show materials for other printers"
+                to "Materialien anderer Drucker zeigen",
+            why = "Unsuitable ones stay marked. Off by default because the list is long."
+                to "Unpassende bleiben gekennzeichnet. Standardmäßig aus, weil die Liste lang ist.",
+            default = false,
+        ),
+        Toggle(
+            key = KEY_AUTOSAVE,
+            group = Group.WORK,
+            title = "Keep work when leaving the app" to "Arbeitsstand beim Verlassen behalten",
+            why = "Android may end the app in the background without warning."
+                to "Android beendet die App im Hintergrund ohne Vorwarnung.",
+            default = true,
+        ),
+    )
+
+    fun group(g: Group): List<Toggle> = toggles.filter { it.group == g }
+
+    fun groupTitle(g: Group): String = when (g) {
+        Group.APPEARANCE -> SimpleModeState.text("Appearance", "Darstellung")
+        Group.PERFORMANCE -> SimpleModeState.text("Performance", "Leistung")
+        Group.PROFILES -> SimpleModeState.text("Profiles", "Profile")
+        Group.WORK -> SimpleModeState.text("Work in progress", "Arbeitsstand")
+    }
+
+    /** Die Gruppen in der Reihenfolge, in der sie angezeigt werden. */
+    val groupsInOrder: List<Group> = listOf(
+        Group.APPEARANCE, Group.PERFORMANCE, Group.PROFILES, Group.WORK,
+    )
+
+    fun startModeLabel(value: String): String = when (value) {
+        START_SIMPLE -> SimpleModeState.text("Always Simple Mode", "Immer Simple Mode")
+        START_ADVANCED -> SimpleModeState.text("Always Advanced Mode", "Immer Advanced Mode")
+        else -> SimpleModeState.text("Ask every time", "Jedes Mal fragen")
+    }
+
+    val startModes: List<String> = listOf(START_ASK, START_SIMPLE, START_ADVANCED)
+}

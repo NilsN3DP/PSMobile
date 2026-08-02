@@ -432,9 +432,21 @@ class SlicerService : Service() {
      * sonst kaeme nach "Neues Projekt" beim naechsten Start der alte Stand
      * zurueck.
      */
+    /** Ob der Arbeitsstand gesichert wird - abschaltbar in den App-Einstellungen. */
+    fun autosaveEnabled(): Boolean = prefs.getBoolean("work.autosave", true)
+
+    /** Ob Listen eine Modellvorschau zeigen - kostet je Objekt etwas Zeit. */
+    fun thumbnailsEnabled(): Boolean = prefs.getBoolean("ui.thumbnails", true)
+
     fun autosave() {
         val c = core ?: return
         if (_setupNeeded.value) return
+        if (! autosaveEnabled()) {
+            // Ausdruecklich abgeschaltet: dann darf auch kein alter Stand
+            // liegenbleiben, der beim naechsten Start zurueckkaeme.
+            runCatching { autosaveFile.delete() }
+            return
+        }
         runCatching {
             if (_objects.value.isEmpty() && _beds.value.size <= 1) {
                 autosaveFile.delete()
