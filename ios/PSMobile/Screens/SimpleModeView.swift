@@ -47,6 +47,15 @@ struct SimpleModeView: View {
     private enum Zweck { case modell, projekt }
     @State private var zweck: Zweck = .modell
 
+    /// Welches Gizmo am ausgewaehlten Objekt haengt.
+    @State private var gizmo: PsmViewport.Gizmo = .move
+    /// Bett oder G-Code-Vorschau. Die Vorschau gibt es erst nach einem
+    /// Schnitt - vorher ist nichts anzuzeigen.
+    @State private var vorschau = false
+    @State private var schicht: Double = 0
+    @State private var schichten: Int32 = 0
+    @State private var ansichtZuruecksetzen = 0
+
     /// Auf schmalen Geraeten ruecken Kopfzeile und Leiste zusammen -
     /// dasselbe `compact` wie auf Android, nur aus der Skalierung
     /// abgeleitet statt aus screenWidthDp.
@@ -73,8 +82,10 @@ struct SimpleModeView: View {
                 }
             }
             if panel != .workspace { overlay }
-            if panel == .workspace { modellKnopf }
-            if panel == .workspace { schrittleiste }
+            if panel == .workspace && !vorschau { modellKnopf }
+            if panel == .workspace && !vorschau { schrittleiste }
+            if panel == .workspace { werkzeugspalte }
+            if vorschau && schichten > 0 { schichtregler }
             if let hinweis = model.projectNotice { projektHinweis(hinweis) }
             if model.progress != .idle {
                 SliceSheet(model: model) { model.dismissProgress() }
@@ -109,6 +120,19 @@ struct SimpleModeView: View {
                 // schlucken: ein Tippen daneben soll das Panel schliessen,
                 // nicht die Kamera drehen.
                 inputEnabled: panel == .workspace,
+                gizmo: gizmo,
+                viewportMode: vorschau ? .preview : .editor,
+                layerRange: vorschau && schichten > 0
+                    ? 0...Int32(schicht) : nil,
+                resetViewKey: ansichtZuruecksetzen,
+                onPreviewLoaded: { anzahl in
+                    schichten = anzahl
+                    schicht = Double(max(anzahl - 1, 0))
+                    // Kommt nichts zurueck, gibt es auch nichts zu
+                    // zeigen - dann zurueck aufs Bett statt eine leere
+                    // Flaeche.
+                    if anzahl == 0 { vorschau = false }
+                },
                 onSelect: { model.select($0 < 0 ? nil : $0) },
                 onBlockedInput: { panel = .workspace }
             )
@@ -272,6 +296,112 @@ struct SimpleModeView: View {
             }
         }
         .padding(ps.pt(12))
+    }
+
+    // MARK: - Werkzeuge am rechten Rand
+
+    /// Verschieben, Drehen, Skalieren und die Ansicht zuruecksetzen.
+    ///
+    /// Der Viewport kennt die drei Gizmos seit langem, sie waren auf iOS
+    /// nur nicht umschaltbar - man konnte ein Objekt also nur ziehen,
+    /// nicht drehen. Rechts und nicht unten, weil unten schon die
+    /// Schrittleiste und das Modelle-Blatt liegen.
+    private var werkzeugspalte: some View {
+        HStack {
+            Spacer()
+            VStack(spacing: ps.pt(6)) {
+                Spacer()
+                if model.selectedId != nil && !vorschau {
+                    werkzeugKnopf("↔", st("Move", "Verschieben"),
+                                  aktiv: gizmo == .move, kennung: "werkzeug.verschieben") {
+                        gizmo = .move
+                    }
+                    werkzeugKnopf("⟳", st("Rotate", "Drehen"),
+                                  aktiv: gizmo == .rotate, kennung: "werkzeug.drehen") {
+                        gizmo = .rotate
+                    }
+                    werkzeugKnopf("⤢", st("Scale", "Skalieren"),
+                                  aktiv: gizmo == .scale, kennung: "werkzeug.skalieren") {
+                        gizmo = .scale
+                    }
+                }
+                werkzeugKnopf("⌂", st("View", "Ansicht"),
+                              aktiv: false, kennung: "werkzeug.ansicht") {
+                    ansichtZuruecksetzen += 1
+                }
+                if model.gcodeURL != nil {
+                    werkzeugKnopf(vorschau ? "▣" : "▱",
+                                  vorschau ? st("Bed", "Bett") : st("Preview", "Vorschau"),
+                                  aktiv: vorschau, kennung: "werkzeug.vorschau") {
+                        vorschauUmschalten()
+                    }
+                }
+                Spacer()
+            }
+            .padding(.trailing, ps.pt(10))
+        }
+    }
+
+    /// Die Vorschau wird beim ersten Hinsehen geladen - die Werkzeugwege
+    /// eines Drucks sind zu gross, um sie vorsorglich vorzuhalten.
+    private func vorschauUmschalten() {
+        if vorschau {
+            vorschau = false
+            return
+        }
+        // In der Vorschau gibt es keine Objekte zum Anfassen.
+        model.select(nil)
+        vorschau = true
+    }
+
+    private func werkzeugKnopf(_ glyph: String,
+                               _ label: String,
+                               aktiv: Bool,
+                               kennung: String,
+                               aktion: @escaping () -> Void) -> some View {
+        Button(action: aktion) {
+            VStack(spacing: 0) {
+                Text(glyph).font(.system(size: ps.font(16)))
+                Text(label).font(.system(size: ps.font(8))).lineLimit(1)
+            }
+            .foregroundStyle(aktiv ? PrusaColors.background : PrusaColors.textPrimary)
+            .frame(width: ps.pt(58), height: ps.touch(48))
+            .background(aktiv ? PrusaColors.orange : PrusaColors.panel.opacity(0.92))
+            .clipShape(RoundedRectangle(cornerRadius: ps.pt(3)))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier(kennung)
+    }
+
+    /// Bis zu welcher Schicht die Vorschau zeigt.
+    ///
+    /// Waagerecht am unteren Rand. Senkrecht am linken Rand waere naeher
+    /// an dem, was der Regler bedeutet - aber ein gedrehter Regler
+    /// stimmt in seinen Trefferflaechen nicht mehr mit dem ueberein, was
+    /// man sieht, und liess sich weder von Hand noch im Test zuverlaessig
+    /// bewegen.
+    private var schichtregler: some View {
+        VStack {
+            Spacer()
+            HStack(spacing: ps.pt(12)) {
+                Text(st("Layer", "Schicht"))
+                    .font(.system(size: ps.font(11)))
+                    .foregroundStyle(PrusaColors.textMuted)
+                Slider(value: $schicht, in: 0...Double(max(schichten - 1, 1)), step: 1)
+                    .tint(PrusaColors.orange)
+                    .accessibilityIdentifier("vorschau.schicht")
+                Text("\(Int(schicht) + 1)/\(schichten)")
+                    .font(.system(size: ps.font(11)))
+                    .foregroundStyle(PrusaColors.textPrimary)
+                    .frame(minWidth: ps.pt(64), alignment: .trailing)
+            }
+            .padding(.horizontal, ps.pt(16))
+            .frame(height: ps.touch(52))
+            .background(PrusaColors.panel.opacity(0.94))
+            .clipShape(RoundedRectangle(cornerRadius: ps.pt(3)))
+            .padding(ps.pt(12))
+        }
     }
 
     // MARK: - Zurueck und wiederholen

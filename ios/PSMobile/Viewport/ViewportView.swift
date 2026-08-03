@@ -24,6 +24,20 @@ struct ViewportView: UIViewRepresentable {
     /// zeichnet der Viewport weiter den alten Stand.
     var invalidateKey: Int
     var inputEnabled: Bool = true
+    /// Welches Gizmo am ausgewaehlten Objekt haengt. Der Viewport kennt
+    /// die Betriebsart schon lange; sie war nur nicht einstellbar.
+    var gizmo: PsmViewport.Gizmo = .move
+    /// Bett oder G-Code-Vorschau. Die Werkzeugwege werden beim ersten
+    /// Umschalten geladen - sie sind zu gross, um sie vorsorglich
+    /// vorzuhalten - und die Zahl der Schichten kommt zurueck.
+    var viewportMode: PsmViewport.Mode = .editor
+    /// Sichtbarer Schichtbereich in der Vorschau. Nil heisst: alles.
+    var layerRange: ClosedRange<Int32>?
+    /// Steigt, wenn die Ansicht zurueckgesetzt werden soll. Ein Ereignis
+    /// laesst sich in SwiftUI nicht als Zustand ausdruecken - ein
+    /// Zaehler schon.
+    var resetViewKey: Int = 0
+    var onPreviewLoaded: ((Int32) -> Void)?
     var onSelect: (Int32) -> Void
     var onSurfaceTap: ((PsmViewport.SurfaceHit) -> Void)?
     var onBlockedInput: (() -> Void)?
@@ -40,8 +54,21 @@ struct ViewportView: UIViewRepresentable {
         v.onSurfaceTap = onSurfaceTap
         v.onBlockedInput = onBlockedInput
         v.inputEnabled = inputEnabled
+        let zuruecksetzen = v.letzterResetKey != resetViewKey
+        v.letzterResetKey = resetViewKey
         v.perform { vp in
             vp.setSelections(selectedIds, primary: selectedId)
+            if vp.gizmo != gizmo { vp.gizmo = gizmo }
+            if viewportMode == .preview && !v.vorschauGeladen {
+                v.vorschauGeladen = true
+                let schichten = vp.loadPreview() ? vp.layerCount : 0
+                DispatchQueue.main.async { onPreviewLoaded?(schichten) }
+            }
+            if vp.mode != viewportMode { vp.mode = viewportMode }
+            if let bereich = layerRange {
+                vp.setLayerRange(first: bereich.lowerBound, last: bereich.upperBound)
+            }
+            if zuruecksetzen { vp.resetView() }
             vp.invalidate()
         }
         v.requestRender()
@@ -74,6 +101,12 @@ final class PSMGLView: UIView {
 
     var selectedId: Int32 = -1
     var inputEnabled = true
+    /// Zuletzt ausgefuehrtes Zuruecksetzen. Ohne diesen Merker liefe es
+    /// bei jeder Neuzeichnung erneut.
+    var letzterResetKey = 0
+    /// Ob die Werkzeugwege schon geladen sind. Sie noch einmal zu laden
+    /// kostet Sekunden und aendert nichts.
+    var vorschauGeladen = false
     var onSelect: ((Int32) -> Void)?
     var onSurfaceTap: ((PsmViewport.SurfaceHit) -> Void)?
     var onBlockedInput: (() -> Void)?
@@ -94,7 +127,13 @@ final class PSMGLView: UIView {
     init(session: OpaquePointer, shaderDir: String) {
         // GLES 2.0: genau dafuer sind die Shader aus PrusaSlicer
         // geschrieben. Sie sind GLSL ES 1.00.
-        guard let ctx = EAGLContext(api: .openGLES2) else {
+        // GLES 3, wenn moeglich. Das Bett zeichnet auch unter GLES 2,
+        // aber libvgcode - die G-Code-Vorschau - bringt Shader mit, die
+        // sich dort nicht uebersetzen lassen; der Fehler kam erst beim
+        // Umschalten auf die Vorschau und lautete nur "Unable to compile
+        // vertex shader". Ein GLES-3-Kontext nimmt die alten Shader
+        // weiterhin an, also kostet der Vorzug nichts.
+        guard let ctx = EAGLContext(api: .openGLES3) ?? EAGLContext(api: .openGLES2) else {
             fatalError("Kein GLES2-Kontext - iOS ohne OpenGLES gibt es nicht")
         }
         self.context = ctx
