@@ -1,44 +1,27 @@
-Erster echter iOS-Bildschirm: die Ersteinrichtung
+Die Ersteinrichtung erscheint jetzt auch
 
-Sie ist der richtige Anfang, weil man sie als Erstes sieht und weil ihre
-Regel schon im gemeinsamen Modul liegt. Der Zweck ist nicht Kosmetik:
-mit allen 37 Druckermodellen dauert der Start 13,5 s und die Listen
-enthalten 5762 Filamente, mit einem gewaehlten Drucker 1,9 s und 189.
+Der Bildschirm war gebaut, aber nie zu sehen: mein Kriterium fragte den
+Kern nach vorhandenen Druckerprofilen, und nach loadBundledPresets sind
+immer welche da. Die App sprang direkt in den Arbeitsbereich.
 
-Dazu die Prusa-Farben als Swift-Fassung. Bewusst nicht geteilt: es sind
-dreizehn Konstanten, und ein gemeinsames Modul muesste sie erst in einen
-plattformfreien Typ verpacken, den beide Seiten wieder auspacken. Anders
-als bei den Regeln faellt eine Abweichung hier sofort auf - eine falsche
-Farbe sieht man, ein falscher Schwellwert bleibt unbemerkt.
+Massgeblich ist die gemerkte Wahl, wie auf Android: leer heisst
+einrichten. Damit faellt auch loadBundledPresets beim Start weg - geladen
+wird nur, was gewaehlt wurde. Genau darum geht es bei diesem Bildschirm:
+alle 37 Modelle kosten 13,5 s Start und 5762 Filamente in den Listen,
+ein einzelner Drucker 1,9 s und 189.
 
-PrinterGrouping musste dafuer umgebaut werden, und der Grund ist eine
-Grenze, die ich vorher nicht kannte: **Kotlins Typparameter ueberleben
-die Bruecke nach Swift nicht.** Ich hatte die Regel generisch
-zugeschnitten, damit sie den Modelltyp offen laesst - auf Android eine
-innere Klasse der JNI-Bruecke, auf iOS ein Swift-Typ. In Swift kam davon
-nur ein untypisiertes Group an.
+Der Platzhalter im Suchfeld wird selbst gezeichnet. SwiftUI faerbt
+seinen eigenen in einem Grau, das auf dem dunklen Feld unsichtbar ist -
+das Feld sah aus wie ein leerer Kasten, dem man nicht ansieht, wozu er
+da ist.
 
-Jetzt bekommt die Regel die Familien und gibt zurueck, welche Positionen
-in welche Gruppe gehoeren. Das Modell bleibt beim Aufrufer. Weniger
-elegant als Generics, dafuer traegt es ueber die Bruecke - und der Test
-prueft jetzt ausdruecklich, dass die Positionen auf die richtigen
-Modelle zeigen.
+Belegt am Bildschirm: elf Familien in der Reihenfolge der Vendor-Datei -
+CORE, MK4, MK3.9, MK3.5, MINI, MK3, XL Single-Tool, XL Multi-Tool,
+MK2.5, MK2 - und Legacy Profiles grau am Ende. Nicht alphabetisch,
+sondern wie PrusaSlicer es fuehrt. Die Regel dafuer liegt im gemeinsamen
+Modul und wird auf beiden Plattformen benutzt.
 
-Der Bildschirm folgt Android auch im Verhalten, nicht nur im Aussehen:
-auf engen Schirmen faellt der Untertitel weg, statt alles zu schrumpfen -
-er erklaert nichts, was die Liste nicht selbst zeigt, kostet aber eine
-Zeile, die dann der Liste fehlt. Waehrend einer Suche entfaellt die
-Gliederung: wer tippt, will Treffer sehen und keine
-Zwischenueberschriften. Und jede Duesengroesse ist eine eigene Wahl, weil
-PrusaSlicer sie als getrennte Profile fuehrt.
-
-Alle Masse gehen durch ps.pt und ps.font - die Regel aus E-13 gilt ab
-dem ersten Bildschirm, nicht nachtraeglich.
-
-Geprueft: Modul, Android-App und -Tests, iOS-App bauen.
-
-Nicht geprueft: der Bildschirm ist noch nicht eingehaengt - PSMobileApp
-zeigt weiterhin direkt den Arbeitsbereich. Ob die Druckerliste sich
-richtig fuellt, zeigt sich erst dann.
+Was noch nicht geprueft ist: Aufklappen, Auswahl und der Abschluss.
+simctl kann keine Finger simulieren - dafuer braucht es ein UI-Testziel.
 
 Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>

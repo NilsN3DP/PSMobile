@@ -24,6 +24,15 @@ final class SlicerModel: ObservableObject {
     @Published private(set) var memoryWarning: String?
     @Published private(set) var coreVersion: String = "?"
 
+    /// Ob noch kein Drucker eingerichtet ist.
+    ///
+    /// Ohne Drucker gibt es keine Profile, ohne Profile kein Bett und
+    /// nichts zu slicen. Deshalb kommt die Ersteinrichtung vor allem
+    /// anderen - genauso wie auf Android.
+    @Published private(set) var setupNeeded = false
+    @Published private(set) var printerModels: [PsmCore.PrinterModel] = []
+    @Published private(set) var setupBusy = false
+
     /// Welches Objekt gerade angefasst ist, oder nichts.
     @Published private(set) var selectedId: Int32?
 
@@ -59,9 +68,24 @@ final class SlicerModel: ObservableObject {
             }
 
             let c = try PsmCore(dataDir: dataDir.path, resourceDir: resDir.path)
-            try? c.loadBundledPresets()
             core = c
             coreVersion = PsmCore.coreVersion
+
+            // Massgeblich ist die gemerkte Wahl, nicht was der Kern an
+            // Profilen kennt: nach loadBundledPresets waeren immer welche
+            // da, und die Ersteinrichtung erschiene nie.
+            //
+            // Und geladen wird nur das Gewaehlte. Alle 37 Modelle kosten
+            // 13,5 s Start und 5762 Filamente in den Listen, ein einzelner
+            // Drucker 1,9 s und 189.
+            let gewaehlt = Self.storedPrinters
+            if gewaehlt.isEmpty {
+                setupNeeded = true
+                printerModels = c.printerModels()
+            } else {
+                try? c.installPrinters(Array(gewaehlt))
+                setupNeeded = false
+            }
         } catch {
             progress = .failed(error.localizedDescription)
         }
@@ -90,6 +114,54 @@ final class SlicerModel: ObservableObject {
     }
 
     func select(_ id: Int32?) { selectedId = id }
+
+    /// Uebernimmt die Druckerwahl aus der Ersteinrichtung.
+    ///
+    /// Laeuft abgetrennt: das Installieren liest und schreibt Dutzende
+    /// Profildateien und blockiert sonst die Oberflaeche.
+    func completeSetup(_ keys: [String]) {
+        guard let core, !setupBusy else { return }
+        setupBusy = true
+        Task {
+            do {
+                try core.installPrinters(keys)
+                await MainActor.run {
+                    // Erst merken, dann als erledigt melden - sonst steht
+                    // beim naechsten Start wieder die Einrichtung da.
+                    Self.storedPrinters = Set(keys)
+                    setupNeeded = false
+                    setupBusy = false
+                    sceneRevision += 1
+                }
+            } catch {
+                await MainActor.run {
+                    progress = .failed(error.localizedDescription)
+                    setupBusy = false
+                }
+            }
+        }
+    }
+
+    /// Die Einrichtung noch einmal oeffnen, etwa um einen Drucker
+    /// nachzutragen.
+    func reopenSetup() {
+        guard let core else { return }
+        printerModels = core.printerModels()
+        setupNeeded = true
+    }
+
+    /// Die gemerkte Druckerwahl. Gegenstueck zu den Preferences auf
+    /// Android - dieselbe Rolle, dieselbe Bedeutung.
+    private static let printersKey = "printers"
+
+    static var storedPrinters: Set<String> {
+        get { Set(UserDefaults.standard.stringArray(forKey: printersKey) ?? []) }
+        set { UserDefaults.standard.set(Array(newValue), forKey: printersKey) }
+    }
+
+    /// Bereits eingerichtete Modelle, damit die Auswahl nicht bei null
+    /// beginnt, wenn man nur eine Duesengroesse ergaenzen will.
+    var installedPrinters: Set<String> { Self.storedPrinters }
 
     func remove(_ id: Int32) {
         try? core?.removeObject(id)

@@ -10,7 +10,19 @@ struct PSMobileApp: App {
             // Legt die Skalierung aus der Fenstergroesse fest. Muss ganz
             // aussen stehen: alles darunter rechnet damit.
             PSScaleRoot {
-                SlicerView()
+                // Ohne Drucker gibt es nichts zu zeigen - die
+                // Ersteinrichtung kommt vor dem Arbeitsbereich.
+                if model.setupNeeded {
+                    SetupView(
+                        models: model.printerModels,
+                        busy: model.setupBusy,
+                        preselected: model.installedPrinters,
+                        onConfirm: { model.completeSetup($0) },
+                        onLanguageChange: { _ in },
+                    )
+                } else {
+                    SlicerView()
+                }
             }
                 .environmentObject(model)
                 .onAppear { model.start() }

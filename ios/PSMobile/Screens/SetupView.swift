@@ -114,18 +114,28 @@ struct SetupView: View {
     }
 
     private var suchfeld: some View {
-        TextField(
-            SimpleModeState.shared.text(english: "Search printer model",
-                                        german: "Druckermodell suchen"),
-            text: $query,
-        )
-        .textFieldStyle(.plain)
-        .font(.system(size: ps.font(15)))
-        .foregroundStyle(PrusaColors.textPrimary)
-        .padding(ps.pt(12))
+        // Der Platzhalter wird selbst gezeichnet. SwiftUI faerbt seinen
+        // eigenen in einem Grau, das auf dem dunklen Feld praktisch
+        // unsichtbar ist - das Feld sah aus wie ein leerer Kasten ohne
+        // Hinweis, wozu er da ist.
+        ZStack(alignment: .leading) {
+            if query.isEmpty {
+                Text(SimpleModeState.shared.text(english: "Search printer model",
+                                                 german: "Druckermodell suchen"))
+                    .font(.system(size: ps.font(15)))
+                    .foregroundStyle(PrusaColors.textMuted)
+                    .padding(.horizontal, ps.pt(12))
+                    .allowsHitTesting(false)
+            }
+            TextField("", text: $query)
+                .textFieldStyle(.plain)
+                .font(.system(size: ps.font(15)))
+                .foregroundStyle(PrusaColors.textPrimary)
+                .padding(ps.pt(12))
+                .autocorrectionDisabled()
+        }
         .background(PrusaColors.panelRaised)
         .clipShape(RoundedCornerShape(ps.pt(6)))
-        .autocorrectionDisabled()
     }
 
     private var liste: some View {
