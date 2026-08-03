@@ -1,10 +1,10 @@
-package de.psmobile.ui
+package de.psmobile.shared.rules
 
-import de.psmobile.ui.SimpleModelSheetState.Action
-import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
-import org.junit.Assert.assertTrue
-import org.junit.Test
+import de.psmobile.shared.rules.SimpleModelSheetState.Action
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 
 class SimpleModelSheetStateTest {
 
@@ -12,16 +12,16 @@ class SimpleModelSheetStateTest {
 
     @Test
     fun `toggling picks and unpicks the same model`() {
-        val once = SimpleModelSheetState.toggle(emptySet(), 7)
-        assertEquals(setOf(7), once)
+        val once = SimpleModelSheetState.toggle(emptyList(), 7)
+        assertEquals(listOf(7), once)
         assertTrue(SimpleModelSheetState.toggle(once, 7).isEmpty())
     }
 
     @Test
     fun `deleted models do not stay selected as ghosts`() {
         assertEquals(
-            setOf(1, 3),
-            SimpleModelSheetState.pruned(setOf(1, 2, 3), listOf(1, 3, 5)),
+            listOf(1, 3),
+            SimpleModelSheetState.pruned(listOf(1, 2, 3), listOf(1, 3, 5)),
         )
     }
 
@@ -29,21 +29,21 @@ class SimpleModelSheetStateTest {
     fun `arranging needs at least two objects`() {
         assertFalse(
             Action.ARRANGE in
-                SimpleModelSheetState.enabledActions(1, emptySet(), 1, maxBeds),
+                SimpleModelSheetState.enabledActions(1, emptyList(), 1, maxBeds),
         )
         assertTrue(
             Action.ARRANGE in
-                SimpleModelSheetState.enabledActions(2, emptySet(), 1, maxBeds),
+                SimpleModelSheetState.enabledActions(2, emptyList(), 1, maxBeds),
         )
     }
 
     @Test
     fun `clone and remove only appear with a selection`() {
-        val none = SimpleModelSheetState.enabledActions(3, emptySet(), 1, maxBeds)
+        val none = SimpleModelSheetState.enabledActions(3, emptyList(), 1, maxBeds)
         assertFalse(Action.CLONE in none)
         assertFalse(Action.REMOVE in none)
 
-        val some = SimpleModelSheetState.enabledActions(3, setOf(1), 1, maxBeds)
+        val some = SimpleModelSheetState.enabledActions(3, listOf(1), 1, maxBeds)
         assertTrue(Action.CLONE in some)
         assertTrue(Action.REMOVE in some)
     }
@@ -52,14 +52,14 @@ class SimpleModelSheetStateTest {
     fun `moving to another bed stays possible while a new bed may be created`() {
         assertTrue(
             Action.MOVE_TO_BED in
-                SimpleModelSheetState.enabledActions(3, setOf(1), 1, maxBeds),
+                SimpleModelSheetState.enabledActions(3, listOf(1), 1, maxBeds),
         )
         // Alle Betten aufgebraucht und nur eines vorhanden waere der
         // einzige Fall ohne Ziel - er kann nicht eintreten, aber die
         // Regel muss ihn trotzdem sauber abbilden.
         assertFalse(
             Action.MOVE_TO_BED in
-                SimpleModelSheetState.enabledActions(3, setOf(1), 1, 1),
+                SimpleModelSheetState.enabledActions(3, listOf(1), 1, 1),
         )
     }
 
@@ -67,18 +67,18 @@ class SimpleModelSheetStateTest {
     fun `adding more is always possible, even on an empty bed`() {
         assertTrue(
             Action.ADD_MORE in
-                SimpleModelSheetState.enabledActions(0, emptySet(), 1, maxBeds),
+                SimpleModelSheetState.enabledActions(0, emptyList(), 1, maxBeds),
         )
         assertFalse(
             Action.SELECT_ALL in
-                SimpleModelSheetState.enabledActions(0, emptySet(), 1, maxBeds),
+                SimpleModelSheetState.enabledActions(0, emptyList(), 1, maxBeds),
         )
     }
 
     @Test
     fun `the headline switches to a count once something is picked`() {
-        assertEquals("MODELS", SimpleModelSheetState.headline(emptySet()))
-        assertTrue(SimpleModelSheetState.headline(setOf(1, 2)).contains("2"))
+        assertEquals("MODELS", SimpleModelSheetState.headline(emptyList()))
+        assertTrue(SimpleModelSheetState.headline(listOf(1, 2)).contains("2"))
     }
 
     @Test

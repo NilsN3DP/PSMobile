@@ -41,6 +41,7 @@ import de.psmobile.core.PsmCore
 import de.psmobile.slicing.SlicerService
 import de.psmobile.ui.theme.PrusaColors
 import de.psmobile.shared.rules.SimpleModeState
+import de.psmobile.shared.rules.SimpleModelSheetState
 
 /** Die C-ABI erlaubt 36 Druckbetten; siehe PSM_MAX_BEDS. */
 private const val MAX_BEDS = 36
@@ -75,7 +76,7 @@ internal fun SimpleModelSheet(
     modifier: Modifier = Modifier,
 ) {
     var expanded by rememberSaveable { mutableStateOf(true) }
-    var picked by remember { mutableStateOf(emptySet<Int>()) }
+    var picked by remember { mutableStateOf(emptyList<Int>()) }
     var moveOpen by remember { mutableStateOf(false) }
     val showThumbs = remember(objects.size) { service.thumbnailsEnabled() }
 
@@ -122,7 +123,7 @@ internal fun SimpleModelSheet(
                     SimpleModelSheetState.Action.ARRANGE in actions,
                 ) { service.arrange() }
             } else {
-                SheetAction("✕", t("Cancel", "Abbrechen"), true) { picked = emptySet() }
+                SheetAction("✕", t("Cancel", "Abbrechen"), true) { picked = emptyList() }
                 SheetAction(
                     "▤", t("Arrange", "Anordnen"),
                     SimpleModelSheetState.Action.ARRANGE in actions,
@@ -134,13 +135,13 @@ internal fun SimpleModelSheet(
                 SheetAction(
                     "⧉", t("Clone", "Klonen"),
                     SimpleModelSheetState.Action.CLONE in actions,
-                ) { service.duplicateObjects(picked) }
+                ) { service.duplicateObjects(picked.toSet()) }
                 SheetAction(
                     "✖", t("Remove", "Entfernen"),
                     SimpleModelSheetState.Action.REMOVE in actions,
                 ) {
-                    service.removeObjects(picked)
-                    picked = emptySet()
+                    service.removeObjects(picked.toSet())
+                    picked = emptyList()
                 }
             }
             SheetAction(
@@ -219,7 +220,7 @@ internal fun SimpleModelSheet(
             beds = beds,
             activeBed = activeBed,
             ids = picked,
-            onDone = { picked = emptySet(); moveOpen = false },
+            onDone = { picked = emptyList(); moveOpen = false },
             onDismiss = { moveOpen = false },
         )
     }
@@ -236,7 +237,7 @@ internal fun MoveToBedDialog(
     service: SlicerService,
     beds: List<PsmCore.Bed>,
     activeBed: Int,
-    ids: Set<Int>,
+    ids: List<Int>,
     onDone: () -> Unit,
     onDismiss: () -> Unit,
 ) {

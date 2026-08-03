@@ -221,23 +221,31 @@ struct SimpleModeView: View {
 
     // MARK: - Modell hinzufuegen
 
-    private var modellKnopf: some View {
+    /// Auf leerem Bett ein einzelner Knopf, sonst das Modelle-Blatt:
+    /// solange nichts da ist, gibt es nichts anzuordnen, zu klonen oder
+    /// zu entfernen - eine Liste mit lauter toten Knoepfen waere die
+    /// schlechtere Auskunft.
+    @ViewBuilder private var modellKnopf: some View {
         VStack {
             Spacer()
             HStack {
                 Spacer()
-                Button { zeigeImporter = true } label: {
-                    Text("＋ " + st("Add model", "Modell hinzufügen"))
-                        .font(.system(size: ps.font(14)))
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, ps.pt(16))
-                        .frame(height: ps.touch(56))
-                        .background(PrusaColors.orange)
-                        .clipShape(RoundedRectangle(cornerRadius: ps.pt(2)))
-                        .contentShape(Rectangle())
+                if model.objects.isEmpty {
+                    Button { zeigeImporter = true } label: {
+                        Text("＋ " + st("Add model", "Modell hinzufügen"))
+                            .font(.system(size: ps.font(14)))
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, ps.pt(16))
+                            .frame(height: ps.touch(56))
+                            .background(PrusaColors.orange)
+                            .clipShape(RoundedRectangle(cornerRadius: ps.pt(2)))
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("simple.modell")
+                } else {
+                    SimpleModelSheetView(model: model) { zeigeImporter = true }
                 }
-                .buttonStyle(.plain)
-                .accessibilityIdentifier("simple.modell")
             }
         }
         .padding(ps.pt(12))

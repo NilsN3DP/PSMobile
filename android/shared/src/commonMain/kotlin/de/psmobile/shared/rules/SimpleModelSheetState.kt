@@ -1,5 +1,4 @@
-package de.psmobile.ui
-import de.psmobile.shared.rules.SimpleModeState
+package de.psmobile.shared.rules
 
 /**
  * Zustand des Modelle-Blatts im Simple Mode, nach dem Vorbild von
@@ -17,16 +16,24 @@ import de.psmobile.shared.rules.SimpleModeState
  */
 object SimpleModelSheetState {
 
+    /*
+     * Ausgewaehlte Kennungen stehen als Liste, nicht als Menge: Kotlins
+     * Set<Int> kommt in Swift als Set<KotlinInt> an, und damit laesst
+     * sich dort nicht arbeiten. Die Reihenfolge spielt keine Rolle,
+     * doppelte Eintraege entstehen durch toggle() nicht.
+     */
+
+
     enum class Action { ARRANGE, MOVE_TO_BED, CLONE, REMOVE, SELECT_ALL, ADD_MORE }
 
-    fun toggle(selected: Set<Int>, id: Int): Set<Int> =
+    fun toggle(selected: List<Int>, id: Int): List<Int> =
         if (id in selected) selected - id else selected + id
 
     /** Nach dem Loeschen oder Bettwechsel duerfen keine Geister bleiben. */
-    fun pruned(selected: Set<Int>, existing: Collection<Int>): Set<Int> =
-        selected.filter { it in existing }.toSet()
+    fun pruned(selected: List<Int>, existing: List<Int>): List<Int> =
+        selected.filter { it in existing }
 
-    fun selectAll(existing: Collection<Int>): Set<Int> = existing.toSet()
+    fun selectAll(existing: List<Int>): List<Int> = existing.distinct()
 
     /**
      * Welche Aktionen jetzt sinnvoll sind.
@@ -38,11 +45,11 @@ object SimpleModelSheetState {
      */
     fun enabledActions(
         objectsOnBed: Int,
-        selected: Set<Int>,
+        selected: List<Int>,
         bedCount: Int,
         maxBeds: Int,
-    ): Set<Action> {
-        val actions = mutableSetOf<Action>()
+    ): List<Action> {
+        val actions = mutableListOf<Action>()
         if (objectsOnBed >= 2) actions += Action.ARRANGE
         if (objectsOnBed >= 1) actions += Action.SELECT_ALL
         actions += Action.ADD_MORE
@@ -55,7 +62,7 @@ object SimpleModelSheetState {
     }
 
     /** Kopfzeile: entweder der Titel oder die Zahl der Ausgewaehlten. */
-    fun headline(selected: Set<Int>): String =
+    fun headline(selected: List<Int>): String =
         if (selected.isEmpty()) SimpleModeState.text("MODELS", "MODELLE")
         else SimpleModeState.text(
             "${selected.size} SELECTED",

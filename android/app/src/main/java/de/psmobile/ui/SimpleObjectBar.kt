@@ -84,7 +84,7 @@ internal fun SimpleObjectBar(
             service = service,
             beds = beds,
             activeBed = activeBed,
-            ids = setOf(obj.id),
+            ids = listOf(obj.id),
             onDone = { moveOpen = false; onClearSelection() },
             onDismiss = { moveOpen = false },
         )

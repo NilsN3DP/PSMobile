@@ -21,6 +21,10 @@ final class SlicerModel: ObservableObject {
     }
 
     @Published private(set) var objects: [PsmCore.ObjectInfo] = []
+
+    /// Die Betten des Projekts. Mehrbett gibt es im Kern seit langem;
+    /// auf der iOS-Seite war es nur nicht sichtbar.
+    @Published private(set) var beds: [PsmCore.Bed] = []
     @Published private(set) var progress: Progress = .idle
     @Published private(set) var memoryWarning: String?
     @Published private(set) var coreVersion: String = "?"
@@ -312,7 +316,74 @@ final class SlicerModel: ObservableObject {
     func refresh() {
         guard let core else { return }
         objects = core.listObjects().compactMap { core.objectInfo($0) }
+        beds = core.beds()
         sceneRevision += 1
+    }
+
+    /// Obergrenze aus dem C-ABI (PSM_MAX_BEDS). Sie steht dort, damit
+    /// beide Seiten dieselbe Zahl nennen.
+    static let maxBeds = 36
+
+    func arrange() {
+        try? core?.arrange()
+        refresh()
+    }
+
+    func duplicate(_ ids: [Int32]) {
+        for id in ids { try? core?.duplicate(id) }
+        refresh()
+    }
+
+    func removeObjects(_ ids: [Int32]) {
+        for id in ids { try? core?.removeObject(id) }
+        if let gewaehlt = selectedId, ids.contains(gewaehlt) { selectedId = nil }
+        refresh()
+    }
+
+    func selectBed(_ index: Int) {
+        try? core?.selectBed(index)
+        // Ein anderes Bett heisst andere Objekte und eine andere
+        // Ansicht - die Auswahl von vorhin gibt es dort nicht.
+        selectedId = nil
+        refresh()
+    }
+
+    /// Schiebt Objekte auf ein anderes Bett. Ein Index jenseits der
+    /// vorhandenen Betten legt eines an - sonst waere ein volles Bett
+    /// eine Sackgasse.
+    func moveToBed(_ ids: [Int32], target: Int) {
+        guard let core else { return }
+        var ziel = target
+        if ziel >= beds.count {
+            guard let neu = try? core.addBed() else { return }
+            ziel = neu
+            // addBed waehlt das neue Bett aus; die Objekte liegen aber
+            // noch auf dem alten.
+            try? core.selectBed(beds.first(where: { $0.active })?.index ?? 0)
+        }
+        for id in ids { _ = try? core.moveToBed(id, target: ziel) }
+        selectedId = nil
+        refresh()
+    }
+
+    func fitToBed(_ id: Int32) {
+        try? core?.fitToBed(id)
+        refresh()
+    }
+
+    func mirror(_ id: Int32, axis: Int32) {
+        try? core?.mirror(id, axis: axis)
+        refresh()
+    }
+
+    func dropToBed(_ id: Int32) {
+        try? core?.dropToBed(id)
+        refresh()
+    }
+
+    func setInstances(_ id: Int32, count: Int32) {
+        try? core?.setInstances(id, count: count)
+        refresh()
     }
 
     private func checkMemory() {

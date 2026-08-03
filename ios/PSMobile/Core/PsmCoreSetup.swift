@@ -28,7 +28,10 @@ extension PsmCore {
 
     /// C-Zeichenfelder kommen in Swift als Tupel an - der Umweg ueber
     /// withUnsafeBytes macht daraus wieder eine Zeichenkette.
-    private static func text<T>(_ feld: T) -> String {
+    /// Nicht privat: PsmCoreObjects liest ebenfalls Namensfelder aus
+    /// C-Strukturen, und zwei Fassungen derselben vier Zeilen waeren eine
+    /// zu viel.
+    static func text<T>(_ feld: T) -> String {
         withUnsafeBytes(of: feld) { buf in
             let bytes = buf.bindMemory(to: CChar.self)
             return String(cString: bytes.baseAddress!)
