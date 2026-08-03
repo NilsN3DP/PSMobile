@@ -48,6 +48,27 @@ final class PrintersUITests: XCTestCase {
                       "Die Adresse wurde nicht als HTTPS ergaenzt")
     }
 
+    func testDasPasswortUeberlebtImSchluesselbund() {
+        // Der Schluesselbund laesst sich nur aus der App heraus pruefen:
+        // ein Testbuendel ohne Host bekommt bei jedem Aufruf -34018,
+        // errSecMissingEntitlement. Mit Host wiederum liegt das
+        // Kotlin-Framework doppelt im Prozess. Also hier, in der
+        // Bedienung - wo es ohnehin darauf ankommt.
+        lege(adresse: "192.168.1.60", passwort: "streng-geheim-42")
+        XCTAssertTrue(app.staticTexts["Werkstatt"].waitForExistence(timeout: 5))
+
+        app.buttons.matching(
+            NSPredicate(format: "label CONTAINS[c] 'earbeiten'")).firstMatch.tap()
+
+        let pw = app.secureTextFields["drucker.passwort"]
+        XCTAssertTrue(pw.waitForExistence(timeout: 5), "Das Formular fehlt")
+        // SecureField gibt seinen Inhalt nicht heraus - es meldet nur,
+        // dass etwas darin steht. Genau das reicht: leer hiesse, der
+        // Schluesselbund hat nichts zurueckgegeben.
+        XCTAssertEqual(pw.value as? String, "••••••••••••••••",
+                       "Das Passwort kam nicht aus dem Schluesselbund zurueck")
+    }
+
     func testKlartextWirdOhneFreigabeNichtGesendet() {
         lege(adresse: "http://192.168.1.50")
 
