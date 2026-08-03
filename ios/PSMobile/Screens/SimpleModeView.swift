@@ -55,6 +55,17 @@ struct SimpleModeView: View {
                 werkzeugleiste
                 Spacer()
             }
+            if panel == .workspace,
+               let id = model.selectedId,
+               let objekt = model.objects.first(where: { $0.id == id }) {
+                VStack {
+                    SimpleObjectBarView(model: model, objekt: objekt) {
+                        model.select(nil)
+                    }
+                    .padding(.top, ps.pt(kompakt ? 116 : 148))
+                    Spacer()
+                }
+            }
             if panel != .workspace { overlay }
             if panel == .workspace { modellKnopf }
             if model.progress != .idle {

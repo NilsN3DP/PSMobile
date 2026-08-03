@@ -113,6 +113,28 @@ extension PsmCore {
         return Array(ids.prefix(Int(anzahl)))
     }
 
+    /// Schneidet an einer waagerechten Ebene in Bettkoordinaten.
+    ///
+    /// keepAsParts legt beide Haelften als Volumen eines Objekts an
+    /// statt als getrennte Objekte. Im Simple Mode ist das die
+    /// schlechtere Wahl - dort gibt es keinen Objektbaum, in dem man
+    /// Teile wiederfaende.
+    @discardableResult
+    func cut(_ id: Int32,
+             zMm: Float,
+             keepUpper: Bool = true,
+             keepLower: Bool = true,
+             keepAsParts: Bool = false) throws -> [Int32] {
+        var ids = [psm_object_id](repeating: 0, count: 64)
+        var anzahl = size_t(0)
+        try check(psm_model_cut_z(raw, id, zMm,
+                                  keepUpper ? 1 : 0, keepLower ? 1 : 0,
+                                  keepAsParts ? 1 : 0,
+                                  &ids, size_t(ids.count), &anzahl),
+                  "Schneiden")
+        return Array(ids.prefix(Int(anzahl)))
+    }
+
     // MARK: - Extruder je Objekt
 
     /// Der Extruder eines Objekts. 0 heisst: der Standard des Profils.

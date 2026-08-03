@@ -366,6 +366,18 @@ final class SlicerModel: ObservableObject {
         refresh()
     }
 
+    func split(_ id: Int32) {
+        _ = try? core?.splitObject(id)
+        selectedId = nil
+        refresh()
+    }
+
+    func cut(_ id: Int32, zMm: Float) {
+        _ = try? core?.cut(id, zMm: zMm)
+        selectedId = nil
+        refresh()
+    }
+
     func fitToBed(_ id: Int32) {
         try? core?.fitToBed(id)
         refresh()
