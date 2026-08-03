@@ -83,8 +83,15 @@ final class SlicerModel: ObservableObject {
             // und prueft nichts mehr. Nur ueber ein Startargument - eine
             // Einstellung in der App waere ein Schalter, mit dem sich
             // versehentlich alles loeschen liesse.
-            if ProcessInfo.processInfo.arguments.contains("-psm-reset-setup") {
+            let argumente = ProcessInfo.processInfo.arguments
+            if argumente.contains("-psm-reset-setup") {
                 Self.storedPrinters = []
+            }
+            // Fuer Tests, die den Arbeitsbereich brauchen und nicht die
+            // Ersteinrichtung: einen gaengigen Drucker vorgeben, statt
+            // sich jedes Mal durch die Auswahl zu klicken.
+            if argumente.contains("-psm-preset-printer"), Self.storedPrinters.isEmpty {
+                Self.storedPrinters = ["PrusaResearch:MK4S:0.4"]
             }
 
             let gewaehlt = Self.storedPrinters

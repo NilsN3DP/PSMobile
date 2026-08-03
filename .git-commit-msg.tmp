@@ -1,30 +1,28 @@
-UI-Tests fuer iOS - und der erste Fehler, den sie gefunden haben
+Viewport-Gesten belegt: Drehen und Spreizen wirken
 
-simctl kann installieren, starten und ein Bild machen, aber nicht
-tippen. Damit liess sich jeder Bildschirm nur ansehen. Ob eine Familie
-sich aufklappt, eine Duesengroesse sich waehlen laesst und der Abschluss
-in den Arbeitsbereich fuehrt, war unpruefbar - genau die Fragen, auf die
-es ankommt.
+Sie waren geschrieben, aber unbelegt. Ein Screenshot zeigt ein
+Druckbett - nicht, ob sich die Kamera bewegen laesst. Genau dort liegt
+der Unterschied zwischen "uebersetzt" und "funktioniert", und genau den
+konnte ich bis jetzt nicht pruefen.
 
-Zwei Durchlaeufe: die Ersteinrichtung von der Familienliste bis in den
-Arbeitsbereich, und die Suche, die die Gliederung ausblenden muss.
-Gegenstueck zu den Emulator-Durchlaeufen auf Android.
+Der Vergleich laeuft ueber Bilder: dieselbe Ansicht vor und nach der
+Geste. Bleibt das Bild gleich, hat die Geste nichts bewirkt. Das ist
+grob, aber es beantwortet die Frage, um die es geht - erreicht die
+Beruehrung den GL-Bereich und rechnet der Viewport damit.
 
-Und sie haben sofort geliefert. Die Familienzeile war nur am Text
-antippbar, nicht auf ganzer Breite: dazwischen sitzt ein Spacer, und
-leeren Raum nimmt SwiftUI von der Trefferpruefung aus. Wer auf die Mitte
-der Zeile tippt - also dorthin, wo man bei einer Listenzeile eben
-hintippt -, haette nichts erreicht und die Familie fuer kaputt gehalten.
-Auf dem Bildschirm sah alles richtig aus; kein Screenshot haette das
-gezeigt.
+Fuer Tests, die den Arbeitsbereich brauchen und nicht die
+Ersteinrichtung, gibt ein zweites Startargument einen gaengigen Drucker
+vor. Sonst muesste sich jeder dieser Tests erst durch die Auswahl
+klicken - und schleppte deren Fehler mit, ohne sie zu pruefen.
 
-Die Kennungen haengen an den Elementen und nicht am sichtbaren Text: der
-ist uebersetzt und ginge bei der naechsten Sprachaenderung kaputt.
+Ein Stolperstein am Rande, der Zeit gekostet haette: eine neue Testdatei
+laeuft erst mit, wenn das Xcode-Projekt neu erzeugt wurde. Bis dahin
+meldet xcodebuild "TEST SUCCEEDED", ohne den Test ueberhaupt auszufuehren -
+eine Erfolgsmeldung fuer nichts.
 
-Zum Zuruecksetzen dient ein Startargument, keine Einstellung in der App -
-ein Schalter dafuer waere einer, mit dem sich versehentlich die ganze
-Einrichtung loeschen liesse.
+Geprueft: zehn Tests gruen, davon vier, die die App wirklich bedienen.
 
-Geprueft: acht Tests gruen, davon zwei, die die App wirklich bedienen.
+Weiterhin offen: Auswahl, Ziehen und die Griffe. Dafuer muss ein Modell
+auf dem Bett liegen, und das laedt der Test noch nicht.
 
 Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
