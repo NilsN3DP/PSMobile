@@ -17,10 +17,13 @@ final class SpecialValueUITests: XCTestCase {
         XCTAssertTrue(app.otherElements["arbeitsbereich"].waitForExistence(timeout: 60))
         app.buttons["advanced.printerSettings"].tap()
         XCTAssertTrue(app.buttons["seite.0"].waitForExistence(timeout: 15))
+        // Bettform und Reinigungsmengen stehen nicht in tabs.json -
+        // PrusaSlicer baut sie am Desktop mit eigenen Widgets. Sie haben
+        // deshalb eine eigene Seite am Ende der Druckerliste.
+        app.buttons["seite.sonderwerte"].tap()
     }
 
     func testDieBettformOeffnetSichAlsBreiteUndTiefe() {
-        // Die Bettform steht auf der ersten Druckerseite.
         let knopf = app.buttons["sonderwert.bed_shape"]
         XCTAssertTrue(knopf.waitForExistence(timeout: 10),
                       "Fuer die Bettform gibt es keinen eigenen Bearbeiter")

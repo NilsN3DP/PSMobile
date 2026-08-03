@@ -18,7 +18,6 @@ struct SettingField: View {
     @State private var meta: PsmCore.ConfigMeta?
     @State private var auswahl: [PsmCore.EnumValue] = []
     @State private var gesperrt: (enabled: Bool, reason: String) = (true, "")
-    @State private var zeigeBearbeiter = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: ps.pt(4)) {
@@ -52,41 +51,7 @@ struct SettingField: View {
     }
 
     @ViewBuilder private var feld: some View {
-        // Zwei Werte sind als Zeichenkette nicht zu bedienen: die
-        // Bettform und die Reinigungsmengen einer MMU. Fuer sie gibt es
-        // einen eigenen Bearbeiter; der allgemeine Renderer wuerde sie
-        // in ein einzeiliges Feld legen, in dem ein Tippfehler in der
-        // Mitte das Bett kaputtmacht.
-        if SpecialValueEditors.hasEditor(option.key) {
-            Button { zeigeBearbeiter = true } label: {
-                HStack {
-                    Text(wert.isEmpty ? "—" : wert)
-                        .font(.system(size: ps.font(12)))
-                        .foregroundStyle(PrusaColors.textMuted)
-                        .lineLimit(1)
-                    Spacer()
-                    Text(SimpleModeState.shared.text(english: "Edit", german: "Bearbeiten"))
-                        .font(.system(size: ps.font(12)))
-                        .foregroundStyle(PrusaColors.orange)
-                }
-                .padding(.horizontal, ps.pt(10))
-                .frame(height: ps.touch(44))
-                .background(PrusaColors.panelRaised)
-                .clipShape(RoundedRectangle(cornerRadius: ps.pt(4)))
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .accessibilityIdentifier("sonderwert." + option.key)
-            .sheet(isPresented: $zeigeBearbeiter, onDismiss: laden) {
-                if option.key == "bed_shape" {
-                    BedShapeEditor(model: model) { zeigeBearbeiter = false }
-                } else {
-                    WipingVolumesEditor(model: model) { zeigeBearbeiter = false }
-                }
-            }
-        } else {
-            gewoehnlichesFeld
-        }
+        gewoehnlichesFeld
     }
 
     @ViewBuilder private var gewoehnlichesFeld: some View {
