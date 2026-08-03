@@ -1,5 +1,0 @@
-# Dieser Ordner wird von build/scripts/stage-resources.sh ios befuellt.
-#
-# Er muss aber schon vorher existieren: project.yml bindet ihn als
-# Ressourcenordner ein, und xcodegen bricht ab, wenn der Pfad fehlt -
-# mit einer Meldung, die nach einem Fehler in der Spezifikation aussieht.

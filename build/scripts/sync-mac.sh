@@ -9,8 +9,12 @@
 # Unraid haengt hinter Tailscale). Deshalb laeuft es ueber diesen Rechner
 # als Bruecke: einmal lesen, einmal schreiben, ohne Zwischendatei.
 #
-#   ./sync-mac.sh            Quellen, Skripte, iOS-Projekt
-#   ./sync-mac.sh alles      zusaetzlich das gemeinsame Modul
+#   ./sync-mac.sh                    Quellen, Skripte, iOS-Projekt
+#   ./sync-mac.sh alles              zusaetzlich das gemeinsame Modul
+#   ./sync-mac.sh alles --trotzdem   auch wenn der Mac schmutzig ist
+#
+# Ohne --trotzdem bricht der Abgleich ab, sobald drueben uncommittete
+# Aenderungen liegen. Siehe die Sperre weiter unten.
 set -euo pipefail
 
 UNRAID="root@100.109.46.54"
@@ -34,6 +38,29 @@ if [ "${1:-}" = "alles" ]; then
 fi
 
 printf 'Spiegle: %s\n' "${PFADE[*]}"
+
+# --- Sperre: nie ueber fremde Arbeit schreiben ---------------------------
+#
+# Dieses Skript packt Dateien in ein tar und entpackt sie drueben. Was
+# dort denselben Namen traegt, ist danach weg - ohne Rueckfrage und ohne
+# Spur. Am 3. August hat genau das den Arbeitsstand eines zweiten
+# Zweiges auf dem Mac ueberschrieben; gerettet hat ihn nur, dass er
+# committet war.
+#
+# Deshalb: ist der Mac schmutzig, bricht der Abgleich ab. Wer trotzdem
+# schieben will, muss drueben committen oder es ausdruecklich sagen.
+if [ "${2:-}" != "--trotzdem" ]; then
+    SCHMUTZ=$(ssh -i "${MAC_KEY}" -o BatchMode=yes "${MAC}" \
+        "cd ~/psmobile 2>/dev/null && git status --porcelain 2>/dev/null | head -20")
+    if [ -n "${SCHMUTZ}" ]; then
+        printf 'Abbruch: auf dem Mac liegen uncommittete Aenderungen.\n\n'
+        printf '%s\n\n' "${SCHMUTZ}"
+        printf 'Erst drueben sichern:\n'
+        printf "  ssh -i \"\${USERPROFILE}/.ssh/macincloud2\" %s 'cd ~/psmobile && git add -A && git commit -m ...'\n\n" "${MAC}"
+        printf 'Oder bewusst ueberschreiben:  ./sync-mac.sh %s --trotzdem\n' "${1:-}"
+        exit 1
+    fi
+fi
 
 # build-Ordner bleiben draussen: sie sind gross, plattformgebunden und
 # werden drueben ohnehin neu erzeugt.
