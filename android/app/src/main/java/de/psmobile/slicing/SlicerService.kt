@@ -1538,6 +1538,16 @@ class SlicerService : Service() {
         }
     }
 
+    /**
+     * Blendet das Ergebnis aus, ohne es zu verwerfen.
+     *
+     * Der G-Code bleibt liegen - wer das Blatt schliesst, will es weg
+     * haben, nicht noch einmal rechnen.
+     */
+    fun dismissProgress() {
+        if (_progress.value !is Progress.Running) _progress.value = Progress.Idle
+    }
+
     fun cancelSlice() {
         startService(
             Intent(this, SlicerService::class.java).setAction(ACTION_CANCEL_SLICE)

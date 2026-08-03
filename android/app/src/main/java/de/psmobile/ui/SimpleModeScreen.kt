@@ -72,6 +72,7 @@ import de.psmobile.ui.theme.PrusaColors
 import de.psmobile.ui.theme.uiScaleFor
 import de.psmobile.shared.rules.AdhesionAdvice
 import de.psmobile.shared.rules.SimpleModeState
+import de.psmobile.shared.rules.SliceSummary
 import de.psmobile.shared.rules.EasyModeState
 import de.psmobile.shared.rules.SimplePanel
 import de.psmobile.shared.rules.SimpleSupportChoice
@@ -88,14 +89,19 @@ fun SimpleModeScreen(
     onOpenPrinterSetup: () -> Unit,
     onAppSettings: () -> Unit,
     onStartSlice: () -> Unit,
+    onShareGcode: () -> Unit = {},
 ) {
     val presets by service.presets.collectAsState()
+    val progress by service.progress.collectAsState()
     val objects by service.objects.collectAsState()
     val beds by service.beds.collectAsState()
     val quick by service.quickSettings.collectAsState()
     val sceneRevision by service.sceneRevision.collectAsState()
     val configuration = LocalConfiguration.current
     var panel by rememberSaveable { mutableStateOf(SimplePanel.WORKSPACE) }
+    // Was fehlt, bevor geschnitten werden kann. Leer heisst: es kann
+    // losgehen.
+    var hinderungsgruende by remember { mutableStateOf(emptyList<String>()) }
     var selectedId by remember { mutableStateOf<Int?>(null) }
     val controller = remember { SceneController() }
     val placement = SimpleModeLayout.toolbarPlacement(
@@ -162,10 +168,25 @@ fun SimpleModeScreen(
                 widthDp = configuration.screenWidthDp,
                 compact = compactChrome,
                 selected = panel,
-                canPrint = objects.isNotEmpty() && presets.selectedPrinter.isNotBlank() &&
-                    presets.selectedFilament.isNotBlank() && presets.selectedPrint.isNotBlank(),
+                // Immer bedienbar: ein Knopf, der nichts tut und nichts
+                // sagt, ist die schlechtere Auskunft als einer, der den
+                // Grund nennt.
+                canPrint = true,
                 onPanel = { panel = if (panel == it) SimplePanel.WORKSPACE else it },
-                onStartSlice = onStartSlice,
+                onStartSlice = {
+                    val gruende = SliceSummary.blockers(
+                        objects = objects.size,
+                        printer = presets.selectedPrinter,
+                        filament = presets.selectedFilament,
+                        print = presets.selectedPrint,
+                    )
+                    if (gruende.isEmpty()) {
+                        panel = SimplePanel.WORKSPACE
+                        onStartSlice()
+                    } else {
+                        hinderungsgruende = gruende
+                    }
+                },
             )
         }
         // Leiste am ausgewaehlten Objekt. Nur wenn kein Menue offen ist -
@@ -215,6 +236,18 @@ fun SimpleModeScreen(
         // Als Geschwister ausserhalb dieser Box konnte die native 3D-View
         // Beruehrungen neben dem Menue abfangen; ein Tippen ausserhalb
         // schloss das Menue dann nicht.
+        if (progress !is SlicerService.Progress.Idle &&
+            progress !is SlicerService.Progress.Stale) {
+            SimpleSliceSheet(
+                progress = progress,
+                onCancel = service::cancelSlice,
+                onClose = service::dismissProgress,
+                onShare = onShareGcode,
+            )
+        }
+        if (hinderungsgruende.isNotEmpty()) {
+            SimpleSliceBlockers(hinderungsgruende) { hinderungsgruende = emptyList() }
+        }
         if (panel != SimplePanel.WORKSPACE) {
             SimpleOverlay(
                 panel = panel,
