@@ -257,3 +257,40 @@ zweimal Testrunner „unexpectedly exited". Keine Absturzberichte, aber
 nur ~290 MB freier Speicher bei zwei laufenden Simulatoren. Der zweite
 Simulator ist jetzt aus. Wer das wieder sieht: erst `vm_stat` ansehen,
 bevor der Fehler im Code gesucht wird.
+
+### Claude — was Tests auf iOS voneinander wissen
+
+Ein voller Lauf hat etwas gefunden, das einzeln nie auffällt: der
+Bettform-Test sah 300 mm, wo 250 stehen sollten. Kein Fehler im Code —
+**PrusaSlicer behält Änderungen an einem Preset über den App-Start
+hinaus**, und ein anderer Test in derselben Klasse ändert die Bettform
+absichtlich. Der erste Test sah beim nächsten Lauf, was der zweite
+hinterlassen hatte.
+
+Daraus zwei Regeln fürs Testen auf iOS:
+
+1. **Keine festen Werte aus Profilen erwarten.** Prüfe, dass überhaupt
+   etwas Sinnvolles kommt, und prüfe Änderungen als Rundreise: setzen,
+   Bildschirm verlassen, zurückkommen, vergleichen.
+2. **Was der Test verändert, überlebt ihn.** UserDefaults, Keychain und
+   Presets liegen im Simulator und bleiben. Wo ein sauberer Start nötig
+   ist, gibt es Startargumente — `-psm-reset-setup`,
+   `-psm-reset-printers` —, und ein neues gehört dazu, wenn ein Test
+   sonst vom vorigen abhängt.
+
+### Stand am Ende des 3. August
+
+**iOS** trägt einen Druck von Anfang bis Ende: Ersteinrichtung,
+Startbildschirm, Simple Mode mit allen Panels, Advanced-Arbeitsbereich
+mit Objektbaum, alle 20 Einstellungsseiten, Schnelleinstellungen,
+Projekte als 3MF, Zurück/Wiederholen, Slicen mit Zusammenfassung,
+G-Code-Ausgabe, G-Code-Vorschau, Bemalen, PrusaLink, ColorMix und
+INDX-Positionen, Bettform und Reinigungsmengen.
+
+**Offen:** variable Schichthöhe, drei der fünf Sonderdialoge (Ramming,
+Ersetzungen, Druckerhost), Miniaturbilder in der Objektliste,
+Rahmenauswahl, MMU-Statistik, Oberfläche für die Profilupdates.
+
+**Und das Wichtigste:** es lief noch nie auf echter Hardware. Alles
+Geprüfte ist Simulator. Die Feature-Matrix sagt deshalb
+`emulator_tested`, nicht `device_tested`.
