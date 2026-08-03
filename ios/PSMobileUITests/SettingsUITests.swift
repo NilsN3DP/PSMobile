@@ -13,7 +13,7 @@ final class SettingsUITests: XCTestCase {
     override func setUp() {
         continueAfterFailure = false
         app = XCUIApplication()
-        app.launchArguments = ["-psm-preset-printer"]
+        app.launchArguments = ["-psm-preset-printer", "-psm-start-advanced"]
         app.launch()
 
         XCTAssertTrue(app.otherElements["arbeitsbereich"].waitForExistence(timeout: 60),

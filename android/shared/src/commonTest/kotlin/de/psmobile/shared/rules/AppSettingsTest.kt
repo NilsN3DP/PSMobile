@@ -17,8 +17,8 @@ class AppSettingsTest {
     fun `jeder Schalter sagt, wofuer er da ist`() {
         // Eine Einstellung ohne Begruendung zwingt zum Ausprobieren.
         AppSettings.toggles.forEach {
-            assertTrue(it.why.first.isNotBlank() && it.why.second.isNotBlank(), it.key)
-            assertTrue(it.title.first.isNotBlank() && it.title.second.isNotBlank(), it.key)
+            assertTrue(it.why.english.isNotBlank() && it.why.german.isNotBlank(), it.key)
+            assertTrue(it.title.english.isNotBlank() && it.title.german.isNotBlank(), it.key)
         }
     }
 
@@ -32,9 +32,9 @@ class AppSettingsTest {
     @Test
     fun `Vorschau und Arbeitsstand sind an, unpassende Profile aus`() {
         fun byKey(k: String) = AppSettings.toggles.first { it.key == k }
-        assertTrue(byKey(AppSettings.KEY_THUMBNAILS).default)
-        assertTrue(byKey(AppSettings.KEY_AUTOSAVE).default)
-        assertFalse(byKey(AppSettings.KEY_SHOW_INCOMPATIBLE).default)
+        assertTrue(byKey(AppSettings.KEY_THUMBNAILS).standard)
+        assertTrue(byKey(AppSettings.KEY_AUTOSAVE).standard)
+        assertFalse(byKey(AppSettings.KEY_SHOW_INCOMPATIBLE).standard)
     }
 
     @Test

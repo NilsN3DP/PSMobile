@@ -66,7 +66,7 @@ fun AppSettingsScreen(
     // Wahrheit steht in den Preferences.
     val values = remember {
         mutableStateMapOf<String, Boolean>().apply {
-            AppSettings.toggles.forEach { put(it.key, prefs.getBoolean(it.key, it.default)) }
+            AppSettings.toggles.forEach { put(it.key, prefs.getBoolean(it.key, it.standard)) }
         }
     }
     var startMode by remember {
@@ -144,9 +144,9 @@ fun AppSettingsScreen(
 
                     items.forEach { toggle ->
                         ToggleRow(
-                            title = t(toggle.title.first, toggle.title.second),
-                            why = t(toggle.why.first, toggle.why.second),
-                            checked = values[toggle.key] ?: toggle.default,
+                            title = t(toggle.title.english, toggle.title.german),
+                            why = t(toggle.why.english, toggle.why.german),
+                            checked = values[toggle.key] ?: toggle.standard,
                             onChange = {
                                 values[toggle.key] = it
                                 prefs.edit().putBoolean(toggle.key, it).apply()

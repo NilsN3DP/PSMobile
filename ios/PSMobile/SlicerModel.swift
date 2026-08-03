@@ -1,6 +1,7 @@
 import Foundation
 import SwiftUI
 import UIKit   // beginBackgroundTask
+import PSMShared
 
 /// Zustandshalter der App - Gegenstueck zu `SlicerService` auf Android.
 ///
@@ -154,6 +155,30 @@ final class SlicerModel: ObservableObject {
         // Eine Aenderung an den Einstellungen macht ein vorhandenes
         // Slice-Ergebnis ungueltig und kann das Bett veraendern.
         sceneRevision += 1
+    }
+
+    func config(_ key: String) -> String? { core?.config(key) }
+
+    func presetNames(_ type: PsmCore.PresetType) -> [String] {
+        core?.presetNames(type) ?? []
+    }
+
+    func selectPreset(_ type: PsmCore.PresetType, _ name: String) {
+        try? core?.selectPreset(type, name)
+        // Ein anderer Drucker heisst ein anderes Bett, ein anderes Profil
+        // andere Masse - beides muss der Viewport sehen.
+        sceneRevision += 1
+        refresh()
+    }
+
+    /// Die Grundflaechen der Objekte, wie sie die Haftungsberatung
+    /// braucht. Die Beurteilung selbst steht im gemeinsamen Modul.
+    var footprints: [AdhesionAdvice.Footprint] {
+        objects.map {
+            AdhesionAdvice.Footprint(widthMm: $0.sizeMm.x,
+                                     depthMm: $0.sizeMm.y,
+                                     heightMm: $0.sizeMm.z)
+        }
     }
 
     /// Uebernimmt die Druckerwahl aus der Ersteinrichtung.

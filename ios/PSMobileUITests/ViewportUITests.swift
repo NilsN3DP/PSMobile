@@ -17,7 +17,7 @@ final class ViewportUITests: XCTestCase {
         app = XCUIApplication()
         // Mit eingerichtetem Drucker starten - die Ersteinrichtung ist
         // hier nicht das Thema.
-        app.launchArguments = ["-psm-preset-printer"]
+        app.launchArguments = ["-psm-preset-printer", "-psm-start-advanced"]
         app.launch()
     }
 

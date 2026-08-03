@@ -81,7 +81,17 @@ object SimpleModeState {
 
     fun printSettingsColumns() = listOf("Print Settings", "Infill", "Shell Thickness")
 
-    fun projectSummaryCopy(): Triple<String, String, String> = Triple(
+    /**
+     * Die drei Zeilen der Projektkarte. Kein Triple - Typparameter
+     * ueberleben die Bruecke nach Swift nicht, siehe [Bilingual].
+     */
+    data class ProjectSummary(
+        val title: String,
+        val noPrinter: String,
+        val session: String,
+    )
+
+    fun projectSummaryCopy() = ProjectSummary(
         text("Current project", "Aktuelles Projekt"),
         text("No printer selected", "Drucker nicht gewählt"),
         text("This session", "Diese Sitzung"),

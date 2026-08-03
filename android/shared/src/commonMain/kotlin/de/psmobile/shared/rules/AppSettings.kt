@@ -21,7 +21,7 @@ object AppSettings {
      * Ein Schalter.
      *
      * @param key      Schluessel in den SharedPreferences
-     * @param default  Wert, solange nichts gesetzt wurde
+     * @param standard Wert, solange nichts gesetzt wurde
      * @param why      warum es ihn gibt - erscheint unter dem Schalter.
      *                 Eine Einstellung ohne Begruendung zwingt zum
      *                 Ausprobieren.
@@ -29,9 +29,9 @@ object AppSettings {
     data class Toggle(
         val key: String,
         val group: Group,
-        val title: Pair<String, String>,
-        val why: Pair<String, String>,
-        val default: Boolean,
+        val title: Bilingual,
+        val why: Bilingual,
+        val standard: Boolean,
     )
 
     /** Modellvorschau in Listen - der Leistungsschalter. */
@@ -55,27 +55,38 @@ object AppSettings {
         Toggle(
             key = KEY_THUMBNAILS,
             group = Group.PERFORMANCE,
-            title = "Model previews in lists" to "Modellvorschau in Listen",
-            why = "Costs a little time per object. Turn it off if long lists feel sluggish."
-                to "Kostet je Objekt etwas Rechenzeit. Bei langen Listen abschaltbar.",
-            default = true,
+            title = Bilingual("Model previews in lists", "Modellvorschau in Listen"),
+            why = Bilingual(
+                "Costs a little time per object. Turn it off if long lists feel sluggish.",
+                "Kostet je Objekt etwas Rechenzeit. Bei langen Listen abschaltbar.",
+            ),
+            standard = true,
         ),
         Toggle(
             key = KEY_SHOW_INCOMPATIBLE,
             group = Group.PROFILES,
-            title = "Show materials for other printers"
-                to "Materialien anderer Drucker zeigen",
-            why = "Unsuitable ones stay marked. Off by default because the list is long."
-                to "Unpassende bleiben gekennzeichnet. Standardmäßig aus, weil die Liste lang ist.",
-            default = false,
+            title = Bilingual(
+                "Show materials for other printers",
+                "Materialien anderer Drucker zeigen",
+            ),
+            why = Bilingual(
+                "Unsuitable ones stay marked. Off by default because the list is long.",
+                "Unpassende bleiben gekennzeichnet. Standardmäßig aus, weil die Liste lang ist.",
+            ),
+            standard = false,
         ),
         Toggle(
             key = KEY_AUTOSAVE,
             group = Group.WORK,
-            title = "Keep work when leaving the app" to "Arbeitsstand beim Verlassen behalten",
-            why = "Android may end the app in the background without warning."
-                to "Android beendet die App im Hintergrund ohne Vorwarnung.",
-            default = true,
+            title = Bilingual(
+                "Keep work when leaving the app",
+                "Arbeitsstand beim Verlassen behalten",
+            ),
+            why = Bilingual(
+                "The system may end the app in the background without warning.",
+                "Das System beendet die App im Hintergrund ohne Vorwarnung.",
+            ),
+            standard = true,
         ),
     )
 

@@ -18,7 +18,7 @@ final class SetupUITests: XCTestCase {
         app = XCUIApplication()
         // Ohne Zuruecksetzen startet der zweite Durchlauf mit bereits
         // eingerichtetem Drucker - und prueft dann nichts mehr.
-        app.launchArguments = ["-psm-reset-setup"]
+        app.launchArguments = ["-psm-reset-setup", "-psm-start-advanced"]
         app.launch()
     }
 

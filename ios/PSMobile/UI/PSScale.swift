@@ -35,8 +35,14 @@ struct PSScale: Equatable {
 
     let factor: CGFloat
 
+    /// Die Fenstergroesse, aus der der Faktor stammt. Panels, die den
+    /// verfuegbaren Platz ausnutzen sollen, rechnen damit - statt einen
+    /// zweiten GeometryReader aufzumachen, der etwas anderes misst.
+    let windowSize: CGSize
+
     init(width: CGFloat, height: CGFloat) {
         self.factor = PSScale.scaleFor(width: width, height: height)
+        self.windowSize = CGSize(width: width, height: height)
     }
 
     /// Die knappere Kante entscheidet. Hochskaliert wird nie: ab der
