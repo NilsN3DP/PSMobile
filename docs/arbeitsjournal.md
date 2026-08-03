@@ -43,7 +43,7 @@ sondern die Absprache währenddessen.
 | iOS ColorMix und INDX-Positionen | Codex | steht |
 | PrusaLink: Digest, Regeln, Client, Schlüsselbund | beide, zusammengeführt | steht, ohne echten Drucker geprüft |
 | Profilupdate-Politik (gemeinsames Modul) | Codex | Regel da, keine Oberfläche |
-| iOS Advanced: Werkzeugleiste, Objektbaum | offen | — |
+| iOS Advanced: Werkzeugleiste, Objektbaum | Claude | steht, 4 Tests |
 | Bemalen: Stützen, Naht, Farbwechsel | offen | — |
 | Fünf Spezialdialoge auf iOS | offen | — |
 
@@ -169,3 +169,39 @@ Stand: 33 Tests auf iOS grün, Android grün.
 
 **Nicht am Gerät geprüft.** Ohne echten Drucker ist nur belegt, dass die
 Rechnung stimmt und die Ablehnungen greifen.
+
+### Claude — Advanced-Arbeitsbereich
+
+Der Advanced Mode war eine Notlösung aus der Zeit, als auf iOS noch gar
+nichts lief: Viewport, Liste, ein Knopf. Der Simple Mode konnte
+inzwischen mehr als der Modus, der für diejenigen da ist, die alles
+sehen wollen.
+
+Jetzt: Werkzeugleiste mit eigenen Einstiegen für Druck-, Filament- und
+Druckereinstellungen, Anordnen, Ansicht, Drucker, Moduswechsel. Rechts
+der Inspektor — Gizmowahl, Größe in Prozent **und** Millimetern, Drehung
+je Achse mit Vierteldrehungen, Ablegen, Einpassen, Spiegeln, Kopien,
+Bettwechsel, und der Objektbaum mit Extruder je Teil.
+
+Zwei Entscheidungen, die man später sonst nicht mehr sieht:
+
+- Die Zahlenfelder übernehmen erst beim Verlassen. Bei jedem Tastendruck
+  zu übernehmen hieße, dass aus „12" beim Tippen von „125" kurz die 12
+  wird und das Modell zweimal springt.
+- Auf schmalen Fenstern klappt die Seite über das Bett statt daneben.
+
+**Dreimal dieselbe Falle an einem Tag.** Der `accessibilityIdentifier`
+am umgebenden Stapel — heute früh bei drei Bildschirmen behoben,
+abends beim Inspektor wieder gemacht. Die Gizmo-Knöpfe hießen danach
+alle `advanced.objectTree`, und drei Tests fanden nichts. Es steht seit
+heute in diesem Journal, und ich habe es trotzdem wiederholt: **wer in
+SwiftUI eine Kennung setzt, setzt sie auf `PSMarke`, nie auf einen
+Container.**
+
+**Und ein Folgefehler daraus:** die Viewport-Tests zielten auf
+`arbeitsbereich` — seit das eine Marke von einem Punkt Größe ist, lehnte
+XCUITest das Spreizen mit „maximum possible scale 0.90" ab. Der Viewport
+hat jetzt eine eigene Kennung; an ihm ist das gefahrlos, weil er eine
+einzelne UIView ohne SwiftUI-Kinder ist.
+
+Stand: **37 Tests auf iOS grün**, Android grün.
