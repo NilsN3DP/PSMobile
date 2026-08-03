@@ -1,43 +1,44 @@
-Bruecke fuer Ersteinrichtung, Profile und Einstellungen
+Erster echter iOS-Bildschirm: die Ersteinrichtung
 
-Die Swift-Seite deckte 29 der 128 ABI-Funktionen ab - genug fuer Laden
-und Slicen, zu wenig fuer jeden Bildschirm, der danach kommt. Jetzt sind
-es 83: Druckersuche und -installation, Profile samt geaenderten Werten,
-Einstellungen mit ihren Metadaten, Extruder und Filamenthersteller.
+Sie ist der richtige Anfang, weil man sie als Erstes sieht und weil ihre
+Regel schon im gemeinsamen Modul liegt. Der Zweck ist nicht Kosmetik:
+mit allen 37 Druckermodellen dauert der Start 13,5 s und die Listen
+enthalten 5762 Filamente, mit einem gewaehlten Drucker 1,9 s und 189.
 
-Das ist die Grundlage fuer Ersteinrichtung und Einstellungsseiten. Ohne
-sie waere jeder Bildschirm daran haengengeblieben, und ich haette die
-Bruecke mitten in der Oberflaechenarbeit nachziehen muessen.
+Dazu die Prusa-Farben als Swift-Fassung. Bewusst nicht geteilt: es sind
+dreizehn Konstanten, und ein gemeinsames Modul muesste sie erst in einen
+plattformfreien Typ verpacken, den beide Seiten wieder auspacken. Anders
+als bei den Regeln faellt eine Abweichung hier sofort auf - eine falsche
+Farbe sieht man, ein falscher Schwellwert bleibt unbemerkt.
 
-In eine eigene Datei, weil PsmCore sonst waechst wie sein Gegenstueck
-auf Android - dort sind es inzwischen 1026 Zeilen.
+PrinterGrouping musste dafuer umgebaut werden, und der Grund ist eine
+Grenze, die ich vorher nicht kannte: **Kotlins Typparameter ueberleben
+die Bruecke nach Swift nicht.** Ich hatte die Regel generisch
+zugeschnitten, damit sie den Modelltyp offen laesst - auf Android eine
+innere Klasse der JNI-Bruecke, auf iOS ein Swift-Typ. In Swift kam davon
+nur ein untypisiertes Group an.
 
-Ein wiederkehrendes Muster steht jetzt einmal da: zwei Dutzend
-ABI-Funktionen schreiben in einen Puffer fester Groesse, und jedes Mal
-dieselben vier Zeilen. Die Groessen sind aus dem Header gespiegelt statt
-geraten - zu klein hiesse abgeschnitten.
+Jetzt bekommt die Regel die Familien und gibt zurueck, welche Positionen
+in welche Gruppe gehoeren. Das Modell bleibt beim Aufrufer. Weniger
+elegant als Generics, dafuer traegt es ueber die Bruecke - und der Test
+prueft jetzt ausdruecklich, dass die Positionen auf die richtigen
+Modelle zeigen.
 
-Zwei Signaturen hatte ich nach Gefuehl geschrieben statt nachgelesen,
-und beide waren reicher als gedacht:
+Der Bildschirm folgt Android auch im Verhalten, nicht nur im Aussehen:
+auf engen Schirmen faellt der Untertitel weg, statt alles zu schrumpfen -
+er erklaert nichts, was die Liste nicht selbst zeigt, kostet aber eine
+Zeile, die dann der Liste fehlt. Waehrend einer Suche entfaellt die
+Gliederung: wer tippt, will Treffer sehen und keine
+Zwischenueberschriften. Und jede Duesengroesse ist eine eigene Wahl, weil
+PrusaSlicer sie als getrennte Profile fuehrt.
 
-psm_preset_dirty_at liefert Schluessel, alten und neuen Wert. Der Hinweis
-auf ungespeicherte Aenderungen soll nicht nur sagen, dass sich etwas
-geaendert hat, sondern was - wie auf dem Desktop.
+Alle Masse gehen durch ps.pt und ps.font - die Regel aus E-13 gilt ab
+dem ersten Bildschirm, nicht nachtraeglich.
 
-psm_config_enum_value_at liefert Wert und Beschriftung getrennt. In die
-Konfiguration geht "rectilinear", auf den Bildschirm "Rectilinear" oder
-dessen Uebersetzung. Wer beides verwechselt, schreibt unlesbare Werte in
-die Profile.
+Geprueft: Modul, Android-App und -Tests, iOS-App bauen.
 
-Dazu ein Sync-Skript. Bisher ging jede geaenderte Datei einzeln per scp
-auf den Mac, jedes Mal mit eigenem Verbindungsaufbau - bei zehn Dateien
-zehn Handschlaege. Jetzt geht der ganze Stand in einem Rutsch durch eine
-Leitung.
-
-Geprueft: iOS-App baut, Tests gruen.
-
-Nicht geprueft: die neuen Funktionen sind uebersetzt, aber noch von
-keinem Bildschirm aufgerufen. Fehler in der Pufferlaenge oder
-Argumentreihenfolge zeigen sich erst dann.
+Nicht geprueft: der Bildschirm ist noch nicht eingehaengt - PSMobileApp
+zeigt weiterhin direkt den Arbeitsbereich. Ob die Druckerliste sich
+richtig fuellt, zeigt sich erst dann.
 
 Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>

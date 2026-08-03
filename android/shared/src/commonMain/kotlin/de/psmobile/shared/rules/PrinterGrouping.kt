@@ -17,32 +17,38 @@ package de.psmobile.shared.rules
  * einer Familie, deren Name "Legacy" enthaelt, und die gehoert ans Ende:
  * wer heute einen Drucker einrichtet, meint fast nie ein Altprofil, und
  * oben stehen sie nur im Weg.
+ *
+ * **Warum Positionen statt Modelle:** Die Regel bekommt nur die Familien
+ * und gibt zurueck, welche Positionen in welche Gruppe gehoeren. Das
+ * Modell selbst bleibt beim Aufrufer - auf Android eine innere Klasse
+ * der JNI-Bruecke, auf iOS ein Swift-Typ. Ein generischer Zuschnitt
+ * waere naheliegender gewesen, aber Kotlins Typparameter ueberleben die
+ * Bruecke nach Swift nicht: dort kaeme nur ein untypisiertes Group an.
  */
 object PrinterGrouping {
 
-    // Der Modelltyp bleibt offen. Auf Android ist es PsmCore.PrinterModel,
-    // auf iOS wird es ein Swift-Gegenstueck sein - die Regel interessiert
-    // sich nur fuer die Familie. Sie hier hereinzuziehen haette bedeutet,
-    // eine innere Klasse aus der JNI-Bruecke herauszuloesen, ohne dass die
-    // Regel dadurch besser wuerde.
-    data class Group<T>(
+    data class Group(
         val family: String,
-        val models: List<T>,
         val isLegacy: Boolean,
+        /** Positionen in der uebergebenen Liste, in ihrer Reihenfolge. */
+        val indices: List<Int>,
     )
 
     fun isLegacy(family: String): Boolean = family.contains("legacy", ignoreCase = true)
 
-    fun <T> grouped(models: List<T>, family: (T) -> String): List<Group<T>> {
+    /**
+     * @param families Familie je Modell, in der Reihenfolge der Liste.
+     */
+    fun group(families: List<String>): List<Group> {
         // LinkedHashMap haelt die Reihenfolge des ersten Auftretens fest.
-        val byFamily = LinkedHashMap<String, MutableList<T>>()
-        for (m in models) {
-            val f = family(m).ifBlank { OTHER }
-            byFamily.getOrPut(f) { mutableListOf() }.add(m)
+        val byFamily = LinkedHashMap<String, MutableList<Int>>()
+        families.forEachIndexed { index, roh ->
+            val family = roh.ifBlank { OTHER }
+            byFamily.getOrPut(family) { mutableListOf() }.add(index)
         }
 
-        val groups = byFamily.map { (f, list) ->
-            Group(f, list, isLegacy(f))
+        val groups = byFamily.map { (family, indices) ->
+            Group(family, isLegacy(family), indices)
         }
         // sortedBy ist stabil - die Reihenfolge innerhalb der beiden
         // Bloecke bleibt also die aus der Vendor-Datei.

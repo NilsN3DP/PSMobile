@@ -255,32 +255,42 @@ fun SetupScreen(
                 // Nach Familien geordnet wie am Desktop, Altgeraete am
                 // Ende. Waehrend einer Suche entfaellt die Gliederung: wer
                 // tippt, will Treffer sehen und keine Zwischenueberschriften.
-                val groups = if (query.isBlank()) PrinterGrouping.grouped(shown) { it.family }
-                             else listOf(PrinterGrouping.Group("", shown, false))
+                // Die Regel liefert Positionen, keine Modelle - so
+                // ueberlebt sie die Bruecke nach Swift, wo Kotlins
+                // Typparameter verlorengehen. Hier zurueck zu den
+                // eigenen Objekten.
+                val groups: List<Pair<String, List<PsmCore.PrinterModel>>> =
+                    if (query.isBlank()) {
+                        PrinterGrouping.group(shown.map { it.family })
+                            .map { g -> g.family to g.indices.map { shown[it] } }
+                    } else {
+                        listOf("" to shown)
+                    }
 
-                groups.forEach { group ->
-                if (group.family.isNotBlank()) {
-                    item(key = "h_${group.family}") {
+                groups.forEach { (family, modelle) ->
+                if (family.isNotBlank()) {
+                    item(key = "h_$family") {
                         Row(
                             Modifier.fillMaxWidth().padding(top = 10.dp, bottom = 2.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             Text(
-                                group.family.uppercase(),
-                                color = if (group.isLegacy) PrusaColors.TextMuted
+                                family.uppercase(),
+                                color = if (PrinterGrouping.isLegacy(family))
+                                            PrusaColors.TextMuted
                                         else PrusaColors.Orange,
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.SemiBold,
                             )
                             Text(
-                                "  ${group.models.size}",
+                                "  ${modelle.size}",
                                 color = PrusaColors.TextMuted,
                                 fontSize = 11.sp,
                             )
                         }
                     }
                 }
-                items(group.models, key = { it.key }) { m ->
+                items(modelle, key = { it.key }) { m ->
                     val on = selected.any { it.startsWith("${m.key}:") }
                     Column(
                         Modifier.fillMaxWidth()
@@ -315,7 +325,7 @@ fun SetupScreen(
                             // Gliederung - dann gehoert sie wieder dazu.
                             val technik = buildString {
                                 append(if (m.isSla) "SLA" else "FFF")
-                                if (group.family.isBlank() && m.family.isNotBlank()) {
+                                if (family.isBlank() && m.family.isNotBlank()) {
                                     append("  ·  ${m.family}")
                                 }
                             }
