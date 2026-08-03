@@ -19,6 +19,14 @@ final class PrinterStore: ObservableObject {
     private let geheim = PrinterCredentialStore()
 
     init() {
+        // Die UI-Tests brauchen eine leere Liste, sonst faengt der
+        // zweite Durchlauf mit den Druckern des ersten an und prueft
+        // nichts mehr. Nur ueber ein Startargument - eine Einstellung
+        // dafuer waere ein Schalter, mit dem sich versehentlich alles
+        // loeschen liesse.
+        if ProcessInfo.processInfo.arguments.contains("-psm-reset-printers") {
+            UserDefaults.standard.removeObject(forKey: Self.key)
+        }
         load()
     }
 
