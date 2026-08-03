@@ -1,0 +1,154 @@
+diff --git a/src/libvgcode/src/ViewerImpl.cpp b/src/libvgcode/src/ViewerImpl.cpp
+index e2a0093..f5c2920 100644
+--- a/src/libvgcode/src/ViewerImpl.cpp
++++ b/src/libvgcode/src/ViewerImpl.cpp
+@@ -343,7 +343,7 @@ void ViewerImpl::TextureData::init(size_t vertices_count)
+     m_tex_ids = std::vector<TexIds>(m_count);
+ }
+ 
+-void ViewerImpl::TextureData::set_positions(const std::vector<Vec3>& positions)
++void ViewerImpl::TextureData::set_positions(const std::vector<std::array<float, 4>>& positions)
+ {
+     if (m_count == 0)
+         return;
+@@ -377,17 +377,17 @@ void ViewerImpl::TextureData::set_positions(const std::vector<Vec3>& positions)
+         glsafe(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST));
+         glsafe(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 0));
+         if (remaining >= tex_capacity) {
+-            glsafe(glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB32F, static_cast<GLsizei>(w), static_cast<GLsizei>(h), 0, GL_RGB, GL_FLOAT, &positions[offset]));
++            glsafe(glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, static_cast<GLsizei>(w), static_cast<GLsizei>(h), 0, GL_RGBA, GL_FLOAT, &positions[offset]));
+             m_tex_ids[i].positions.second = w * h;
+         }
+         else {
+             // the last row is only partially fitted with data, send it separately
+-            glsafe(glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB32F, static_cast<GLsizei>(w), static_cast<GLsizei>(h), 0, GL_RGB, GL_FLOAT, nullptr));
+-            glsafe(glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, static_cast<GLsizei>(w), static_cast<GLsizei>(h - 1), GL_RGB, GL_FLOAT, &positions[offset]));
+-            glsafe(glTexSubImage2D(GL_TEXTURE_2D, 0, 0, static_cast<GLsizei>(h - 1), static_cast<GLsizei>(remaining % w), 1, GL_RGB, GL_FLOAT, &positions[offset + w * (h - 1)]));
++            glsafe(glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, static_cast<GLsizei>(w), static_cast<GLsizei>(h), 0, GL_RGBA, GL_FLOAT, nullptr));
++            glsafe(glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, static_cast<GLsizei>(w), static_cast<GLsizei>(h - 1), GL_RGBA, GL_FLOAT, &positions[offset]));
++            glsafe(glTexSubImage2D(GL_TEXTURE_2D, 0, 0, static_cast<GLsizei>(h - 1), static_cast<GLsizei>(remaining % w), 1, GL_RGBA, GL_FLOAT, &positions[offset + w * (h - 1)]));
+             m_tex_ids[i].positions.second = w * (h - 1) + remaining % w;
+         }
+-        m_positions_size += m_tex_ids[i].positions.second * sizeof(Vec3);
++        m_positions_size += m_tex_ids[i].positions.second * sizeof(std::array<float, 4>);
+ 
+         remaining = (remaining > tex_capacity) ? remaining - tex_capacity: 0;
+     }
+@@ -396,7 +396,7 @@ void ViewerImpl::TextureData::set_positions(const std::vector<Vec3>& positions)
+     glsafe(glPixelStorei(GL_UNPACK_ALIGNMENT, curr_unpack_alignment));
+ }
+ 
+-void ViewerImpl::TextureData::set_heights_widths_angles(const std::vector<Vec3>& heights_widths_angles)
++void ViewerImpl::TextureData::set_heights_widths_angles(const std::vector<std::array<float, 4>>& heights_widths_angles)
+ {
+     if (m_count == 0)
+         return;
+@@ -430,17 +430,17 @@ void ViewerImpl::TextureData::set_heights_widths_angles(const std::vector<Vec3>&
+         glsafe(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST));
+         glsafe(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 0));
+         if (remaining >= tex_capacity) {
+-            glsafe(glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB32F, static_cast<GLsizei>(w), static_cast<GLsizei>(h), 0, GL_RGB, GL_FLOAT, &heights_widths_angles[offset]));
++            glsafe(glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, static_cast<GLsizei>(w), static_cast<GLsizei>(h), 0, GL_RGBA, GL_FLOAT, &heights_widths_angles[offset]));
+             m_tex_ids[i].heights_widths_angles.second = w * h;
+         }
+         else {
+             // the last row is only partially fitted with data, send it separately
+-            glsafe(glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB32F, static_cast<GLsizei>(w), static_cast<GLsizei>(h), 0, GL_RGB, GL_FLOAT, nullptr));
+-            glsafe(glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, static_cast<GLsizei>(w), static_cast<GLsizei>(h - 1), GL_RGB, GL_FLOAT, &heights_widths_angles[offset]));
+-            glsafe(glTexSubImage2D(GL_TEXTURE_2D, 0, 0, static_cast<GLsizei>(h - 1), static_cast<GLsizei>(remaining % w), 1, GL_RGB, GL_FLOAT, &heights_widths_angles[offset + w * (h - 1)]));
++            glsafe(glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, static_cast<GLsizei>(w), static_cast<GLsizei>(h), 0, GL_RGBA, GL_FLOAT, nullptr));
++            glsafe(glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, static_cast<GLsizei>(w), static_cast<GLsizei>(h - 1), GL_RGBA, GL_FLOAT, &heights_widths_angles[offset]));
++            glsafe(glTexSubImage2D(GL_TEXTURE_2D, 0, 0, static_cast<GLsizei>(h - 1), static_cast<GLsizei>(remaining % w), 1, GL_RGBA, GL_FLOAT, &heights_widths_angles[offset + w * (h - 1)]));
+             m_tex_ids[i].heights_widths_angles.second = w * (h - 1) + remaining % w;
+         }
+-        m_height_width_angle_size += m_tex_ids[i].heights_widths_angles.second * sizeof(Vec3);
++        m_height_width_angle_size += m_tex_ids[i].heights_widths_angles.second * sizeof(std::array<float, 4>);
+ 
+         remaining = (remaining > tex_capacity) ? remaining - tex_capacity : 0;
+     }
+@@ -895,7 +895,7 @@ void ViewerImpl::reset()
+ #endif // ENABLE_OPENGL_ES
+ }
+ 
+-// On some graphic cards texture buffers using GL_RGB32F format do not work, see:
++// On some graphic cards texture buffers using GL_RGBA32F format do not work, see:
+ // https://dev.prusa3d.com/browse/SPE-2411
+ // https://github.com/prusa3d/PrusaSlicer/issues/12908
+ // To let all drivers be happy, we use GL_RGBA32F format, so we need to add an extra (currently unused) float
+@@ -1807,7 +1807,7 @@ void ViewerImpl::update_color_ranges()
+ void ViewerImpl::update_heights_widths()
+ {
+ #ifdef ENABLE_OPENGL_ES
+-    std::vector<Vec3> heights_widths_angles;
++    std::vector<Vec4> heights_widths_angles;
+     heights_widths_angles.reserve(m_vertices.size());
+     extract_pos_and_or_hwa(m_vertices, m_travels_radius, m_wipes_radius, m_valid_lines_bitset, nullptr, &heights_widths_angles);
+     m_texture_data.set_heights_widths_angles(heights_widths_angles);
+diff --git a/src/libvgcode/src/ViewerImpl.hpp b/src/libvgcode/src/ViewerImpl.hpp
+index 8e112dc..ef8ba22 100644
+--- a/src/libvgcode/src/ViewerImpl.hpp
++++ b/src/libvgcode/src/ViewerImpl.hpp
+@@ -20,6 +20,7 @@
+ #include "Layers.hpp"
+ #include "ExtrusionRoles.hpp"
+ 
++#include <array>
+ #include <string>
+ #include <optional>
+ 
+@@ -343,8 +344,8 @@ private:
+     {
+     public:
+         void init(size_t vertices_count);
+-        void set_positions(const std::vector<Vec3>& positions);
+-        void set_heights_widths_angles(const std::vector<Vec3>& heights_widths_angles);
++        void set_positions(const std::vector<std::array<float, 4>>& positions);
++        void set_heights_widths_angles(const std::vector<std::array<float, 4>>& heights_widths_angles);
+         void set_colors(const std::vector<float>& colors);
+         void set_enabled_segments(const std::vector<uint32_t>& enabled_segments);
+         void set_enabled_options(const std::vector<uint32_t>& enabled_options);
+diff --git a/src/slic3r/GUI/LibVGCode/LibVGCodeWrapper.cpp b/src/slic3r/GUI/LibVGCode/LibVGCodeWrapper.cpp
+index 92dc2fe..e49f2ac 100644
+--- a/src/slic3r/GUI/LibVGCode/LibVGCodeWrapper.cpp
++++ b/src/slic3r/GUI/LibVGCode/LibVGCodeWrapper.cpp
+@@ -130,6 +130,7 @@ EMoveType convert(Slic3r::EMoveType type)
+     }
+ }
+ 
++#ifndef PSM_NO_GUI_TYPES
+ EOptionType convert(const Slic3r::GUI::Preview::OptionType& type)
+ {
+     switch (type)
+@@ -153,6 +154,8 @@ EOptionType convert(const Slic3r::GUI::Preview::OptionType& type)
+     default:                                                { return EOptionType::COUNT; }
+     }
+ }
++#endif // PSM_NO_GUI_TYPES
++
+ 
+ ETimeMode convert(const Slic3r::PrintEstimatedStatistics::ETimeMode& mode)
+ {
+diff --git a/src/slic3r/GUI/LibVGCode/LibVGCodeWrapper.hpp b/src/slic3r/GUI/LibVGCode/LibVGCodeWrapper.hpp
+index f7b4a40..752cb8e 100644
+--- a/src/slic3r/GUI/LibVGCode/LibVGCodeWrapper.hpp
++++ b/src/slic3r/GUI/LibVGCode/LibVGCodeWrapper.hpp
+@@ -17,7 +17,9 @@
+ #include "../../src/libvgcode/include/Types.hpp"
+ #include "libslic3r/Color.hpp"
+ #include "libslic3r/GCode/GCodeProcessor.hpp"
++#ifndef PSM_NO_GUI_TYPES
+ #include "slic3r/GUI/GUI_Preview.hpp"
++#endif
+ #include "libslic3r/ExtrusionRole.hpp"
+ #include "libslic3r/Point.hpp"
+ 
+@@ -61,7 +63,9 @@ extern EGCodeExtrusionRole convert(Slic3r::GCodeExtrusionRole role);
+ extern EMoveType convert(Slic3r::EMoveType type);
+ 
+ // mapping from Slic3r::GUI::Preview::OptionType to libvgcode::EOptionType
++#ifndef PSM_NO_GUI_TYPES
+ extern EOptionType convert(const Slic3r::GUI::Preview::OptionType& type);
++#endif
+ 
+ // mapping from Slic3r::PrintEstimatedStatistics::ETimeMode to libvgcode::ETimeMode
+ extern ETimeMode convert(const Slic3r::PrintEstimatedStatistics::ETimeMode& mode);

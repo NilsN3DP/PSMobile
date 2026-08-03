@@ -73,6 +73,33 @@ build_core() {
         -DPSM_BUILD_TESTCLI="${WITH_TESTS}" \
         -DBUILD_SHARED_LIBS=OFF
     cmake --build "${CORE_BUILD}" -j "$(sysctl -n hw.ncpu)"
+    bundle_core
+}
+
+# Eine statische Bibliothek nimmt ihre Abhaengigkeiten nicht mit. Die App
+# muesste sonst libslic3r, Boost, TBB, CGAL und zwei Dutzend weitere
+# Archive einzeln aufzaehlen - eine Liste, die bei jeder Aenderung an den
+# Dependencies veraltet, und deren Luecken sich erst beim Linken der App
+# als Haufen fehlender Symbole zeigen.
+#
+# libtool legt sie stattdessen zu einer einzigen Datei zusammen. Die ist
+# gross, aber der Linker nimmt aus einem Archiv ohnehin nur das heraus,
+# was tatsaechlich gebraucht wird.
+bundle_core() {
+    local out="${CORE_BUILD}/libpsmobile_core_all.a"
+    log "Alles in eine Bibliothek: $(basename "${out}")"
+
+    local archive=()
+    while IFS= read -r a; do archive+=("${a}"); done < <(
+        find "${CORE_BUILD}" -name '*.a' ! -name 'libpsmobile_core_all.a'
+        find "${PREFIX}/lib" -name '*.a'
+    )
+
+    rm -f "${out}"
+    # -no_warning_for_no_symbols: mehrere Archive enthalten Objektdateien
+    # ganz ohne Symbole. Das ist erwartet und keine Meldung wert.
+    libtool -static -no_warning_for_no_symbols -o "${out}" "${archive[@]}"
+    printf '    %s Archive, %s\n' "${#archive[@]}" "$(du -h "${out}" | cut -f1)"
 }
 
 case "${1:-all}" in

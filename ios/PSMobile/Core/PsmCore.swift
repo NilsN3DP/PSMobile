@@ -70,22 +70,29 @@ final class PsmCore {
         guard let h = psm_session_create(dataDir, resourceDir) else {
             throw PsmError.createFailed(String(cString: psm_last_error(nil)))
         }
-        handle = OpaquePointer(h)
+        // psm_session_create liefert bereits einen OpaquePointer.
+        handle = h
         Self.log.info("Kern \(Self.coreVersion) bereit")
     }
 
     deinit {
         if let h = handle {
-            psm_slice_cancel(UnsafeMutablePointer(h))
-            psm_session_destroy(UnsafeMutablePointer(h))
+            psm_slice_cancel(h)
+            psm_session_destroy(h)
         }
     }
 
-    private var raw: UnsafeMutablePointer<psm_session> {
-        UnsafeMutablePointer(handle!)
+    /// Swift bildet unvollstaendige C-Typen wie psm_session als
+    /// OpaquePointer ab - einen UnsafeMutablePointer darauf gibt es nicht.
+    /// Genau so ist das ABI auch gemeint: der Zeiger wird durchgereicht,
+    /// nie dereferenziert.
+    private var raw: OpaquePointer {
+        handle!
     }
 
     var lastError: String {
+        // psm_last_error nimmt void*, nicht psm_session* - es soll auch
+        // ohne Session aufrufbar sein, wenn das Anlegen fehlgeschlagen ist.
         handle == nil ? "" : String(cString: psm_last_error(UnsafeMutableRawPointer(handle!)))
     }
 

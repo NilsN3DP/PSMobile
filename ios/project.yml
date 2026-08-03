@@ -12,8 +12,12 @@
 name: PSMobile
 options:
   bundleIdPrefix: de.psmobile
+  # 16.0 statt 15.0: NavigationStack gibt es erst ab 16, und die Geraete,
+  # die dazwischen liegen - iPhone 7, iPad Air 2, iPad mini 4 - haben zum
+  # Slicen ohnehin zu wenig Arbeitsspeicher. Die urspruengliche Begruendung
+  # fuer 15.0 ("deckt alles ab, was genug RAM hat") gilt fuer 16.0 genauso.
   deploymentTarget:
-    iOS: "15.0"
+    iOS: "16.0"
   createIntermediateGroups: true
 
 settings:
@@ -52,10 +56,22 @@ targets:
       base:
         INFOPLIST_FILE: PSMobile/Support/Info.plist
         PRODUCT_BUNDLE_IDENTIFIER: de.psmobile
+        # Ohne diesen Namen heisst das Ergebnis woertlich ".app", und
+        # xcodebuild bricht mit "Multiple commands produce ... /.app" ab -
+        # das klingt nach zwei kollidierenden Zielen und ist doch nur ein
+        # fehlender Name.
+        PRODUCT_NAME: PSMobile
+        # 1 = iPhone, 2 = iPad. Ohne beides laeuft die App auf dem iPad im
+        # iPhone-Fenster mitten auf schwarzem Grund - sie startet, sieht
+        # aber aus wie ein Fehler. Das iPad ist das eigentliche Ziel.
+        TARGETED_DEVICE_FAMILY: "1,2"
         # Der Kern ist C++ - ohne libc++ fehlen beim Linken alle Symbole.
         OTHER_LDFLAGS:
           - -lc++
-          - -lpsmobile_core
+          # Die zusammengefasste Fassung, nicht libpsmobile_core allein:
+          # darin stecken libslic3r und alle Dependencies. Erzeugt von
+          # build/scripts/build-ios.sh.
+          - -lpsmobile_core_all
     dependencies:
       - sdk: OpenGLES.framework
       - sdk: Metal.framework

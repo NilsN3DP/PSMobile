@@ -70,11 +70,19 @@ add_subdirectory("${PSM_PS_DIR}/src/libvgcode"
 unset(SLIC3R_OPENGL_ES)
 if (TARGET libvgcode)
     target_compile_definitions(libvgcode PUBLIC ENABLE_OPENGL_ES)
-    # GLADs GLES2-Loader zieht sonst ein selbst erzeugtes glad/egl.h herein,
-    # das in PrusaSlicers Baum nicht mitgeliefert ist. Das NDK bringt EGL
-    # selbst mit, also den Systempfad nehmen.
-    target_compile_definitions(libvgcode PRIVATE GLAD_GLES2_USE_SYSTEM_EGL=1)
-    target_link_libraries(libvgcode PUBLIC EGL GLESv2)
+    if (ANDROID)
+        # GLADs GLES2-Loader zieht sonst ein selbst erzeugtes glad/egl.h
+        # herein, das in PrusaSlicers Baum nicht mitgeliefert ist. Das NDK
+        # bringt EGL selbst mit, also den Systempfad nehmen.
+        target_compile_definitions(libvgcode PRIVATE GLAD_GLES2_USE_SYSTEM_EGL=1)
+        target_link_libraries(libvgcode PUBLIC EGL GLESv2)
+    elseif (IOS)
+        # iOS hat kein EGL. Die GLES-Symbole stecken im Framework und sind
+        # nach dem Binden bereits im Prozess; glad findet sie per dlsym,
+        # siehe patches/0003. Deshalb hier nur das Framework binden - und
+        # GLAD_GLES2_USE_SYSTEM_EGL bewusst nicht setzen.
+        target_link_libraries(libvgcode PUBLIC "-framework OpenGLES")
+    endif ()
     target_include_directories(libvgcode PUBLIC
         "${PSM_PS_DIR}/src/libvgcode/include"
         "${PSM_PS_DIR}/src/libvgcode/glad/include")
@@ -91,7 +99,12 @@ set(PSM_CORE_SOURCES
 
 # Der Viewport liegt in derselben Bibliothek wie der Kern: er liest das
 # Modell direkt aus der Session, ohne Umweg ueber das ABI (E-03).
-if (ANDROID)
+#
+# Er ist in C++ gegen GLES geschrieben und damit auf beiden Plattformen
+# derselbe Bestand - Android und iOS unterscheiden sich nur darin, wie
+# der Kontext entsteht (EGL beziehungsweise EAGL). Genau deshalb ist er
+# nicht an ANDROID gebunden.
+if (ANDROID OR IOS)
     list(APPEND PSM_CORE_SOURCES viewport/src/psm_viewport.cpp
                                  viewport/src/psm_gizmo.cpp)
     # Wandelt ein Print-Ergebnis in die Eingabedaten von libvgcode um.
@@ -106,7 +119,15 @@ if (ANDROID)
     list(APPEND PSM_CORE_SOURCES android/jni/psm_jni.cpp)
 endif ()
 
-add_library(psmobile_core SHARED ${PSM_CORE_SOURCES})
+# Auf iOS statisch: die App bindet den Kern direkt ein. Eine eigene
+# dynamische Bibliothek muesste mitsigniert und als Framework verpackt
+# werden, ohne dass sie etwas dafuer zurueckgibt. Auf Android ist es
+# umgekehrt - dort laedt die JVM eine .so.
+if (IOS)
+    add_library(psmobile_core STATIC ${PSM_CORE_SOURCES})
+else ()
+    add_library(psmobile_core SHARED ${PSM_CORE_SOURCES})
+endif ()
 
 target_include_directories(psmobile_core
     PUBLIC  ${CMAKE_CURRENT_SOURCE_DIR}/core/include
@@ -162,7 +183,10 @@ set_target_properties(psmobile_core PROPERTIES
 # als statische Bibliothek eingebunden und wuerde sonst ~8.800 Slic3r-
 # Symbole in die dynamische Symboltabelle spuelen: unnoetig gross und eine
 # Kollisionsquelle mit anderen .so im selben Prozess.
-if (NOT MSVC)
+# --exclude-libs kennt nur die GNU-Linker. Apples ld lehnt es ab, und auf
+# iOS ist es ohnehin gegenstandslos: dort ist der Kern eine statische
+# Bibliothek, aus der gar keine Symboltabelle nach aussen geht.
+if (NOT MSVC AND NOT APPLE)
     target_link_options(psmobile_core PRIVATE "-Wl,--exclude-libs,ALL")
 endif ()
 
