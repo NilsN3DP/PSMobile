@@ -175,7 +175,9 @@ struct ColorMixView: View {
 
     private func saveRecipe() {
         guard let preview else { return }
-        let nextID = (recipes.map(\.id).max() ?? Int32(model.extruderCount - 1)) + 1
+        // IDs der virtuellen Extruder beginnen strikt hinter den physischen
+        // Positionen: bei acht Positionen ist die erste Mischung also 9.
+        let nextID = (recipes.map(\.id).max() ?? Int32(model.extruderCount)) + 1
         let recipe = ColorMixRecipe(id: nextID, components: components, color: preview)
         recipes.append(recipe)
         if !model.saveColorMix(recipes) {
