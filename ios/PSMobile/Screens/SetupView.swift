@@ -177,8 +177,18 @@ struct SetupView: View {
                     .foregroundStyle(PrusaColors.textMuted)
             }
             .padding(.vertical, ps.pt(8))
+            // Ohne das ist nur der Text antippbar, nicht die Zeile: der
+            // Spacer dazwischen ist leerer Raum, und leeren Raum nimmt
+            // SwiftUI von der Trefferpruefung aus. Wer auf die Mitte der
+            // Zeile tippt, greift ins Leere - der UI-Test hat es gefunden,
+            // ein Finger haette dasselbe erlebt.
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        // Kennungen, damit der UI-Test die Zeilen findet. Der sichtbare
+        // Text taugt dafuer nicht: er ist uebersetzt und geht bei der
+        // naechsten Sprachaenderung kaputt.
+        .accessibilityIdentifier("familie.\(gruppe.name)")
     }
 
     private func modellZeile(_ modell: PsmCore.PrinterModel) -> some View {
@@ -208,6 +218,7 @@ struct SetupView: View {
                             .clipShape(RoundedCornerShape(ps.pt(4)))
                     }
                     .buttonStyle(.plain)
+                    .accessibilityIdentifier("variante.\(key)")
                 }
             }
         }
@@ -236,6 +247,7 @@ struct SetupView: View {
         }
         .buttonStyle(.plain)
         .disabled(selected.isEmpty || busy)
+        .accessibilityIdentifier("fertig")
     }
 }
 

@@ -1,27 +1,30 @@
-Die Ersteinrichtung erscheint jetzt auch
+UI-Tests fuer iOS - und der erste Fehler, den sie gefunden haben
 
-Der Bildschirm war gebaut, aber nie zu sehen: mein Kriterium fragte den
-Kern nach vorhandenen Druckerprofilen, und nach loadBundledPresets sind
-immer welche da. Die App sprang direkt in den Arbeitsbereich.
+simctl kann installieren, starten und ein Bild machen, aber nicht
+tippen. Damit liess sich jeder Bildschirm nur ansehen. Ob eine Familie
+sich aufklappt, eine Duesengroesse sich waehlen laesst und der Abschluss
+in den Arbeitsbereich fuehrt, war unpruefbar - genau die Fragen, auf die
+es ankommt.
 
-Massgeblich ist die gemerkte Wahl, wie auf Android: leer heisst
-einrichten. Damit faellt auch loadBundledPresets beim Start weg - geladen
-wird nur, was gewaehlt wurde. Genau darum geht es bei diesem Bildschirm:
-alle 37 Modelle kosten 13,5 s Start und 5762 Filamente in den Listen,
-ein einzelner Drucker 1,9 s und 189.
+Zwei Durchlaeufe: die Ersteinrichtung von der Familienliste bis in den
+Arbeitsbereich, und die Suche, die die Gliederung ausblenden muss.
+Gegenstueck zu den Emulator-Durchlaeufen auf Android.
 
-Der Platzhalter im Suchfeld wird selbst gezeichnet. SwiftUI faerbt
-seinen eigenen in einem Grau, das auf dem dunklen Feld unsichtbar ist -
-das Feld sah aus wie ein leerer Kasten, dem man nicht ansieht, wozu er
-da ist.
+Und sie haben sofort geliefert. Die Familienzeile war nur am Text
+antippbar, nicht auf ganzer Breite: dazwischen sitzt ein Spacer, und
+leeren Raum nimmt SwiftUI von der Trefferpruefung aus. Wer auf die Mitte
+der Zeile tippt - also dorthin, wo man bei einer Listenzeile eben
+hintippt -, haette nichts erreicht und die Familie fuer kaputt gehalten.
+Auf dem Bildschirm sah alles richtig aus; kein Screenshot haette das
+gezeigt.
 
-Belegt am Bildschirm: elf Familien in der Reihenfolge der Vendor-Datei -
-CORE, MK4, MK3.9, MK3.5, MINI, MK3, XL Single-Tool, XL Multi-Tool,
-MK2.5, MK2 - und Legacy Profiles grau am Ende. Nicht alphabetisch,
-sondern wie PrusaSlicer es fuehrt. Die Regel dafuer liegt im gemeinsamen
-Modul und wird auf beiden Plattformen benutzt.
+Die Kennungen haengen an den Elementen und nicht am sichtbaren Text: der
+ist uebersetzt und ginge bei der naechsten Sprachaenderung kaputt.
 
-Was noch nicht geprueft ist: Aufklappen, Auswahl und der Abschluss.
-simctl kann keine Finger simulieren - dafuer braucht es ein UI-Testziel.
+Zum Zuruecksetzen dient ein Startargument, keine Einstellung in der App -
+ein Schalter dafuer waere einer, mit dem sich versehentlich die ganze
+Einrichtung loeschen liesse.
+
+Geprueft: acht Tests gruen, davon zwei, die die App wirklich bedienen.
 
 Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>

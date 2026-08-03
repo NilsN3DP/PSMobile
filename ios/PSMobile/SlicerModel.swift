@@ -78,6 +78,15 @@ final class SlicerModel: ObservableObject {
             // Und geladen wird nur das Gewaehlte. Alle 37 Modelle kosten
             // 13,5 s Start und 5762 Filamente in den Listen, ein einzelner
             // Drucker 1,9 s und 189.
+            // Der UI-Test braucht einen unberuehrten Zustand, sonst
+            // startet der zweite Durchlauf mit eingerichtetem Drucker
+            // und prueft nichts mehr. Nur ueber ein Startargument - eine
+            // Einstellung in der App waere ein Schalter, mit dem sich
+            // versehentlich alles loeschen liesse.
+            if ProcessInfo.processInfo.arguments.contains("-psm-reset-setup") {
+                Self.storedPrinters = []
+            }
+
             let gewaehlt = Self.storedPrinters
             if gewaehlt.isEmpty {
                 setupNeeded = true

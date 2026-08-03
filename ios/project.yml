@@ -128,6 +128,21 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: de.psmobile.tests
         GENERATE_INFOPLIST_FILE: YES
 
+  # Bedient die App wie ein Finger. simctl kann das nicht - es kann
+  # installieren, starten und ein Bild machen, aber nicht tippen. Ohne
+  # dieses Ziel laesst sich jeder Bildschirm nur ansehen.
+  PSMobileUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - path: PSMobileUITests
+    dependencies:
+      - target: PSMobile
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: de.psmobile.uitests
+        GENERATE_INFOPLIST_FILE: YES
+
 # Ohne diesen Eintrag kennt das erzeugte Schema keine Testaktion, und
 # xcodebuild antwortet mit "Scheme PSMobile is not currently configured
 # for the test action" - was klingt, als fehle das Testziel, dabei fehlt
@@ -143,3 +158,4 @@ schemes:
       config: Debug
       targets:
         - PSMobileTests
+        - PSMobileUITests

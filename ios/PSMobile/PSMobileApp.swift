@@ -22,6 +22,7 @@ struct PSMobileApp: App {
                     )
                 } else {
                     SlicerView()
+                        .accessibilityIdentifier("arbeitsbereich")
                 }
             }
                 .environmentObject(model)
