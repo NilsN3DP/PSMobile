@@ -554,6 +554,50 @@ final class SlicerModel: ObservableObject {
         refresh()
     }
 
+    /// Gleichmaessig skalieren. Der Kern kennt drei Achsen; ungleiche
+    /// Faktoren gibt es in der Oberflaeche bewusst nicht - wer ein
+    /// Modell in einer Achse streckt, druckt selten das, was er wollte.
+    func setUniformScale(_ id: Int32, _ faktor: Float) {
+        try? core?.setScale(id, SIMD3(faktor, faktor, faktor))
+        refresh()
+    }
+
+    /// Auf ein Zielmass der laengsten Kante bringen.
+    func scaleToSize(_ id: Int32, _ mm: Float) {
+        try? core?.scaleToFit(id, sizeMm: mm)
+        refresh()
+    }
+
+    /// Dreht eine Achse auf einen festen Winkel. Gerechnet wird im Kern
+    /// in Radiant, eingegeben in Grad.
+    func setRotationAxis(_ id: Int32, _ achse: Int, grad: Float) {
+        guard let objekt = objects.first(where: { $0.id == id }) else { return }
+        var r = objekt.rotation
+        r[achse] = grad * .pi / 180
+        try? core?.setRotation(id, r)
+        refresh()
+    }
+
+    /// Dreht um einen Betrag weiter - fuer die Vierteldrehungen.
+    func rotateBy(_ id: Int32, achse: Int, grad: Float) {
+        guard let objekt = objects.first(where: { $0.id == id }) else { return }
+        var r = objekt.rotation
+        r[achse] += grad * .pi / 180
+        try? core?.setRotation(id, r)
+        refresh()
+    }
+
+    func volumeCount(_ id: Int32) -> Int { core?.volumeCount(id) ?? 0 }
+
+    func volumeInfo(_ id: Int32, at index: Int) -> PsmCore.VolumeInfo? {
+        core?.volumeInfo(id, at: index)
+    }
+
+    func setVolumeExtruder(_ id: Int32, at index: Int, _ extruder: Int32) {
+        try? core?.setVolumeExtruder(id, at: index, extruder)
+        refresh()
+    }
+
     func fitToBed(_ id: Int32) {
         try? core?.fitToBed(id)
         refresh()

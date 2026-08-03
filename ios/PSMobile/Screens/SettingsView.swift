@@ -15,6 +15,9 @@ import PSMShared
 struct SettingsView: View {
 
     @ObservedObject var model: SlicerModel
+    /// Womit der Bildschirm aufgeht. Der Advanced Mode hat fuer Druck,
+    /// Filament und Drucker je einen eigenen Einstieg.
+    var startTab: String = "print"
     let onClose: () -> Void
 
     @Environment(\.psScale) private var ps
@@ -41,6 +44,11 @@ struct SettingsView: View {
                     inhalt
                 }
             }
+        }
+        .onAppear {
+            // Nur beim Erscheinen: waehrend jemand blaettert, soll der
+            // Einstieg von aussen nichts mehr umstellen.
+            if tabs.contains(startTab) { tab = startTab }
         }
     }
 
