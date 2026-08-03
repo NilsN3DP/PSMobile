@@ -1,6 +1,7 @@
 package de.psmobile.shared.rules
 
 import kotlin.test.assertEquals
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.test.Test
 
@@ -20,6 +21,29 @@ class ColorMixCodecTest {
     @Test fun `a blend requires two or three distinct physical heads`() {
         val invalid = runCatching { ColorMixCodec.normalize(listOf(ColorMixComponent(0, 1.0))) }
         assertTrue(invalid.isFailure)
+    }
+
+    @Test fun `physical positions are one based through eight`() {
+        assertEquals((1..8).map(Int::toString), ExtruderPresentation.positions(8).map { it.label })
+    }
+
+    @Test fun `equal red and blue components preview as purple`() {
+        assertEquals(
+            "#800080",
+            ColorMixCodec.previewColor(
+                listOf("#FF0000", "#0000FF"),
+                listOf(ColorMixComponent(0, 1.0), ColorMixComponent(1, 1.0)),
+            ),
+        )
+    }
+
+    @Test fun `invalid source colors have no deceptive mix preview`() {
+        assertNull(
+            ColorMixCodec.previewColor(
+                listOf("#FF0000", "not-a-colour"),
+                listOf(ColorMixComponent(0, 1.0), ColorMixComponent(1, 1.0)),
+            ),
+        )
     }
 
     @Test fun `malformed recipes do not hide other valid recipes`() {
