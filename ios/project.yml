@@ -127,6 +127,9 @@ targets:
       # Dasselbe Verhaeltnis wie auf Android: die Regeltests dort laufen
       # ohne das NDK.
       - path: PSMobile/UI/PSScale.swift
+      # Der Schluesselbund-Zugang aus demselben Grund: er braucht nur
+      # Foundation und Security, kein PSMShared.
+      - path: PSMobile/Networking/PrinterCredentialStore.swift
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: de.psmobile.tests

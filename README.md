@@ -1,5 +1,11 @@
 # PSMobile
 
+> **Wer an diesem Projekt arbeitet - Mensch oder Agent - liest zuerst
+> [docs/arbeitsjournal.md](docs/arbeitsjournal.md) und schreibt nach
+> jedem fertigen Schritt hinein.** Dort steht, wer gerade woran ist, was
+> zuletzt schiefging und was man nicht zweimal bauen muss.
+
+
 PrusaSlicer-Kern auf Mobilgeräten, mit einer Oberfläche, die für Touch
 und Stift gebaut ist statt für Maus und Tastatur.
 
