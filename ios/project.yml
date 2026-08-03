@@ -139,14 +139,17 @@ targets:
         # PSMShared wuerde Kotlin/Native-Klassen doppelt laden und den
         # Prozess vor dem Teststart abstuerzen lassen.
         OTHER_LDFLAGS: []
-    # Die App als Testhost. Damit erreicht ein Test ihre Typen ueber
-    # \"@testable import PSMobile\" - noetig fuer alles, was am Zustand
-    # der App haengt, etwa der Druckerspeicher. Beim Zusammenfuehren der
-    # beiden Arbeitslinien ist diese Zeile verlorengegangen; die Folge
-    # war ein Testlauf, der \"0 Tests\" ausfuehrte und trotzdem Erfolg
-    # meldete.
-    dependencies:
-      - target: PSMobile
+    # Bewusst ohne Testhost und ohne Abhaengigkeit zur App.
+    #
+    # Zweimal versucht, zweimal an derselben Wand: die Abhaengigkeit
+    # bringt "@testable import PSMobile" trotzdem nicht zum Laufen, zieht
+    # aber PSMShared ein zweites Mal in den Prozess. Kotlin/Native-Klassen
+    # liegen dann doppelt vor, und der Lauf bricht vor dem ersten Fall ab
+    # - mit einer Wand aus "Class ... is implemented in both".
+    #
+    # Also: was geprueft werden soll, wird oben mitkompiliert. Was das
+    # nicht zulaesst, weil es am Zustand der App haengt, gehoert in einen
+    # Oberflaechentest.
 
   # Bedient die App wie ein Finger. simctl kann das nicht - es kann
   # installieren, starten und ein Bild machen, aber nicht tippen. Ohne
