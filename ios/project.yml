@@ -22,6 +22,19 @@ options:
 
 settings:
   base:
+    # Ohne Namen heisst das Ergebnis woertlich ".app" beziehungsweise
+    # ".xctest", und xcodebuild meldet "Multiple commands produce ...".
+    # Das klingt nach zwei kollidierenden Zielen und ist doch nur ein
+    # fehlender Name. Hier global, damit es nicht bei jedem neuen Ziel
+    # von vorne losgeht.
+    PRODUCT_NAME: $(TARGET_NAME)
+    # Der Kern wird als SIMULATORARM64 gebaut, eine Intel-Fassung gibt es
+    # nicht und braucht es nicht - Mac-Rechner mit Intel bauen kein iOS
+    # mehr fuer uns. Ohne diesen Ausschluss uebersetzt xcodebuild beim
+    # test-Durchlauf trotzdem zusaetzlich fuer x86_64 und meldet dann
+    # seitenweise "found architecture arm64, required architecture
+    # x86_64" - was wie ein kaputtes Archiv aussieht und keines ist.
+    EXCLUDED_ARCHS[sdk=iphonesimulator*]: x86_64
     SWIFT_VERSION: "5.9"
     ENABLE_BITCODE: NO
     CLANG_ENABLE_MODULES: YES
@@ -56,11 +69,6 @@ targets:
       base:
         INFOPLIST_FILE: PSMobile/Support/Info.plist
         PRODUCT_BUNDLE_IDENTIFIER: de.psmobile
-        # Ohne diesen Namen heisst das Ergebnis woertlich ".app", und
-        # xcodebuild bricht mit "Multiple commands produce ... /.app" ab -
-        # das klingt nach zwei kollidierenden Zielen und ist doch nur ein
-        # fehlender Name.
-        PRODUCT_NAME: PSMobile
         # 1 = iPhone, 2 = iPad. Ohne beides laeuft die App auf dem iPad im
         # iPhone-Fenster mitten auf schwarzem Grund - sie startet, sieht
         # aber aus wie ein Fehler. Das iPad ist das eigentliche Ziel.
@@ -75,3 +83,41 @@ targets:
     dependencies:
       - sdk: OpenGLES.framework
       - sdk: Metal.framework
+
+  # Nur die reine Rechnerei, kein Bildschirmtest. Die Skalierungsregeln
+  # muessen mit denen auf Android uebereinstimmen, und das laesst sich
+  # ohne Geraet pruefen - siehe PSMobileTests/PSScaleTests.swift und
+  # android/.../UiScaleForTest.kt.
+  PSMobileTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: PSMobileTests
+      # Die gepruefte Datei wird mitkompiliert statt ueber "@testable
+      # import" aus der App geholt. Sonst haengt ein Test ueber vier
+      # Rechenregeln am Linken der gesamten App - und die zieht die 141 MB
+      # grosse libpsmobile_core_all mit. Das lohnt sich nicht, und es
+      # macht den Test von Dingen abhaengig, die er gar nicht prueft.
+      # Dasselbe Verhaeltnis wie auf Android: die Regeltests dort laufen
+      # ohne das NDK.
+      - path: PSMobile/UI/PSScale.swift
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: de.psmobile.tests
+        GENERATE_INFOPLIST_FILE: YES
+
+# Ohne diesen Eintrag kennt das erzeugte Schema keine Testaktion, und
+# xcodebuild antwortet mit "Scheme PSMobile is not currently configured
+# for the test action" - was klingt, als fehle das Testziel, dabei fehlt
+# nur seine Verknuepfung.
+schemes:
+  PSMobile:
+    build:
+      targets:
+        PSMobile: all
+    run:
+      config: Debug
+    test:
+      config: Debug
+      targets:
+        - PSMobileTests

@@ -7,7 +7,11 @@ struct PSMobileApp: App {
 
     var body: some Scene {
         WindowGroup {
-            SlicerView()
+            // Legt die Skalierung aus der Fenstergroesse fest. Muss ganz
+            // aussen stehen: alles darunter rechnet damit.
+            PSScaleRoot {
+                SlicerView()
+            }
                 .environmentObject(model)
                 .onAppear { model.start() }
                 // Modelle, die aus anderen Apps geteilt werden
@@ -18,11 +22,12 @@ struct PSMobileApp: App {
 
 struct SlicerView: View {
     @EnvironmentObject private var model: SlicerModel
+    @Environment(\.psScale) private var ps
     @State private var showImporter = false
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 12) {
+            VStack(spacing: ps.pt(12)) {
 
                 // Platzhalter fuer den 3D-Viewport (M4).
                 // Layout bleibt spaeter so: Bett vollflaechig oben,
@@ -31,10 +36,15 @@ struct SlicerView: View {
                 RoundedRectangle(cornerRadius: 12)
                     .fill(.quaternary)
                     .overlay {
-                        VStack {
-                            Text("3D-Ansicht folgt in M4").font(.headline)
+                        VStack(spacing: ps.pt(4)) {
+                            Text("3D-Ansicht folgt in M4")
+                                .font(.system(size: ps.font(17), weight: .semibold))
                             Text("\(model.objects.count) Objekt(e) auf dem Bett")
-                                .font(.caption).foregroundStyle(.secondary)
+                                .font(.system(size: ps.font(12)))
+                                .foregroundStyle(.secondary)
+                            Text(String(format: "Massstab %.2f", ps.factor))
+                                .font(.system(size: ps.font(11)))
+                                .foregroundStyle(.tertiary)
                         }
                     }
                     .frame(maxHeight: .infinity)
@@ -64,7 +74,7 @@ struct SlicerView: View {
                             idx.map { model.objects[$0].id }.forEach(model.remove)
                         }
                     }
-                    .frame(maxHeight: 220)
+                    .frame(maxHeight: ps.pt(220))
                 }
 
                 progressView
@@ -77,7 +87,7 @@ struct SlicerView: View {
                         .disabled(!isRunning)
                 }
             }
-            .padding()
+            .padding(ps.pt(16))
             .navigationTitle("PSMobile")
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {

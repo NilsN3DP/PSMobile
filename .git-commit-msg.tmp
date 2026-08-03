@@ -1,71 +1,57 @@
-Die iOS-App baut, laeuft und rechnet
+Skalierungsregeln fuer iOS, mit denen von Android gleichgezogen
 
-Erster vollstaendiger Durchlauf auf einem echten Mac: Dependencies,
-Kern, Xcode-Projekt, App. Der C-ABI-Vertragstest laeuft im Simulator
-durch - dieselbe Pruefung, die unter Android auf dem Emulator laeuft.
-Damit ist beantwortet, was das eigentliche Risiko war: nicht ob
-PrusaSlicers Kern auf iOS uebersetzt, sondern ob er dort auch rechnet.
+Die App soll auf jedem iPhone und jedem iPad brauchbar sein. Auf Android
+loest das eine einzige Stelle: die Masse sind fuer rund 1000 x 720
+geschrieben, und faellt das Fenster kleiner aus, wird die wirksame
+Dichte gestaucht - gleichmaessig fuer Abstaende, Schrift und
+Zielflaechen.
 
-Am Bau selbst:
+SwiftUI hat dazu kein Gegenstueck, das global wirkt. Statt eine zweite,
+eigene Logik zu erfinden, uebernimmt PSScale die Regeln woertlich:
+dieselbe Referenzgroesse, dieselbe Untergrenze von 0.7, dieselbe
+Daempfung der Schrift mit 0.6. Die Bildschirme rechnen ihre Masse durch
+- ps.pt(16) statt 16. Das ist mehr Schreibarbeit als auf Android, aber
+es ist dieselbe Regel, und sie steht an einer Stelle.
 
-CMAKE_MACOSX_BUNDLE steht bei CMAKE_SYSTEM_NAME iOS von sich aus auf AN.
-Fuer eine App ist das richtig, fuer die Hilfsprogramme der Dependencies
-nicht - heatshrink installiert ein Kommandozeilenwerkzeug, und CMake
-verlangt dafuer ein BUNDLE DESTINATION, das es nie geben wird.
+Gemessen wird das Fenster, nicht der Bildschirm. Auf dem iPad kann die
+App in Slide Over oder Stage Manager in einem schmalen Streifen stehen,
+waehrend der Bildschirm gross bleibt; wer den Bildschirm misst, baut
+dort eine Oberflaeche, die nicht hineinpasst.
 
-CMAKE_SYSTEM_PROCESSOR bleibt beim Cross-Build leer. libjpeg-turbo
-uebergibt es unquotiert an string(TOLOWER), das leere Argument
-verschwindet, und die Meldung lautet "string no output variable
-specified". Zu wissen ist noch: der Wert landet in CMakeSystem.cmake im
-Bauverzeichnis, ein Nachtragen in der Toolchain allein reicht also
-nicht.
+Die Zielflaeche bleibt bei mindestens 44 Punkt, auch wenn die Skalierung
+rechnerisch darunter liegt. Apples Untergrenze ist keine Empfehlung,
+sondern die Grenze der Treffbarkeit.
 
-Der Viewport haengt nicht mehr an ANDROID. Er ist C++ gegen GLES und
-damit auf beiden Plattformen derselbe Bestand; verschieden ist nur, wie
-der Kontext entsteht - EGL hier, EAGL dort. Dazu der Header-Pfad:
-Android legt GLES unter GLES2/, Apple in ein Framework.
+Dazu ein Testziel. Die sechs Faelle sind dieselben wie in
+UiScaleForTest.kt, ergaenzt um eine Liste echter Geraetegroessen vom
+iPhone SE bis zum iPad Pro 13 quer, jeweils hoch und quer. Weicht eine
+der beiden Plattformen ab, faellt es dort auf und nicht auf einem Geraet.
 
-Der Kern ist auf iOS statisch. Eine eigene dynamische Bibliothek
-muesste mitsigniert und als Framework verpackt werden, ohne etwas
-zurueckzugeben. Damit kam aber die naechste Frage: eine statische
-Bibliothek nimmt ihre Abhaengigkeiten nicht mit, und die App muesste
-libslic3r, Boost, TBB, CGAL und zwei Dutzend weitere Archive einzeln
-aufzaehlen - eine Liste, die bei jeder Aenderung veraltet. Deshalb legt
-build-ios.sh sie jetzt mit libtool zu einer Datei zusammen: 71 Archive,
-141 MB. Der Linker nimmt daraus ohnehin nur, was er braucht.
+Der Test kompiliert PSScale.swift selbst mit, statt sie ueber "@testable
+import" aus der App zu holen. Sonst haengt eine Pruefung von vier
+Rechenregeln am Linken der gesamten App, und die zieht 141 MB
+statischer Bibliotheken mit. Dasselbe Verhaeltnis wie auf Android, wo
+die Regeltests ohne das NDK laufen.
 
---exclude-libs kennt nur die GNU-Linker; Apples ld lehnt es ab.
+Drei Dinge am Projekt mussten dafuer noch stimmen:
 
-An der App-Huelle - sie war nie uebersetzt worden, entsprechend viel lag
-im Argen:
+PRODUCT_NAME jetzt global als $(TARGET_NAME). Ohne Namen heisst das
+Ergebnis woertlich ".app" beziehungsweise ".xctest", und xcodebuild
+meldet "Multiple commands produce ..." - was nach zwei kollidierenden
+Zielen klingt und doch nur ein fehlender Name ist. Global, damit es
+nicht bei jedem neuen Ziel von vorne losgeht.
 
-- PsmCore.swift benutzte UnsafeMutablePointer<psm_session>. Swift bildet
-  unvollstaendige C-Typen als OpaquePointer ab, einen Zeiger dieser Art
-  gibt es gar nicht. So ist das ABI auch gemeint: durchreichen, nie
-  dereferenzieren.
-- Der Info.plist fehlten CFBundleIdentifier, -Executable, -Name und
-  -PackageType. Die App baute, liess sich aber nicht installieren, und
-  der Simulator sagte nur "Missing bundle ID".
-- PRODUCT_NAME war leer. Das Ergebnis hiess woertlich ".app", und
-  xcodebuild meldete "Multiple commands produce ... /.app" - was nach
-  zwei kollidierenden Zielen klingt und doch nur ein fehlender Name ist.
-- TARGETED_DEVICE_FAMILY fehlte. Die App lief auf dem iPad im
-  iPhone-Fenster mitten auf schwarzem Grund.
-- Deployment-Ziel von 15.0 auf 16.0. NavigationStack gibt es erst ab 16,
-  und die Geraete dazwischen haben zum Slicen zu wenig Speicher. Die
-  urspruengliche Begruendung fuer 15.0 gilt fuer 16.0 genauso.
+Das Schema kannte keine Testaktion. Die Meldung dazu klingt, als fehle
+das Testziel; es fehlte nur seine Verknuepfung.
 
-Der Vertragstest suchte seine Schrift unter /system/fonts - ein
-Android-Pfad. Er scheiterte auf iOS also an der Umgebung statt an der
-Sache. Jetzt nimmt er die erste Schrift, die es auf dem System gibt.
+x86_64 ist fuer den Simulator ausgeschlossen. Der Kern wird als
+SIMULATORARM64 gebaut, eine Intel-Fassung gibt es nicht. Ohne den
+Ausschluss uebersetzt der test-Durchlauf zusaetzlich fuer x86_64 und
+meldet seitenweise "found architecture arm64, required architecture
+x86_64" - was wie ein kaputtes Archiv aussieht und keines ist.
 
-Neu: patches/0003 fuer glad, OCCT und STEP. Und patches/0001 hat die
-iOS-Flags fuer GMP und MPFR bekommen - ohne sie entsteht dort eine
-macOS-Bibliothek, was erst der Linker der App bemerkt ("built for
-macOS"), und configure haelt den Bau fuer nativ, solange host und build
-dasselbe Tripel tragen.
-
-Nicht enthalten: das Geraeteziel OS64 ist noch nicht gebaut, und die
-Oberflaeche ist weiterhin das Geruest aus M3.
+Geprueft: sechs Tests gruen; die App laeuft auf iPad Pro 11 mit Massstab
+0.83 und auf iPhone 16e mit 0.70, also genau auf der Untergrenze, beide
+bildschirmfuellend.
 
 Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
