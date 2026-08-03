@@ -41,8 +41,19 @@ stage_into() {
         for f in "${SRC}"/profiles/Prusa*.ini "${SRC}"/profiles/Prusa*.idx; do
             [ -e "$f" ] && cp "$f" "${dest}/profiles/"
         done
+        # Der abschliessende Schraegstrich muss weg, bevor kopiert wird.
+        #
+        # GNU cp legt bei "cp -r quelle/ ziel/" den Ordner quelle unter
+        # ziel an, BSD cp schuettet seinen Inhalt hinein. Auf Linux
+        # entstand also profiles/PrusaResearch/coreone_bed.stl, auf dem
+        # Mac lagen dieselben Dateien flach in profiles/. PrusaSlicer
+        # sucht das Bettmodell aber unter dem Herstellernamen - auf iOS
+        # fand es keines und zeichnete nur das flache Vieleck.
+        #
+        # Gefunden auf einem echten iPad, nachdem es im Simulator
+        # monatelang genauso falsch war und niemandem auffiel.
         for d in "${SRC}"/profiles/Prusa*/; do
-            [ -d "$d" ] && cp -r "$d" "${dest}/profiles/"
+            [ -d "$d" ] && cp -r "${d%/}" "${dest}/profiles/"
         done
     fi
 
