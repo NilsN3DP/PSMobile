@@ -1,8 +1,11 @@
 # Funktionsvergleich PrusaSlicer 2.9.6 ↔ PSMobile
 
-Stand: 2026-07-31. Android ist der einzige aktuelle
-Implementierungsfokus. iOS wird erst portiert, wenn der Android-Ablauf
-stabil und auf Geräten geprüft ist.
+Stand: 2026-08-03. Android bleibt der Referenzpfad fuer reale
+Geraete- und Druckerabnahmen. iOS ist jedoch kein Platzhalter mehr:
+eine native SwiftUI-App mit C-ABI-Kern, Simple Mode, 3MF-Projekten,
+Mehrbett, Vorschau und Einstellungsseiten wird auf dem Mac aktiv gebaut
+und per Simulator getestet. Der belastbare Integrationsnachweis steht in
+`release/ios-integration-inventory-2026-08-03.md`.
 
 Der Abgleich einer von aussen zusammengetragenen Restliste gegen den
 tatsaechlichen Quellstand steht in `docs/11-abgleich-2026-08-02.md`.
@@ -43,6 +46,22 @@ Gerät lief.
 - Easy Mode für den geführten Druckablauf, Advanced-Assistent für die
   drei Profilarten und sperrbare Druckbetten.
 - Slicing als started Foreground-Service im App-Prozess.
+
+## iOS-Stand
+
+- Native SwiftUI-App mit dem gleichen C-ABI-FFF-Kern, iPad- und
+  iPhone-Unterstuetzung, Startmodus und Ersteinrichtung.
+- Simple Mode, 3MF-Projektablauf, Mehrbett, Undo/Redo, Objektleiste,
+  Slice-Zusammenfassung und echte G-Code-Vorschau sind im Simulator
+  getestet.
+- Advanced-Arbeitsflaeche und die dynamischen Print-, Filament- und
+  Printer-Settings sind vorhanden, erreichen aber noch nicht die
+  vollstaendige Android-Advanced-Bedienung.
+- Offen bleiben iOS-INXD/MMU-ColorMix, PrusaLink samt sicherem
+  Profilupdate, der vollständige Advanced-/Sprach-/Rotation-Audit und
+  die iPad-Abnahme mit realem Drucker. Diese Punkte stehen einzeln in
+  `feature-matrix.json`; sie duerfen nicht mehr hinter einem pauschalen
+  "iOS spaeter" verschwinden.
 
 ### EasyPrint-Responsive-Smoke (2026-07-31)
 
@@ -239,4 +258,6 @@ Store-/AGPL-Entscheidung.
 5. Für die verbleibende Desktop-Lücke den Hollow-Pfad bewerten.
 6. Physical-Printer-Dialoge nur dann erweitern, wenn ein unterstütztes
    Ziel über PrusaLink hinaus erforderlich wird.
-7. Erst danach den stabilen Funktionsumfang auf iOS portieren.
+7. iOS-INDX/ColorMix, PrusaLink/Profile-Updates und Advanced-UI gegen
+   denselben Kern vervollstaendigen und danach mit einem iPad sowie einem
+   echten PrusaLink-Drucker abnehmen.

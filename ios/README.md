@@ -1,7 +1,8 @@
 # PSMobile - iOS
 
-Stand: 2026-07-28. Vorbereitet, aber noch nicht gebaut - dafuer braucht es
-einen Mac.
+Stand: 2026-08-03. Der native iOS-Client wird aktiv auf einem Mac gebaut.
+Der iPad-Simulator hat den aktuellen XCUITest- und XCTest-Stand bereits
+ausgefuehrt; reale iPad- und Druckerabnahme bleibt ein eigener Release-Gate.
 
 ## Was hier schon liegt
 
@@ -13,7 +14,10 @@ einen Mac.
 | `PSMobile/SlicerModel.swift` | Zustandshalter, Gegenstueck zu `SlicerService` auf Android |
 | `PSMobile/PSMobileApp.swift` | SwiftUI-Einstieg und Oberflaeche |
 | `PSMobile/Support/PSMobile-Bridging-Header.h` | macht `psmobile_core.h` fuer Swift sichtbar |
-| `project.yml` | XcodeGen-Spezifikation statt eingechecktem `.xcodeproj` |
+| `project.yml` | XcodeGen-Spezifikation; das erzeugte Projekt ist fuer reproduzierbare Tests eingecheckt |
+| `PSMobile/Screens/` | Simple Mode, Ersteinrichtung, Settings, Projekte und Slice-Zusammenfassung |
+| `PSMobile/Viewport/` | OpenGL-ES-Viewport, Auswahl, Kamera und G-Code-Layerbereich |
+| `PSMobileUITests/` | Bedienbare Simulator-Regressionen statt reiner Build-Pruefung |
 
 ## Erste Schritte auf dem Mac
 
@@ -34,8 +38,10 @@ PSM_IOS_PLATFORM=OS64 build/scripts/build-ios.sh all
 # 5. Ressourcen ins Bundle legen
 build/scripts/stage-resources.sh ios
 
-# 6. Xcode-Projekt erzeugen und oeffnen
-cd ios && xcodegen generate && open PSMobile.xcodeproj
+# 6. Xcode-Projekt bei Aenderung der project.yml regenerieren und testen
+cd ios && xcodegen generate
+xcodebuild -project PSMobile.xcodeproj -scheme PSMobile \
+  -destination 'platform=iOS Simulator,name=iPad Pro 13-inch (M5),OS=26.3.1' test
 ```
 
 ## Was erfahrungsgemaess noch Arbeit macht
@@ -47,8 +53,9 @@ cd ios && xcodegen generate && open PSMobile.xcodeproj
 - **`-fno-aligned-allocation`**: setzt libslic3r fuer Apple-Ziele. Bei
   Deployment-Target 15.0 ist das nicht mehr noetig und kann stoeren.
 - **Simulator vs. Geraet**: Deps muessen fuer jede Plattform getrennt
-  gebaut werden (`OS64` bzw. `SIMULATORARM64`). Ein XCFramework, das
-  beides buendelt, kommt in M8.
+  gebaut werden (`OS64` bzw. `SIMULATORARM64`). Der Simulator beweist
+  Bedienung und Kernvertrag, nicht Speicher- oder Druckerverhalten auf
+  einem iPad.
 
 ## Wichtig vor jeder Veroeffentlichung
 

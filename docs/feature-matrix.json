@@ -596,7 +596,9 @@
         "android/app/src/test/java/de/psmobile/ui/SimpleModeStateTest.kt",
         "android/app/src/test/java/de/psmobile/ui/SimpleWorkspaceStateTest.kt",
         "android/app/src/test/java/de/psmobile/ui/SimpleModeLayoutTest.kt",
-        ".superpowers/sdd/2026-07-31-simple-mode-reference-fidelity/task-6-report.md",
+        "docs/release/android-beta-closure-audit.md"
+      ],
+      "verification": [
         "docs/release/android-beta-closure-audit.md"
       ],
       "verification": [
@@ -671,28 +673,116 @@
       ]
     },
     {
-      "id": "ios.scaffold",
-      "title": "iOS-Projektgerüst",
+      "id": "ios.native_core",
+      "title": "iOS-App mit nativem PrusaSlicer-FFF-Kern",
       "platform": "ios",
-      "status": "coded",
+      "status": "emulator_tested",
       "evidence": [
-        "ios/README.md"
+        "ios/PSMobile.xcodeproj",
+        "ios/PSMobile/Core/PsmCore.swift",
+        "docs/release/ios-integration-inventory-2026-08-03.md"
+      ],
+      "verification": [
+        "docs/release/ios-integration-inventory-2026-08-03.md"
       ],
       "blocked_by": [
-        "ios.parity"
+        "ios.device_release_gate"
       ]
     },
     {
-      "id": "ios.parity",
-      "title": "Funktionale iOS-Portierung nach stabiler Android-Version",
+      "id": "ios.simple_mode",
+      "title": "Simple Mode mit Projekt, Material, Support und Slice",
+      "platform": "ios",
+      "status": "emulator_tested",
+      "evidence": [
+        "ios/PSMobile/Screens/SimpleModeView.swift",
+        "ios/PSMobileUITests/SimpleModeUITests.swift",
+        "docs/release/ios-integration-inventory-2026-08-03.md"
+      ],
+      "verification": [
+        "docs/release/ios-integration-inventory-2026-08-03.md"
+      ],
+      "blocked_by": [
+        "ios.device_release_gate"
+      ]
+    },
+    {
+      "id": "ios.project_workflow",
+      "title": "iOS-3MF-Projekt, Mehrbett, Undo/Redo und G-Code-Vorschau",
+      "platform": "ios",
+      "status": "emulator_tested",
+      "evidence": [
+        "ios/PSMobile/Core/PsmCoreProject.swift",
+        "ios/PSMobileUITests/ProjectUITests.swift",
+        "ios/PSMobileUITests/PreviewUITests.swift"
+      ],
+      "verification": [
+        "docs/release/ios-integration-inventory-2026-08-03.md"
+      ],
+      "blocked_by": [
+        "ios.device_release_gate"
+      ]
+    },
+    {
+      "id": "ios.advanced_shell",
+      "title": "iOS-Advanced-Arbeitsfläche und Einstellungsseiten",
+      "platform": "ios",
+      "status": "emulator_tested",
+      "evidence": [
+        "ios/PSMobile/PSMobileApp.swift",
+        "ios/PSMobile/Screens/SettingsView.swift",
+        "ios/PSMobileUITests/SettingsUITests.swift"
+      ],
+      "verification": [
+        "docs/release/ios-integration-inventory-2026-08-03.md"
+      ],
+      "blocked_by": [
+        "ios.advanced_parity",
+        "ios.device_release_gate"
+      ]
+    },
+    {
+      "id": "ios.indx_colormix",
+      "title": "iOS INDX/MMU-Materialpositionen und ColorMix",
       "platform": "ios",
       "status": "not_started",
       "evidence": [
-        "docs/03-roadmap.md"
+        "docs/superpowers/plans/2026-08-03-ios-parity-and-beta-rc.md"
+      ],
+      "blocked_by": []
+    },
+    {
+      "id": "ios.prusalink_profile_updates",
+      "title": "iOS PrusaLink und sichere Profilupdates",
+      "platform": "ios",
+      "status": "not_started",
+      "evidence": [
+        "docs/superpowers/plans/2026-08-03-ios-parity-and-beta-rc.md"
+      ],
+      "blocked_by": []
+    },
+    {
+      "id": "ios.advanced_parity",
+      "title": "Vollständige iOS-Advanced-UI-, Sprach- und Rotationsparität",
+      "platform": "ios",
+      "status": "not_started",
+      "evidence": [
+        "docs/superpowers/plans/2026-08-03-ios-parity-and-beta-rc.md"
+      ],
+      "blocked_by": []
+    },
+    {
+      "id": "ios.device_release_gate",
+      "title": "iOS Geräte-, Speicher- und PrusaLink-Abnahme",
+      "platform": "ios",
+      "status": "not_started",
+      "evidence": [
+        "docs/superpowers/plans/2026-08-03-ios-parity-and-beta-rc.md"
       ],
       "blocked_by": [
-        "android.device_release_gate",
-        "macos.build_host"
+        "ios.indx_colormix",
+        "ios.prusalink_profile_updates",
+        "ios.advanced_parity"
       ]
     },
     {
