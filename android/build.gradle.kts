@@ -2,6 +2,13 @@ plugins {
     alias(libs.plugins.android.application) apply false
     alias(libs.plugins.kotlin.android) apply false
     alias(libs.plugins.kotlin.compose) apply false
+    // Fuer das gemeinsame Regelmodul (E-13). Hier bekanntgemacht, aber
+    // nicht angewandt - sonst haengt der Kotlin-Multiplatform-Klassenpfad
+    // ohne Version am Wurzelprojekt, und Gradle lehnt die Anfrage im
+    // Untermodul mit "already on the classpath with an unknown version"
+    // ab.
+    alias(libs.plugins.android.library) apply false
+    alias(libs.plugins.kotlin.multiplatform) apply false
 }
 
 /*

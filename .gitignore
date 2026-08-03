@@ -42,3 +42,4 @@ xcuserdata/
 .vscode/
 .idea/
 *.swp
+android/shared/build/

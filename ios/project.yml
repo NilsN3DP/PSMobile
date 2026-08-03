@@ -39,20 +39,31 @@ settings:
     ENABLE_BITCODE: NO
     CLANG_ENABLE_MODULES: YES
     SWIFT_OBJC_BRIDGING_HEADER: PSMobile/Support/PSMobile-Bridging-Header.h
+    # Such- und Bibliothekspfade nach Plattform getrennt.
+    #
+    # Frueher standen Geraet und Simulator gemeinsam in je einer Liste,
+    # mit der Begruendung, Xcode ignoriere nicht vorhandene Pfade. Das
+    # stimmte nur, solange genau eine der beiden Fassungen gebaut war.
+    # Sobald beide existierten, gewann die erstgenannte, und der
+    # Simulatorbau scheiterte an "building for iOS-simulator, but linking
+    # in object file built for iOS" - was wie ein kaputtes Archiv
+    # aussieht und keines ist.
+    #
+    # Das Framework enthaelt die gemeinsamen Regeln (E-13) und wird von
+    # build/scripts/build-shared-ios.sh gebaut, nicht eingecheckt.
+    FRAMEWORK_SEARCH_PATHS[sdk=iphonesimulator*]:
+      - $(SRCROOT)/../android/shared/build/bin/iosSimulatorArm64/debugFramework
+    FRAMEWORK_SEARCH_PATHS[sdk=iphoneos*]:
+      - $(SRCROOT)/../android/shared/build/bin/iosArm64/debugFramework
     HEADER_SEARCH_PATHS:
       - $(SRCROOT)/../core/include
       - $(SRCROOT)/../viewport/include
-    # Beide Plattformen stehen hier, nicht nur das Geraet: sonst faende
-    # der Linker beim Simulatorbau nichts und meldete das als Haufen
-    # fehlender Symbole statt als fehlenden Pfad - eine Fehlersuche, die
-    # in die falsche Richtung fuehrt. Nicht vorhandene Pfade ignoriert
-    # Xcode, es steht also immer nur die tatsaechlich gebaute Plattform
-    # zur Verfuegung.
-    LIBRARY_SEARCH_PATHS:
-      - $(SRCROOT)/../build-out/ios-core-OS64
-      - $(SRCROOT)/../build-out/ios-destdir-OS64/usr/local/lib
+    LIBRARY_SEARCH_PATHS[sdk=iphonesimulator*]:
       - $(SRCROOT)/../build-out/ios-core-SIMULATORARM64
       - $(SRCROOT)/../build-out/ios-destdir-SIMULATORARM64/usr/local/lib
+    LIBRARY_SEARCH_PATHS[sdk=iphoneos*]:
+      - $(SRCROOT)/../build-out/ios-core-OS64
+      - $(SRCROOT)/../build-out/ios-destdir-OS64/usr/local/lib
 
 targets:
   PSMobile:
@@ -86,6 +97,11 @@ targets:
           # darin stecken libslic3r und alle Dependencies. Erzeugt von
           # build/scripts/build-ios.sh.
           - -lpsmobile_core_all
+          # Kotlin/Native als statisches Framework - dieselbe Ueberlegung
+          # wie beim Kern: kein Signieraufwand fuer etwas, das ohnehin
+          # nur in dieser App steckt.
+          - -framework
+          - PSMShared
     dependencies:
       - sdk: OpenGLES.framework
       - sdk: Metal.framework

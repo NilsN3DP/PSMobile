@@ -59,6 +59,14 @@ write_env() {
         if [ -x "${HOME}/homebrew/bin/brew" ]; then
             printf 'eval "$(%s/bin/brew shellenv)"\n' "${HOME}/homebrew"
         fi
+        # Gradle findet Java nur ueber JAVA_HOME - der Pfad allein
+        # genuegt ihm nicht.
+        local jdk
+        jdk="$(ls -d "${PSM_TOOLS}"/jdk-*/Contents/Home 2>/dev/null | head -1)"
+        if [ -n "${jdk}" ]; then
+            printf 'export JAVA_HOME="%s"\n' "${jdk}"
+            printf 'export PATH="%s/bin:$PATH"\n' "${jdk}"
+        fi
         printf 'export PATH="%s/bin:$PATH"\n' "${PSM_TOOLS}"
     } > "${PSM_TOOLS}/env.sh"
 }
@@ -106,6 +114,14 @@ step_tools() {
 
     mkdir -p "${PSM_TOOLS}/bin"
     export PATH="${PSM_TOOLS}/bin:${PATH}"
+
+    # Das JDK kommt nie ueber Homebrew - es waere aus dem Quelltext zu
+    # bauen. Deshalb steht es nicht in der Liste unten, sondern wird
+    # geholt, wenn es fehlt.
+    if ! command -v java >/dev/null 2>&1 \
+       && [ -z "$(ls -d "${PSM_TOOLS}"/jdk-*/Contents/Home 2>/dev/null)" ]; then
+        fetch_jdk
+    fi
 
     local missing=()
     local tool
@@ -199,6 +215,21 @@ fetch_ninja() {
         -o "${PSM_TOOLS}/ninja.zip"
     unzip -oq "${PSM_TOOLS}/ninja.zip" -d "${PSM_TOOLS}/bin"
     chmod +x "${PSM_TOOLS}/bin/ninja"
+}
+
+# Ein JDK fuer das gemeinsame Regelmodul (E-13).
+#
+# Kotlin/Native baut die iOS-Fassung nur auf einem Mac, und dafuer
+# braucht Gradle eine Java-Laufzeit. macOS bringt keine mit, und ueber
+# das Benutzer-Homebrew waere sie aus dem Quelltext zu bauen - schon
+# gettext scheiterte daran, bei OpenJDK ist es aussichtslos. Ein fertiges
+# Archiv von Adoptium tut es genauso und braucht keine Adminrechte.
+fetch_jdk() {
+    log "JDK ohne Adminrechte holen"
+    curl -fsSL -o "${PSM_TOOLS}/jdk.tar.gz" \
+        "https://api.adoptium.net/v3/binary/latest/21/ga/mac/aarch64/jdk/hotspot/normal/eclipse"
+    tar xzf "${PSM_TOOLS}/jdk.tar.gz" -C "${PSM_TOOLS}"
+    rm -f "${PSM_TOOLS}/jdk.tar.gz"
 }
 
 # Homebrew ins Benutzerverzeichnis, wenn es keine Adminrechte gibt.

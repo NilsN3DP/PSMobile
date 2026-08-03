@@ -31,7 +31,12 @@ case "${VARIANT}" in
     debug)   TASK=assembleDebug ;;
     release) TASK=assembleRelease ;;
     test)    TASK=testDebugUnitTest ;;
-    *) echo "Unbekannte Variante: ${VARIANT}" >&2; exit 2 ;;
+    # Die Regeln aus dem gemeinsamen Modul (E-13). Sie haengen an keiner
+    # Plattform und laufen ohne Emulator und ohne NDK. Auf Linux baut nur
+    # das Android-Ziel des Moduls; die iOS-Fassung entsteht auf dem Mac.
+    shared)  TASK=':shared:testDebugUnitTest' ;;
+    *) echo "Unbekannte Variante: ${VARIANT}" >&2
+       echo "Erlaubt: debug release test shared" >&2; exit 2 ;;
 esac
 
 psm_log "Gradle ${TASK}"

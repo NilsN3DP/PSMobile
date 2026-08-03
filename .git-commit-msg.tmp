@@ -1,21 +1,55 @@
-Null freier Speicher heisst "keine Auskunft", nicht "kein Speicher"
+Erste Regel liegt im gemeinsamen Modul - beide Apps holen sie dort
 
-Beim ersten Modell auf dem Bett stand da: "Dieses Modell braucht
-geschaetzt 160 MB, verfuegbar sind etwa 0 MB. Das kann fehlschlagen."
+Umsetzung von E-13, an einem Stueck durchgezogen: Android-Kotlin ->
+gemeinsames Modul -> Kotlin/Native-Framework -> Swift. Die Skalierung
+war der richtige Anfang, weil sie bereits doppelt existierte: dieselben
+Zahlen in Theme.kt und in PSScale.swift, dieselben Testfaelle zweimal.
+Nichts haette gemerkt, wenn eine der beiden Seiten sich verschoben
+haette.
 
-os_proc_available_memory liefert 0, wenn es nichts sagen kann - im
-Simulator etwa, wo es gar keine Jetsam-Grenze gibt. Die Null als Zahl
-weiterzureichen macht daraus eine Warnung, die bei jedem Modell
-erscheint und immer falsch ist.
+Jetzt stehen die Zahlen einmal in UiScale, beide Seiten reichen durch.
+Wie die Zahl angewandt wird, bleibt Sache der Plattform - Android
+staucht die wirksame Dichte, iOS rechnet die Masse einzeln durch. Das
+ist der Schnitt, den E-13 meint: geteilt wird die Entscheidung, nicht
+die Darstellung.
 
-Solche Warnungen sind schlimmer als keine. Man gewoehnt sich an sie, und
-wenn der Speicher dann wirklich knapp wird, liest sie niemand mehr.
+Die doppelte Android-Testdatei ist weg. Die Faelle stehen im Modul und
+laufen dort fuer beide. Die Swift-Tests bleiben, pruefen jetzt aber
+etwas anderes: dass die Bruecke durchreicht und PSScale nicht
+irgendwann wieder anfaengt, selbst zu rechnen. Deshalb stehen die
+erwarteten Werte dort ausgeschrieben.
 
-Jetzt liefert availableMemory nichts statt null, und ohne Auskunft wird
-nicht gewarnt. Der Fall, um den es eigentlich geht - ein grosses Modell
-auf einem echten Geraet -, ist davon unberuehrt: dort antwortet iOS.
+Zum Bauen:
 
-Nebenbei belegt: das Modell laedt, liegt auf dem Bett und wird
-gezeichnet. 20 x 20 x 20 mm, 12 Dreiecke, wie es die Datei sagt.
+Kotlin/Native uebersetzt iOS nur auf einem Mac, und Gradle braucht dafuer
+ein JDK. macOS bringt keines mit, und ueber das Benutzer-Homebrew waere
+es aus dem Quelltext zu bauen - schon gettext scheiterte daran. Deshalb
+holt macos-bootstrap.sh jetzt ein fertiges Archiv von Adoptium und
+traegt JAVA_HOME in env.sh ein, so wie es cmake und ninja schon
+handhabt. Auf Linux baut dasselbe Modul nur seine Android-Fassung; das
+ist kein Fehler, sondern die Arbeitsteilung.
+
+build-apk.sh kennt "shared" als vierte Variante - die Regeln laufen ohne
+Emulator und ohne NDK.
+
+Drei Stolpersteine, die dabei auftauchten:
+
+Der Kotlin-Multiplatform-Klassenpfad muss im Wurzelprojekt bekannt sein,
+sonst lehnt Gradle die Anfrage im Untermodul mit "already on the
+classpath with an unknown version" ab.
+
+Und einer, der erst jetzt sichtbar wurde, weil endlich beide Ziele
+gebaut sind: Geraet und Simulator standen gemeinsam in je einer
+Suchpfadliste, mit der Begruendung, Xcode ignoriere nicht vorhandene
+Pfade. Das stimmte nur, solange genau eine Fassung existierte. Sobald
+beide da waren, gewann die erstgenannte, und der Simulatorbau scheiterte
+an "building for iOS-simulator, but linking in object file built for
+iOS". Die Pfade sind jetzt nach Plattform getrennt.
+
+Nebenbei: das Geraeteziel OS64 ist durchgebaut. Damit ist der Weg zu
+einer Datei fuers echte iPad offen.
+
+Geprueft: Android-Tests gruen, Modultests gruen, iOS-Tests gruen - und
+die iOS-Tests laufen jetzt gegen die Kotlin-Regeln.
 
 Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>

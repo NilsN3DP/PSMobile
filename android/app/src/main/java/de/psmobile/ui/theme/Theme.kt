@@ -13,6 +13,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.sp
+import de.psmobile.shared.ui.UiScale
 
 /**
  * Farbwelt an PrusaSlicer angelehnt.
@@ -80,18 +81,19 @@ private val Scheme = darkColorScheme(
  * Inhalt weglassen, wie es der Assistent und der Startbildschirm
  * inzwischen tun.
  */
-internal fun uiScaleFor(widthDp: Int, heightDp: Int): Float {
-    val byWidth = widthDp / REFERENCE_WIDTH_DP
-    val byHeight = heightDp / REFERENCE_HEIGHT_DP
-    return minOf(byWidth, byHeight, 1f).coerceAtLeast(MIN_SCALE)
-}
+// Die Zahlen stehen seit E-13 im gemeinsamen Modul, damit iOS dieselben
+// verwendet. Hier bleibt nur der Durchgriff - und die Anwendung, denn die
+// unterscheidet sich je Plattform: Android staucht die wirksame Dichte,
+// iOS rechnet die Masse einzeln durch.
+internal fun uiScaleFor(widthDp: Int, heightDp: Int): Float =
+    UiScale.forWindow(widthDp.toFloat(), heightDp.toFloat())
 
-internal const val REFERENCE_WIDTH_DP = 1000f
-internal const val REFERENCE_HEIGHT_DP = 720f
-internal const val MIN_SCALE = 0.7f
+internal const val REFERENCE_WIDTH_DP = UiScale.REFERENCE_WIDTH
+internal const val REFERENCE_HEIGHT_DP = UiScale.REFERENCE_HEIGHT
+internal const val MIN_SCALE = UiScale.MIN_SCALE
 
 /** Wie stark die Schrift dem Kastenmass folgt. */
-internal const val FONT_FOLLOW = 0.6f
+internal const val FONT_FOLLOW = UiScale.FONT_FOLLOW
 
 /*
  * Material3 bringt Schriftgroessen fuer eine Telefon-App mit: eine

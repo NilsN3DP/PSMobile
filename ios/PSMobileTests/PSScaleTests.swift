@@ -1,9 +1,14 @@
 import XCTest
 // Die Datei wird mitkompiliert, siehe project.yml - kein Import noetig.
 
-/// Gegenstueck zu `UiScaleForTest` auf Android - dieselben Faelle,
-/// dieselben Erwartungen. Weicht eine der beiden Seiten ab, faellt es
-/// hier auf und nicht erst auf einem Geraet.
+/// Prueft, dass die Swift-Seite dieselben Zahlen bekommt wie das
+/// gemeinsame Regelmodul (E-13).
+///
+/// Die Regeln selbst werden dort geprueft, in `UiScaleTest` - hier geht
+/// es um die Bruecke: dass PSScale wirklich durchreicht und nicht
+/// irgendwann wieder anfaengt, selbst zu rechnen. Deshalb stehen die
+/// erwarteten Werte hier ausgeschrieben und nicht als Aufruf derselben
+/// Funktion, die geprueft werden soll.
 final class PSScaleTests: XCTestCase {
 
     func testGrossesTabletBleibtUnveraendert() {

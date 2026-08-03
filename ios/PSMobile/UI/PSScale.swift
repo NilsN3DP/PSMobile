@@ -1,9 +1,10 @@
 import SwiftUI
+import PSMShared
 
 /// Wie stark die Oberflaeche insgesamt verkleinert wird.
 ///
-/// Gegenstueck zu `uiScaleFor` in `de.psmobile.ui.theme.Theme` auf
-/// Android - **mit denselben Zahlen**. Die Masse in den Bildschirmen sind
+/// Die Zahlen kommen aus dem gemeinsamen Modul (E-13) - es sind
+/// buchstaeblich dieselben wie auf Android, nicht nachgehaltene Kopien. Die Masse in den Bildschirmen sind
 /// fuer ein Tablet mit rund 1000 x 720 Punkt geschrieben. Faellt das
 /// Fenster kleiner aus - iPhone, Slide Over, Split View, Stage Manager -,
 /// dann sind dieselben Masse im Verhaeltnis zu gross.
@@ -19,18 +20,18 @@ import SwiftUI
 struct PSScale: Equatable {
 
     /// Die Groesse, fuer die die Masse gedacht sind.
-    static let referenceWidth: CGFloat = 1000
-    static let referenceHeight: CGFloat = 720
+    static let referenceWidth = CGFloat(UiScale.shared.REFERENCE_WIDTH)
+    static let referenceHeight = CGFloat(UiScale.shared.REFERENCE_HEIGHT)
 
     /// Untergrenze. Darunter waeren Zielflaechen physisch zu klein zum
     /// Treffen. Wo es enger wird, muss der Bildschirm selbst Inhalt
     /// weglassen, statt weiter zu schrumpfen.
-    static let minScale: CGFloat = 0.7
+    static let minScale = CGFloat(UiScale.shared.MIN_SCALE)
 
     /// Wie stark die Schrift dem Kastenmass folgt. Text darf nicht so
     /// stark schrumpfen wie Kaesten, sonst wird er unleserlich, bevor der
     /// Platz wirklich knapp ist.
-    static let fontFollow: CGFloat = 0.6
+    static let fontFollow = CGFloat(UiScale.shared.FONT_FOLLOW)
 
     let factor: CGFloat
 
@@ -41,14 +42,12 @@ struct PSScale: Equatable {
     /// Die knappere Kante entscheidet. Hochskaliert wird nie: ab der
     /// Referenzgroesse stimmen die Masse bereits.
     static func scaleFor(width: CGFloat, height: CGFloat) -> CGFloat {
-        let byWidth = width / referenceWidth
-        let byHeight = height / referenceHeight
-        return max(min(byWidth, byHeight, 1), minScale)
+        CGFloat(UiScale.shared.forWindow(width: Float(width), height: Float(height)))
     }
 
     /// Gedaempfte Fassung fuer Schriftgroessen.
     static func fontScaleFor(_ scale: CGFloat) -> CGFloat {
-        1 - (1 - scale) * fontFollow
+        CGFloat(UiScale.shared.fontScale(scale: Float(scale)))
     }
 
     /// Ein Kastenmass: Abstand, Breite, Hoehe, Eckenradius.
