@@ -33,8 +33,11 @@ struct AdvancedObjectInspectorView: View {
             if model.beds.count > 1 { bettwechsel }
             Divider().background(PrusaColors.divider)
             teile
+            // Eine Marke, kein Bezeichner am Stapel: SwiftUI vererbt den
+            // an jedes Kind und ueberschreibt deren eigene. Genau daran
+            // sind heute schon zwei Bildschirme gescheitert.
+            PSMarke(name: "advanced.objectTree")
         }
-        .accessibilityIdentifier("advanced.objectTree")
     }
 
     // MARK: - Griffe
