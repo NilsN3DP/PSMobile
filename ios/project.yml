@@ -132,6 +132,11 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: de.psmobile.tests
         GENERATE_INFOPLIST_FILE: YES
+        # Der Testhost liefert die App samt PSMShared bereits. Das Bundle
+        # selbst testet nur reine Swift-Dateien; ein zweites statisches
+        # PSMShared wuerde Kotlin/Native-Klassen doppelt laden und den
+        # Prozess vor dem Teststart abstuerzen lassen.
+        OTHER_LDFLAGS: []
     dependencies:
       - sdk: Security.framework
       - target: PSMobile
