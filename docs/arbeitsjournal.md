@@ -128,8 +128,44 @@ führte null Tests aus — die unangenehmste Art zu scheitern, weil sie wie
 Bestehen aussieht. Wer hier arbeitet: bei jedem Testlauf auf die Zeile
 `Executed N tests` sehen, nicht nur auf `TEST SUCCEEDED`.
 
-**Und noch einer:** `@testable import PSMobile` funktioniert in diesem
-Aufbau nicht. Codex ist daran gescheitert (sein Commit `daaa18f` nimmt
-den Unit-Test wieder heraus), ich anschließend auch. Was geprüft werden
-soll, wird deshalb ins Testziel mitkompiliert; was das nicht zulässt,
-gehört in einen Oberflächentest.
+**Und noch einer, mit Auflösung:** Codex hatte einen Unit-Test für den
+Schlüsselbund geschrieben und in `daaa18f` wieder herausgenommen. Ich bin
+in dieselbe Falle gelaufen und habe zwei Anläufe gebraucht, um zu sehen,
+warum:
+
+- *Ohne* Testhost meldet jeder Schlüsselbund-Aufruf `-34018`,
+  `errSecMissingEntitlement` — ein Testbündel ohne App-Prozess hat dafür
+  keine Berechtigung.
+- *Mit* Testhost liegt PSMShared zweimal im Prozess. Kotlin/Native-Klassen
+  sind dann doppelt registriert, und der Lauf bricht vor dem ersten Fall
+  ab: eine Wand aus „Class … is implemented in both".
+
+Es gibt in diesem Aufbau also keinen Weg, den Schlüsselbund als Einheit
+zu prüfen. Die Prüfung steht jetzt in der Bedienung: Passwort eingeben,
+Bildschirm verlassen, zurückkommen — steht es wieder da, hat der
+Schlüsselbund gehalten. Für das Einheitsziel gilt weiterhin: nur reine
+Swift-Dateien, mitkompiliert, ohne Abhängigkeit zur App.
+
+**Merke fürs Testen:** immer auf die Zeile `Executed N tests` sehen. Es
+gab heute zwei Läufe, die `TEST SUCCEEDED` meldeten und null Tests
+ausführten — einmal, weil das Xcode-Projekt nicht neu erzeugt war,
+einmal, weil die Testdateien nur im Arbeitsstand lagen und das Bündel
+nur Commits trägt.
+
+### Claude — PrusaLink-Oberfläche und ihre Prüfungen
+
+Druckerschirm zum Einrichten und Senden, erreichbar aus der
+Zusammenfassung nach dem Slicen und aus dem Arbeitsbereich. Drei
+Bedienungstests: ein Drucker lässt sich anlegen und erscheint mit
+`https://` davor, das Passwort überlebt im Schlüsselbund, und eine
+Klartextadresse wird ohne ausdrückliche Freigabe gar nicht erst gesendet.
+
+Die `Info.plist` gibt nur das lokale Netz frei (`NSAllowsLocalNetworking`),
+nicht das offene Internet. Selbstsignierte Zertifikate werden **nicht**
+blind akzeptiert — wer HTTPS mit eigenem Zertifikat fährt, kommt derzeit
+nicht durch. Das ist bewusst offen gelassen und wäre der nächste Punkt.
+
+Stand: 33 Tests auf iOS grün, Android grün.
+
+**Nicht am Gerät geprüft.** Ohne echten Drucker ist nur belegt, dass die
+Rechnung stimmt und die Ablehnungen greifen.
