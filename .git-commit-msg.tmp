@@ -1,60 +1,43 @@
-Neun Regeln ins gemeinsame Modul, bevor die iOS-Oberflaeche entsteht
+Bruecke fuer Ersteinrichtung, Profile und Einstellungen
 
-Reihenfolge aus E-13: erst die Regeln teilen, dann Bildschirme bauen.
-Andersherum haette ich jede dieser Regeln in Swift nachgeschrieben und
-spaeter wieder herausloesen muessen - Arbeit, die niemand mehr macht,
-wenn die App laeuft.
+Die Swift-Seite deckte 29 der 128 ABI-Funktionen ab - genug fuer Laden
+und Slicen, zu wenig fuer jeden Bildschirm, der danach kommt. Jetzt sind
+es 83: Druckersuche und -installation, Profile samt geaenderten Werten,
+Einstellungen mit ihren Metadaten, Extruder und Filamenthersteller.
 
-Verschoben, nicht abgetippt: AdhesionAdvice, PrinterGrouping,
-AppSettings, SimpleModeState, EasyModeState, EasyPanel,
-SpecialValueCodec, RemovableStorage, ColorMixCodec - samt Kommentaren
-und samt ihren Tests. Auf der Android-Seite bleibt ein Import stehen.
+Das ist die Grundlage fuer Ersteinrichtung und Einstellungsseiten. Ohne
+sie waere jeder Bildschirm daran haengengeblieben, und ich haette die
+Bruecke mitten in der Oberflaechenarbeit nachziehen muessen.
 
-Drei Kopplungen mussten dafuer aufgeloest werden:
+In eine eigene Datei, weil PsmCore sonst waechst wie sein Gegenstueck
+auf Android - dort sind es inzwischen 1026 Zeilen.
 
-PrinterGrouping haengte an PsmCore.PrinterModel, einer inneren Klasse
-der JNI-Bruecke. Statt sie herauszubrechen nimmt die Regel jetzt einen
-Zugriff auf die Familie entgegen und laesst den Modelltyp offen. Sie
-interessiert sich ohnehin nur dafuer, und iOS bringt seinen eigenen Typ
-mit.
+Ein wiederkehrendes Muster steht jetzt einmal da: zwei Dutzend
+ABI-Funktionen schreiben in einen Puffer fester Groesse, und jedes Mal
+dieselben vier Zeilen. Die Groessen sind aus dem Header gespiegelt statt
+geraten - zu klein hiesse abgeschnitten.
 
-SimpleModeState fragte PsUi nach der Sprache. Die Frage "welche Sprache
-gilt gerade" gehoert zu den Regeln - beide Apps beantworten sie gleich -,
-also steht sie jetzt in Lang. Die Beschriftungen selbst bleiben je
-Plattform, sie kommen aus PrusaSlicers Katalog (E-12).
+Zwei Signaturen hatte ich nach Gefuehl geschrieben statt nachgelesen,
+und beide waren reicher als gedacht:
 
-SpecialValueCodec war internal. Das hiess "modulintern", und das Modul
-ist jetzt ein anderes.
+psm_preset_dirty_at liefert Schluessel, alten und neuen Wert. Der Hinweis
+auf ungespeicherte Aenderungen soll nicht nur sagen, dass sich etwas
+geaendert hat, sondern was - wie auf dem Desktop.
 
-Was nicht mitging: SimpleModelSheetState. Es haengt an einem Typ aus der
-Oberflaeche, und das aufzuloesen haette die Regel nicht besser gemacht.
-Es bleibt auf der Android-Seite, bis die iOS-Seite zeigt, was sie
-wirklich braucht.
+psm_config_enum_value_at liefert Wert und Beschriftung getrennt. In die
+Konfiguration geht "rectilinear", auf den Bildschirm "Rectilinear" oder
+dessen Uebersetzung. Wer beides verwechselt, schreibt unlesbare Werte in
+die Profile.
 
-Zwei Dinge, die erst der iOS-Bau aufdeckte und die auf Android
-jahrelang unauffaellig geblieben waeren:
+Dazu ein Sync-Skript. Bisher ging jede geaenderte Datei einzeln per scp
+auf den Mac, jedes Mal mit eigenem Verbindungsaufbau - bei zehn Dateien
+zehn Handschlaege. Jetzt geht der ganze Stand in einem Rutsch durch eine
+Leitung.
 
-SpecialValueCodec formatierte mit String.format und Locale.ROOT - beides
-gibt es nur auf der JVM. Jetzt wird von Hand gerechnet, was fuer diesen
-Zweck ohnehin richtiger ist: die Werte gehen in PrusaSlicers
-Konfiguration und muessen einen Punkt tragen, kein deutsches Komma.
+Geprueft: iOS-App baut, Tests gruen.
 
-Und deleteCharAt ist auf Kotlin/Native missbilligt. deleteAt heisst
-dasselbe und gilt auf beiden Seiten.
-
-Dazu eine Namenskollision, die ich selbst gebaut hatte: das gestern
-angelegte UiScale im Modul und das bestehende UiScale auf Android
-beantworten verschiedene Fragen - um wieviel wird verkleinert gegen wie
-eng ist es. Beide zusammen in einem Namensraum brauchen klare Namen,
-also heisst das neue jetzt WindowScale.
-
-Beinahe waere dabei ein echter Fehler stehengeblieben: die Sprachumstellung
-setzte Lang nicht, weil mein Suchmuster die Typangabe nicht traf. Simple
-Mode haette ab sofort immer englisch geantwortet, waehrend der Rest der
-App deutsch spricht - und niemand haette den Fehler im gemeinsamen Modul
-gesucht.
-
-Geprueft: Android-App und -Tests gruen, Modultests gruen, Modul baut fuer
-beide iOS-Ziele, iOS-App und -Tests gruen.
+Nicht geprueft: die neuen Funktionen sind uebersetzt, aber noch von
+keinem Bildschirm aufgerufen. Fehler in der Pufferlaenge oder
+Argumentreihenfolge zeigen sich erst dann.
 
 Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>

@@ -92,7 +92,10 @@ final class PsmCore {
     /// den Zeiger.
     var sessionHandle: OpaquePointer? { handle }
 
-    private var raw: OpaquePointer {
+    // Nicht private: PsmCoreSetup.swift erweitert diese Klasse und
+    // braucht beides. Nach aussen bleibt es unsichtbar, weil die Klasse
+    // selbst nicht oeffentlich ist.
+    var raw: OpaquePointer {
         handle!
     }
 
@@ -102,7 +105,7 @@ final class PsmCore {
         handle == nil ? "" : String(cString: psm_last_error(UnsafeMutableRawPointer(handle!)))
     }
 
-    private func check(_ code: psm_result, _ what: String) throws {
+    func check(_ code: psm_result, _ what: String) throws {
         guard code == PSM_OK else { throw PsmError.call(what, code.rawValue, lastError) }
     }
 
@@ -179,19 +182,10 @@ final class PsmCore {
         try check(psm_presets_load_bundled(raw), "Profile laden")
     }
 
-    func presetNames(_ type: PresetType) -> [String] {
-        let n = psm_preset_count(raw, psm_preset_type(rawValue: UInt32(type.rawValue)))
-        return (0..<n).map { i in
-            var buf = [CChar](repeating: 0, count: 256)
-            _ = psm_preset_name_at(raw, psm_preset_type(rawValue: UInt32(type.rawValue)),
-                                   i, &buf, 256)
-            return String(cString: buf)
-        }
-    }
-
-    func selectPreset(_ type: PresetType, _ name: String) throws {
-        try check(psm_preset_select(raw, psm_preset_type(rawValue: UInt32(type.rawValue)), name),
-                  "Preset waehlen")
+    /// Unser Aufzaehlungstyp traegt Int32, der aus dem C-ABI UInt32.
+    /// Die Umwandlung stand dreimal ausgeschrieben da.
+    func cType(_ type: PresetType) -> psm_preset_type {
+        psm_preset_type(rawValue: UInt32(type.rawValue))
     }
 
     // MARK: - Konfiguration
