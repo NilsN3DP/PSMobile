@@ -39,6 +39,7 @@ struct SimpleModeView: View {
     @Environment(\.psScale) private var ps
     @State private var panel: SimplePanel = .workspace
     @State private var zeigeImporter = false
+    @State private var hinderungsgruende: [String] = []
 
     /// Auf schmalen Geraeten ruecken Kopfzeile und Leiste zusammen -
     /// dasselbe `compact` wie auf Android, nur aus der Skalierung
@@ -56,6 +57,12 @@ struct SimpleModeView: View {
             }
             if panel != .workspace { overlay }
             if panel == .workspace { modellKnopf }
+            if model.progress != .idle {
+                SliceSheet(model: model) { model.dismissProgress() }
+            }
+            if !hinderungsgruende.isEmpty {
+                SliceBlockerSheet(gruende: hinderungsgruende) { hinderungsgruende = [] }
+            }
             PSMarke(name: "simple.arbeitsbereich")
         }
         .fileImporter(isPresented: $zeigeImporter,
@@ -142,19 +149,30 @@ struct SimpleModeView: View {
                 }
             }
             Spacer(minLength: 0)
+            // Beide Knoepfe fuehren zum selben Schnitt - "Vorschau" und
+            // "G-Code" unterscheiden sich in der Referenz darin, was
+            // danach angezeigt wird. Bis die G-Code-Vorschau steht, ist
+            // das dasselbe.
             werkzeug(labels[4], gewaehlt: false,
-                     breite: ps.pt(kompakt ? 62 : 74), aktiv: druckbereit) { model.slice() }
+                     breite: ps.pt(kompakt ? 62 : 74)) { schneiden() }
             werkzeug(labels[5], gewaehlt: true,
-                     breite: ps.pt(kompakt ? 84 : 100), aktiv: druckbereit) { model.slice() }
+                     breite: ps.pt(kompakt ? 84 : 100)) { schneiden() }
         }
         .padding(.horizontal, ps.pt(12))
         .padding(.vertical, ps.pt(kompakt ? 3 : 6))
     }
 
-    private var druckbereit: Bool {
-        !model.objects.isEmpty
-            && !(model.selectedPreset(for: "printer") ?? "").isEmpty
-            && !(model.selectedPreset(for: "filament") ?? "").isEmpty
+    /// Statt eines ausgegrauten Knopfes, der nur sagt "geht nicht":
+    /// erst die Gruende zeigen, dann schneiden. Ein Knopf, der nichts
+    /// tut und nichts sagt, ist die schlechtere Auskunft.
+    private func schneiden() {
+        let gruende = model.sliceBlockers
+        if gruende.isEmpty {
+            panel = .workspace
+            model.slice()
+        } else {
+            hinderungsgruende = gruende
+        }
     }
 
     private func werkzeug(_ label: String,

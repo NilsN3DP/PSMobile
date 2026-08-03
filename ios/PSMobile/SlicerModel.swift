@@ -25,6 +25,18 @@ final class SlicerModel: ObservableObject {
     @Published private(set) var memoryWarning: String?
     @Published private(set) var coreVersion: String = "?"
 
+    /// Die Kennzahlen des letzten Slice. Frueher standen nur Zeit und
+    /// Gewicht im Fortschrittstext; fuer eine Zusammenfassung braucht es
+    /// auch Laenge, Kosten und Objektzahl.
+    @Published private(set) var stats: PsmCore.SliceStats?
+
+    /// Der fertige G-Code als Datei im Zwischenspeicher.
+    ///
+    /// Auf iOS gibt es keinen Ordner, in den eine App einfach schreibt -
+    /// die Datei muss erst existieren, bevor das Teilen-Blatt sie
+    /// weiterreichen kann.
+    @Published private(set) var gcodeURL: URL?
+
     /// Ob noch kein Drucker eingerichtet ist.
     ///
     /// Ohne Drucker gibt es keine Profile, ohne Profile kein Bett und
@@ -106,10 +118,73 @@ final class SlicerModel: ObservableObject {
             } else {
                 try? c.installPrinters(Array(gewaehlt))
                 setupNeeded = false
+                // Ein Wuerfel fuer die Tests, die etwas auf dem Bett
+                // brauchen: Schneiden, Auswahl, Gizmos. Er kommt hinter
+                // die Profile - ohne Drucker gibt es kein Bett, und ein
+                // Modell ohne Bett landet irgendwo.
+                if argumente.contains("-psm-load-cube") { ladeTestWuerfel() }
             }
         } catch {
             progress = .failed(error.localizedDescription)
         }
+    }
+
+    /// Erzeugt einen 20-mm-Wuerfel als STL und laedt ihn.
+    ///
+    /// Bewusst gerechnet statt mitgeliefert: eine Datei im Bundle waere
+    /// in jeder ausgelieferten App dabei, nur damit ein Test etwas zum
+    /// Anfassen hat.
+    ///
+    /// Jede Zahl wird einzeln angehaengt. Der erste Anlauf schrieb die
+    /// zwoelf Fliesskommazahlen eines Dreiecks aus einem
+    /// zusammengesetzten Array - dabei kamen nur sechs an, und die Datei
+    /// war 396 statt 684 Bytes gross. libslic3r meldete daraufhin nur
+    /// "Loading of a model file failed", ohne zu sagen, woran.
+    private func ladeTestWuerfel() {
+        let a: Float = 20
+        let ecken: [SIMD3<Float>] = [
+            [0, 0, 0], [a, 0, 0], [a, a, 0], [0, a, 0],
+            [0, 0, a], [a, 0, a], [a, a, a], [0, a, a],
+        ]
+        // Zwoelf Dreiecke, von aussen gesehen gegen den Uhrzeigersinn.
+        let flaechen: [(Int, Int, Int)] = [
+            (0, 2, 1), (0, 3, 2),   // unten
+            (4, 5, 6), (4, 6, 7),   // oben
+            (0, 1, 5), (0, 5, 4),   // vorn
+            (1, 2, 6), (1, 6, 5),   // rechts
+            (2, 3, 7), (2, 7, 6),   // hinten
+            (3, 0, 4), (3, 4, 7),   // links
+        ]
+
+        // 80 Byte Kopf, vier Byte Anzahl, dann je Dreieck 50 Byte.
+        var daten = Data(count: 80)
+        func zahl(_ wert: Float) {
+            var f = wert
+            withUnsafeBytes(of: &f) { daten.append(contentsOf: $0) }
+        }
+        var anzahl = UInt32(flaechen.count)
+        withUnsafeBytes(of: &anzahl) { daten.append(contentsOf: $0) }
+
+        for (i, j, k) in flaechen {
+            // Die Normale darf null bleiben - libslic3r rechnet sie aus
+            // der Reihenfolge der Ecken.
+            zahl(0); zahl(0); zahl(0)
+            for ecke in [ecken[i], ecken[j], ecken[k]] {
+                zahl(ecke.x); zahl(ecke.y); zahl(ecke.z)
+            }
+            var attribut = UInt16(0)
+            withUnsafeBytes(of: &attribut) { daten.append(contentsOf: $0) }
+        }
+
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("psm-testwuerfel.stl")
+        do {
+            try daten.write(to: url)
+            _ = try core?.loadModel(path: url.path)
+        } catch {
+            NSLog("Testwuerfel liess sich nicht laden: %@", String(describing: error))
+        }
+        refresh()
     }
 
     func load(url: URL) {
@@ -262,6 +337,12 @@ final class SlicerModel: ObservableObject {
         }
 
         progress = .running(percent: 0, stage: "wird vorbereitet")
+        stats = nil
+        // Der G-Code des vorigen Laufs gehoert zum vorigen Stand. Ihn
+        // stehen zu lassen, waere die gefaehrlichere Variante: man
+        // teilt eine Datei, die zu dem, was auf dem Bett liegt, nicht
+        // mehr passt.
+        gcodeURL = nil
         let t0 = Date()
 
         sliceTask = Task.detached(priority: .userInitiated) { [weak self] in
@@ -279,6 +360,8 @@ final class SlicerModel: ObservableObject {
                     switch state {
                     case .done:
                         let st = core.sliceStats()
+                        self?.stats = st
+                        self?.writeGcode()
                         self?.progress = .done(
                             seconds: secs,
                             printMinutes: Int((st?.printTimeSeconds ?? 0) / 60),
@@ -304,6 +387,40 @@ final class SlicerModel: ObservableObject {
 
     func exportGcode(to url: URL) throws {
         try core?.exportGcode(to: url.path)
+    }
+
+    /// Legt den G-Code als Datei ab, damit das Teilen-Blatt sie
+    /// weitergeben kann. Der Name kommt aus dem gemeinsamen Modul - dort
+    /// steht auch, was aus einem Modellnamen mit Leerzeichen und
+    /// Schraegstrichen wird.
+    private func writeGcode() {
+        guard let core else { return }
+        let name = SliceSummary.shared.fileName(project: objects.first?.name ?? "")
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent(name)
+        try? FileManager.default.removeItem(at: url)
+        do {
+            try core.exportGcode(to: url.path)
+            gcodeURL = url
+        } catch {
+            gcodeURL = nil
+        }
+    }
+
+    /// Zurueck in den Ruhezustand - das Blatt ist weg, das Ergebnis
+    /// bleibt es aber nicht: ein neuer Slice ueberschreibt es ohnehin.
+    func dismissProgress() {
+        progress = .idle
+    }
+
+    /// Was fehlt, bevor geschnitten werden kann. Die Beurteilung steht im
+    /// gemeinsamen Modul, damit beide Apps dieselben Gruende nennen.
+    var sliceBlockers: [String] {
+        SliceSummary.shared.blockers(
+            objects: Int32(objects.count),
+            printer: selectedPreset(for: "printer") ?? "",
+            filament: selectedPreset(for: "filament") ?? "",
+            print: selectedPreset(for: "print") ?? ""
+        )
     }
 
     private func finishSlice() {

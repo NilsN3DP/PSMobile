@@ -102,8 +102,21 @@ struct SlicerView: View {
     @EnvironmentObject private var model: SlicerModel
     @Environment(\.psScale) private var ps
     @State private var showImporter = false
+    @State private var hinderungsgruende: [String] = []
 
     var body: some View {
+        ZStack {
+            werkbank
+            if model.progress != .idle {
+                SliceSheet(model: model) { model.dismissProgress() }
+            }
+            if !hinderungsgruende.isEmpty {
+                SliceBlockerSheet(gruende: hinderungsgruende) { hinderungsgruende = [] }
+            }
+        }
+    }
+
+    private var werkbank: some View {
         NavigationStack {
             VStack(spacing: ps.pt(12)) {
 
@@ -156,14 +169,11 @@ struct SlicerView: View {
                     .frame(maxHeight: ps.pt(220))
                 }
 
-                progressView
-
                 HStack {
-                    Button("Slicen") { model.slice() }
+                    Button("Slicen") { schneiden() }
                         .buttonStyle(.borderedProminent)
-                        .disabled(model.objects.isEmpty || isRunning)
-                    Button("Abbrechen") { model.cancel() }
-                        .disabled(!isRunning)
+                        .disabled(isRunning)
+                        .accessibilityIdentifier("slicen")
                 }
             }
             .padding(ps.pt(16))
@@ -204,25 +214,9 @@ struct SlicerView: View {
         return false
     }
 
-    @ViewBuilder private var progressView: some View {
-        switch model.progress {
-        case .idle:
-            EmptyView()
-        case .running(let percent, let stage):
-            VStack(alignment: .leading, spacing: 4) {
-                // Phase mit anzeigen, nicht nur Prozent - das macht
-                // mehrminutige Wartezeiten ertraeglich.
-                Text("\(percent)%  -  \(stage)").font(.callout)
-                ProgressView(value: Double(percent), total: 100)
-            }
-        case .done(let secs, let minutes, let grams):
-            Text(String(format: "Fertig in %.1f s  -  Druckzeit %d min  -  %.1f g",
-                        secs, minutes, grams))
-                .font(.callout)
-        case .failed(let msg):
-            Text(msg).font(.callout).foregroundStyle(.red)
-        case .cancelled:
-            Text("abgebrochen").font(.callout)
-        }
+    /// Erst die Gruende nennen, dann schneiden - siehe SimpleModeView.
+    private func schneiden() {
+        let gruende = model.sliceBlockers
+        if gruende.isEmpty { model.slice() } else { hinderungsgruende = gruende }
     }
 }
