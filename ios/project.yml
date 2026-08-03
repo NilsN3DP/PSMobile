@@ -41,6 +41,7 @@ settings:
     SWIFT_OBJC_BRIDGING_HEADER: PSMobile/Support/PSMobile-Bridging-Header.h
     HEADER_SEARCH_PATHS:
       - $(SRCROOT)/../core/include
+      - $(SRCROOT)/../viewport/include
     # Beide Plattformen stehen hier, nicht nur das Geraet: sonst faende
     # der Linker beim Simulatorbau nichts und meldete das als Haufen
     # fehlender Symbole statt als fehlenden Pfad - eine Fehlersuche, die
@@ -59,12 +60,17 @@ targets:
     platform: iOS
     sources:
       - path: PSMobile
-    resources:
-      # Die PrusaSlicer-Profile werden ins Bundle gelegt und beim ersten
-      # Start von PsmCore gelesen. Der Ordner wird von
+      # Profile und Shader aus PrusaSlicer. Der Ordner wird von
       # build/scripts/stage-resources.sh befuellt.
+      #
+      # Das gehoert unter sources mit ausgewiesener Bauphase, nicht unter
+      # ein eigenes resources - das kennt XcodeGen nicht und ueberliest
+      # es wortlos. Die App baute dadurch sauber durch, hatte aber ein
+      # leeres Bundle, und der Fehler zeigte sich erst zur Laufzeit als
+      # Shader nicht gefunden.
       - path: Resources/psresources
         type: folder
+        buildPhase: resources
     settings:
       base:
         INFOPLIST_FILE: PSMobile/Support/Info.plist

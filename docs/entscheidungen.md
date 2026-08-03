@@ -237,3 +237,55 @@ das verschleiern.
 | OpenGL/GLEW optional | auf Android gibt es kein Desktop-GL, nur GLES |
 | PNG fuer Android bauen | Upstream baut libpng nur fuer MSVC/Apple, sonst System-Bibliothek - die es auf Android nicht gibt |
 | Cross-Compile-Erkennung | Upstream erkennt nur Apple-Multi-Arch; sonst wird das fuer arm64 gebaute `encoding-check` auf dem x86-Host ausgefuehrt |
+
+---
+
+## E-13 - Native Oberflaeche je Plattform, gemeinsame Regeln
+
+**Entscheidung**: Die Oberflaeche wird auf jeder Plattform in deren
+eigenem Werkzeug gebaut - Compose auf Android, SwiftUI auf iOS. Was
+darunter liegt und keine Oberflaeche ist, wandert in ein gemeinsames
+Kotlin-Multiplatform-Modul und wird nur einmal geschrieben.
+
+**Anlass**: Nachdem der Kern auf iOS lief, stand die Frage, wie die
+Oberflaeche dorthin kommt. Gemessen: 17.930 Zeilen Kotlin, davon 12.904
+Oberflaeche. Die zweimal zu schreiben ist teuer, sie zweimal zu *pflegen*
+ist teurer.
+
+**Verworfen: Compose Multiplatform.** Es haette die 12.904 Zeilen geteilt
+und waere in der Schreibarbeit etwa halb so teuer gewesen. Dagegen sprach
+nicht die Leistung - das Slicen ist C++, und der Viewport haengt in
+beiden Faellen als natives GL-Surface nur im Rahmen - sondern das
+Anfuehlen. Die App benutzt an vielen Stellen Material-Bausteine: Schalter,
+Dialoge, Schieberegler, Textfelder. Ein Material-Schalter sieht auf einem
+iPhone falsch aus, und zwar genau dort, wo am haeufigsten hingefasst wird.
+Dazu die Dinge, die man nicht sieht, sondern spuert: Scroll-Physik,
+Gummiband am Listenende, Lupe bei der Textauswahl, Wischen zum
+Zurueckgehen.
+
+Der eigene Arbeitsbereich - vollflaechige 3D-Ansicht mit eigenen Panels,
+Prusa-Farben, eigene Schriftstaffel - haette dagegen auf beiden Systemen
+gleich ausgesehen. Dort gibt es keine Plattform-Anmutung zu verfehlen.
+Der Ausschlag kam von den Standardbausteinen, nicht vom eigenen Entwurf.
+
+**Was geteilt wird**: alles ohne Bildschirmbezug. Regeln wie die
+Haftungsanalyse, die Druckergruppierung, die Skalierungsschwellen, die
+Abhaengigkeiten zwischen Einstellungen, die Zustandsverwaltung um den
+Kern. Grob 5.000 bis 6.000 der 17.930 Zeilen.
+
+**Was nicht geteilt wird**: Layout. Jede Plattform ordnet selbst an.
+
+**Konsequenz**: Die Doppelpflege schrumpft auf das Layout. Wer eine Regel
+aendert - ab wann ein Brim vorgeschlagen wird, welche Einstellung wann
+ausgegraut ist -, aendert sie einmal, und beide Apps folgen. Auseinander
+laufen koennen nur noch Anordnungen, und das faellt beim Hinsehen auf.
+
+**Reihenfolge**: Das Regelmodul entsteht **vor** der ersten
+iOS-Oberflaeche. Andersherum werden die Regeln zweimal geschrieben und
+muessen spaeter wieder herausgeloest werden - Arbeit, die niemand mehr
+macht, wenn die App laeuft.
+
+**Nachweis, dass die Regeln zusammenpassen**: Beide Seiten testen
+dieselben Faelle. `PSScaleTests.swift` und `UiScaleForTest.kt` sind das
+erste Paar; solange das Regelmodul noch nicht steht, ist die Doppelung
+der Testfaelle die Absicherung.

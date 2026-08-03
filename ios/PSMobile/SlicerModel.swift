@@ -24,6 +24,23 @@ final class SlicerModel: ObservableObject {
     @Published private(set) var memoryWarning: String?
     @Published private(set) var coreVersion: String = "?"
 
+    /// Welches Objekt gerade angefasst ist, oder nichts.
+    @Published private(set) var selectedId: Int32?
+
+    /// Steigt bei jeder Modelaenderung - der Viewport zeichnet dann neu.
+    /// Gegenstueck zu sceneRevision in SlicerService auf Android.
+    @Published private(set) var sceneRevision: Int = 0
+
+    var sessionHandle: OpaquePointer? { core?.sessionHandle }
+
+    /// Verzeichnis mit den GLES-Shadern aus PrusaSlicer. Sie liegen im
+    /// App-Bundle, nicht im Datenverzeichnis - anders als auf Android,
+    /// wo sie beim ersten Start ausgepackt werden.
+    var shaderDir: String {
+        Bundle.main.resourceURL?
+            .appendingPathComponent("psresources/shaders/ES").path ?? ""
+    }
+
     private var core: PsmCore?
     private var sliceTask: Task<Void, Never>?
     private var backgroundTask: UIBackgroundTaskIdentifier = .invalid
@@ -72,6 +89,8 @@ final class SlicerModel: ObservableObject {
         }
     }
 
+    func select(_ id: Int32?) { selectedId = id }
+
     func remove(_ id: Int32) {
         try? core?.removeObject(id)
         refresh()
@@ -80,6 +99,7 @@ final class SlicerModel: ObservableObject {
     func refresh() {
         guard let core else { return }
         objects = core.listObjects().compactMap { core.objectInfo($0) }
+        sceneRevision += 1
     }
 
     private func checkMemory() {

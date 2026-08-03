@@ -1,57 +1,56 @@
-Skalierungsregeln fuer iOS, mit denen von Android gleichgezogen
+Der Viewport zeichnet auf iOS
 
-Die App soll auf jedem iPhone und jedem iPad brauchbar sein. Auf Android
-loest das eine einzige Stelle: die Masse sind fuer rund 1000 x 720
-geschrieben, und faellt das Fenster kleiner aus, wird die wirksame
-Dichte gestaucht - gleichmaessig fuer Abstaende, Schrift und
-Zielflaechen.
+Dasselbe Druckbett wie auf Android, gerendert vom selben C++-Bestand.
+Verschieden ist nur, wer den GL-Kontext haelt.
 
-SwiftUI hat dazu kein Gegenstueck, das global wirkt. Statt eine zweite,
-eigene Logik zu erfinden, uebernimmt PSScale die Regeln woertlich:
-dieselbe Referenzgroesse, dieselbe Untergrenze von 0.7, dieselbe
-Daempfung der Schrift mit 0.6. Die Bildschirme rechnen ihre Masse durch
-- ps.pt(16) statt 16. Das ist mehr Schreibarbeit als auf Android, aber
-es ist dieselbe Regel, und sie steht an einer Stelle.
+Auf Android macht das ein GLSurfaceView, und Compose bettet es per
+AndroidView nur ein. iOS bringt kein Gegenstueck mit: Kontext, Farb- und
+Tiefenpuffer und die Zeichenschleife stehen jetzt in PSMGLView, SwiftUI
+bettet das per UIViewRepresentable ein. Die Rollenverteilung ist damit
+auf beiden Seiten dieselbe - die Oberflaeche haelt den Rahmen, nicht den
+Inhalt.
 
-Gemessen wird das Fenster, nicht der Bildschirm. Auf dem iPad kann die
-App in Slide Over oder Stage Manager in einem schmalen Streifen stehen,
-waehrend der Bildschirm gross bleibt; wer den Bildschirm misst, baut
-dort eine Oberflaeche, die nicht hineinpasst.
+Gezeichnet wird auf Anforderung, nicht in einer Dauerschleife. Ein
+Slicer steht die meiste Zeit still; 60 Bilder je Sekunde in ein
+unveraendertes Bett zu rechnen kostet nur Akku. Und zwar direkt statt
+ueber setNeedsDisplay: eine GL-Ebene haengt nicht am Zeichenzyklus von
+UIKit, der Umweg brachte nur einen Frame Verzoegerung - beim Ziehen mit
+dem Finger merkt man das.
 
-Die Zielflaeche bleibt bei mindestens 44 Punkt, auch wenn die Skalierung
-rechnerisch darunter liegt. Apples Untergrenze ist keine Empfehlung,
-sondern die Grenze der Treffbarkeit.
+Die Gesten folgen SceneView.kt in der Reihenfolge, auf die es ankommt:
+erst der Griff, dann das Objekt, dann die Kamera. Ein einmal gefasster
+Griff bleibt fuer die Dauer des Zuges fest, sonst springt das Objekt auf
+eine andere Achse, sobald der Finger einem anderen Griff naeher kommt.
+Zwei Finger spreizen im Skalieren-Werkzeug das Objekt und sonst die
+Kamera. Bewusst rohe Beruehrungen statt UIGestureRecognizer - mit
+mehreren Erkennern muesste dieselbe Vorrangfrage noch einmal
+beantwortet werden, nur verteilter.
 
-Dazu ein Testziel. Die sechs Faelle sind dieselben wie in
-UiScaleForTest.kt, ergaenzt um eine Liste echter Geraetegroessen vom
-iPhone SE bis zum iPad Pro 13 quer, jeweils hoch und quer. Weicht eine
-der beiden Plattformen ab, faellt es dort auf und nicht auf einem Geraet.
+Drei Dinge, die dabei zu klaeren waren:
 
-Der Test kompiliert PSScale.swift selbst mit, statt sie ueber "@testable
-import" aus der App zu holen. Sonst haengt eine Pruefung von vier
-Rechenregeln am Linken der gesamten App, und die zieht 141 MB
-statischer Bibliotheken mit. Dasselbe Verhaeltnis wie auf Android, wo
-die Regeltests ohne das NDK laufen.
+Der Bildschirmmassstab. Die Ebene misst in Punkten, GL rechnet in
+Pixeln. Ohne contentScaleFactor zeichnet der Viewport auf einem
+Retina-Geraet in ein Viertel der Flaeche - und alle Fingerkoordinaten
+liegen um denselben Faktor daneben.
 
-Drei Dinge am Projekt mussten dafuer noch stimmen:
+Die C-Schnittstelle sieht anders aus, als ich sie mir gedacht hatte:
+psm_surface_hit traegt ausser Ort und Normale auch Volumen-, Facetten-
+und Instanzindex, die Felder kommen in Swift als Tupel an, gizmo_drag
+hat einen Rastschalter, und C-Enums tragen UInt32. Ich habe zuerst nach
+Gefuehl geschrieben statt den Header zu lesen; das kostete zwei
+Durchlaeufe.
 
-PRODUCT_NAME jetzt global als $(TARGET_NAME). Ohne Namen heisst das
-Ergebnis woertlich ".app" beziehungsweise ".xctest", und xcodebuild
-meldet "Multiple commands produce ..." - was nach zwei kollidierenden
-Zielen klingt und doch nur ein fehlender Name ist. Global, damit es
-nicht bei jedem neuen Ziel von vorne losgeht.
+Und der Fund, der eine halbe Stunde gekostet haette, waere er spaeter
+aufgefallen: XcodeGen kennt keinen resources-Block. Der stand seit M3 in
+der project.yml und wurde wortlos ueberlesen - die App baute sauber
+durch und hatte ein leeres Bundle. Sichtbar wurde es erst zur Laufzeit
+als "Shader nicht gefunden". Ressourcen gehoeren unter sources mit
+ausgewiesener Bauphase.
 
-Das Schema kannte keine Testaktion. Die Meldung dazu klingt, als fehle
-das Testziel; es fehlte nur seine Verknuepfung.
+Geprueft auf iPad Pro 11: Bett mit Raster in 3D, keine Shaderfehler im
+Protokoll.
 
-x86_64 ist fuer den Simulator ausgeschlossen. Der Kern wird als
-SIMULATORARM64 gebaut, eine Intel-Fassung gibt es nicht. Ohne den
-Ausschluss uebersetzt der test-Durchlauf zusaetzlich fuer x86_64 und
-meldet seitenweise "found architecture arm64, required architecture
-x86_64" - was wie ein kaputtes Archiv aussieht und keines ist.
-
-Geprueft: sechs Tests gruen; die App laeuft auf iPad Pro 11 mit Massstab
-0.83 und auf iPhone 16e mit 0.70, also genau auf der Untergrenze, beide
-bildschirmfuellend.
+Noch nicht geprueft, weil dafuer ein Modell auf dem Bett liegen muss:
+Auswahl, Ziehen, Griffe.
 
 Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>

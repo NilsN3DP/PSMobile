@@ -33,21 +33,26 @@ struct SlicerView: View {
                 // Layout bleibt spaeter so: Bett vollflaechig oben,
                 // Objektliste darunter, Aktionen ganz unten in
                 // Daumenreichweite - siehe docs/05-ui-konzept-touch-stift.md
-                RoundedRectangle(cornerRadius: 12)
-                    .fill(.quaternary)
-                    .overlay {
-                        VStack(spacing: ps.pt(4)) {
-                            Text("3D-Ansicht folgt in M4")
-                                .font(.system(size: ps.font(17), weight: .semibold))
-                            Text("\(model.objects.count) Objekt(e) auf dem Bett")
-                                .font(.system(size: ps.font(12)))
-                                .foregroundStyle(.secondary)
-                            Text(String(format: "Massstab %.2f", ps.factor))
-                                .font(.system(size: ps.font(11)))
-                                .foregroundStyle(.tertiary)
-                        }
+// Der Arbeitsbereich. Solange der Kern nicht steht, bleibt die
+                // Flaeche leer statt zu blinken - das Anlegen dauert einen
+                // Wimpernschlag, und ein aufblitzender Platzhalter sieht aus
+                // wie ein Fehler.
+                Group {
+                    if let session = model.sessionHandle {
+                        ViewportView(
+                            session: session,
+                            shaderDir: model.shaderDir,
+                            selectedId: model.selectedId ?? -1,
+                            selectedIds: model.selectedId.map { [$0] } ?? [],
+                            invalidateKey: model.sceneRevision,
+                            onSelect: { model.select($0 < 0 ? nil : $0) }
+                        )
+                    } else {
+                        RoundedRectangle(cornerRadius: ps.pt(12)).fill(.quaternary)
                     }
-                    .frame(maxHeight: .infinity)
+                }
+                .clipShape(RoundedRectangle(cornerRadius: ps.pt(12)))
+                .frame(maxHeight: .infinity)
 
                 if let warning = model.memoryWarning {
                     Label(warning, systemImage: "exclamationmark.triangle")

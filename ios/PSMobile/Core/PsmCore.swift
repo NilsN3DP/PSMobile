@@ -86,6 +86,12 @@ final class PsmCore {
     /// OpaquePointer ab - einen UnsafeMutablePointer darauf gibt es nicht.
     /// Genau so ist das ABI auch gemeint: der Zeiger wird durchgereicht,
     /// nie dereferenziert.
+    /// Der rohe Sitzungszeiger fuer den Viewport. Der laeuft bewusst
+    /// nicht ueber diese Klasse, sondern liest das Modell direkt aus der
+    /// Session - siehe docs/entscheidungen.md, E-03. Dafuer braucht er
+    /// den Zeiger.
+    var sessionHandle: OpaquePointer? { handle }
+
     private var raw: OpaquePointer {
         handle!
     }
