@@ -344,7 +344,7 @@
       "evidence": [
         "android/app/src/main/java/de/psmobile/net/PrusaLink.kt",
         "android/app/src/main/java/de/psmobile/ui/SlicerScreen.kt",
-        "android/app/src/test/java/de/psmobile/net/DigestAuthTest.kt"
+        "android/shared/src/commonTest/kotlin/de/psmobile/shared/net/DigestAuthTest.kt"
       ],
       "blocked_by": [
         "android.prusalink_hardware_test"
@@ -575,9 +575,9 @@
       "status": "built",
       "evidence": [
         "android/app/src/main/java/de/psmobile/ui/SpecialSettingsDialogs.kt",
-        "android/app/src/main/java/de/psmobile/ui/SpecialValueCodec.kt",
+        "android/shared/src/commonMain/kotlin/de/psmobile/shared/rules/SpecialValueCodec.kt",
         "android/app/src/main/java/de/psmobile/ui/SettingsScreen.kt",
-        "android/app/src/test/java/de/psmobile/ui/SpecialValueCodecTest.kt"
+        "android/shared/src/commonTest/kotlin/de/psmobile/shared/rules/SpecialValueCodecTest.kt"
       ],
       "blocked_by": [
         "android.device_release_gate"
@@ -590,15 +590,12 @@
       "status": "emulator_tested",
       "evidence": [
         "android/app/src/main/java/de/psmobile/ui/SimpleModeScreen.kt",
-        "android/app/src/main/java/de/psmobile/ui/SimpleModeState.kt",
+        "android/shared/src/commonMain/kotlin/de/psmobile/shared/rules/SimpleModeState.kt",
         "android/app/src/main/java/de/psmobile/ui/SimpleModeLayout.kt",
         "android/app/src/main/java/de/psmobile/MainActivity.kt",
-        "android/app/src/test/java/de/psmobile/ui/SimpleModeStateTest.kt",
+        "android/shared/src/commonTest/kotlin/de/psmobile/shared/rules/SimpleModeStateTest.kt",
         "android/app/src/test/java/de/psmobile/ui/SimpleWorkspaceStateTest.kt",
         "android/app/src/test/java/de/psmobile/ui/SimpleModeLayoutTest.kt",
-        "docs/release/android-beta-closure-audit.md"
-      ],
-      "verification": [
         "docs/release/android-beta-closure-audit.md"
       ],
       "verification": [
@@ -802,6 +799,96 @@
         "release.license_notices",
         "android.device_release_gate"
       ]
+    },
+    {
+      "id": "ios.advanced_mode",
+      "title": "iOS Advanced-Arbeitsbereich mit Objektbaum",
+      "platform": "ios",
+      "status": "emulator_tested",
+      "evidence": [
+        "ios/PSMobile/Screens/AdvancedWorkspaceView.swift",
+        "ios/PSMobile/Screens/AdvancedObjectInspectorView.swift",
+        "ios/PSMobileUITests/AdvancedWorkflowUITests.swift"
+      ],
+      "verification": "XCUITest im iOS-Simulator (iPad Pro 11 M5, iOS 26.2); auf echter Hardware noch nicht geprueft."
+    },
+    {
+      "id": "ios.slice_summary",
+      "title": "iOS Zusammenfassung nach dem Slicen und G-Code-Ausgabe",
+      "platform": "ios",
+      "status": "emulator_tested",
+      "evidence": [
+        "ios/PSMobile/Screens/SliceSheet.swift",
+        "ios/PSMobileUITests/SliceUITests.swift"
+      ],
+      "verification": "XCUITest im iOS-Simulator (iPad Pro 11 M5, iOS 26.2); auf echter Hardware noch nicht geprueft."
+    },
+    {
+      "id": "ios.preview",
+      "title": "iOS G-Code-Vorschau mit Schichtregler",
+      "platform": "ios",
+      "status": "emulator_tested",
+      "evidence": [
+        "ios/PSMobile/Viewport/ViewportView.swift",
+        "ios/PSMobileUITests/PreviewUITests.swift"
+      ],
+      "verification": "XCUITest im iOS-Simulator (iPad Pro 11 M5, iOS 26.2); auf echter Hardware noch nicht geprueft."
+    },
+    {
+      "id": "ios.projects",
+      "title": "iOS Projekte als 3MF, Zurueck und Wiederholen",
+      "platform": "ios",
+      "status": "emulator_tested",
+      "evidence": [
+        "ios/PSMobile/Core/PsmCoreProject.swift",
+        "ios/PSMobileUITests/ProjectUITests.swift"
+      ],
+      "verification": "XCUITest im iOS-Simulator (iPad Pro 11 M5, iOS 26.2); auf echter Hardware noch nicht geprueft."
+    },
+    {
+      "id": "ios.prusalink",
+      "title": "iOS PrusaLink: Drucker einrichten und senden",
+      "platform": "ios",
+      "status": "emulator_tested",
+      "evidence": [
+        "ios/PSMobile/Networking/PrusaLinkClient.swift",
+        "ios/PSMobile/Networking/PrinterCredentialStore.swift",
+        "ios/PSMobileUITests/PrintersUITests.swift"
+      ],
+      "verification": "XCUITest im iOS-Simulator (iPad Pro 11 M5, iOS 26.2); auf echter Hardware noch nicht geprueft."
+    },
+    {
+      "id": "ios.painting",
+      "title": "iOS Bemalen: Stuetzen, Naht, MMU",
+      "platform": "ios",
+      "status": "emulator_tested",
+      "evidence": [
+        "ios/PSMobile/Screens/PaintView.swift",
+        "ios/PSMobileUITests/PaintUITests.swift"
+      ],
+      "verification": "XCUITest im iOS-Simulator (iPad Pro 11 M5, iOS 26.2); auf echter Hardware noch nicht geprueft."
+    },
+    {
+      "id": "ios.special_values",
+      "title": "iOS Bettform und Reinigungsmengen",
+      "platform": "ios",
+      "status": "emulator_tested",
+      "evidence": [
+        "ios/PSMobile/Screens/SpecialValueEditors.swift",
+        "ios/PSMobileUITests/SpecialValueUITests.swift"
+      ],
+      "verification": "XCUITest im iOS-Simulator (iPad Pro 11 M5, iOS 26.2); auf echter Hardware noch nicht geprueft."
+    },
+    {
+      "id": "ios.responsive",
+      "title": "iOS bedienbar auf schmalen Geraeten",
+      "platform": "ios",
+      "status": "emulator_tested",
+      "evidence": [
+        "ios/PSMobile/UI/PSScale.swift",
+        "ios/PSMobileUITests/ResponsiveLayoutUITests.swift"
+      ],
+      "verification": "XCUITest im iOS-Simulator (iPad Pro 11 M5, iOS 26.2); auf echter Hardware noch nicht geprueft."
     }
   ]
 }
