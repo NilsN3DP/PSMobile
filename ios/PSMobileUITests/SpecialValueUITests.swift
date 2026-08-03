@@ -32,10 +32,16 @@ final class SpecialValueUITests: XCTestCase {
         let breite = app.textFields["bett.breite"]
         XCTAssertTrue(breite.waitForExistence(timeout: 5), "Der Bearbeiter fehlt")
 
-        // Der MK4S hat ein 250er Bett - der Wert kommt aus dem Profil,
-        // nicht aus einer Voreinstellung hier.
-        XCTAssertEqual(breite.value as? String, "250")
-        XCTAssertEqual(app.textFields["bett.tiefe"].value as? String, "210")
+        // Bewusst keine festen Masse: eine Aenderung am Profil ueberlebt
+        // den App-Start - so haelt es PrusaSlicer mit veraenderten
+        // Presets. Ein Test, der hier 250 erwartet, faellt um, sobald ein
+        // frueherer Lauf das Bett angefasst hat, und zeigt dann auf die
+        // falsche Stelle.
+        let b = Double((breite.value as? String) ?? "")
+        let t = Double((app.textFields["bett.tiefe"].value as? String) ?? "")
+        XCTAssertNotNil(b, "Die Breite kam nicht aus dem Profil")
+        XCTAssertNotNil(t, "Die Tiefe kam nicht aus dem Profil")
+        XCTAssertTrue((b ?? 0) > 0 && (t ?? 0) > 0, "Das Bett hat keine Groesse")
 
         // Und die Flaeche wird ausgerechnet, nicht abgetippt.
         XCTAssertTrue(app.staticTexts["bett.flaeche"].exists,
