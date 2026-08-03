@@ -21,30 +21,6 @@ final class SimpleModeUITests: XCTestCase {
                       "Der Simple Mode ist nicht erschienen")
     }
 
-    func testBilder() {
-        func bild(_ name: String) {
-            let png = XCUIScreen.main.screenshot().pngRepresentation
-            try? png.write(to: URL(fileURLWithPath: "/tmp/psm-" + name + ".png"))
-        }
-        app.buttons["simple.werkzeug.Settings"].tap()
-        bild("einstellen")
-        app.buttons["simple.karte.SUPPORTS"].tap()
-        bild("stuetzen")
-        app.buttons["simple.zurueck"].tap()
-        app.buttons["simple.karte.ADHESION"].tap()
-        bild("haftung")
-        app.buttons["simple.zurueck"].tap()
-        app.buttons["simple.werkzeug.Printer"].tap()
-        bild("drucker")
-        app.buttons["simple.werkzeug.Material"].tap()
-        bild("material")
-        app.buttons["simple.werkzeug.Projects"].tap()
-        bild("projekte")
-        app.buttons["simple.werkzeug.Settings"].tap()
-        app.buttons["simple.appeinstellungen"].tap()
-        bild("appeinstellungen")
-    }
-
     func testWerkzeugleisteOeffnetUndSchliesstEinPanel() {
         let werkzeug = app.buttons["simple.werkzeug.Settings"]
         XCTAssertTrue(werkzeug.waitForExistence(timeout: 10),
