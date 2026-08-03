@@ -745,9 +745,14 @@
       "id": "ios.indx_colormix",
       "title": "iOS INDX/MMU-Materialpositionen und ColorMix",
       "platform": "ios",
-      "status": "not_started",
+      "status": "emulator_tested",
       "evidence": [
-        "docs/superpowers/plans/2026-08-03-ios-parity-and-beta-rc.md"
+        "ios/PSMobile/Screens/ColorMixView.swift",
+        "ios/PSMobileUITests/ExtruderAndColorMixUITests.swift",
+        "docs/release/ios-integration-inventory-2026-08-03.md"
+      ],
+      "verification": [
+        "docs/release/ios-integration-inventory-2026-08-03.md"
       ],
       "blocked_by": []
     },
