@@ -132,6 +132,8 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: de.psmobile.tests
         GENERATE_INFOPLIST_FILE: YES
+    dependencies:
+      - sdk: Security.framework
 
   # Bedient die App wie ein Finger. simctl kann das nicht - es kann
   # installieren, starten und ein Bild machen, aber nicht tippen. Ohne
