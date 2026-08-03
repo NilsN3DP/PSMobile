@@ -1,11 +1,12 @@
 package de.psmobile.net
 
 import android.util.Log
-import org.json.JSONObject
+import de.psmobile.shared.net.DigestAuth
+import de.psmobile.shared.net.PrusaLinkRules
+import de.psmobile.shared.net.PrusaLinkRules.Auth
 import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
-import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
 
 /**
@@ -24,16 +25,20 @@ import java.util.concurrent.ConcurrentHashMap
  * Endpunkte:
  *   GET  /api/v1/status                    Zustand, dient als Verbindungstest
  *   PUT  /api/v1/files/{storage}/{name}    Datei hochladen
+ *
+ * Was hier steht, ist die Verbindung selbst. Adressen zusammensetzen,
+ * Dateinamen entschaerfen und Antwortcodes deuten sind Entscheidungen
+ * und liegen in [PrusaLinkRules] im gemeinsamen Modul - sonst
+ * beantwortet iOS dieselbe Frage anders, ohne dass es auffaellt.
  */
 object PrusaLink {
 
     private const val TAG = "PrusaLink"
-    private const val TIMEOUT_MS = 15_000
 
     /** Vorgabe bei PrusaLink; der Nutzer kann sie aendern. */
-    const val DEFAULT_USER = "maker"
+    const val DEFAULT_USER = PrusaLinkRules.DEFAULT_USER
 
-    enum class Auth { API_KEY, USER_PASSWORD }
+
 
     data class Printer(
         val id: String,
@@ -48,28 +53,16 @@ object PrusaLink {
         val storage: String = "usb",
         val allowInsecureHttp: Boolean = false,
     ) {
-        val baseUrl: String
-            get() = if (host.startsWith("http://", ignoreCase = true) ||
-                        host.startsWith("https://", ignoreCase = true))
-                host.trimEnd('/')
-            else
-                "https://${host.trimEnd('/')}"
+        val baseUrl: String get() = PrusaLinkRules.baseUrl(host)
 
         val transportError: String?
-            get() = when {
-                host.isBlank() -> "Adresse fehlt"
-                baseUrl.startsWith("http://", ignoreCase = true) &&
-                    !allowInsecureHttp ->
-                    "HTTP ist für diesen Drucker nicht freigegeben"
-                else -> null
-            }
+            get() = PrusaLinkRules.transportError(host, allowInsecureHttp)
 
         /** Anmeldedaten vollstaendig? */
         val isComplete: Boolean
-            get() = transportError == null && when (auth) {
-                Auth.API_KEY -> apiKey.isNotBlank()
-                Auth.USER_PASSWORD -> username.isNotBlank() && password.isNotBlank()
-            }
+            get() = PrusaLinkRules.isComplete(
+                host, allowInsecureHttp, auth, apiKey, username, password,
+            )
     }
 
     sealed interface Result {
@@ -90,17 +83,10 @@ object PrusaLink {
     /** Zustand abfragen. Dient zugleich als Test der Anmeldedaten. */
     fun probe(p: Printer): Result = try {
         p.transportError?.let { return Result.Error(it) }
-        val (code, body) = request(p, "/api/v1/status", "GET")
-        when (code) {
-            in 200..299 -> Result.Ok(describe(body))
-            401 -> Result.Error(
-                if (p.auth == Auth.USER_PASSWORD)
-                    "Benutzername oder Passwort abgelehnt"
-                else "API-Schlüssel abgelehnt")
-            403 -> Result.Error("Zugriff verweigert (HTTP 403)")
-            404 -> Result.Error("Kein PrusaLink unter dieser Adresse")
-            else -> Result.Error("HTTP $code")
-        }
+        val (code, body) = request(p, PrusaLinkRules.STATUS_PATH, "GET")
+        PrusaLinkRules.probeError(code, p.auth)
+            ?.let { Result.Error(it) }
+            ?: Result.Ok(PrusaLinkRules.describeStatus(body))
     } catch (t: Throwable) {
         Result.Error(t.message ?: "nicht erreichbar")
     }
@@ -113,33 +99,27 @@ object PrusaLink {
      */
     fun upload(p: Printer, file: File, remoteName: String, printAfter: Boolean): Result = try {
         p.transportError?.let { return Result.Error(it) }
-        val safe = remoteName.replace(Regex("[^A-Za-z0-9._-]"), "_")
-        val path = "/api/v1/files/${p.storage}/$safe"
+        val path = PrusaLinkRules.uploadPath(p.storage, remoteName)
 
         // Bei Digest zuerst eine billige Anfrage, um die nonce zu holen -
         // sonst ginge die Datei beim ersten Versuch ins Leere.
         if (p.auth == Auth.USER_PASSWORD && challenges[p.id] == null)
-            runCatching { request(p, "/api/v1/status", "GET") }
+            runCatching { request(p, PrusaLinkRules.STATUS_PATH, "GET") }
 
         var (code, body) = put(p, path, file, printAfter)
 
         // Abgelaufene nonce: einmal neu holen und wiederholen.
         if (code == 401 && p.auth == Auth.USER_PASSWORD) {
             challenges.remove(p.id)
-            runCatching { request(p, "/api/v1/status", "GET") }
+            runCatching { request(p, PrusaLinkRules.STATUS_PATH, "GET") }
             val retry = put(p, path, file, printAfter)
             code = retry.first
             body = retry.second
         }
 
-        when (code) {
-            in 200..299 -> Result.Ok(
-                if (printAfter) "Gesendet, Druck gestartet" else "Gesendet")
-            401 -> Result.Error("Anmeldung abgelehnt")
-            409 -> Result.Error("Datei existiert bereits oder Drucker beschäftigt")
-            413 -> Result.Error("Datei zu groß für den Speicher")
-            else -> Result.Error("HTTP $code: ${body.take(200)}")
-        }
+        PrusaLinkRules.uploadError(code)
+            ?.let { Result.Error(if (code >= 500) "$it: ${body.take(200)}" else it) }
+            ?: Result.Ok(PrusaLinkRules.uploadOk(printAfter))
     } catch (t: Throwable) {
         Log.w(TAG, "Upload fehlgeschlagen", t)
         Result.Error(t.message ?: "Übertragung fehlgeschlagen")
@@ -174,7 +154,7 @@ object PrusaLink {
         val c = open(p, path, "PUT")
         c.doOutput = true
         c.setRequestProperty("Content-Type", "application/octet-stream")
-        c.setRequestProperty("Print-After-Upload", if (printAfter) "?1" else "?0")
+        c.setRequestProperty("Print-After-Upload", PrusaLinkRules.printAfterHeader(printAfter))
         c.setRequestProperty("Overwrite", "?1")
         c.setFixedLengthStreamingMode(file.length())
 
@@ -190,8 +170,8 @@ object PrusaLink {
     private fun open(p: Printer, path: String, method: String): HttpURLConnection =
         (URL(p.baseUrl + path).openConnection() as HttpURLConnection).apply {
             requestMethod = method
-            connectTimeout = TIMEOUT_MS
-            readTimeout = TIMEOUT_MS
+            connectTimeout = PrusaLinkRules.TIMEOUT_MS
+            readTimeout = PrusaLinkRules.TIMEOUT_MS
             setRequestProperty("Accept", "application/json")
 
             when (p.auth) {
@@ -204,16 +184,4 @@ object PrusaLink {
                 }
             }
         }
-
-    /** Aus der Statusantwort etwas Lesbares machen. */
-    private fun describe(body: String): String = runCatching {
-        val printer = JSONObject(body).optJSONObject("printer")
-        val state = printer?.optString("state").orEmpty()
-        val nozzle = printer?.optDouble("temp_nozzle", Double.NaN) ?: Double.NaN
-        buildString {
-            append(state.ifBlank { "verbunden" })
-            if (!nozzle.isNaN())
-                append("  ·  Düse ${String.format(Locale.ROOT, "%.0f", nozzle)} °C")
-        }
-    }.getOrDefault("verbunden")
 }

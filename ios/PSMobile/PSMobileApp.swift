@@ -6,6 +6,7 @@ import PSMShared
 struct PSMobileApp: App {
     @StateObject private var model = SlicerModel()
     @StateObject private var einstellungen = AppSettingsStore()
+    @StateObject private var drucker = PrinterCredentialStore()
 
     /// Welcher Bildschirm gerade oben liegt.
     ///
@@ -15,6 +16,9 @@ struct PSMobileApp: App {
     /// anderen elf.
     enum Route {
         case start, simple, advanced, druckEinstellungen, appEinstellungen
+        /// Drucker einrichten - oder, mit einer Datei, den G-Code
+        /// hinschicken. Derselbe Bildschirm, zwei Anlaesse.
+        case drucker(URL?)
     }
 
     @State private var route: Route = .start
@@ -62,19 +66,30 @@ struct PSMobileApp: App {
                 SimpleModeView(
                     onOpenAdvanced: { route = .advanced },
                     onOpenPrinterSetup: { model.reopenSetup() },
-                    onAppSettings: { zurueckVon = .simple; route = .appEinstellungen }
+                    onAppSettings: { zurueckVon = .simple; route = .appEinstellungen },
+                    onSendToPrinter: { datei in
+                        zurueckVon = .simple
+                        route = .drucker(datei)
+                    }
                 )
             case .advanced:
                 SlicerView(
                     onOpenSettings: { route = .druckEinstellungen },
                     onOpenSimple: { route = .simple },
-                    onAppSettings: { zurueckVon = .advanced; route = .appEinstellungen }
+                    onAppSettings: { zurueckVon = .advanced; route = .appEinstellungen },
+                    onPrinters: { zurueckVon = .advanced; route = .drucker(nil) }
                 )
                 .accessibilityIdentifier("arbeitsbereich")
             case .druckEinstellungen:
                 SettingsView(model: model) { route = .advanced }
             case .appEinstellungen:
                 AppSettingsView(einstellungen: einstellungen) { route = zurueckVon }
+            case .drucker(let datei):
+                PrintersView(
+                    store: drucker,
+                    senden: datei,
+                    dateiname: datei?.lastPathComponent ?? "psmobile.gcode"
+                ) { route = zurueckVon }
             }
         }
     }
@@ -99,6 +114,7 @@ struct SlicerView: View {
     var onOpenSettings: () -> Void = {}
     var onOpenSimple: () -> Void = {}
     var onAppSettings: () -> Void = {}
+    var onPrinters: () -> Void = {}
     @EnvironmentObject private var model: SlicerModel
     @Environment(\.psScale) private var ps
     @State private var showImporter = false
@@ -193,6 +209,12 @@ struct SlicerView: View {
                         Label("Einstellungen", systemImage: "slider.horizontal.3")
                     }
                     .accessibilityIdentifier("einstellungen.oeffnen")
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button(action: onPrinters) {
+                        Label("Drucker", systemImage: "printer")
+                    }
+                    .accessibilityIdentifier("drucker.oeffnen")
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button(action: onAppSettings) {

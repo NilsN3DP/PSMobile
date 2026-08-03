@@ -47,6 +47,21 @@
         </dict>
     </array>
 
+    <!-- Ein Drucker im eigenen Netz ist ein lokales Geraet. iOS fragt
+         dafuer seit Version 14 um Erlaubnis und will wissen, wofuer. -->
+    <key>NSLocalNetworkUsageDescription</key>
+    <string>Um G-Code an deinen Drucker im selben Netzwerk zu senden.</string>
+
+    <!-- PrusaLink spricht im Heimnetz meist HTTP. Nur das lokale Netz
+         wird freigegeben, nicht das offene Internet: NSAllowsArbitraryLoads
+         waere die bequeme und deutlich weitere Ausnahme. In der App muss
+         Klartext ausserdem je Drucker ausdruecklich erlaubt werden. -->
+    <key>NSAppTransportSecurity</key>
+    <dict>
+        <key>NSAllowsLocalNetworking</key>
+        <true/>
+    </dict>
+
     <key>UILaunchScreen</key>
     <dict/>
 

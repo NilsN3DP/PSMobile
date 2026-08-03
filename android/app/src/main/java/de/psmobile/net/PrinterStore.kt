@@ -1,5 +1,6 @@
 package de.psmobile.net
 
+import de.psmobile.shared.net.PrusaLinkRules.Auth
 import android.content.Context
 import androidx.core.content.edit
 import org.json.JSONArray
@@ -61,10 +62,10 @@ object PrinterStore {
                 host = o.optString("host"),
                 // Alte Eintraege ohne "auth" hatten nur einen API-Key.
                 auth = if (o.optString("auth", "") == "apikey")
-                    PrusaLink.Auth.API_KEY
+                    Auth.API_KEY
                 else if (!o.has("auth") && o.optString("apiKey").isNotBlank())
-                    PrusaLink.Auth.API_KEY
-                else PrusaLink.Auth.USER_PASSWORD,
+                    Auth.API_KEY
+                else Auth.USER_PASSWORD,
                 apiKey = secret?.optString("apiKey").orEmpty(),
                 username = secret?.optString("username", PrusaLink.DEFAULT_USER)
                     ?: PrusaLink.DEFAULT_USER,
@@ -96,7 +97,7 @@ object PrinterStore {
                 put("id", p.id)
                 put("name", p.name)
                 put("host", p.host)
-                put("auth", if (p.auth == PrusaLink.Auth.API_KEY) "apikey" else "userpass")
+                put("auth", if (p.auth == Auth.API_KEY) "apikey" else "userpass")
                 put("credentialRef", credentialRef)
                 put("presetName", p.presetName)
                 put("storage", p.storage)

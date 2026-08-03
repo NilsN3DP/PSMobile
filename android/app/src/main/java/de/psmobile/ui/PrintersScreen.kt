@@ -48,6 +48,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import de.psmobile.net.BackupStore
 import de.psmobile.net.PrinterStore
+import de.psmobile.shared.net.PrusaLinkRules.Auth
 import de.psmobile.net.PrusaLink
 import de.psmobile.ui.theme.PrusaColors
 import kotlinx.coroutines.Dispatchers
@@ -298,8 +299,8 @@ private fun PrinterEditor(
             Text("Anmeldung", color = PrusaColors.TextMuted, fontSize = 12.sp)
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 listOf(
-                    PrusaLink.Auth.USER_PASSWORD to "Benutzer + Passwort",
-                    PrusaLink.Auth.API_KEY to "API-Schlüssel",
+                    Auth.USER_PASSWORD to "Benutzer + Passwort",
+                    Auth.API_KEY to "API-Schlüssel",
                 ).forEach { (mode, label) ->
                     val active = mode == auth
                     Box(
@@ -313,7 +314,7 @@ private fun PrinterEditor(
                 }
             }
 
-            if (auth == PrusaLink.Auth.USER_PASSWORD) {
+            if (auth == Auth.USER_PASSWORD) {
                 Field("Benutzername", user) { user = it }
                 Field("Passwort", pass) { pass = it }
             } else {
@@ -333,7 +334,7 @@ private fun PrinterEditor(
 
             OutlinedButton(
                 enabled = !testing && host.isNotBlank() && (
-                    if (auth == PrusaLink.Auth.API_KEY) key.isNotBlank()
+                    if (auth == Auth.API_KEY) key.isNotBlank()
                     else user.isNotBlank() && pass.isNotBlank()),
                 onClick = {
                     testing = true
@@ -367,7 +368,7 @@ private fun PrinterEditor(
                 ) { Text("Abbrechen") }
                 Button(
                     enabled = host.isNotBlank() && (
-                        if (auth == PrusaLink.Auth.API_KEY) key.isNotBlank()
+                        if (auth == Auth.API_KEY) key.isNotBlank()
                         else user.isNotBlank() && pass.isNotBlank()),
                     onClick = {
                         onSave(printer.copy(

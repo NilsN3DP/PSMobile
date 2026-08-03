@@ -15,6 +15,8 @@ import PSMShared
 struct SliceSheet: View {
 
     @ObservedObject var model: SlicerModel
+    /// Wenn gesetzt, steht neben dem Sichern auch der Weg zum Drucker.
+    var onSendToPrinter: ((URL) -> Void)?
     var onClose: () -> Void
 
     @Environment(\.psScale) private var ps
@@ -86,6 +88,11 @@ struct SliceSheet: View {
                         .contentShape(Rectangle())
                 }
                 .accessibilityIdentifier("slice.sichern")
+
+                if let senden = onSendToPrinter {
+                    knopf(st("Send to printer", "An Drucker senden"),
+                          kennung: "slice.andrucker", betont: false) { senden(url) }
+                }
             } else {
                 hinweis(st("The G-Code could not be written.",
                            "Der G-Code liess sich nicht schreiben."))

@@ -35,6 +35,9 @@ struct SimpleModeView: View {
     var onOpenAdvanced: () -> Void = {}
     var onOpenPrinterSetup: () -> Void = {}
     var onAppSettings: () -> Void = {}
+    /// Den fertigen G-Code an einen Drucker schicken. Der Weg ueber die
+    /// Zusammenfassung: dort liegt die Datei, dort ist die Frage faellig.
+    var onSendToPrinter: (URL) -> Void = { _ in }
 
     @Environment(\.psScale) private var ps
     @State private var panel: SimplePanel = .workspace
@@ -88,7 +91,8 @@ struct SimpleModeView: View {
             if vorschau && schichten > 0 { schichtregler }
             if let hinweis = model.projectNotice { projektHinweis(hinweis) }
             if model.progress != .idle {
-                SliceSheet(model: model) { model.dismissProgress() }
+                SliceSheet(model: model,
+                           onSendToPrinter: onSendToPrinter) { model.dismissProgress() }
             }
             if !hinderungsgruende.isEmpty {
                 SliceBlockerSheet(gruende: hinderungsgruende) { hinderungsgruende = [] }
