@@ -41,6 +41,12 @@ struct SimpleModeView: View {
     @State private var zeigeImporter = false
     @State private var hinderungsgruende: [String] = []
 
+    /// Wofuer der Dateiwaehler offen ist. Eine 3MF kann beides sein -
+    /// ein Modell, das dazukommt, oder ein Projekt, das alles ersetzt.
+    /// Das kann die Datei nicht entscheiden, nur der Nutzer.
+    private enum Zweck { case modell, projekt }
+    @State private var zweck: Zweck = .modell
+
     /// Auf schmalen Geraeten ruecken Kopfzeile und Leiste zusammen -
     /// dasselbe `compact` wie auf Android, nur aus der Skalierung
     /// abgeleitet statt aus screenWidthDp.
@@ -68,6 +74,8 @@ struct SimpleModeView: View {
             }
             if panel != .workspace { overlay }
             if panel == .workspace { modellKnopf }
+            if panel == .workspace { schrittleiste }
+            if let hinweis = model.projectNotice { projektHinweis(hinweis) }
             if model.progress != .idle {
                 SliceSheet(model: model) { model.dismissProgress() }
             }
@@ -79,7 +87,11 @@ struct SimpleModeView: View {
         .fileImporter(isPresented: $zeigeImporter,
                       allowedContentTypes: [.item],
                       allowsMultipleSelection: false) { ergebnis in
-            if case .success(let urls) = ergebnis, let u = urls.first { model.load(url: u) }
+            guard case .success(let urls) = ergebnis, let u = urls.first else { return }
+            switch zweck {
+            case .modell:  model.load(url: u)
+            case .projekt: model.loadProject(url: u)
+            }
         }
     }
 
@@ -262,6 +274,83 @@ struct SimpleModeView: View {
         .padding(ps.pt(12))
     }
 
+    // MARK: - Zurueck und wiederholen
+
+    /// Unten links, wie auf Android. Beide Knoepfe nennen, was sie tun
+    /// wuerden - "Zurueck" allein sagt nicht, was verloren geht.
+    private var schrittleiste: some View {
+        VStack {
+            Spacer()
+            HStack(spacing: 0) {
+                schritt("↶", model.undoLabel,
+                        standard: st("Undo", "Rückgängig"),
+                        kennung: "simple.zurueckschritt") { model.undo() }
+                schritt("↷", model.redoLabel,
+                        standard: st("Redo", "Wiederholen"),
+                        kennung: "simple.wiederholen") { model.redo() }
+                Spacer()
+            }
+        }
+        .padding(ps.pt(12))
+    }
+
+    private func schritt(_ glyph: String,
+                         _ beschriftung: String,
+                         standard: String,
+                         kennung: String,
+                         aktion: @escaping () -> Void) -> some View {
+        Button(action: aktion) {
+            VStack(spacing: 0) {
+                Text(glyph).font(.system(size: ps.font(15)))
+                Text(beschriftung.isEmpty ? standard : beschriftung)
+                    .font(.system(size: ps.font(8)))
+                    .lineLimit(1)
+            }
+            .foregroundStyle(beschriftung.isEmpty
+                             ? PrusaColors.textMuted.opacity(0.4) : PrusaColors.textPrimary)
+            .frame(width: ps.pt(76), height: ps.touch(48))
+            .background(PrusaColors.panel.opacity(0.9))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(beschriftung.isEmpty)
+        .accessibilityIdentifier(kennung)
+    }
+
+    /// Was beim Oeffnen eines Projekts anders lief als darin stand.
+    private func projektHinweis(_ text: String) -> some View {
+        VStack {
+            Spacer()
+            HStack(alignment: .top, spacing: ps.pt(10)) {
+                Text(text)
+                    .font(.system(size: ps.font(12)))
+                    .foregroundStyle(PrusaColors.textPrimary)
+                    .fixedSize(horizontal: false, vertical: true)
+                Spacer()
+                Button { model.projectNotice = nil } label: {
+                    Text("✕")
+                        .font(.system(size: ps.font(14)))
+                        .foregroundStyle(PrusaColors.textMuted)
+                        .frame(width: ps.touch(44), height: ps.touch(44))
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("projekt.hinweis.schliessen")
+            }
+            .padding(.horizontal, ps.pt(14))
+            .padding(.vertical, ps.pt(8))
+            .frame(maxWidth: ps.pt(520))
+            .background(PrusaColors.panelRaised)
+            .overlay(
+                RoundedRectangle(cornerRadius: ps.pt(3))
+                    .stroke(PrusaColors.orange, lineWidth: 1)
+            )
+            Spacer().frame(height: ps.pt(80))
+        }
+        .padding(.horizontal, ps.pt(12))
+        .accessibilityIdentifier("projekt.hinweis")
+    }
+
     // MARK: - Overlay
 
     private var overlay: some View {
@@ -344,16 +433,38 @@ struct SimpleModeView: View {
         let drucker = model.selectedPreset(for: "printer") ?? ""
         let material = model.selectedPreset(for: "filament") ?? ""
         return VStack(alignment: .leading, spacing: ps.pt(8)) {
-            HStack {
-                titel(st("PROJECTS", "PROJEKTE"))
-                Spacer()
-                Button { zeigeImporter = true } label: {
-                    Text(st("Open model", "Modell öffnen"))
-                        .font(.system(size: ps.font(13)))
-                        .foregroundStyle(PrusaColors.orange)
-                        .contentShape(Rectangle())
+            titel(st("PROJECTS", "PROJEKTE"))
+            HStack(spacing: ps.pt(12)) {
+                panelAktion(st("Open model", "Modell öffnen"), kennung: "projekt.modell") {
+                    zweck = .modell
+                    zeigeImporter = true
                 }
-                .buttonStyle(.plain)
+                panelAktion(st("Open project", "Projekt öffnen"), kennung: "projekt.oeffnen") {
+                    zweck = .projekt
+                    zeigeImporter = true
+                }
+            }
+            // Sichern schreibt erst die Datei, dann geht sie ueber das
+            // Teilen-Blatt weiter - auf iOS gibt es keinen Ordner, in den
+            // eine App einfach schreibt.
+            HStack(spacing: ps.pt(12)) {
+                panelAktion(st("Save project", "Projekt sichern"),
+                            kennung: "projekt.sichern") {
+                    model.saveProject()
+                }
+                if let url = model.projectURL {
+                    ShareLink(item: url) {
+                        Text(st("Share", "Weitergeben"))
+                            .font(.system(size: ps.font(13)))
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, ps.pt(14))
+                            .frame(height: ps.touch(44))
+                            .background(PrusaColors.orange)
+                            .clipShape(RoundedRectangle(cornerRadius: ps.pt(3)))
+                            .contentShape(Rectangle())
+                    }
+                    .accessibilityIdentifier("projekt.weitergeben")
+                }
             }
             projektZeile(
                 titel: text.title,
@@ -366,6 +477,25 @@ struct SimpleModeView: View {
                 detail: text.session
             )
         }
+    }
+
+    private func panelAktion(_ label: String,
+                             kennung: String,
+                             aktion: @escaping () -> Void) -> some View {
+        Button(action: aktion) {
+            Text(label)
+                .font(.system(size: ps.font(13)))
+                .foregroundStyle(PrusaColors.orange)
+                .padding(.horizontal, ps.pt(14))
+                .frame(height: ps.touch(44))
+                .overlay(
+                    RoundedRectangle(cornerRadius: ps.pt(3))
+                        .stroke(PrusaColors.divider, lineWidth: 1)
+                )
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier(kennung)
     }
 
     private func projektZeile(titel: String,

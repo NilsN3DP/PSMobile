@@ -41,6 +41,20 @@ final class SlicerModel: ObservableObject {
     /// weiterreichen kann.
     @Published private(set) var gcodeURL: URL?
 
+    /// Das gesicherte Projekt als Datei - dieselbe Ueberlegung wie beim
+    /// G-Code: erst schreiben, dann teilen.
+    @Published private(set) var projectURL: URL?
+
+    /// Was beim Oeffnen eines Projekts anders lief als darin stand.
+    /// Bleibt stehen, bis der Nutzer es weggeklickt hat.
+    @Published var projectNotice: String?
+
+    /// Beschriftung des naechsten Zurueck-Schritts, leer wenn keiner da
+    /// ist. Ein Zurueck-Knopf, der nicht sagt, was er zuruecknimmt, wird
+    /// nur zoegernd benutzt.
+    @Published private(set) var undoLabel = ""
+    @Published private(set) var redoLabel = ""
+
     /// Ob noch kein Drucker eingerichtet ist.
     ///
     /// Ohne Drucker gibt es keine Profile, ohne Profile kein Bett und
@@ -317,7 +331,81 @@ final class SlicerModel: ObservableObject {
         guard let core else { return }
         objects = core.listObjects().compactMap { core.objectInfo($0) }
         beds = core.beds()
+        undoLabel = core.undoCount > 0 ? core.undoLabel : ""
+        redoLabel = core.redoCount > 0 ? core.redoLabel : ""
         sceneRevision += 1
+    }
+
+    func undo() {
+        try? core?.undo()
+        selectedId = nil
+        refresh()
+    }
+
+    func redo() {
+        try? core?.redo()
+        selectedId = nil
+        refresh()
+    }
+
+    /// Oeffnet eine 3MF als vollstaendiges Projekt: Positionen, Betten
+    /// und Konfiguration. Anders als beim Laden eines Modells wird das
+    /// aktuelle Bett dabei ersetzt.
+    func loadProject(url: URL) {
+        guard let core else { return }
+        let scoped = url.startAccessingSecurityScopedResource()
+        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+        do {
+            let ziel = FileManager.default.temporaryDirectory
+                .appendingPathComponent(url.lastPathComponent)
+            try? FileManager.default.removeItem(at: ziel)
+            try FileManager.default.copyItem(at: url, to: ziel)
+
+            let info = try core.loadProject(path: ziel.path)
+            projectNotice = Self.hinweis(zu: info)
+            refresh()
+        } catch {
+            progress = .failed(error.localizedDescription)
+        }
+    }
+
+    /// Sichert alle Betten als PrusaSlicer-taugliches 3MF.
+    func saveProject(name: String = "PSMobile") {
+        guard let core else { return }
+        let datei = SliceSummary.shared.fileName(project: name)
+            .replacingOccurrences(of: ".gcode", with: ".3mf")
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent(datei)
+        try? FileManager.default.removeItem(at: url)
+        do {
+            try core.saveProject(path: url.path)
+            projectURL = url
+        } catch {
+            projectURL = nil
+            projectNotice = error.localizedDescription
+        }
+    }
+
+    /// Nur melden, was den Nutzer betrifft: ein anderes Profil als
+    /// gespeichert, und entfernte Skripte. Alles andere waere eine
+    /// Meldung, die man wegklickt, ohne sie zu lesen.
+    private static func hinweis(zu info: PsmCore.ProjectImport) -> String? {
+        var zeilen: [String] = []
+        if info.printerChanged {
+            zeilen.append(SimpleModeState.shared.text(
+                english: "Printer profile differs: " + info.selectedPrinter,
+                german: "Anderes Druckerprofil aktiv: " + info.selectedPrinter))
+        }
+        if info.printChanged {
+            zeilen.append(SimpleModeState.shared.text(
+                english: "Print profile differs: " + info.selectedPrint,
+                german: "Anderes Druckprofil aktiv: " + info.selectedPrint))
+        }
+        if info.postProcessRemoved {
+            zeilen.append(SimpleModeState.shared.text(
+                english: "Embedded post-processing scripts were not loaded.",
+                german: "Eingebettete Nachbearbeitungsskripte wurden nicht übernommen."))
+        }
+        return zeilen.isEmpty ? nil : zeilen.joined(separator: "  ·  ")
     }
 
     /// Obergrenze aus dem C-ABI (PSM_MAX_BEDS). Sie steht dort, damit
