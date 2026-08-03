@@ -18,7 +18,7 @@ final class SettingsUITests: XCTestCase {
 
         XCTAssertTrue(app.otherElements["arbeitsbereich"].waitForExistence(timeout: 60),
                       "Der Arbeitsbereich ist nicht erschienen")
-        app.buttons["einstellungen.oeffnen"].tap()
+        app.buttons["advanced.printSettings"].tap()
     }
 
     func testSeitenAusDerVorlageErscheinen() {

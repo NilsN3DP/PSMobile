@@ -72,7 +72,7 @@ final class SliceUITests: XCTestCase {
         XCTAssertTrue(app.otherElements["arbeitsbereich"].waitForExistence(timeout: 60))
 
         XCTAssertTrue(app.staticTexts.allElementsBoundByIndex.contains {
-            $0.label.contains("20.0 x 20.0 x 20.0 mm")
+            $0.label.contains("20.0 × 20.0 × 20.0 mm")
         }, "Der Testwuerfel steht nicht in der Modellliste")
     }
 }

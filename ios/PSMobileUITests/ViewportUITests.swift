@@ -50,7 +50,10 @@ final class ViewportUITests: XCTestCase {
         sleep(3)
 
         let vorher = bildDaten()
-        flaeche.pinch(withScale: 2.0, velocity: 1.0)
+        // Kleiner als frueher: der Arbeitsbereich hat seit dem Umbau eine
+        // Werkzeugleiste und eine Fusszeile, und XCUITest laesst nur
+        // Spreizen zu, die in die Flaeche passen.
+        flaeche.pinch(withScale: 1.6, velocity: 1.0)
         sleep(1)
 
         XCTAssertNotEqual(vorher, bildDaten(),
