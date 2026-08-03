@@ -87,6 +87,7 @@ final class SlicerModel: ObservableObject {
     private(set) var core: PsmCore?
     private var sliceTask: Task<Void, Never>?
     private var backgroundTask: UIBackgroundTaskIdentifier = .invalid
+    @Published private(set) var credentialSelfTestResult: String?
 
     func start() {
         guard core == nil else { return }
@@ -119,6 +120,9 @@ final class SlicerModel: ObservableObject {
             // Einstellung in der App waere ein Schalter, mit dem sich
             // versehentlich alles loeschen liesse.
             let argumente = ProcessInfo.processInfo.arguments
+            if argumente.contains("-psm-credential-self-test") {
+                credentialSelfTestResult = runCredentialSelfTest()
+            }
             if argumente.contains("-psm-reset-setup") {
                 Self.storedPrinters = []
             }
@@ -287,6 +291,21 @@ final class SlicerModel: ObservableObject {
         try? core?.setExtruderColor(index, hex)
         sceneRevision += 1
         objectWillChange.send()
+    }
+
+    private func runCredentialSelfTest() -> String {
+        let host = "credential-test.psmobile.invalid"
+        let store = PrinterCredentialStore()
+        do {
+            try store.remove(host: host, mode: .apiKey)
+            try store.save(.init(host: host, mode: .apiKey, secret: "test-secret"))
+            defer { try? store.remove(host: host, mode: .apiKey) }
+            guard try store.load(host: host, mode: .apiKey)?.secret == "test-secret",
+                  UserDefaults.standard.object(forKey: "printer.apiKey") == nil else { return "failed" }
+            return "passed"
+        } catch {
+            return "failed"
+        }
     }
 
     /// Virtuelle ColorMix-Positionen bleiben im Kernprojekt erhalten und

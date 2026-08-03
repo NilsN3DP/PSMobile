@@ -127,7 +127,6 @@ targets:
       # Dasselbe Verhaeltnis wie auf Android: die Regeltests dort laufen
       # ohne das NDK.
       - path: PSMobile/UI/PSScale.swift
-      - path: PSMobile/Networking/PrinterCredentialStore.swift
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: de.psmobile.tests
@@ -137,9 +136,6 @@ targets:
         # PSMShared wuerde Kotlin/Native-Klassen doppelt laden und den
         # Prozess vor dem Teststart abstuerzen lassen.
         OTHER_LDFLAGS: []
-    dependencies:
-      - sdk: Security.framework
-      - target: PSMobile
 
   # Bedient die App wie ein Finger. simctl kann das nicht - es kann
   # installieren, starten und ein Bild machen, aber nicht tippen. Ohne

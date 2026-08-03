@@ -58,3 +58,14 @@ final class ExtruderAndColorMixUITests: XCTestCase {
                        "ColorMix darf das Filament einer physischen Position nicht ersetzen")
     }
 }
+
+final class PrinterCredentialStoreUITests: XCTestCase {
+    func testAppStoresCredentialInKeychainNotUserDefaults() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-psm-reset-setup", "-psm-preset-printer", "-psm-start-simple", "-psm-credential-self-test"]
+        app.launch()
+        let result = app.staticTexts["credential.selftest"]
+        XCTAssertTrue(result.waitForExistence(timeout: 60))
+        XCTAssertEqual(result.label, "passed")
+    }
+}

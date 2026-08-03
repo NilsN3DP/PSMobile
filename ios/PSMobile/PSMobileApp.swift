@@ -30,6 +30,14 @@ struct PSMobileApp: App {
                 inhalt
             }
                 .environmentObject(model)
+                .overlay(alignment: .bottomTrailing) {
+                    if let result = model.credentialSelfTestResult {
+                        Text(result)
+                            .accessibilityIdentifier("credential.selftest")
+                            .padding(1)
+                            .opacity(0.01)
+                    }
+                }
                 .onAppear {
                     model.start()
                     route = startRoute()
