@@ -292,7 +292,7 @@ final class SlicerModel: ObservableObject {
     /// Virtuelle ColorMix-Positionen bleiben im Kernprojekt erhalten und
     /// veraendern niemals die Filamentwahl der physischen Positionen.
     func colorMixRecipes() -> [ColorMixRecipe] {
-        guard let source = try? core?.colorMixJson(), let source else { return [] }
+        guard let source = try? core?.colorMixJson() else { return [] }
         return ColorMixCodec.shared.decode(source: source)
     }
 
