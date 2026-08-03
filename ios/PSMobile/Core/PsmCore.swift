@@ -275,7 +275,14 @@ final class PsmCore {
     /// pruefen und lieber warnen.
     var estimatedSliceMemory: UInt64 { psm_estimate_slice_memory(raw) }
 
-    static var availableMemory: UInt64 {
-        UInt64(max(0, os_proc_available_memory()))
+    /// Wieviel Speicher dieser Prozess noch bekommen darf, oder nichts.
+    ///
+    /// os_proc_available_memory liefert 0, wenn es keine Auskunft gibt -
+    /// im Simulator etwa, wo es keine Jetsam-Grenze gibt. Die Null heisst
+    /// also "unbekannt" und nicht "kein Speicher". Wer sie als Zahl
+    /// weiterreicht, warnt bei jedem Modell vor 0 MB.
+    static var availableMemory: UInt64? {
+        let v = os_proc_available_memory()
+        return v > 0 ? UInt64(v) : nil
     }
 }

@@ -1,56 +1,21 @@
-Der Viewport zeichnet auf iOS
+Null freier Speicher heisst "keine Auskunft", nicht "kein Speicher"
 
-Dasselbe Druckbett wie auf Android, gerendert vom selben C++-Bestand.
-Verschieden ist nur, wer den GL-Kontext haelt.
+Beim ersten Modell auf dem Bett stand da: "Dieses Modell braucht
+geschaetzt 160 MB, verfuegbar sind etwa 0 MB. Das kann fehlschlagen."
 
-Auf Android macht das ein GLSurfaceView, und Compose bettet es per
-AndroidView nur ein. iOS bringt kein Gegenstueck mit: Kontext, Farb- und
-Tiefenpuffer und die Zeichenschleife stehen jetzt in PSMGLView, SwiftUI
-bettet das per UIViewRepresentable ein. Die Rollenverteilung ist damit
-auf beiden Seiten dieselbe - die Oberflaeche haelt den Rahmen, nicht den
-Inhalt.
+os_proc_available_memory liefert 0, wenn es nichts sagen kann - im
+Simulator etwa, wo es gar keine Jetsam-Grenze gibt. Die Null als Zahl
+weiterzureichen macht daraus eine Warnung, die bei jedem Modell
+erscheint und immer falsch ist.
 
-Gezeichnet wird auf Anforderung, nicht in einer Dauerschleife. Ein
-Slicer steht die meiste Zeit still; 60 Bilder je Sekunde in ein
-unveraendertes Bett zu rechnen kostet nur Akku. Und zwar direkt statt
-ueber setNeedsDisplay: eine GL-Ebene haengt nicht am Zeichenzyklus von
-UIKit, der Umweg brachte nur einen Frame Verzoegerung - beim Ziehen mit
-dem Finger merkt man das.
+Solche Warnungen sind schlimmer als keine. Man gewoehnt sich an sie, und
+wenn der Speicher dann wirklich knapp wird, liest sie niemand mehr.
 
-Die Gesten folgen SceneView.kt in der Reihenfolge, auf die es ankommt:
-erst der Griff, dann das Objekt, dann die Kamera. Ein einmal gefasster
-Griff bleibt fuer die Dauer des Zuges fest, sonst springt das Objekt auf
-eine andere Achse, sobald der Finger einem anderen Griff naeher kommt.
-Zwei Finger spreizen im Skalieren-Werkzeug das Objekt und sonst die
-Kamera. Bewusst rohe Beruehrungen statt UIGestureRecognizer - mit
-mehreren Erkennern muesste dieselbe Vorrangfrage noch einmal
-beantwortet werden, nur verteilter.
+Jetzt liefert availableMemory nichts statt null, und ohne Auskunft wird
+nicht gewarnt. Der Fall, um den es eigentlich geht - ein grosses Modell
+auf einem echten Geraet -, ist davon unberuehrt: dort antwortet iOS.
 
-Drei Dinge, die dabei zu klaeren waren:
-
-Der Bildschirmmassstab. Die Ebene misst in Punkten, GL rechnet in
-Pixeln. Ohne contentScaleFactor zeichnet der Viewport auf einem
-Retina-Geraet in ein Viertel der Flaeche - und alle Fingerkoordinaten
-liegen um denselben Faktor daneben.
-
-Die C-Schnittstelle sieht anders aus, als ich sie mir gedacht hatte:
-psm_surface_hit traegt ausser Ort und Normale auch Volumen-, Facetten-
-und Instanzindex, die Felder kommen in Swift als Tupel an, gizmo_drag
-hat einen Rastschalter, und C-Enums tragen UInt32. Ich habe zuerst nach
-Gefuehl geschrieben statt den Header zu lesen; das kostete zwei
-Durchlaeufe.
-
-Und der Fund, der eine halbe Stunde gekostet haette, waere er spaeter
-aufgefallen: XcodeGen kennt keinen resources-Block. Der stand seit M3 in
-der project.yml und wurde wortlos ueberlesen - die App baute sauber
-durch und hatte ein leeres Bundle. Sichtbar wurde es erst zur Laufzeit
-als "Shader nicht gefunden". Ressourcen gehoeren unter sources mit
-ausgewiesener Bauphase.
-
-Geprueft auf iPad Pro 11: Bett mit Raster in 3D, keine Shaderfehler im
-Protokoll.
-
-Noch nicht geprueft, weil dafuer ein Modell auf dem Bett liegen muss:
-Auswahl, Ziehen, Griffe.
+Nebenbei belegt: das Modell laedt, liegt auf dem Bett und wird
+gezeichnet. 20 x 20 x 20 mm, 12 Dreiecke, wie es die Datei sagt.
 
 Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>

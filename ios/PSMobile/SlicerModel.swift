@@ -104,8 +104,11 @@ final class SlicerModel: ObservableObject {
 
     private func checkMemory() {
         guard let core else { return }
+        // Ohne Auskunft ueber den freien Speicher wird nicht geraten. Eine
+        // Warnung, die auf einer erfundenen Zahl steht, ist schlimmer als
+        // keine - man gewoehnt sich an sie und uebersieht die echte.
+        guard let have = PsmCore.availableMemory else { memoryWarning = nil; return }
         let need = core.estimatedSliceMemory
-        let have = PsmCore.availableMemory
         memoryWarning = need > UInt64(Double(have) * 0.8)
             ? "Dieses Modell braucht geschaetzt \(need / 1_048_576) MB, verfuegbar sind etwa \(have / 1_048_576) MB. Das kann fehlschlagen."
             : nil
