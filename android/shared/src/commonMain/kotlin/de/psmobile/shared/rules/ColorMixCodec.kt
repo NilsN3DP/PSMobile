@@ -37,7 +37,7 @@ object ColorMixCodec {
     fun previewColor(
         physicalColors: List<String>,
         components: List<ColorMixComponent>,
-    ): String? = runCatching {
+    ): String? = runCatching<String> {
         val normalized = normalize(components)
         require(normalized.all { it.head in physicalColors.indices }) {
             "ColorMix-Position existiert nicht"
@@ -48,8 +48,14 @@ object ColorMixCodec {
         val red = blend(channels) { it.first }
         val green = blend(channels) { it.second }
         val blue = blend(channels) { it.third }
-        "#%02X%02X%02X".format(red, green, blue)
+        "#${red.hexByte()}${green.hexByte()}${blue.hexByte()}"
     }.getOrNull()
+
+    private fun Int.hexByte(): String {
+        val digits = "0123456789ABCDEF"
+        val byte = coerceIn(0, 255)
+        return "${digits[byte / 16]}${digits[byte % 16]}"
+    }
 
     fun decode(source: String): List<ColorMixRecipe> = runCatching {
         val root = json.parseToJsonElement(source).jsonObject
