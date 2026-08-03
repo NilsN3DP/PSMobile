@@ -443,7 +443,11 @@ struct SimpleModeView: View {
                 Text(glyph).font(.system(size: ps.font(15)))
                 Text(beschriftung.isEmpty ? standard : beschriftung)
                     .font(.system(size: ps.font(8)))
-                    .lineLimit(1)
+                    // Zwei Zeilen: die Beschriftungen kommen aus dem Kern
+                    // ("Objekte importiert") und passen auf einem iPhone
+                    // sonst nicht in eine.
+                    .lineLimit(2)
+                    .multilineTextAlignment(.center)
             }
             .foregroundStyle(beschriftung.isEmpty
                              ? PrusaColors.textMuted.opacity(0.4) : PrusaColors.textPrimary)
