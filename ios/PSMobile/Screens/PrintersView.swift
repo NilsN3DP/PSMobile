@@ -114,6 +114,7 @@ struct PrintersView: View {
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+            .accessibilityIdentifier("drucker.bearbeiten." + drucker.id)
             Button { handle(drucker) } label: {
                 Text(senden == nil ? st("Test", "Prüfen") : st("Send", "Senden"))
                     .font(.system(size: ps.font(13)))

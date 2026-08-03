@@ -57,8 +57,11 @@ final class PrintersUITests: XCTestCase {
         lege(adresse: "192.168.1.60", passwort: "streng-geheim-42")
         XCTAssertTrue(app.staticTexts["Werkstatt"].waitForExistence(timeout: 5))
 
+        // Ueber die Kennung, nicht ueber die Beschriftung: die App
+        // startet auf Englisch, und ein Test, der an einer Uebersetzung
+        // haengt, faellt beim naechsten Sprachwechsel um.
         app.buttons.matching(
-            NSPredicate(format: "label CONTAINS[c] 'earbeiten'")).firstMatch.tap()
+            NSPredicate(format: "identifier BEGINSWITH 'drucker.bearbeiten.'")).firstMatch.tap()
 
         let pw = app.secureTextFields["drucker.passwort"]
         XCTAssertTrue(pw.waitForExistence(timeout: 5), "Das Formular fehlt")
