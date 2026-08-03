@@ -252,6 +252,39 @@ final class SlicerModel: ObservableObject {
 
     func config(_ key: String) -> String? { core?.config(key) }
 
+    /// Material und Farbe je Extruder.
+    ///
+    /// Bei einem Extruder ist das dasselbe wie das gewaehlte
+    /// Filamentprofil; erst mit MMU oder Werkzeugwechsler wird es eine
+    /// eigene Frage.
+    func extruderFilament(_ index: Int) -> String {
+        core?.extruderFilament(index) ?? ""
+    }
+
+    func setExtruderFilament(_ index: Int, _ name: String) {
+        try? core?.setExtruderFilament(index, name)
+        sceneRevision += 1
+        objectWillChange.send()
+    }
+
+    func extruderColor(_ index: Int) -> String {
+        core?.extruderColor(index) ?? ""
+    }
+
+    func setExtruderColor(_ index: Int, _ hex: String) {
+        try? core?.setExtruderColor(index, hex)
+        sceneRevision += 1
+        objectWillChange.send()
+    }
+
+    /// Der Extruder eines Objekts. 0 heisst: der Standard des Profils.
+    func objectExtruder(_ id: Int32) -> Int32 { core?.objectExtruder(id) ?? 0 }
+
+    func setObjectExtruder(_ id: Int32, _ extruder: Int32) {
+        try? core?.setObjectExtruder(id, extruder)
+        refresh()
+    }
+
     func presetNames(_ type: PsmCore.PresetType) -> [String] {
         core?.presetNames(type) ?? []
     }

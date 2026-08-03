@@ -35,6 +35,16 @@ enum PrusaColors {
 }
 
 extension Color {
+    /// Aus "#RRGGBB", wie PrusaSlicer Filamentfarben notiert. Nil, wenn
+    /// nichts oder etwas anderes dasteht - dann zeigt die Oberflaeche
+    /// lieber ein neutrales Feld als eine erfundene Farbe.
+    init?(hexString: String) {
+        var text = hexString.trimmingCharacters(in: .whitespaces)
+        if text.hasPrefix("#") { text.removeFirst() }
+        guard text.count == 6, let wert = UInt32(text, radix: 16) else { return nil }
+        self.init(hex: wert)
+    }
+
     /// 0xRRGGBB, wie die Werte in PrusaSlicer und auf Android notiert sind.
     init(hex: UInt32) {
         self.init(

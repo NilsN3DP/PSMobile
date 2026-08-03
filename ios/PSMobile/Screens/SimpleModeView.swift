@@ -737,6 +737,12 @@ struct SimpleModeView: View {
         return VStack(alignment: .leading, spacing: ps.pt(8)) {
             titel(st("MATERIAL", "MATERIAL"))
             hinweis(st("The material for this print.", "Das Material für diesen Druck."))
+            // Mit mehreren Extrudern ist "das Material" keine Frage
+            // mehr, sondern eine je Position. Bei einem Extruder waere
+            // die Liste eine Zeile, die nichts sagt.
+            if model.extruderCount > 1 {
+                extruderListe(filamente)
+            }
             if filamente.isEmpty {
                 leeresPanel(st("No material available", "Kein Material vorhanden"),
                             st("Open Advanced Mode", "Advanced Mode öffnen"),
@@ -751,6 +757,58 @@ struct SimpleModeView: View {
                 }
             }
         }
+    }
+
+    /// Ein Eintrag je Extruder: Farbe, gewaehltes Material, Auswahl.
+    private func extruderListe(_ filamente: [String]) -> some View {
+        VStack(alignment: .leading, spacing: ps.pt(8)) {
+            Text(st("Per extruder", "Je Extruder").uppercased())
+                .font(.system(size: ps.font(11), weight: .semibold))
+                .foregroundStyle(PrusaColors.textMuted)
+            ForEach(0..<model.extruderCount, id: \.self) { index in
+                HStack(spacing: ps.pt(10)) {
+                    // Die Farbe ist die einzige Auskunft, die man auf
+                    // einen Blick braucht: welcher Strang liegt auf
+                    // welcher Position.
+                    RoundedRectangle(cornerRadius: ps.pt(3))
+                        .fill(Color(hexString: model.extruderColor(index))
+                              ?? PrusaColors.panelRaised)
+                        .frame(width: ps.pt(26), height: ps.pt(26))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: ps.pt(3))
+                                .stroke(PrusaColors.divider, lineWidth: 1)
+                        )
+                    Text("\(index + 1)")
+                        .font(.system(size: ps.font(12)))
+                        .foregroundStyle(PrusaColors.textMuted)
+                    Menu {
+                        ForEach(filamente, id: \.self) { name in
+                            Button(EasyModeState.shared.profileDisplayLabel(rawPreset: name)) {
+                                model.setExtruderFilament(index, name)
+                            }
+                        }
+                    } label: {
+                        HStack {
+                            Text(EasyModeState.shared.profileDisplayLabel(
+                                rawPreset: model.extruderFilament(index)))
+                                .font(.system(size: ps.font(13)))
+                                .foregroundStyle(PrusaColors.textPrimary)
+                                .lineLimit(1)
+                            Spacer()
+                            Image(systemName: "chevron.up.chevron.down")
+                                .font(.system(size: ps.font(10)))
+                                .foregroundStyle(PrusaColors.textMuted)
+                        }
+                        .padding(.horizontal, ps.pt(10))
+                        .frame(height: ps.touch(44))
+                        .background(PrusaColors.panelRaised)
+                        .clipShape(RoundedRectangle(cornerRadius: ps.pt(3)))
+                    }
+                    .accessibilityIdentifier("extruder.\(index)")
+                }
+            }
+        }
+        .padding(.bottom, ps.pt(8))
     }
 
     // MARK: - Einstellen
@@ -922,16 +980,28 @@ struct SimpleModeView: View {
         let profile = Array(model.presetNames(.print).prefix(10))
         return VStack(alignment: .leading, spacing: ps.pt(8)) {
             titel(st("PRINT SETTINGS", "DRUCKEINSTELLUNGEN"))
-            HStack(spacing: ps.pt(8)) {
-                ForEach(SimpleModeState.shared.printSettingsColumns(), id: \.self) { spalte in
-                    Text(st(spalte, spaltenNameDeutsch(spalte)))
-                        .font(.system(size: ps.font(12)))
-                        .foregroundStyle(PrusaColors.textPrimary)
-                        .padding(ps.pt(10))
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(PrusaColors.panelRaised)
-                }
-            }
+
+            // Die drei Bereiche der Referenz, jetzt mit den Werten
+            // dahinter. Sie kamen bisher nur als Ueberschriften vor -
+            // wer die Fuelldichte aendern wollte, musste in den
+            // Advanced Mode.
+            //
+            // Gezeichnet wird mit demselben SettingField wie die 247
+            // Parameter der Einstellungsseiten: Typ, Grenzen,
+            // Auswahlwerte und der Grund fuers Ausgrauen kommen aus dem
+            // Kern, nicht aus einer Liste hier.
+            schnellBereich(st("Print Settings", "Druckeinstellungen"),
+                           schluessel: ["layer_height"])
+            schnellBereich(st("Infill", "Füllung"),
+                           schluessel: ["fill_density", "fill_pattern"])
+            schnellBereich(st("Shell Thickness", "Wandstärke"),
+                           schluessel: ["perimeters", "top_solid_layers",
+                                        "bottom_solid_layers"])
+
+            Text(st("Profiles", "Profile").uppercased())
+                .font(.system(size: ps.font(11), weight: .semibold))
+                .foregroundStyle(PrusaColors.textMuted)
+                .padding(.top, ps.pt(10))
             if profile.isEmpty {
                 leeresPanel(st("No print settings available",
                                "Keine Druckeinstellungen vorhanden"),
@@ -947,6 +1017,22 @@ struct SimpleModeView: View {
                 }
             }
         }
+    }
+
+    private func schnellBereich(_ titelText: String,
+                                schluessel: [String]) -> some View {
+        VStack(alignment: .leading, spacing: ps.pt(8)) {
+            Text(titelText.uppercased())
+                .font(.system(size: ps.font(11), weight: .semibold))
+                .foregroundStyle(PrusaColors.textMuted)
+            ForEach(schluessel, id: \.self) { key in
+                SettingField(model: model,
+                             option: TabsCatalog.Option(key: key, code: false, line: nil),
+                             kompakt: false)
+                    .accessibilityIdentifier("schnell." + key)
+            }
+        }
+        .padding(.top, ps.pt(10))
     }
 
     /// Die drei Spaltenkoepfe stehen in der gemeinsamen Liste bewusst auf

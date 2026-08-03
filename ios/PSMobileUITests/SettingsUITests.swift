@@ -77,6 +77,26 @@ final class SettingsUITests: XCTestCase {
                        "Der geaenderte Wert hat den Seitenwechsel nicht ueberlebt")
     }
 
+    func testSchnelleinstellungenImSimpleMode() {
+        // Die drei Bereiche der Referenz kamen bisher nur als
+        // Ueberschriften vor. Wer die Fuelldichte aendern wollte, musste
+        // in den Advanced Mode.
+        let simple = XCUIApplication()
+        simple.launchArguments = ["-psm-preset-printer", "-psm-start-simple"]
+        simple.launch()
+        XCTAssertTrue(simple.otherElements["simple.arbeitsbereich"].waitForExistence(timeout: 60))
+
+        simple.buttons["simple.werkzeug.Settings"].tap()
+        simple.buttons["simple.karte.PRINT_SETTINGS"].tap()
+
+        for schluessel in ["schnell.layer_height", "schnell.fill_density",
+                           "schnell.fill_pattern", "schnell.perimeters"] {
+            XCTAssertTrue(simple.descendants(matching: .any)[schluessel]
+                            .waitForExistence(timeout: 10),
+                          "Im Druckprofil-Panel fehlt " + schluessel)
+        }
+    }
+
     func testZurueckFuehrtInDenArbeitsbereich() {
         XCTAssertTrue(app.buttons["seite.0"].waitForExistence(timeout: 10))
         app.buttons["einstellungen.zurueck"].tap()
