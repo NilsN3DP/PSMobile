@@ -135,6 +135,18 @@ final class SlicerModel: ObservableObject {
                 printerModels = c.printerModels()
             } else {
                 try? c.installPrinters(Array(gewaehlt))
+                // Acht Positionen und eindeutige Farben sind ausschliesslich
+                // ein reproduzierbarer UI-Testzustand. Im normalen Start
+                // bestimmt das installierte Druckerprofil die Extruderzahl.
+                if argumente.contains("-psm-test-eight-extruders") {
+                    try? c.setConfig("nozzle_diameter", Array(repeating: "0.4", count: 8).joined(separator: ","))
+                }
+                if argumente.contains("-psm-test-colormix-colors") {
+                    let colors = ["#FF0000", "#0000FF"] + Array(repeating: "#808080", count: 6)
+                    for (index, color) in colors.enumerated() {
+                        try? c.setExtruderColor(index, color)
+                    }
+                }
                 setupNeeded = false
                 // Ein Wuerfel fuer die Tests, die etwas auf dem Bett
                 // brauchen: Schneiden, Auswahl, Gizmos. Er kommt hinter
@@ -275,6 +287,30 @@ final class SlicerModel: ObservableObject {
         try? core?.setExtruderColor(index, hex)
         sceneRevision += 1
         objectWillChange.send()
+    }
+
+    /// Virtuelle ColorMix-Positionen bleiben im Kernprojekt erhalten und
+    /// veraendern niemals die Filamentwahl der physischen Positionen.
+    func colorMixRecipes() -> [ColorMixRecipe] {
+        guard let source = try? core?.colorMixJson(), let source else { return [] }
+        return ColorMixCodec.shared.decode(source: source)
+    }
+
+    @discardableResult
+    func saveColorMix(_ recipes: [ColorMixRecipe]) -> Bool {
+        guard let core else { return false }
+        let colors = (0..<extruderCount).map { index in
+            let color = extruderColor(index)
+            return color.isEmpty ? "#808080" : color
+        }
+        do {
+            try core.setColorMixJson(ColorMixCodec.shared.encode(physicalColors: colors, recipes: recipes))
+            sceneRevision += 1
+            objectWillChange.send()
+            return true
+        } catch {
+            return false
+        }
     }
 
     /// Der Extruder eines Objekts. 0 heisst: der Standard des Profils.

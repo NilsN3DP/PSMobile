@@ -39,6 +39,7 @@ struct SimpleModeView: View {
     @Environment(\.psScale) private var ps
     @State private var panel: SimplePanel = .workspace
     @State private var zeigeImporter = false
+    @State private var zeigeColorMix = false
     @State private var hinderungsgruende: [String] = []
 
     /// Wofuer der Dateiwaehler offen ist. Eine 3MF kann beides sein -
@@ -103,6 +104,10 @@ struct SimpleModeView: View {
             case .modell:  model.load(url: u)
             case .projekt: model.loadProject(url: u)
             }
+        }
+        .sheet(isPresented: $zeigeColorMix) {
+            ColorMixView { zeigeColorMix = false }
+                .environmentObject(model)
         }
     }
 
@@ -742,6 +747,15 @@ struct SimpleModeView: View {
             // die Liste eine Zeile, die nichts sagt.
             if model.extruderCount > 1 {
                 extruderListe(filamente)
+                Button {
+                    zeigeColorMix = true
+                } label: {
+                    Label(st("ColorMix", "ColorMix"), systemImage: "circle.lefthalf.filled")
+                        .frame(maxWidth: .infinity, minHeight: ps.touch(44))
+                }
+                .buttonStyle(.bordered)
+                .tint(PrusaColors.orange)
+                .accessibilityIdentifier("simple.colormix")
             }
             if filamente.isEmpty {
                 leeresPanel(st("No material available", "Kein Material vorhanden"),
@@ -803,6 +817,7 @@ struct SimpleModeView: View {
                         .frame(height: ps.touch(44))
                         .background(PrusaColors.panelRaised)
                         .clipShape(RoundedRectangle(cornerRadius: ps.pt(3)))
+                        .accessibilityIdentifier("extruder.material.\(index)")
                     }
                     .accessibilityIdentifier("extruder.\(index)")
                 }

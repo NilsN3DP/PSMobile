@@ -10,6 +10,7 @@ final class ExtruderAndColorMixUITests: XCTestCase {
         continueAfterFailure = false
         app = XCUIApplication()
         app.launchArguments = [
+            "-psm-reset-setup",
             "-psm-preset-printer",
             "-psm-test-eight-extruders",
             "-psm-test-colormix-colors",
