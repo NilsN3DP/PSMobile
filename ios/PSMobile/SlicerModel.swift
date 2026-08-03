@@ -615,6 +615,22 @@ final class SlicerModel: ObservableObject {
         refresh()
     }
 
+    func layerProfile(_ id: Int32) -> [LayerProfile.Point] {
+        (core?.layerProfile(id) ?? []).map {
+            LayerProfile.Point(z: $0.z, height: $0.height)
+        }
+    }
+
+    func setLayerProfile(_ id: Int32, points: [LayerProfile.Point]) {
+        try? core?.setLayerProfile(id, points: points.map { (z: $0.z, height: $0.height) })
+        refresh()
+    }
+
+    func clearLayerProfile(_ id: Int32) {
+        try? core?.setLayerProfile(id, points: [])
+        refresh()
+    }
+
     func volumeCount(_ id: Int32) -> Int { core?.volumeCount(id) ?? 0 }
 
     func volumeInfo(_ id: Int32, at index: Int) -> PsmCore.VolumeInfo? {

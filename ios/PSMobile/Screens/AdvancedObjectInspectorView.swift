@@ -19,6 +19,7 @@ struct AdvancedObjectInspectorView: View {
     @Binding var gizmo: PsmViewport.Gizmo
 
     @Environment(\.psScale) private var ps
+    @State private var zeigeSchichten = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: ps.pt(10)) {
@@ -31,6 +32,21 @@ struct AdvancedObjectInspectorView: View {
             handgriffe
             kopien
             if model.beds.count > 1 { bettwechsel }
+            Divider().background(PrusaColors.divider)
+            Button { zeigeSchichten = true } label: {
+                Text(PsUiCatalog.tr("Variable layer height"))
+                    .font(.system(size: ps.font(12)))
+                    .foregroundStyle(PrusaColors.orange)
+                    .frame(maxWidth: .infinity, minHeight: ps.touch(44))
+                    .background(PrusaColors.panelRaised)
+                    .clipShape(RoundedRectangle(cornerRadius: ps.pt(6)))
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("advanced.schichten")
+            .sheet(isPresented: $zeigeSchichten) {
+                LayerProfileView(model: model, objekt: objekt) { zeigeSchichten = false }
+            }
             Divider().background(PrusaColors.divider)
             teile
             // Eine Marke, kein Bezeichner am Stapel: SwiftUI vererbt den

@@ -135,6 +135,35 @@ extension PsmCore {
         return Array(ids.prefix(Int(anzahl)))
     }
 
+    // MARK: - Variable Schichthoehen
+
+    /// Die Stuetzstellen des Objekts, als Paare aus Hoehe und
+    /// Schichtdicke.
+    func layerProfile(_ id: Int32) -> [(z: Double, height: Double)] {
+        let anzahl = Int(psm_model_layer_profile_count(raw, id))
+        guard anzahl > 0 else { return [] }
+        return (0..<anzahl).compactMap { i in
+            var z = 0.0
+            var h = 0.0
+            guard psm_model_layer_profile_at(raw, id, size_t(i), &z, &h) == PSM_OK else {
+                return nil
+            }
+            return (z, h)
+        }
+    }
+
+    /// Setzt die Stuetzstellen. Eine leere Liste raeumt das Profil ab -
+    /// das ist die einzige Art, zur festen Schichthoehe zurueckzukommen.
+    func setLayerProfile(_ id: Int32, points: [(z: Double, height: Double)]) throws {
+        var werte: [Double] = []
+        for punkt in points {
+            werte.append(punkt.z)
+            werte.append(punkt.height)
+        }
+        try check(psm_model_layer_profile_set(raw, id, werte, size_t(points.count)),
+                  "Schichtprofil setzen")
+    }
+
     // MARK: - Bemalen
 
     /// Welches Werkzeug malt. Die Werte kommen aus dem C-ABI.
