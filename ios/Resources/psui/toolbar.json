@@ -1,0 +1,77 @@
+[
+ {
+  "name": "add",
+  "icon": "add.svg",
+  "tooltip": "Add..."
+ },
+ {
+  "name": "delete",
+  "icon": "remove.svg",
+  "tooltip": "Delete"
+ },
+ {
+  "name": "deleteall",
+  "icon": "delete_all.svg",
+  "tooltip": "Delete all"
+ },
+ {
+  "name": "arrange",
+  "icon": "arrange.svg",
+  "tooltip": "Arrange"
+ },
+ {
+  "name": "arrangecurrent",
+  "icon": "arrange_current.svg",
+  "tooltip": ""
+ },
+ {
+  "name": "copy",
+  "icon": "copy.svg",
+  "tooltip": "Copy"
+ },
+ {
+  "name": "paste",
+  "icon": "paste.svg",
+  "tooltip": "Paste"
+ },
+ {
+  "name": "more",
+  "icon": "instance_add.svg",
+  "tooltip": "Add instance"
+ },
+ {
+  "name": "fewer",
+  "icon": "instance_remove.svg",
+  "tooltip": "Remove instance"
+ },
+ {
+  "name": "splitobjects",
+  "icon": "split_objects.svg",
+  "tooltip": "Split to objects"
+ },
+ {
+  "name": "splitvolumes",
+  "icon": "split_parts.svg",
+  "tooltip": "Split to parts"
+ },
+ {
+  "name": "settings",
+  "icon": "settings.svg",
+  "tooltip": "Switch to Settings"
+ },
+ {
+  "name": "layersediting",
+  "icon": "layers_white.svg",
+  "tooltip": "Variable layer height"
+ },
+ {
+  "name": "undo",
+  "icon": "undo_toolbar.svg",
+  "tooltip": "Undo"
+ },
+ {
+  "name": "redo",
+  "icon": "redo_toolbar.svg",
+  "tooltip": "Redo"
+ }
+]

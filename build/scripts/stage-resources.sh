@@ -60,12 +60,34 @@ stage_into() {
     echo "  ${n_ini} Vendor-Bundles, ${n_sh} Shader, $(du -sh "${dest}" | cut -f1) gesamt"
 }
 
+# Die aus PrusaSlicer uebernommene Oberflaechen-Definition - Seiten,
+# Werkzeuge, Beschriftungen, Icons. Erzeugt von extract-ui.py, liegt im
+# Android-Baum und wird von dort gespiegelt.
+#
+# Beide Apps lesen dieselbe Datei und werten sie mit derselben Regel aus
+# (TabsCatalog, E-13). Zwei Kopien der Datei sind unschoen, aber jede
+# Plattform legt Ressourcen nun einmal woanders ab; die Alternative waere
+# ein Auspacken zur Laufzeit gewesen.
+UI_SRC="${PSM_ROOT}/android/app/src/main/assets/psui"
+
+stage_ui_into() {
+    local dest="$1"
+    [ -d "${UI_SRC}" ] || { psm_warn "psui fehlt - erst extract-ui.py laufen lassen"; return; }
+    psm_log "Oberflaechen-Definition nach ${dest}"
+    rm -rf "${dest}"
+    mkdir -p "$(dirname "${dest}")"
+    cp -r "${UI_SRC}" "${dest}"
+    echo "  $(find "${dest}" -type f | wc -l) Dateien, $(du -sh "${dest}" | cut -f1)"
+}
+
 case "${1:-both}" in
     android) stage_into "${PSM_ROOT}/android/app/src/main/assets/psresources" ;;
-    ios)     stage_into "${PSM_ROOT}/ios/Resources/psresources" ;;
+    ios)     stage_into "${PSM_ROOT}/ios/Resources/psresources"
+             stage_ui_into "${PSM_ROOT}/ios/Resources/psui" ;;
     both)
         stage_into "${PSM_ROOT}/android/app/src/main/assets/psresources"
         stage_into "${PSM_ROOT}/ios/Resources/psresources"
+        stage_ui_into "${PSM_ROOT}/ios/Resources/psui"
         ;;
     *) echo "Nutzung: $0 [android|ios|both]" >&2; exit 2 ;;
 esac

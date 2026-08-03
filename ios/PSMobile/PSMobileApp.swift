@@ -4,6 +4,7 @@ import UniformTypeIdentifiers
 @main
 struct PSMobileApp: App {
     @StateObject private var model = SlicerModel()
+    @State private var zeigeEinstellungen = false
 
     var body: some Scene {
         WindowGroup {
@@ -20,8 +21,10 @@ struct PSMobileApp: App {
                         onConfirm: { model.completeSetup($0) },
                         onLanguageChange: { _ in },
                     )
+                } else if zeigeEinstellungen {
+                    SettingsView(model: model) { zeigeEinstellungen = false }
                 } else {
-                    SlicerView()
+                    SlicerView(onOpenSettings: { zeigeEinstellungen = true })
                         .accessibilityIdentifier("arbeitsbereich")
                 }
             }
@@ -34,6 +37,7 @@ struct PSMobileApp: App {
 }
 
 struct SlicerView: View {
+    var onOpenSettings: () -> Void = {}
     @EnvironmentObject private var model: SlicerModel
     @Environment(\.psScale) private var ps
     @State private var showImporter = false
@@ -110,6 +114,12 @@ struct SlicerView: View {
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button { showImporter = true } label: { Label("Modell", systemImage: "plus") }
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button(action: onOpenSettings) {
+                        Label("Einstellungen", systemImage: "slider.horizontal.3")
+                    }
+                    .accessibilityIdentifier("einstellungen.oeffnen")
                 }
             }
             .fileImporter(isPresented: $showImporter,

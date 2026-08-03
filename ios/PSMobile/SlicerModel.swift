@@ -50,7 +50,10 @@ final class SlicerModel: ObservableObject {
             .appendingPathComponent("psresources/shaders/ES").path ?? ""
     }
 
-    private var core: PsmCore?
+    /// Nicht privat: der Einstellungsrenderer liest Typ, Grenzen und
+    /// Auswahlwerte direkt beim Kern. Sie hier alle durchzureichen waere
+    /// eine zweite, immer veraltete Fassung des ABI.
+    private(set) var core: PsmCore?
     private var sliceTask: Task<Void, Never>?
     private var backgroundTask: UIBackgroundTaskIdentifier = .invalid
 
@@ -70,6 +73,7 @@ final class SlicerModel: ObservableObject {
             let c = try PsmCore(dataDir: dataDir.path, resourceDir: resDir.path)
             core = c
             coreVersion = PsmCore.coreVersion
+            PsUiCatalog.load(language: PsUiCatalog.language)
 
             // Massgeblich ist die gemerkte Wahl, nicht was der Kern an
             // Profilen kennt: nach loadBundledPresets waeren immer welche
@@ -130,6 +134,27 @@ final class SlicerModel: ObservableObject {
     }
 
     func select(_ id: Int32?) { selectedId = id }
+
+    var extruderCount: Int { core?.extruderCount ?? 1 }
+
+    /// Das gewaehlte Profil eines Bereichs - "print", "filament",
+    /// "printer".
+    func selectedPreset(for tab: String) -> String? {
+        guard let core else { return nil }
+        switch tab {
+        case "print":    return core.selectedPreset(.print)
+        case "filament": return core.selectedPreset(.filament)
+        case "printer":  return core.selectedPreset(.printer)
+        default:         return nil
+        }
+    }
+
+    func setConfig(_ key: String, _ value: String) {
+        try? core?.setConfig(key, value)
+        // Eine Aenderung an den Einstellungen macht ein vorhandenes
+        // Slice-Ergebnis ungueltig und kann das Bett veraendern.
+        sceneRevision += 1
+    }
 
     /// Uebernimmt die Druckerwahl aus der Ersteinrichtung.
     ///

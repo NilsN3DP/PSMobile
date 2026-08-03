@@ -1,28 +1,43 @@
-Viewport-Gesten belegt: Drehen und Spreizen wirken
+Der Einstellungsrenderer laeuft auf iOS - 20 Seiten aus einer Vorlage
 
-Sie waren geschrieben, aber unbelegt. Ein Screenshot zeigt ein
-Druckbett - nicht, ob sich die Kamera bewegen laesst. Genau dort liegt
-der Unterschied zwischen "uebersetzt" und "funktioniert", und genau den
-konnte ich bis jetzt nicht pruefen.
+Das Stueck mit dem groessten Hebel: ein Bildschirm traegt 247 Parameter.
+Es gibt bewusst keine handgebaute Seite je Thema. Struktur, Reihenfolge
+und Beschriftungen kommen aus PrusaSlicer (E-12), Typ, Grenzen und
+Auswahlwerte aus dem Kern. Was gezeichnet wird - Schalter, Zahl,
+Auswahl, mehrzeiliger G-code - entscheidet der Typ des Parameters, nicht
+eine Liste, die jemand pflegen muesste. Ein neuer Parameter in
+PrusaSlicer erscheint nach dem naechsten Extraktionslauf von selbst.
 
-Der Vergleich laeuft ueber Bilder: dieselbe Ansicht vor und nach der
-Geste. Bleibt das Bild gleich, hat die Geste nichts bewirkt. Das ist
-grob, aber es beantwortet die Frage, um die es geht - erreicht die
-Beruehrung den GL-Bereich und rechnet der Viewport damit.
+Die Auswertung von tabs.json liegt im gemeinsamen Modul: welcher
+Parameter in welche Gruppe gehoert, welche Felder mehrzeilig sind,
+welche Seite je Duese vervielfacht wird, welche Parameter nebeneinander
+in eine Zeile gehoeren. Beide Apps beantworten das jetzt gleich. Das
+Laden der Datei bleibt bei den Apps - Android holt sie aus den Assets,
+iOS aus dem Bundle, und dafuer staged stage-resources.sh psui jetzt auch
+nach iOS.
 
-Fuer Tests, die den Arbeitsbereich brauchen und nicht die
-Ersteinrichtung, gibt ein zweites Startargument einen gaengigen Drucker
-vor. Sonst muesste sich jeder dieser Tests erst durch die Auswahl
-klicken - und schleppte deren Fehler mit, ohne sie zu pruefen.
+Zwei Dinge, auf die es dabei ankommt und die sonst untergehen:
 
-Ein Stolperstein am Rande, der Zeit gekostet haette: eine neue Testdatei
-laeuft erst mit, wenn das Xcode-Projekt neu erzeugt wurde. Bis dahin
-meldet xcodebuild "TEST SUCCEEDED", ohne den Test ueberhaupt auszufuehren -
-eine Erfolgsmeldung fuer nichts.
+Ausgegraute Felder nennen ihren Grund. PrusaSlicer sperrt Einstellungen,
+die von anderen abhaengen, und liefert die Begruendung mit. Ein totes
+Feld ohne Erklaerung sieht aus wie ein Fehler.
 
-Geprueft: zehn Tests gruen, davon vier, die die App wirklich bedienen.
+Zusammengehoerende Parameter stehen nebeneinander, so wie der Desktop
+"Solid layers" mit oben und unten in einer Zeile zeigt. Wer das
+ignoriert, reisst auseinander, was ein Paar ist.
 
-Weiterhin offen: Auswahl, Ziehen und die Griffe. Dafuer muss ein Modell
-auf dem Bett liegen, und das laedt der Test noch nicht.
+Und noch einmal dieselbe Grenze wie bei PrinterGrouping: auch Kotlins
+Pair verliert seine Typen auf dem Weg nach Swift - dort kam ein
+untypisiertes NSArray an. Die Zeile hat jetzt eine eigene Klasse. Das
+ist die zweite Stelle, an der mich das erwischt hat; die Regel lautet
+offenbar schlicht: keine Generics ueber die Bruecke.
+
+Geprueft mit vier Bedienlaeufen: die Seiten erscheinen aus der Vorlage
+(zehn im Druckbereich), der Reiterwechsel wechselt sie, ein geaenderter
+Wert ueberlebt den Seitenwechsel - er kommt also aus dem Kern und nicht
+aus dem Bildschirmzustand -, und Zurueck fuehrt in den Arbeitsbereich.
+
+Am Bildschirm belegt: mit eingerichtetem MK4S zeichnet der Viewport
+dessen echtes Bett, nicht mehr das Ersatzbett.
 
 Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>

@@ -82,6 +82,10 @@ targets:
       - path: Resources/psresources
         type: folder
         buildPhase: resources
+      # Seitenstruktur, Beschriftungen und Icons aus PrusaSlicer.
+      - path: Resources/psui
+        type: folder
+        buildPhase: resources
     settings:
       base:
         INFOPLIST_FILE: PSMobile/Support/Info.plist
