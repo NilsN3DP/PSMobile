@@ -135,6 +135,52 @@ extension PsmCore {
         return Array(ids.prefix(Int(anzahl)))
     }
 
+    // MARK: - Bemalen
+
+    /// Welches Werkzeug malt. Die Werte kommen aus dem C-ABI.
+    enum PaintTool: Int32 {
+        case support = 0, seam = 1, fuzzy = 2, mmu = 3
+    }
+
+    /// Ein Pinselstrich um ein getroffenes Dreieck.
+    ///
+    /// Markiert werden nur kantenverbundene, aehnlich ausgerichtete
+    /// Facetten innerhalb des Radius - sonst faerbt ein Tippen auf eine
+    /// Kante die Rueckseite gleich mit.
+    ///
+    /// `state`: 0 loescht. Stuetzen und Naht kennen 1 (erzwingen) und
+    /// 2 (sperren), MMU die einsbasierte Extrudernummer.
+    func paint(_ id: Int32,
+               volume: Int,
+               facet: Int,
+               tool: PaintTool,
+               state: Int32,
+               radiusMm: Float) throws {
+        try check(psm_model_paint_brush(raw, id, size_t(volume), size_t(facet),
+                                        psm_paint_tool(rawValue: UInt32(tool.rawValue)),
+                                        state, radiusMm),
+                  "Bemalen")
+    }
+
+    func clearPaint(_ id: Int32, tool: PaintTool) throws {
+        try check(psm_model_clear_paint(raw, id,
+                                        psm_paint_tool(rawValue: UInt32(tool.rawValue))),
+                  "Bemalung loeschen")
+    }
+
+    /// Wie viele Facetten dieses Werkzeug markiert hat. Ohne diese Zahl
+    /// waere nicht zu sehen, ob ein Strich etwas bewirkt hat.
+    func paintCount(_ id: Int32, tool: PaintTool) -> Int {
+        Int(psm_model_paint_count(raw, id,
+                                  psm_paint_tool(rawValue: UInt32(tool.rawValue))))
+    }
+
+    /// Legt die angetippte Flaeche nach unten und das Objekt auf Z=0.
+    func layOnFacet(_ id: Int32, volume: Int, facet: Int) throws {
+        try check(psm_model_lay_on_facet(raw, id, size_t(volume), size_t(facet)),
+                  "Flaeche nach unten legen")
+    }
+
     // MARK: - Extruder je Objekt
 
     /// Der Extruder eines Objekts. 0 heisst: der Standard des Profils.

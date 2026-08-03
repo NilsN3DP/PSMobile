@@ -28,6 +28,12 @@ struct AdvancedWorkspaceView: View {
     @State private var seiteOffen = true
     @State private var ansichtZuruecksetzen = 0
 
+    /// Womit gemalt wird, und mit welchem Zustand. Nil heisst: gar
+    /// nicht - dann dreht ein Wischen wieder die Kamera.
+    @State private var malwerkzeug: PsmCore.PaintTool?
+    @State private var malzustand: Int32 = 1
+    @State private var malradius: Float = 5
+
     /// Auf schmalen Fenstern liegt der Inspektor ueber dem Bett statt
     /// daneben - nebeneinander bliebe fuer beides zu wenig.
     private var schmal: Bool { ps.windowSize.width < 760 }
@@ -54,6 +60,13 @@ struct AdvancedWorkspaceView: View {
                 SliceBlockerSheet(gruende: hinderungsgruende) { hinderungsgruende = [] }
             }
             PSMarke(name: "arbeitsbereich")
+        }
+        // Ohne ausgewaehltes Objekt gibt es nichts zu bemalen. Ein
+        // aktives Werkzeug ohne Ziel waere ein Zustand, aus dem man nur
+        // schwer wieder herausfindet: der Viewport reagiert dann auf
+        // keine Geste mehr wie erwartet.
+        .onChange(of: model.selectedId) { neu in
+            if neu == nil { malwerkzeug = nil }
         }
         .fileImporter(isPresented: $zeigeImporter,
                       allowedContentTypes: [.item],
@@ -135,9 +148,22 @@ struct AdvancedWorkspaceView: View {
                 selectedId: model.selectedId ?? -1,
                 selectedIds: model.selectedId.map { [$0] } ?? [],
                 invalidateKey: model.sceneRevision,
-                gizmo: gizmo,
+                gizmo: malwerkzeug == nil ? gizmo : .none,
                 resetViewKey: ansichtZuruecksetzen,
-                onSelect: { model.select($0 < 0 ? nil : $0) }
+                onSelect: { model.select($0 < 0 ? nil : $0) },
+                // Solange ein Malwerkzeug gewaehlt ist, geht jede
+                // Beruehrung an die Flaeche statt an die Kamera. Der
+                // Viewport unterscheidet das daran, ob hier jemand
+                // zuhoert.
+                onSurfaceTap: malwerkzeug == nil ? nil : { treffer in
+                    guard let werkzeug = malwerkzeug else { return }
+                    model.paint(treffer.objectId,
+                                volume: Int(treffer.volumeIndex),
+                                facet: Int(treffer.facetIndex),
+                                tool: werkzeug,
+                                state: malzustand,
+                                radiusMm: malradius)
+                }
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             // Eine eigene Kennung, damit Gesten im Test die Flaeche
@@ -190,6 +216,12 @@ struct AdvancedWorkspaceView: View {
                 objektliste
                 if let id = model.selectedId,
                    let objekt = model.objects.first(where: { $0.id == id }) {
+                    Divider().overlay(PrusaColors.divider)
+                    PaintView(model: model,
+                              objektId: id,
+                              werkzeug: $malwerkzeug,
+                              zustand: $malzustand,
+                              radius: $malradius)
                     Divider().overlay(PrusaColors.divider)
                     AdvancedObjectInspectorView(model: model, objekt: objekt, gizmo: $gizmo)
                 }
