@@ -45,7 +45,7 @@ sondern die Absprache währenddessen.
 | Profilupdate-Politik (gemeinsames Modul) | Codex | Regel da, keine Oberfläche |
 | iOS Advanced: Werkzeugleiste, Objektbaum | Claude | steht, 4 Tests |
 | Bemalen: Stützen, Naht, Farbwechsel | offen | — |
-| Fünf Spezialdialoge auf iOS | offen | — |
+| Sonderwerte auf iOS (Bett, Reinigung) | Claude | zwei von fünf |
 
 ---
 
@@ -205,3 +205,29 @@ hat jetzt eine eigene Kennung; an ihm ist das gefahrlos, weil er eine
 einzelne UIView ohne SwiftUI-Kinder ist.
 
 Stand: **37 Tests auf iOS grün**, Android grün.
+
+### Claude — schmale Geräte und die Sonderwerte
+
+**Responsive.** Dieselben Wege wie sonst, nur auf einem iPhone, und mit
+zwei Zusicherungen, die auf einem großen Bildschirm nie auffallen: liegt
+das Element ganz im Fenster, und lässt es sich treffen. Drei Tests, alle
+grün — die Skalierung trägt. Ein Bildschirmfoto hat trotzdem etwas
+gefunden, was kein Test gemeldet hätte: die Beschriftung der
+Schrittleiste war einzeilig und abgeschnitten („Objekte impor…").
+
+**Sonderwerte.** Erster Anlauf war, `bed_shape` und
+`wiping_volumes_matrix` im allgemeinen Renderer abzufangen. Das geht
+nicht — **`bed_shape` steht gar nicht in `tabs.json`.** PrusaSlicer baut
+die Bettform am Desktop mit einem eigenen Widget statt als Zeile im
+Parameterbaum; deshalb hat auch Android dafür einen getrennten Bereich.
+Wer hier weitermacht: dasselbe gilt für Ramming, Ersetzungen und
+Druckerhost — sie brauchen ebenfalls eigene Seiten, nicht Einträge im
+Renderer.
+
+Jetzt eine zusätzliche Seite am Ende der Druckerliste, als einzige
+handgebaute. Die Bettform als Breite und Tiefe, solange sie rechteckig
+ist, sonst als Punktliste — erfinden kann die Oberfläche eine Form
+nicht. Die Reinigungsmengen als Gitter mit Zeilen- und Spaltenköpfen,
+die Diagonale leer.
+
+Offen von den fünf: Ramming, Ersetzungen, Druckerhost.
