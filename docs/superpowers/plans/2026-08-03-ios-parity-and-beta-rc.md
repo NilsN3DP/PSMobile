@@ -322,4 +322,3 @@ Set feature-matrix statuses only when matching evidence exists. Keep any environ
 | Release / legal transparency | 6 |
 
 The plan deliberately does not turn ZIP, STEP or SLA into scope. It does not treat a simulator build as proof of physical printer or memory behavior.
-
