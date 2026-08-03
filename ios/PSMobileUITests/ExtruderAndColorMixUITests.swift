@@ -47,8 +47,10 @@ final class ExtruderAndColorMixUITests: XCTestCase {
         XCTAssertEqual(preview.value as? String, "#800080")
 
         app.buttons["colormix.save"].tap()
-        XCTAssertTrue(app.buttons["colormix.done"].waitForExistence(timeout: 5),
+        XCTAssertTrue(app.otherElements["colormix.recipe.9"].waitForExistence(timeout: 5),
                       "Das gespeicherte Rezept bleibt nicht sichtbar")
+        XCTAssertTrue(app.buttons["colormix.done"].waitForExistence(timeout: 5),
+                      "ColorMix lässt sich nicht eindeutig abschließen")
         app.buttons["colormix.done"].tap()
 
         XCTAssertTrue(app.staticTexts["extruder.material.0"].waitForExistence(timeout: 5))

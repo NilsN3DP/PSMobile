@@ -146,17 +146,17 @@ struct ColorMixView: View {
                             .accessibilityIdentifier("colormix.recipe.\(recipe.id)")
                         }
                     }
+
+                    Button(st("Done", "Fertig"), action: onClose)
+                        .buttonStyle(.bordered)
+                        .tint(PrusaColors.orange)
+                        .frame(maxWidth: .infinity, minHeight: ps.touch(46))
+                        .accessibilityIdentifier("colormix.done")
                 }
                 .padding(ps.pt(20))
             }
             .background(PrusaColors.background.ignoresSafeArea())
             .navigationTitle(st("ColorMix", "ColorMix"))
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button(st("Done", "Fertig"), action: onClose)
-                        .accessibilityIdentifier("colormix.done")
-                }
-            }
             .onAppear { recipes = model.colorMixRecipes() }
         }
     }
