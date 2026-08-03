@@ -6,7 +6,7 @@ import PSMShared
 struct PSMobileApp: App {
     @StateObject private var model = SlicerModel()
     @StateObject private var einstellungen = AppSettingsStore()
-    @StateObject private var drucker = PrinterCredentialStore()
+    @StateObject private var drucker = PrinterStore()
 
     /// Welcher Bildschirm gerade oben liegt.
     ///
@@ -34,6 +34,14 @@ struct PSMobileApp: App {
                 inhalt
             }
                 .environmentObject(model)
+                .overlay(alignment: .bottomTrailing) {
+                    if let result = model.credentialSelfTestResult {
+                        Text(result)
+                            .accessibilityIdentifier("credential.selftest")
+                            .padding(1)
+                            .opacity(0.01)
+                    }
+                }
                 .onAppear {
                     model.start()
                     route = startRoute()

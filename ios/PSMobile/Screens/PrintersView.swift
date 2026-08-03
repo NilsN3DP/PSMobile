@@ -7,7 +7,7 @@ import PSMShared
 /// Weg zum Drucker da - der fertige G-Code liess sich nur teilen.
 struct PrintersView: View {
 
-    @ObservedObject var store: PrinterCredentialStore
+    @ObservedObject var store: PrinterStore
     /// Wenn gesetzt, wird nach dem Auswaehlen gesendet statt nur
     /// geprueft. So dient derselbe Bildschirm zum Einrichten und zum
     /// Senden.
@@ -134,7 +134,7 @@ struct PrintersView: View {
     }
 
     private func handle(_ drucker: PrusaLinkClient.Printer) {
-        let secret = store.secret(for: drucker.id)
+        let secret = store.secret(for: drucker)
         guard drucker.isComplete(secret: secret) else {
             meldung = drucker.transportError
                 ?? st("Credentials incomplete", "Anmeldedaten unvollständig")
@@ -191,7 +191,7 @@ struct PrintersView: View {
 /// Protokoll auf.
 struct PrinterEditView: View {
 
-    @ObservedObject var store: PrinterCredentialStore
+    @ObservedObject var store: PrinterStore
     @State var printer: PrusaLinkClient.Printer
     var onClose: () -> Void
 
@@ -251,7 +251,7 @@ struct PrinterEditView: View {
 
                 HStack(spacing: ps.pt(12)) {
                     Button(st("Delete", "Löschen")) {
-                        store.remove(printer.id)
+                        store.remove(printer)
                         onClose()
                     }
                     .foregroundStyle(PrusaColors.danger)
@@ -263,7 +263,7 @@ struct PrinterEditView: View {
                         store.upsert(printer)
                         store.setSecret(
                             PrusaLinkClient.Secret(apiKey: apiKey, password: password),
-                            for: printer.id)
+                            for: printer)
                         onClose()
                     } label: {
                         Text(st("Save", "Sichern"))
@@ -283,7 +283,7 @@ struct PrinterEditView: View {
         }
         .background(PrusaColors.background)
         .onAppear {
-            let vorhanden = store.secret(for: printer.id)
+            let vorhanden = store.secret(for: printer)
             apiKey = vorhanden.apiKey
             password = vorhanden.password
         }

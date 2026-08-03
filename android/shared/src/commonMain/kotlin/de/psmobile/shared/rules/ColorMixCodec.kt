@@ -29,6 +29,34 @@ data class ColorMixRecipe(
 object ColorMixCodec {
     private val json = Json { ignoreUnknownKeys = true }
 
+    /**
+     * Der sichtbare Farbeindruck eines Rezeptes. Das ist bewusst eine
+     * Vorschau: Beim Druck wechseln die beteiligten Positionen, sie werden
+     * nicht in einer Duese physisch zusammengeschmolzen.
+     */
+    fun previewColor(
+        physicalColors: List<String>,
+        components: List<ColorMixComponent>,
+    ): String? = runCatching<String> {
+        val normalized = normalize(components)
+        require(normalized.all { it.head in physicalColors.indices }) {
+            "ColorMix-Position existiert nicht"
+        }
+        val channels = normalized.map { component ->
+            parseRgb(physicalColors[component.head]) to component.ratio
+        }
+        val red = blend(channels) { it.first }
+        val green = blend(channels) { it.second }
+        val blue = blend(channels) { it.third }
+        "#${red.hexByte()}${green.hexByte()}${blue.hexByte()}"
+    }.getOrNull()
+
+    private fun Int.hexByte(): String {
+        val digits = "0123456789ABCDEF"
+        val byte = coerceIn(0, 255)
+        return "${digits[byte / 16]}${digits[byte % 16]}"
+    }
+
     fun decode(source: String): List<ColorMixRecipe> = runCatching {
         val root = json.parseToJsonElement(source).jsonObject
         val physicalCount = root["physical_extruders"]?.jsonArray?.size ?: Int.MAX_VALUE
@@ -103,4 +131,19 @@ object ColorMixCodec {
         require(total > 0.0) { "ColorMix-Anteile müssen positiv sein" }
         return merged.map { it.copy(ratio = it.ratio / total) }
     }
+
+    private fun parseRgb(raw: String): Triple<Int, Int, Int> {
+        require(raw.length == 7 && raw.firstOrNull() == '#') { "Ungültige RGB-Farbe" }
+        val value = raw.drop(1).toLongOrNull(16) ?: error("Ungültige RGB-Farbe")
+        return Triple(
+            ((value shr 16) and 0xFF).toInt(),
+            ((value shr 8) and 0xFF).toInt(),
+            (value and 0xFF).toInt(),
+        )
+    }
+
+    private fun blend(
+        channels: List<Pair<Triple<Int, Int, Int>, Double>>,
+        component: (Triple<Int, Int, Int>) -> Int,
+    ): Int = (channels.sumOf { (rgb, ratio) -> component(rgb) * ratio } + 0.5).toInt()
 }
