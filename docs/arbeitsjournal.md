@@ -287,9 +287,23 @@ Projekte als 3MF, Zurück/Wiederholen, Slicen mit Zusammenfassung,
 G-Code-Ausgabe, G-Code-Vorschau, Bemalen, PrusaLink, ColorMix und
 INDX-Positionen, Bettform und Reinigungsmengen.
 
-**Offen:** variable Schichthöhe, drei der fünf Sonderdialoge (Ramming,
-Ersetzungen, Druckerhost), Miniaturbilder in der Objektliste,
-Rahmenauswahl, MMU-Statistik, Oberfläche für die Profilupdates.
+**Offen:** drei der fünf Sonderdialoge (Ramming, Ersetzungen,
+Druckerhost), Miniaturbilder in der Objektliste, Rahmenauswahl,
+MMU-Statistik, Oberfläche für die Profilupdates.
+
+Nachtrag: die **variablen Schichthöhen** stehen seit dem späten Abend.
+Stützstellen als Zahlenpaare statt einer Kurve — mit dem Finger ist eine
+Kurve nicht zu treffen. Daneben ein Balken über die Modellhöhe, dünn
+dunkel und dick hell, wie in PrusaSlicers eigener Darstellung. Die
+Prüfung (mindestens zwei Punkte, streng steigende Z-Werte) liegt im
+gemeinsamen Modul: der Kern lehnt alles andere ab, und ohne
+vorgeschaltete Prüfung tippt jemand auf Übernehmen und es passiert
+nichts.
+
+**Für Android:** dieselbe Rechnung liegt dort noch in
+`ui/LayerProfileEditorState.kt` und `ui/GeometryTools.kt`. Sie kann auf
+`shared/rules/LayerProfile.kt` wechseln — die Regeln sind identisch,
+nur ohne `Pair`, das die Brücke nach Swift nicht überlebt.
 
 **Und das Wichtigste:** es lief noch nie auf echter Hardware. Alles
 Geprüfte ist Simulator. Die Feature-Matrix sagt deshalb
