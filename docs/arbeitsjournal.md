@@ -44,7 +44,7 @@ sondern die Absprache währenddessen.
 | PrusaLink: Digest, Regeln, Client, Schlüsselbund | beide, zusammengeführt | steht, ohne echten Drucker geprüft |
 | Profilupdate-Politik (gemeinsames Modul) | Codex | Regel da, keine Oberfläche |
 | iOS Advanced: Werkzeugleiste, Objektbaum | Claude | steht, 4 Tests |
-| Bemalen: Stützen, Naht, Farbwechsel | offen | — |
+| Bemalen: Stützen, Naht, MMU | Claude | steht auf iOS, 2 Tests |
 | Sonderwerte auf iOS (Bett, Reinigung) | Claude | zwei von fünf |
 
 ---
@@ -231,3 +231,29 @@ nicht. Die Reinigungsmengen als Gitter mit Zeilen- und Spaltenköpfen,
 die Diagonale leer.
 
 Offen von den fünf: Ramming, Ersetzungen, Druckerhost.
+
+### Claude — Bemalen, und die Lücke auf Android
+
+**Bemalen auf iOS.** Stützen erzwingen oder sperren, Naht setzen,
+MMU-Farben. Der Kern konnte das seit langem — Facette treffen, Pinsel
+mit Radius, zählen, löschen —, aber der Viewport lieferte Treffer, und
+niemand hörte zu.
+
+Am Desktop hängt das an einer Gizmo-Leiste mit Mausrad für den Radius.
+Auf einem Tablet gibt es kein Mausrad, also ein Regler. Zwei
+Entscheidungen, die man sonst später nicht mehr sieht: „Aus" ist ein
+eigener Zustand (solange gemalt wird, dreht ein Wischen die Kamera
+nicht mehr — das muss abstellbar sein), und die Zahl der markierten
+Facetten steht daneben, weil ein paar gefärbte Dreiecke auf dunkler
+Fläche leicht zu übersehen sind.
+
+**Android hat aufgeholt, wo es hinterherhing.** Der Simple Mode startete
+den Schnitt bis heute stumm. Jetzt dasselbe Blatt wie auf iOS, aus
+denselben Regeln — `SliceSummary` im gemeinsamen Modul. Und statt eines
+ausgegrauten Knopfes nennt auch Android, was fehlt.
+
+**Beobachtung zum Mac, nicht zum Code:** in einem vollen Testlauf sind
+zweimal Testrunner „unexpectedly exited". Keine Absturzberichte, aber
+nur ~290 MB freier Speicher bei zwei laufenden Simulatoren. Der zweite
+Simulator ist jetzt aus. Wer das wieder sieht: erst `vm_stat` ansehen,
+bevor der Fehler im Code gesucht wird.
