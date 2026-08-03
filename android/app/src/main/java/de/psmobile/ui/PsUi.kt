@@ -3,6 +3,7 @@ package de.psmobile.ui
 import android.content.Context
 import android.util.Log
 import org.json.JSONObject
+import de.psmobile.shared.rules.Lang
 
 /** Copy owned by PSMobile rather than PrusaSlicer's PO catalog. */
 internal fun applicationText(language: String, english: String, german: String): String =
@@ -78,6 +79,11 @@ object PsUi {
 
     fun setLanguage(context: Context, lang: String) {
         language = lang
+        // Die Regeln im gemeinsamen Modul lesen die Sprache dort (E-13).
+        // Fehlt diese Zeile, bleibt Simple Mode englisch, waehrend der
+        // Rest der App deutsch spricht - und niemand sucht den Fehler
+        // hier.
+        Lang.current = lang
         strings = if (lang == "en") emptyMap() else runCatching {
             val o = JSONObject(read(context, "lang_$lang.json"))
             buildMap(o.length()) {

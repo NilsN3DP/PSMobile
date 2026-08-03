@@ -29,6 +29,7 @@ kotlinx-coroutines-android  = { group = "org.jetbrains.kotlinx",      name = "ko
 # Fuer die Original-SVG-Icons aus PrusaSlicer - Android rendert SVG nicht selbst.
 coil-compose                = { group = "io.coil-kt",                 name = "coil-compose",             version.ref = "coil" }
 coil-svg                    = { group = "io.coil-kt",                 name = "coil-svg",                 version.ref = "coil" }
+kotlin-test                 = { group = "org.jetbrains.kotlin",     name = "kotlin-test",              version.ref = "kotlin" }
 junit                       = { group = "junit",                      name = "junit",                    version.ref = "junit" }
 kotlinx-serialization-json = { group = "org.jetbrains.kotlinx",      name = "kotlinx-serialization-json", version.ref = "serializationJson" }
 kotlinx-coroutines-test    = { group = "org.jetbrains.kotlinx",      name = "kotlinx-coroutines-test",    version.ref = "coroutinesTest" }
@@ -37,3 +38,6 @@ kotlinx-coroutines-test    = { group = "org.jetbrains.kotlinx",      name = "kot
 android-application = { id = "com.android.application", version.ref = "agp" }
 kotlin-android      = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
 kotlin-compose      = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
+android-library     = { id = "com.android.library", version.ref = "agp" }
+kotlin-multiplatform= { id = "org.jetbrains.kotlin.multiplatform", version.ref = "kotlin" }
+kotlin-serialization= { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }

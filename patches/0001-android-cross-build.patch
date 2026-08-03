@@ -85,7 +85,7 @@ index 57b60ea..d3c18fb 100644
  # Find the Cereal serialization library
  find_package(cereal REQUIRED)
 diff --git a/deps/+GMP/GMP.cmake b/deps/+GMP/GMP.cmake
-index bea8c89..4480366 100644
+index bea8c89..2d2e8b5 100644
 --- a/deps/+GMP/GMP.cmake
 +++ b/deps/+GMP/GMP.cmake
 @@ -28,6 +28,11 @@ else ()
@@ -100,7 +100,43 @@ index bea8c89..4480366 100644
      set(_cross_compile_arg "")
      if (APPLE)
          if (CMAKE_OSX_ARCHITECTURES)
-@@ -65,7 +70,7 @@ else ()
+@@ -42,8 +47,33 @@ else ()
+             set(_cross_compile_arg --host=${_gmp_build_tgt}-apple-darwin21)
+         endif ()
+ 
+-        set(_gmp_ccflags "${_gmp_ccflags} -mmacosx-version-min=${DEP_OSX_TARGET}")
+-        set(_gmp_build_tgt "--build=${_gmp_build_tgt}-apple-darwin")
++        # PSMobile: Auf iOS ist -mmacosx-version-min schlicht falsch. Das
++        # Ergebnis ist eine macOS-Bibliothek, und erst der Linker der App
++        # merkt es: "built for macOS" mitten im iOS-Bau. Autotools erfaehrt
++        # das SDK ausserdem nur ueber die Flags - CMake reicht -isysroot
++        # hier nicht von selbst weiter.
++        if (CMAKE_SYSTEM_NAME STREQUAL "iOS")
++            if (CMAKE_OSX_SYSROOT MATCHES "[Ss]imulator")
++                set(_ios_min "-mios-simulator-version-min=${CMAKE_OSX_DEPLOYMENT_TARGET}")
++            else ()
++                set(_ios_min "-miphoneos-version-min=${CMAKE_OSX_DEPLOYMENT_TARGET}")
++            endif ()
++            set(_gmp_ccflags  "${_gmp_ccflags} ${_ios_min} -isysroot ${CMAKE_OSX_SYSROOT}")
++            set(_gmp_cxxflags "${_gmp_cxxflags} -arch ${CMAKE_OSX_ARCHITECTURES} ${_ios_min} -isysroot ${CMAKE_OSX_SYSROOT}")
++        else ()
++            set(_gmp_ccflags "${_gmp_ccflags} -mmacosx-version-min=${DEP_OSX_TARGET}")
++        endif ()
++        if (CMAKE_SYSTEM_NAME STREQUAL "iOS")
++            # PSMobile: configure vergleicht die beiden Tripel als reine
++            # Zeichenketten. Sind sie gleich, haelt es den Bau fuer nativ
++            # und fuehrt seine Testprogramme aus - eine Simulator-Binaerdatei
++            # laeuft auf dem Mac aber nicht, und die Meldung lautet dann nur
++            # "program does not run". Deshalb hier die Maschine benennen,
++            # auf der tatsaechlich gebaut wird, statt noch einmal das Ziel.
++            set(_gmp_build_tgt "--build=${CMAKE_HOST_SYSTEM_PROCESSOR}-apple-darwin${CMAKE_HOST_SYSTEM_VERSION}")
++        else ()
++            set(_gmp_build_tgt "--build=${_gmp_build_tgt}-apple-darwin")
++        endif ()
+     elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+         if (${CMAKE_SYSTEM_PROCESSOR} MATCHES "arm")
+             set(_gmp_ccflags "${_gmp_ccflags} -march=armv7-a") # Works on RPi-4
+@@ -65,7 +95,7 @@ else ()
          URL_HASH SHA256=eae9326beb4158c386e39a356818031bd28f3124cf915f8c5b1dc4c7a36b4d7c
          DOWNLOAD_DIR ${${PROJECT_NAME}_DEP_DOWNLOAD_DIR}/GMP
          BUILD_IN_SOURCE ON 

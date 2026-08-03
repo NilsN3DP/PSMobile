@@ -31,6 +31,7 @@ import androidx.compose.ui.unit.sp
 import de.psmobile.core.PsmCore
 import de.psmobile.slicing.SlicerService
 import de.psmobile.ui.theme.PrusaColors
+import de.psmobile.shared.rules.SimpleModeState
 
 private fun t(english: String, german: String) = SimpleModeState.text(english, german)
 

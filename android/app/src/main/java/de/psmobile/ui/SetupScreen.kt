@@ -50,6 +50,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import de.psmobile.core.PsmCore
 import de.psmobile.ui.theme.PrusaColors
+import de.psmobile.shared.rules.PrinterGrouping
 
 /**
  * Ersteinrichtung - Gegenstueck zum Konfigurationsassistenten des Desktops.
@@ -254,7 +255,7 @@ fun SetupScreen(
                 // Nach Familien geordnet wie am Desktop, Altgeraete am
                 // Ende. Waehrend einer Suche entfaellt die Gliederung: wer
                 // tippt, will Treffer sehen und keine Zwischenueberschriften.
-                val groups = if (query.isBlank()) PrinterGrouping.grouped(shown)
+                val groups = if (query.isBlank()) PrinterGrouping.grouped(shown) { it.family }
                              else listOf(PrinterGrouping.Group("", shown, false))
 
                 groups.forEach { group ->

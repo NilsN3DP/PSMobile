@@ -44,8 +44,25 @@ endif ()
 
 set(TOOLCHAIN_PREFIX "${TOOLCHAIN_PREFIX}" CACHE STRING "autotools host triple" FORCE)
 
+# Beim Cross-Build leitet CMake CMAKE_SYSTEM_PROCESSOR nicht ab, es bleibt
+# leer. Die meisten Projekte stoert das nicht, libjpeg-turbo schon: es
+# ruft string(TOLOWER ${CMAKE_SYSTEM_PROCESSOR} ...) unquotiert auf, das
+# leere Argument verschwindet, und CMake meldet "string no output variable
+# specified" - eine Meldung, die auf alles Moegliche hindeutet, nur nicht
+# auf die eigentliche Ursache.
+set(CMAKE_SYSTEM_PROCESSOR "${CMAKE_OSX_ARCHITECTURES}")
+
 # Bitcode ist seit Xcode 14 abgeschafft.
 set(CMAKE_XCODE_ATTRIBUTE_ENABLE_BITCODE "NO" CACHE STRING "" FORCE)
+
+# Fuer CMAKE_SYSTEM_NAME iOS steht MACOSX_BUNDLE von sich aus auf AN. Fuer
+# eine App ist das richtig, fuer die Hilfsprogramme in den Dependencies
+# nicht: heatshrink baut ein Kommandozeilenwerkzeug und installiert es mit
+# install(TARGETS), und CMake bricht dann mit "given no BUNDLE DESTINATION
+# for MACOSX_BUNDLE executable" ab. Diese Programme laufen ohnehin nie auf
+# einem Geraet - sie sind reine Bauhilfen. Das eigentliche App-Bundle
+# entsteht in Xcode, nicht hier.
+set(CMAKE_MACOSX_BUNDLE OFF CACHE BOOL "" FORCE)
 
 # Wie bei Android: die selbst gebauten Dependencies liegen ausserhalb des
 # SDK-Sysroots und muessen als zusaetzliche Suchwurzel bekannt sein.

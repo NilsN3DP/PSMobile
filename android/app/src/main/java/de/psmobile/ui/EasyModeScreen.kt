@@ -48,8 +48,10 @@ import androidx.core.view.WindowCompat
 import de.psmobile.core.PsmCore
 import de.psmobile.slicing.SlicerService
 import de.psmobile.ui.theme.PrusaColors
+import de.psmobile.shared.rules.EasyModeState
+import de.psmobile.shared.rules.EasyPanel
+import de.psmobile.shared.rules.EasyReadiness
 
-enum class EasyPanel { HOME, PROJECTS, PRINTER, FILAMENT, SUPPORTS, ADHESION, PRINT_SETTINGS }
 
 /** Curated, touch-first entry point backed by the same SlicerService session as Advanced. */
 @Composable

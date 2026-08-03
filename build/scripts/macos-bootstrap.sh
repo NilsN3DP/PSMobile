@@ -23,6 +23,14 @@
 
 set -euo pipefail
 
+# Ueber SSH kommt keine Locale mit: LANG ist leer, LC_CTYPE steht auf C.
+# CMake packt Boost dann nicht aus - im Archiv stecken Dateinamen mit
+# Sonderzeichen, und ohne UTF-8 bricht es mit "Pathname cannot be
+# converted from UTF-8 to current locale" ab. Am Bildschirm faellt das
+# nie auf, weil Terminal.app eine Locale setzt.
+export LANG="${LANG:-en_US.UTF-8}"
+export LC_ALL="${LC_ALL:-en_US.UTF-8}"
+
 PSM_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 PLATFORM="${PSM_IOS_PLATFORM:-SIMULATORARM64}"
 PS_REPO="https://github.com/prusa3d/PrusaSlicer.git"
@@ -35,6 +43,33 @@ PSM_TOOLS="${PSM_ROOT}/build-out/mac-tools"
 
 # Was ein frueherer Lauf schon eingerichtet hat, gilt auch jetzt.
 [ -f "${PSM_TOOLS}/env.sh" ] && source "${PSM_TOOLS}/env.sh"
+
+# env.sh sammelt, was die spaeteren Schritte brauchen: die ohne
+# Adminrechte geholten Werkzeuge und - falls vorhanden - das eigene
+# Homebrew. Beide Wege werden unabhaengig voneinander eingerichtet,
+# deshalb wird die Datei jedes Mal aus dem tatsaechlichen Zustand neu
+# geschrieben. Wer sie nur ueberschreibt, verliert den jeweils anderen
+# Weg: erst hat der homebrew-Schritt seine Zeile hineingeschrieben, dann
+# hat der tools-Schritt sie geloescht, und autoreconf war weg.
+write_env() {
+    mkdir -p "${PSM_TOOLS}"
+    {
+        printf 'export LANG="${LANG:-en_US.UTF-8}"\n'
+        printf 'export LC_ALL="${LC_ALL:-en_US.UTF-8}"\n'
+        if [ -x "${HOME}/homebrew/bin/brew" ]; then
+            printf 'eval "$(%s/bin/brew shellenv)"\n' "${HOME}/homebrew"
+        fi
+        # Gradle findet Java nur ueber JAVA_HOME - der Pfad allein
+        # genuegt ihm nicht.
+        local jdk
+        jdk="$(ls -d "${PSM_TOOLS}"/jdk-*/Contents/Home 2>/dev/null | head -1)"
+        if [ -n "${jdk}" ]; then
+            printf 'export JAVA_HOME="%s"\n' "${jdk}"
+            printf 'export PATH="%s/bin:$PATH"\n' "${jdk}"
+        fi
+        printf 'export PATH="%s/bin:$PATH"\n' "${PSM_TOOLS}"
+    } > "${PSM_TOOLS}/env.sh"
+}
 
 log()  { printf '\n\033[1;36m==> %s\033[0m\n' "$*"; }
 warn() { printf '\033[1;33m!!  %s\033[0m\n' "$*"; }
@@ -80,6 +115,14 @@ step_tools() {
     mkdir -p "${PSM_TOOLS}/bin"
     export PATH="${PSM_TOOLS}/bin:${PATH}"
 
+    # Das JDK kommt nie ueber Homebrew - es waere aus dem Quelltext zu
+    # bauen. Deshalb steht es nicht in der Liste unten, sondern wird
+    # geholt, wenn es fehlt.
+    if ! command -v java >/dev/null 2>&1 \
+       && [ -z "$(ls -d "${PSM_TOOLS}"/jdk-*/Contents/Home 2>/dev/null)" ]; then
+        fetch_jdk
+    fi
+
     local missing=()
     local tool
     for tool in cmake ninja xcodegen automake autoconf libtool pkg-config; do
@@ -102,6 +145,13 @@ step_tools() {
             esac
         done
     fi
+
+    # Erst festhalten, was da ist, dann bemaengeln, was fehlt. Andersherum
+    # war es eine Falle: der Abbruch kam vor dem Schreiben, also blieb ein
+    # frueher eingerichtetes Homebrew unvermerkt, und der naechste Lauf
+    # fand die autotools wieder nicht.
+    write_env
+    source "${PSM_TOOLS}/env.sh"
 
     # Nach den Notbeschaffungen erneut zaehlen. Was jetzt noch fehlt,
     # laesst sich nicht umgehen - GMP und MPFR bauen per autotools, ohne
@@ -138,8 +188,6 @@ EOF
         exit 1
     fi
 
-    # Damit die spaeteren Schritte dieselben Werkzeuge finden.
-    printf 'export PATH="%s/bin:$PATH"\n' "${PSM_TOOLS}" > "${PSM_TOOLS}/env.sh"
     printf '\n    Werkzeugpfad gemerkt in %s/env.sh\n' "${PSM_TOOLS}"
 }
 
@@ -169,6 +217,21 @@ fetch_ninja() {
     chmod +x "${PSM_TOOLS}/bin/ninja"
 }
 
+# Ein JDK fuer das gemeinsame Regelmodul (E-13).
+#
+# Kotlin/Native baut die iOS-Fassung nur auf einem Mac, und dafuer
+# braucht Gradle eine Java-Laufzeit. macOS bringt keine mit, und ueber
+# das Benutzer-Homebrew waere sie aus dem Quelltext zu bauen - schon
+# gettext scheiterte daran, bei OpenJDK ist es aussichtslos. Ein fertiges
+# Archiv von Adoptium tut es genauso und braucht keine Adminrechte.
+fetch_jdk() {
+    log "JDK ohne Adminrechte holen"
+    curl -fsSL -o "${PSM_TOOLS}/jdk.tar.gz" \
+        "https://api.adoptium.net/v3/binary/latest/21/ga/mac/aarch64/jdk/hotspot/normal/eclipse"
+    tar xzf "${PSM_TOOLS}/jdk.tar.gz" -C "${PSM_TOOLS}"
+    rm -f "${PSM_TOOLS}/jdk.tar.gz"
+}
+
 # Homebrew ins Benutzerverzeichnis, wenn es keine Adminrechte gibt.
 #
 # Offiziell unterstuetzt, aber mit einem Preis: fuer ein Praefix
@@ -187,13 +250,15 @@ step_homebrew() {
 
     eval "$("${prefix}/bin/brew" shellenv)"
     warn "Baut aus dem Quelltext - das dauert. Nicht abbrechen."
-    brew install autoconf automake libtool pkg-config
+    # texinfo sieht nach Beiwerk aus, ist aber Pflicht: MPFR wird vor dem
+    # Bauen durch autoreconf geschickt, und danach will make auch die
+    # Dokumentation erzeugen. Ohne makeinfo bricht es mit Error 127 ab -
+    # einer Meldung, die nicht verraet, welches Programm fehlt.
+    brew install autoconf automake libtool pkg-config texinfo
 
     # Die spaeteren Schritte laufen in eigenen Shells und finden brew
     # sonst nicht wieder.
-    mkdir -p "${PSM_TOOLS}"
-    printf 'eval "$(%s/bin/brew shellenv)"\nexport PATH="%s/bin:$PATH"\n' \
-        "${prefix}" "${PSM_TOOLS}" > "${PSM_TOOLS}/env.sh"
+    write_env
 
     log "Fertig"
     cat <<EOF

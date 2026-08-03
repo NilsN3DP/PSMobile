@@ -1,4 +1,5 @@
 package de.psmobile.ui
+import de.psmobile.shared.rules.SimpleModeState
 
 /**
  * Zustand des Modelle-Blatts im Simple Mode, nach dem Vorbild von

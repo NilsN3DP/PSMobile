@@ -19,10 +19,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import de.psmobile.ui.AppSettings
+import de.psmobile.shared.rules.AppSettings
 import de.psmobile.ui.AppSettingsScreen
 import de.psmobile.ui.PsUi
-import de.psmobile.ui.RemovableStorage
+import de.psmobile.shared.rules.RemovableStorage
 import de.psmobile.ui.SetupScreen
 import androidx.lifecycle.lifecycleScope
 import de.psmobile.slicing.SlicerService

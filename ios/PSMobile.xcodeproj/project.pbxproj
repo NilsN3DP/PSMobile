@@ -1,0 +1,575 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 54;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		00EEBAB39B64A226F3A7D88C /* PsmCoreSetup.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5D530B95C8D6BA27AB21966 /* PsmCoreSetup.swift */; };
+		06D4685D96546EE9CB17DE3D /* ModelSheetUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C61523A559E12F7477C6E6D /* ModelSheetUITests.swift */; };
+		157B2880F76366AA396ECD03 /* ObjectBarUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE7EC5EBAB8473EC2C017E6D /* ObjectBarUITests.swift */; };
+		16230FBE336B5610BAE50B81 /* SimpleObjectBarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B8D6C7F10077CC37ED37C3EF /* SimpleObjectBarView.swift */; };
+		18A9DBCC5C15BCBCB9EAC489 /* SettingsUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 309E005E525C36955534FAC8 /* SettingsUITests.swift */; };
+		21A0A2248B3263A344A0E766 /* SlicerModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6586EA406CDCA913DDE900D2 /* SlicerModel.swift */; };
+		22DCBFCCFFD845683240E3E5 /* AppSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B065877366DFBB7FE6BC7C0D /* AppSettingsView.swift */; };
+		3778B44D2502115C4AFD957E /* Metal.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A88A85B5C4CC36BB3AA7D6C0 /* Metal.framework */; };
+		45E95C1A17FADC2A6D0CA342 /* PSScale.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9F7277D3E4B23BF953117D3B /* PSScale.swift */; };
+		517016C75B76CBFF90801548 /* WorkflowStartView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B3A7AA9CFDB28BF9B02D1606 /* WorkflowStartView.swift */; };
+		607A1296DE1B222CB852CEA3 /* PsmCore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A911341AA5D710A39304CB82 /* PsmCore.swift */; };
+		6C7BDB12BBE36E49C9921931 /* ViewportView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 94729A1DF310BF9863B29622 /* ViewportView.swift */; };
+		6F1ADAA3CBBC59C62455A997 /* ProjectUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 14A8F3384F23A68DD9B62A29 /* ProjectUITests.swift */; };
+		711DC33F770EE1014616296E /* PsUiCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = DF57A028F1F82170DAEBA15D /* PsUiCatalog.swift */; };
+		7AA84614DF4D5C44437B579A /* SimpleModelSheetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D95872870DAED0997242940D /* SimpleModelSheetView.swift */; };
+		7E2F2F6966FD3061FD7A52A2 /* SettingField.swift in Sources */ = {isa = PBXBuildFile; fileRef = 021610281A51E2BC03A7CE3B /* SettingField.swift */; };
+		801CCA1DE571B0C71A7FFC70 /* PSScaleTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B1805F11B35ED638A7CF497 /* PSScaleTests.swift */; };
+		8055DE005FF9A0C126C20D22 /* PsmCoreObjects.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5F66DAB030E19F434772C115 /* PsmCoreObjects.swift */; };
+		8CED8277F9519270FE2B8050 /* SliceUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7C33ABB115E57793771F10EF /* SliceUITests.swift */; };
+		990CB6641B7CEC77CEB79144 /* PSMobileApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8BB6B31169E0675122265061 /* PSMobileApp.swift */; };
+		9AAF15143CC61524A7906022 /* SimpleModeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 35A60AFC279B58B4F2DD13DC /* SimpleModeView.swift */; };
+		B6F6BC0F527913F37729C76E /* psui in Resources */ = {isa = PBXBuildFile; fileRef = 12DB3C2FDBFC6B613BFC31EA /* psui */; };
+		C359E631495AAACCA21BE4A3 /* PSScale.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9F7277D3E4B23BF953117D3B /* PSScale.swift */; };
+		CA927EAA7ED3697DA37D6DFE /* SetupView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B97355F9406CD0A70140484 /* SetupView.swift */; };
+		D04DBDDA872714DDF6C613AA /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 34E8620B25690829DD1E5A97 /* SettingsView.swift */; };
+		DA8D63A829FBD18AB3122B36 /* SliceSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3D44578AE134E1F2D1DF9395 /* SliceSheet.swift */; };
+		DBC095C44C595103DE7E7734 /* PrusaColors.swift in Sources */ = {isa = PBXBuildFile; fileRef = A9E5CF16511CFE40F465AE6B /* PrusaColors.swift */; };
+		E26F52BA52670F8397399AB9 /* OpenGLES.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 9AAC1D94CE05CAA8CCC02C31 /* OpenGLES.framework */; };
+		E4253E199CC718B621407225 /* SimpleModeUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC019FF5B6EEE03716762B82 /* SimpleModeUITests.swift */; };
+		E62FC1E035CC84927E5D2697 /* PsmCoreProject.swift in Sources */ = {isa = PBXBuildFile; fileRef = DAA4E915A20F5747B6B4C411 /* PsmCoreProject.swift */; };
+		EA957F3D0A35F4EB69EEF299 /* psresources in Resources */ = {isa = PBXBuildFile; fileRef = D72F3C6A968EC350C0986B17 /* psresources */; };
+		F322AC798A1D45D6EEA3E7E8 /* SetupUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 88FC9C9138FC3E452C8F26DC /* SetupUITests.swift */; };
+		FA6129162AA56F1EB61D81E6 /* PreviewUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4F5BB4C9A11256D58F549471 /* PreviewUITests.swift */; };
+		FC5A6013F8A704DA788C2D56 /* ViewportUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB1853001750F332BA65D153 /* ViewportUITests.swift */; };
+		FC8E9020F7EEE0BC79CD778E /* PsmViewport.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0A2E2324F3925B44A187C20 /* PsmViewport.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		CC63F2AA5762715C9DCB5B3C /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 48068508EE9E9FAE1685E926 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = AA5E63A1140CA3588A001320;
+			remoteInfo = PSMobile;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		021610281A51E2BC03A7CE3B /* SettingField.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingField.swift; sourceTree = "<group>"; };
+		12DB3C2FDBFC6B613BFC31EA /* psui */ = {isa = PBXFileReference; lastKnownFileType = folder; name = psui; path = Resources/psui; sourceTree = SOURCE_ROOT; };
+		14A8F3384F23A68DD9B62A29 /* ProjectUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectUITests.swift; sourceTree = "<group>"; };
+		19F02686215D5D536EB819E1 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		1C61523A559E12F7477C6E6D /* ModelSheetUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelSheetUITests.swift; sourceTree = "<group>"; };
+		309E005E525C36955534FAC8 /* SettingsUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsUITests.swift; sourceTree = "<group>"; };
+		34E8620B25690829DD1E5A97 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		35A60AFC279B58B4F2DD13DC /* SimpleModeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SimpleModeView.swift; sourceTree = "<group>"; };
+		399D07FEFC2C5D853492247B /* PSMobile.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = PSMobile.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		3CC53C5612554E07833136FE /* PSMobileUITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = PSMobileUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		3D44578AE134E1F2D1DF9395 /* SliceSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SliceSheet.swift; sourceTree = "<group>"; };
+		4B1805F11B35ED638A7CF497 /* PSScaleTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PSScaleTests.swift; sourceTree = "<group>"; };
+		4F5BB4C9A11256D58F549471 /* PreviewUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreviewUITests.swift; sourceTree = "<group>"; };
+		505C0A1F4C83C1C1659C19CB /* PSMobile-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "PSMobile-Bridging-Header.h"; sourceTree = "<group>"; };
+		5F66DAB030E19F434772C115 /* PsmCoreObjects.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PsmCoreObjects.swift; sourceTree = "<group>"; };
+		6586EA406CDCA913DDE900D2 /* SlicerModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SlicerModel.swift; sourceTree = "<group>"; };
+		6B97355F9406CD0A70140484 /* SetupView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SetupView.swift; sourceTree = "<group>"; };
+		7C33ABB115E57793771F10EF /* SliceUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SliceUITests.swift; sourceTree = "<group>"; };
+		88FC9C9138FC3E452C8F26DC /* SetupUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SetupUITests.swift; sourceTree = "<group>"; };
+		8BB6B31169E0675122265061 /* PSMobileApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PSMobileApp.swift; sourceTree = "<group>"; };
+		94729A1DF310BF9863B29622 /* ViewportView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ViewportView.swift; sourceTree = "<group>"; };
+		9AAC1D94CE05CAA8CCC02C31 /* OpenGLES.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = OpenGLES.framework; path = System/Library/Frameworks/OpenGLES.framework; sourceTree = SDKROOT; };
+		9F7277D3E4B23BF953117D3B /* PSScale.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PSScale.swift; sourceTree = "<group>"; };
+		A0A2E2324F3925B44A187C20 /* PsmViewport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PsmViewport.swift; sourceTree = "<group>"; };
+		A88A85B5C4CC36BB3AA7D6C0 /* Metal.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Metal.framework; path = System/Library/Frameworks/Metal.framework; sourceTree = SDKROOT; };
+		A911341AA5D710A39304CB82 /* PsmCore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PsmCore.swift; sourceTree = "<group>"; };
+		A9E5CF16511CFE40F465AE6B /* PrusaColors.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrusaColors.swift; sourceTree = "<group>"; };
+		AC019FF5B6EEE03716762B82 /* SimpleModeUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SimpleModeUITests.swift; sourceTree = "<group>"; };
+		B065877366DFBB7FE6BC7C0D /* AppSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppSettingsView.swift; sourceTree = "<group>"; };
+		B3A7AA9CFDB28BF9B02D1606 /* WorkflowStartView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkflowStartView.swift; sourceTree = "<group>"; };
+		B8D6C7F10077CC37ED37C3EF /* SimpleObjectBarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SimpleObjectBarView.swift; sourceTree = "<group>"; };
+		D72F3C6A968EC350C0986B17 /* psresources */ = {isa = PBXFileReference; lastKnownFileType = folder; name = psresources; path = Resources/psresources; sourceTree = SOURCE_ROOT; };
+		D95872870DAED0997242940D /* SimpleModelSheetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SimpleModelSheetView.swift; sourceTree = "<group>"; };
+		DAA4E915A20F5747B6B4C411 /* PsmCoreProject.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PsmCoreProject.swift; sourceTree = "<group>"; };
+		DF57A028F1F82170DAEBA15D /* PsUiCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PsUiCatalog.swift; sourceTree = "<group>"; };
+		E5D530B95C8D6BA27AB21966 /* PsmCoreSetup.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PsmCoreSetup.swift; sourceTree = "<group>"; };
+		EFBE98DE75F3DB543EEA9DF2 /* PSMobileTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = PSMobileTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		FB1853001750F332BA65D153 /* ViewportUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ViewportUITests.swift; sourceTree = "<group>"; };
+		FE7EC5EBAB8473EC2C017E6D /* ObjectBarUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ObjectBarUITests.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		BE680ACF406BE4A6889DDF31 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				E26F52BA52670F8397399AB9 /* OpenGLES.framework in Frameworks */,
+				3778B44D2502115C4AFD957E /* Metal.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		4D53396209BE3FDE6AA925C1 /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				D72F3C6A968EC350C0986B17 /* psresources */,
+				12DB3C2FDBFC6B613BFC31EA /* psui */,
+			);
+			path = Resources;
+			sourceTree = "<group>";
+		};
+		8AEA5CC62A610899C28B0DAE /* PSMobile */ = {
+			isa = PBXGroup;
+			children = (
+				8BB6B31169E0675122265061 /* PSMobileApp.swift */,
+				6586EA406CDCA913DDE900D2 /* SlicerModel.swift */,
+				E7ED70C1246B1DF9071B3B3A /* Core */,
+				918793651A0720519AA0DAE9 /* Screens */,
+				91CA8C7807F0314A2B86222E /* Support */,
+				C83A34B65D1063130F856E12 /* UI */,
+				CF777F5CC914D13B51A17ABA /* Viewport */,
+			);
+			path = PSMobile;
+			sourceTree = "<group>";
+		};
+		918793651A0720519AA0DAE9 /* Screens */ = {
+			isa = PBXGroup;
+			children = (
+				B065877366DFBB7FE6BC7C0D /* AppSettingsView.swift */,
+				021610281A51E2BC03A7CE3B /* SettingField.swift */,
+				34E8620B25690829DD1E5A97 /* SettingsView.swift */,
+				6B97355F9406CD0A70140484 /* SetupView.swift */,
+				D95872870DAED0997242940D /* SimpleModelSheetView.swift */,
+				35A60AFC279B58B4F2DD13DC /* SimpleModeView.swift */,
+				B8D6C7F10077CC37ED37C3EF /* SimpleObjectBarView.swift */,
+				3D44578AE134E1F2D1DF9395 /* SliceSheet.swift */,
+				B3A7AA9CFDB28BF9B02D1606 /* WorkflowStartView.swift */,
+			);
+			path = Screens;
+			sourceTree = "<group>";
+		};
+		91CA8C7807F0314A2B86222E /* Support */ = {
+			isa = PBXGroup;
+			children = (
+				19F02686215D5D536EB819E1 /* Info.plist */,
+				505C0A1F4C83C1C1659C19CB /* PSMobile-Bridging-Header.h */,
+			);
+			path = Support;
+			sourceTree = "<group>";
+		};
+		A66DDCDF24160BF94601B230 /* PSMobileUITests */ = {
+			isa = PBXGroup;
+			children = (
+				1C61523A559E12F7477C6E6D /* ModelSheetUITests.swift */,
+				FE7EC5EBAB8473EC2C017E6D /* ObjectBarUITests.swift */,
+				4F5BB4C9A11256D58F549471 /* PreviewUITests.swift */,
+				14A8F3384F23A68DD9B62A29 /* ProjectUITests.swift */,
+				309E005E525C36955534FAC8 /* SettingsUITests.swift */,
+				88FC9C9138FC3E452C8F26DC /* SetupUITests.swift */,
+				AC019FF5B6EEE03716762B82 /* SimpleModeUITests.swift */,
+				7C33ABB115E57793771F10EF /* SliceUITests.swift */,
+				FB1853001750F332BA65D153 /* ViewportUITests.swift */,
+			);
+			path = PSMobileUITests;
+			sourceTree = "<group>";
+		};
+		A8EB3CC3149CBEB041352559 = {
+			isa = PBXGroup;
+			children = (
+				8AEA5CC62A610899C28B0DAE /* PSMobile */,
+				B4410DE0565589BBDB6A2EEC /* PSMobileTests */,
+				A66DDCDF24160BF94601B230 /* PSMobileUITests */,
+				4D53396209BE3FDE6AA925C1 /* Resources */,
+				B64B1845E42676ED01603591 /* Frameworks */,
+				D98B922868AA48393AF06B4C /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		B4410DE0565589BBDB6A2EEC /* PSMobileTests */ = {
+			isa = PBXGroup;
+			children = (
+				4B1805F11B35ED638A7CF497 /* PSScaleTests.swift */,
+			);
+			path = PSMobileTests;
+			sourceTree = "<group>";
+		};
+		B64B1845E42676ED01603591 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				A88A85B5C4CC36BB3AA7D6C0 /* Metal.framework */,
+				9AAC1D94CE05CAA8CCC02C31 /* OpenGLES.framework */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
+		C83A34B65D1063130F856E12 /* UI */ = {
+			isa = PBXGroup;
+			children = (
+				A9E5CF16511CFE40F465AE6B /* PrusaColors.swift */,
+				9F7277D3E4B23BF953117D3B /* PSScale.swift */,
+				DF57A028F1F82170DAEBA15D /* PsUiCatalog.swift */,
+			);
+			path = UI;
+			sourceTree = "<group>";
+		};
+		CF777F5CC914D13B51A17ABA /* Viewport */ = {
+			isa = PBXGroup;
+			children = (
+				A0A2E2324F3925B44A187C20 /* PsmViewport.swift */,
+				94729A1DF310BF9863B29622 /* ViewportView.swift */,
+			);
+			path = Viewport;
+			sourceTree = "<group>";
+		};
+		D98B922868AA48393AF06B4C /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				399D07FEFC2C5D853492247B /* PSMobile.app */,
+				EFBE98DE75F3DB543EEA9DF2 /* PSMobileTests.xctest */,
+				3CC53C5612554E07833136FE /* PSMobileUITests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		E7ED70C1246B1DF9071B3B3A /* Core */ = {
+			isa = PBXGroup;
+			children = (
+				A911341AA5D710A39304CB82 /* PsmCore.swift */,
+				5F66DAB030E19F434772C115 /* PsmCoreObjects.swift */,
+				DAA4E915A20F5747B6B4C411 /* PsmCoreProject.swift */,
+				E5D530B95C8D6BA27AB21966 /* PsmCoreSetup.swift */,
+			);
+			path = Core;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		898CEF9E17E90DF9E28138D3 /* PSMobileTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 0A02C74E4DDE42B034FCFD79 /* Build configuration list for PBXNativeTarget "PSMobileTests" */;
+			buildPhases = (
+				7EEDE030A9D91D3D8A10570A /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = PSMobileTests;
+			productName = PSMobileTests;
+			productReference = EFBE98DE75F3DB543EEA9DF2 /* PSMobileTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		AA5E63A1140CA3588A001320 /* PSMobile */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 88340BF77F163B2F0C6E668B /* Build configuration list for PBXNativeTarget "PSMobile" */;
+			buildPhases = (
+				E0F87B22D92EA2F024263019 /* Sources */,
+				2C0F01CA9DDE77640A8D1AB5 /* Resources */,
+				BE680ACF406BE4A6889DDF31 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = PSMobile;
+			productName = PSMobile;
+			productReference = 399D07FEFC2C5D853492247B /* PSMobile.app */;
+			productType = "com.apple.product-type.application";
+		};
+		C60778C5BEEB2E9D272B6B67 /* PSMobileUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 7D5EDC6C2C7FE491D0C821FE /* Build configuration list for PBXNativeTarget "PSMobileUITests" */;
+			buildPhases = (
+				629E2EE586DBCD53166481B3 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				56A47255A6C827B6FEA77408 /* PBXTargetDependency */,
+			);
+			name = PSMobileUITests;
+			productName = PSMobileUITests;
+			productReference = 3CC53C5612554E07833136FE /* PSMobileUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		48068508EE9E9FAE1685E926 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1430;
+				TargetAttributes = {
+					C60778C5BEEB2E9D272B6B67 = {
+						TestTargetID = AA5E63A1140CA3588A001320;
+					};
+				};
+			};
+			buildConfigurationList = 8FB161B037C66ED962DFDD08 /* Build configuration list for PBXProject "PSMobile" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = A8EB3CC3149CBEB041352559;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				AA5E63A1140CA3588A001320 /* PSMobile */,
+				898CEF9E17E90DF9E28138D3 /* PSMobileTests */,
+				C60778C5BEEB2E9D272B6B67 /* PSMobileUITests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		2C0F01CA9DDE77640A8D1AB5 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				EA957F3D0A35F4EB69EEF299 /* psresources in Resources */,
+				B6F6BC0F527913F37729C76E /* psui in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		629E2EE586DBCD53166481B3 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				06D4685D96546EE9CB17DE3D /* ModelSheetUITests.swift in Sources */,
+				157B2880F76366AA396ECD03 /* ObjectBarUITests.swift in Sources */,
+				FA6129162AA56F1EB61D81E6 /* PreviewUITests.swift in Sources */,
+				6F1ADAA3CBBC59C62455A997 /* ProjectUITests.swift in Sources */,
+				18A9DBCC5C15BCBCB9EAC489 /* SettingsUITests.swift in Sources */,
+				F322AC798A1D45D6EEA3E7E8 /* SetupUITests.swift in Sources */,
+				E4253E199CC718B621407225 /* SimpleModeUITests.swift in Sources */,
+				8CED8277F9519270FE2B8050 /* SliceUITests.swift in Sources */,
+				FC5A6013F8A704DA788C2D56 /* ViewportUITests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		7EEDE030A9D91D3D8A10570A /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				C359E631495AAACCA21BE4A3 /* PSScale.swift in Sources */,
+				801CCA1DE571B0C71A7FFC70 /* PSScaleTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		E0F87B22D92EA2F024263019 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				22DCBFCCFFD845683240E3E5 /* AppSettingsView.swift in Sources */,
+				990CB6641B7CEC77CEB79144 /* PSMobileApp.swift in Sources */,
+				45E95C1A17FADC2A6D0CA342 /* PSScale.swift in Sources */,
+				DBC095C44C595103DE7E7734 /* PrusaColors.swift in Sources */,
+				711DC33F770EE1014616296E /* PsUiCatalog.swift in Sources */,
+				607A1296DE1B222CB852CEA3 /* PsmCore.swift in Sources */,
+				8055DE005FF9A0C126C20D22 /* PsmCoreObjects.swift in Sources */,
+				E62FC1E035CC84927E5D2697 /* PsmCoreProject.swift in Sources */,
+				00EEBAB39B64A226F3A7D88C /* PsmCoreSetup.swift in Sources */,
+				FC8E9020F7EEE0BC79CD778E /* PsmViewport.swift in Sources */,
+				7E2F2F6966FD3061FD7A52A2 /* SettingField.swift in Sources */,
+				D04DBDDA872714DDF6C613AA /* SettingsView.swift in Sources */,
+				CA927EAA7ED3697DA37D6DFE /* SetupView.swift in Sources */,
+				9AAF15143CC61524A7906022 /* SimpleModeView.swift in Sources */,
+				7AA84614DF4D5C44437B579A /* SimpleModelSheetView.swift in Sources */,
+				16230FBE336B5610BAE50B81 /* SimpleObjectBarView.swift in Sources */,
+				DA8D63A829FBD18AB3122B36 /* SliceSheet.swift in Sources */,
+				21A0A2248B3263A344A0E766 /* SlicerModel.swift in Sources */,
+				6C7BDB12BBE36E49C9921931 /* ViewportView.swift in Sources */,
+				517016C75B76CBFF90801548 /* WorkflowStartView.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		56A47255A6C827B6FEA77408 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = AA5E63A1140CA3588A001320 /* PSMobile */;
+			targetProxy = CC63F2AA5762715C9DCB5B3C /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		3BB0D8D8C6BC75C7D8B668E6 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				GENERATE_INFOPLIST_FILE = YES;
+				PRODUCT_BUNDLE_IDENTIFIER = de.psmobile.uitests;
+				TEST_TARGET_NAME = PSMobile;
+			};
+			name = Release;
+		};
+		523B955F7A47D7B7D4F713E7 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				GENERATE_INFOPLIST_FILE = YES;
+				PRODUCT_BUNDLE_IDENTIFIER = de.psmobile.tests;
+			};
+			name = Debug;
+		};
+		A3C4D039DFE16D566CF89A0A /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				INFOPLIST_FILE = PSMobile/Support/Info.plist;
+				OTHER_LDFLAGS = (
+					"-lc++",
+					"-lpsmobile_core_all",
+					"-framework",
+					PSMShared,
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = de.psmobile;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		AFF6E1404C605E30568F0F78 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_ENABLE_MODULES = YES;
+				ENABLE_BITCODE = NO;
+				"EXCLUDED_ARCHS[sdk=iphonesimulator*]" = x86_64;
+				"FRAMEWORK_SEARCH_PATHS[sdk=iphoneos*]" = (
+					"$(SRCROOT)/../android/shared/build/bin/iosArm64/debugFramework",
+				);
+				"FRAMEWORK_SEARCH_PATHS[sdk=iphonesimulator*]" = (
+					"$(SRCROOT)/../android/shared/build/bin/iosSimulatorArm64/debugFramework",
+				);
+				HEADER_SEARCH_PATHS = (
+					"$(SRCROOT)/../core/include",
+					"$(SRCROOT)/../viewport/include",
+				);
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				"LIBRARY_SEARCH_PATHS[sdk=iphoneos*]" = (
+					"$(SRCROOT)/../build-out/ios-core-OS64",
+					"$(SRCROOT)/../build-out/ios-destdir-OS64/usr/local/lib",
+				);
+				"LIBRARY_SEARCH_PATHS[sdk=iphonesimulator*]" = (
+					"$(SRCROOT)/../build-out/ios-core-SIMULATORARM64",
+					"$(SRCROOT)/../build-out/ios-destdir-SIMULATORARM64/usr/local/lib",
+				);
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_OBJC_BRIDGING_HEADER = "PSMobile/Support/PSMobile-Bridging-Header.h";
+				SWIFT_VERSION = 5.9;
+			};
+			name = Debug;
+		};
+		BF5C15897B8E7D6B3A484FCD /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				GENERATE_INFOPLIST_FILE = YES;
+				PRODUCT_BUNDLE_IDENTIFIER = de.psmobile.tests;
+			};
+			name = Release;
+		};
+		CF1B695289C1911F216AA010 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				INFOPLIST_FILE = PSMobile/Support/Info.plist;
+				OTHER_LDFLAGS = (
+					"-lc++",
+					"-lpsmobile_core_all",
+					"-framework",
+					PSMShared,
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = de.psmobile;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		D0702ADA58EE2354B203672D /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_ENABLE_MODULES = YES;
+				ENABLE_BITCODE = NO;
+				"EXCLUDED_ARCHS[sdk=iphonesimulator*]" = x86_64;
+				"FRAMEWORK_SEARCH_PATHS[sdk=iphoneos*]" = (
+					"$(SRCROOT)/../android/shared/build/bin/iosArm64/debugFramework",
+				);
+				"FRAMEWORK_SEARCH_PATHS[sdk=iphonesimulator*]" = (
+					"$(SRCROOT)/../android/shared/build/bin/iosSimulatorArm64/debugFramework",
+				);
+				HEADER_SEARCH_PATHS = (
+					"$(SRCROOT)/../core/include",
+					"$(SRCROOT)/../viewport/include",
+				);
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				"LIBRARY_SEARCH_PATHS[sdk=iphoneos*]" = (
+					"$(SRCROOT)/../build-out/ios-core-OS64",
+					"$(SRCROOT)/../build-out/ios-destdir-OS64/usr/local/lib",
+				);
+				"LIBRARY_SEARCH_PATHS[sdk=iphonesimulator*]" = (
+					"$(SRCROOT)/../build-out/ios-core-SIMULATORARM64",
+					"$(SRCROOT)/../build-out/ios-destdir-SIMULATORARM64/usr/local/lib",
+				);
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_OBJC_BRIDGING_HEADER = "PSMobile/Support/PSMobile-Bridging-Header.h";
+				SWIFT_VERSION = 5.9;
+			};
+			name = Release;
+		};
+		DCA75D4A32053970A133DD7E /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				GENERATE_INFOPLIST_FILE = YES;
+				PRODUCT_BUNDLE_IDENTIFIER = de.psmobile.uitests;
+				TEST_TARGET_NAME = PSMobile;
+			};
+			name = Debug;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		0A02C74E4DDE42B034FCFD79 /* Build configuration list for PBXNativeTarget "PSMobileTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				523B955F7A47D7B7D4F713E7 /* Debug */,
+				BF5C15897B8E7D6B3A484FCD /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		7D5EDC6C2C7FE491D0C821FE /* Build configuration list for PBXNativeTarget "PSMobileUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				DCA75D4A32053970A133DD7E /* Debug */,
+				3BB0D8D8C6BC75C7D8B668E6 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		88340BF77F163B2F0C6E668B /* Build configuration list for PBXNativeTarget "PSMobile" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A3C4D039DFE16D566CF89A0A /* Debug */,
+				CF1B695289C1911F216AA010 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		8FB161B037C66ED962DFDD08 /* Build configuration list for PBXProject "PSMobile" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				AFF6E1404C605E30568F0F78 /* Debug */,
+				D0702ADA58EE2354B203672D /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 48068508EE9E9FAE1685E926 /* Project object */;
+}

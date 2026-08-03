@@ -70,26 +70,42 @@ final class PsmCore {
         guard let h = psm_session_create(dataDir, resourceDir) else {
             throw PsmError.createFailed(String(cString: psm_last_error(nil)))
         }
-        handle = OpaquePointer(h)
+        // psm_session_create liefert bereits einen OpaquePointer.
+        handle = h
         Self.log.info("Kern \(Self.coreVersion) bereit")
     }
 
     deinit {
         if let h = handle {
-            psm_slice_cancel(UnsafeMutablePointer(h))
-            psm_session_destroy(UnsafeMutablePointer(h))
+            psm_slice_cancel(h)
+            psm_session_destroy(h)
         }
     }
 
-    private var raw: UnsafeMutablePointer<psm_session> {
-        UnsafeMutablePointer(handle!)
+    /// Swift bildet unvollstaendige C-Typen wie psm_session als
+    /// OpaquePointer ab - einen UnsafeMutablePointer darauf gibt es nicht.
+    /// Genau so ist das ABI auch gemeint: der Zeiger wird durchgereicht,
+    /// nie dereferenziert.
+    /// Der rohe Sitzungszeiger fuer den Viewport. Der laeuft bewusst
+    /// nicht ueber diese Klasse, sondern liest das Modell direkt aus der
+    /// Session - siehe docs/entscheidungen.md, E-03. Dafuer braucht er
+    /// den Zeiger.
+    var sessionHandle: OpaquePointer? { handle }
+
+    // Nicht private: PsmCoreSetup.swift erweitert diese Klasse und
+    // braucht beides. Nach aussen bleibt es unsichtbar, weil die Klasse
+    // selbst nicht oeffentlich ist.
+    var raw: OpaquePointer {
+        handle!
     }
 
     var lastError: String {
+        // psm_last_error nimmt void*, nicht psm_session* - es soll auch
+        // ohne Session aufrufbar sein, wenn das Anlegen fehlgeschlagen ist.
         handle == nil ? "" : String(cString: psm_last_error(UnsafeMutableRawPointer(handle!)))
     }
 
-    private func check(_ code: psm_result, _ what: String) throws {
+    func check(_ code: psm_result, _ what: String) throws {
         guard code == PSM_OK else { throw PsmError.call(what, code.rawValue, lastError) }
     }
 
@@ -166,19 +182,10 @@ final class PsmCore {
         try check(psm_presets_load_bundled(raw), "Profile laden")
     }
 
-    func presetNames(_ type: PresetType) -> [String] {
-        let n = psm_preset_count(raw, psm_preset_type(rawValue: UInt32(type.rawValue)))
-        return (0..<n).map { i in
-            var buf = [CChar](repeating: 0, count: 256)
-            _ = psm_preset_name_at(raw, psm_preset_type(rawValue: UInt32(type.rawValue)),
-                                   i, &buf, 256)
-            return String(cString: buf)
-        }
-    }
-
-    func selectPreset(_ type: PresetType, _ name: String) throws {
-        try check(psm_preset_select(raw, psm_preset_type(rawValue: UInt32(type.rawValue)), name),
-                  "Preset waehlen")
+    /// Unser Aufzaehlungstyp traegt Int32, der aus dem C-ABI UInt32.
+    /// Die Umwandlung stand dreimal ausgeschrieben da.
+    func cType(_ type: PresetType) -> psm_preset_type {
+        psm_preset_type(rawValue: UInt32(type.rawValue))
     }
 
     // MARK: - Konfiguration
@@ -262,7 +269,14 @@ final class PsmCore {
     /// pruefen und lieber warnen.
     var estimatedSliceMemory: UInt64 { psm_estimate_slice_memory(raw) }
 
-    static var availableMemory: UInt64 {
-        UInt64(max(0, os_proc_available_memory()))
+    /// Wieviel Speicher dieser Prozess noch bekommen darf, oder nichts.
+    ///
+    /// os_proc_available_memory liefert 0, wenn es keine Auskunft gibt -
+    /// im Simulator etwa, wo es keine Jetsam-Grenze gibt. Die Null heisst
+    /// also "unbekannt" und nicht "kein Speicher". Wer sie als Zahl
+    /// weiterreicht, warnt bei jedem Modell vor 0 MB.
+    static var availableMemory: UInt64? {
+        let v = os_proc_available_memory()
+        return v > 0 ? UInt64(v) : nil
     }
 }

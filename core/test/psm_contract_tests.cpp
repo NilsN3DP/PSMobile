@@ -23,6 +23,26 @@ bool close_to(float actual, float expected, float epsilon = 0.0001f)
     return std::abs(actual - expected) <= epsilon;
 }
 
+/// Irgendeine vorhandene TrueType-Schrift des Systems.
+///
+/// Der Text-Test prueft, ob aus Buchstaben Geometrie wird - welche
+/// Schrift das liefert, ist dafuer gleichgueltig. Ein fester Pfad waere
+/// es aber nicht: /system/fonts gibt es nur auf Android, und auf iOS
+/// scheiterte der Test deshalb an der Umgebung statt an der Sache.
+const char *system_font()
+{
+    static const char *const kandidaten[] = {
+        "/system/fonts/Roboto-Regular.ttf",              // Android
+        "/System/Library/Fonts/Supplemental/Arial.ttf",  // iOS und macOS
+        "/System/Library/Fonts/SFNSMono.ttf",            // macOS, aeltere Staende
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", // Linux
+    };
+    for (const char *pfad : kandidaten) {
+        if (std::filesystem::exists(pfad)) return pfad;
+    }
+    return kandidaten[0];
+}
+
 } // namespace
 
 int main(int argc, char **argv)
@@ -332,7 +352,7 @@ int main(int argc, char **argv)
     size_t text_volume = 0;
     require(psm_model_add_text_volume(
                 session, tool_object, "PSMobile",
-                "/system/fonts/Roboto-Regular.ttf",
+                system_font(),
                 5.f, 0.8f, PSM_VOLUME_MODEL_PART,
                 &text_volume) == PSM_OK,
             std::string("create embossed text: ") +
@@ -660,7 +680,7 @@ int main(int argc, char **argv)
     size_t project_text_volume = 0;
     require(psm_model_add_text_volume(
                 session, annotated_id, "3MF",
-                "/system/fonts/Roboto-Regular.ttf",
+                system_font(),
                 4.f, 0.6f, PSM_VOLUME_MODEL_PART,
                 &project_text_volume) == PSM_OK &&
             psm_model_volume_count(session, annotated_id) >= 2,

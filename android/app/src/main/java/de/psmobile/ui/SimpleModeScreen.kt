@@ -70,6 +70,11 @@ import de.psmobile.core.PsmCore
 import de.psmobile.slicing.SlicerService
 import de.psmobile.ui.theme.PrusaColors
 import de.psmobile.ui.theme.uiScaleFor
+import de.psmobile.shared.rules.AdhesionAdvice
+import de.psmobile.shared.rules.SimpleModeState
+import de.psmobile.shared.rules.EasyModeState
+import de.psmobile.shared.rules.SimplePanel
+import de.psmobile.shared.rules.SimpleSupportChoice
 
 private fun st(english: String, german: String): String = SimpleModeState.text(english, german)
 

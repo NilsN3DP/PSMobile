@@ -70,6 +70,9 @@ android {
 }
 
 dependencies {
+    // Die gemeinsamen Regeln (E-13). Was hier drin steht, gilt auch fuer
+    // die iOS-App - Aenderungen wirken auf beiden Seiten.
+    implementation(project(":shared"))
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime)
     implementation(libs.androidx.lifecycle.viewmodel)

@@ -18,7 +18,16 @@
 #include "psm_gizmo_internal.hpp"
 #include "psmobile_session.hpp"
 
-#include <GLES2/gl2.h>
+// Derselbe GLES-Bestand, zwei Ablageorte: Android legt die Header unter
+// GLES2/, Apple in das OpenGLES-Framework. Nur der Pfad unterscheidet
+// sich - die Funktionen dahinter sind dieselben, und genau deshalb
+// laesst sich der Viewport ueberhaupt teilen.
+#if defined(__APPLE__)
+#  include <OpenGLES/ES2/gl.h>
+#  include <OpenGLES/ES2/glext.h>
+#else
+#  include <GLES2/gl2.h>
+#endif
 
 #include <algorithm>
 #include <cmath>

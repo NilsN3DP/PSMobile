@@ -22,3 +22,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "PSMobile"
 include(":app")
+include(":shared")
