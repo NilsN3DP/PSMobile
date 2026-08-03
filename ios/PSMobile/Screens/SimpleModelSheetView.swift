@@ -15,6 +15,9 @@ struct SimpleModelSheetView: View {
 
     @ObservedObject var model: SlicerModel
     var onPickFile: () -> Void
+    /// Die Vorschau laesst sich abschalten - sie kostet Platz, und auf
+    /// einem schmalen Geraet ist die Zeile ohnehin eng.
+    @StateObject private var einstellungen = AppSettingsStore()
 
     @Environment(\.psScale) private var ps
     @State private var ausgeklappt = true
@@ -150,6 +153,7 @@ struct SimpleModelSheetView: View {
             }
         } label: {
             HStack(spacing: ps.pt(10)) {
+                if einstellungen.thumbnails { ObjektMasse(objekt: objekt) }
                 Button {
                     gewaehlt = SimpleModelSheetState.shared.toggle(
                         selected: gewaehlt.map { KotlinInt(int: $0) },
@@ -279,5 +283,36 @@ struct SimpleModelSheetView: View {
 
     private func st(_ english: String, _ german: String) -> String {
         SimpleModeState.shared.text(english: english, german: german)
+    }
+}
+
+/// Das Groessenverhaeltnis eines Objekts als Kaestchen.
+///
+/// Gegenstueck zu `ObjectProportionThumb` auf Android, mit denselben
+/// Massen. Bewusst kein gerendertes Bild: das kostet je Objekt einen
+/// Durchgang durch den Viewport, und bei zwanzig Teilen in der Liste
+/// merkt man das. Um zwei Objekte zu unterscheiden, reichen die
+/// Proportionen - hoch und schmal oder flach und breit.
+struct ObjektMasse: View {
+
+    let objekt: PsmCore.ObjectInfo
+    @Environment(\.psScale) private var ps
+
+    var body: some View {
+        let b = max(objekt.sizeMm.x, 0.1)
+        let t = max(objekt.sizeMm.y, 0.1)
+        let h = max(objekt.sizeMm.z, 0.1)
+        let laengste = max(b, max(t, h))
+        let breite = max(CGFloat(26 * (max(b, t) / laengste)), 4)
+        let hoehe = max(CGFloat(26 * (h / laengste)), 4)
+        return ZStack {
+            RoundedRectangle(cornerRadius: ps.pt(2))
+                .fill(PrusaColors.background)
+            RoundedRectangle(cornerRadius: ps.pt(1))
+                .fill(PrusaColors.orange)
+                .frame(width: ps.pt(breite), height: ps.pt(hoehe))
+        }
+        .frame(width: ps.pt(36), height: ps.pt(36))
+        .accessibilityIdentifier("blatt.masse.\(objekt.id)")
     }
 }

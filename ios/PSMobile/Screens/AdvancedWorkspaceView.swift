@@ -256,6 +256,7 @@ struct AdvancedWorkspaceView: View {
             ForEach(model.objects, id: \.id) { objekt in
                 Button { model.select(objekt.id) } label: {
                     HStack {
+                        ObjektMasse(objekt: objekt)
                         VStack(alignment: .leading, spacing: 0) {
                             Text(objekt.name.isEmpty ? "Objekt \(objekt.id)" : objekt.name)
                                 .font(.system(size: ps.font(13)))
