@@ -140,6 +140,11 @@ struct AdvancedWorkspaceView: View {
                 onSelect: { model.select($0 < 0 ? nil : $0) }
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+            // Eine eigene Kennung, damit Gesten im Test die Flaeche
+            // treffen und nicht die Marke des Bildschirms. Am Viewport
+            // ist das gefahrlos: er ist eine einzelne UIView ohne
+            // SwiftUI-Kinder, die Kennung vererbt sich an niemanden.
+            .accessibilityIdentifier("viewport")
         } else {
             PrusaColors.background.frame(maxWidth: .infinity, maxHeight: .infinity)
         }

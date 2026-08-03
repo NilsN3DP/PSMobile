@@ -26,7 +26,7 @@ final class ViewportUITests: XCTestCase {
     }
 
     func testDrehenAendertDieAnsicht() {
-        let flaeche = app.otherElements["arbeitsbereich"]
+        let flaeche = app.otherElements["viewport"]
         XCTAssertTrue(flaeche.waitForExistence(timeout: 60),
                       "Der Arbeitsbereich ist nicht erschienen")
         // Das Bett wird beim ersten Bild noch aufgebaut.
@@ -45,15 +45,12 @@ final class ViewportUITests: XCTestCase {
     }
 
     func testZweiFingerZoomen() {
-        let flaeche = app.otherElements["arbeitsbereich"]
+        let flaeche = app.otherElements["viewport"]
         XCTAssertTrue(flaeche.waitForExistence(timeout: 60))
         sleep(3)
 
         let vorher = bildDaten()
-        // Kleiner als frueher: der Arbeitsbereich hat seit dem Umbau eine
-        // Werkzeugleiste und eine Fusszeile, und XCUITest laesst nur
-        // Spreizen zu, die in die Flaeche passen.
-        flaeche.pinch(withScale: 1.6, velocity: 1.0)
+        flaeche.pinch(withScale: 2.0, velocity: 1.0)
         sleep(1)
 
         XCTAssertNotEqual(vorher, bildDaten(),
