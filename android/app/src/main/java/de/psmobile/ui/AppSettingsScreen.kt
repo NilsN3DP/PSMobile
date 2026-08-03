@@ -37,6 +37,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import de.psmobile.ui.theme.PrusaColors
+import de.psmobile.shared.rules.AppSettings
+import de.psmobile.shared.rules.SimpleModeState
 
 private fun t(english: String, german: String) = SimpleModeState.text(english, german)
 

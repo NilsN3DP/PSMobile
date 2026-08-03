@@ -1,4 +1,4 @@
-package de.psmobile.ui
+package de.psmobile.shared.rules
 
 /**
  * Entscheidet aus der Geometrie, ob ein Objekt einen Rand braucht.

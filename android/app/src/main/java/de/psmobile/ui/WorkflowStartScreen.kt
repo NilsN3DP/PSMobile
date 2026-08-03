@@ -39,6 +39,7 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import de.psmobile.ui.theme.PrusaColors
+import de.psmobile.shared.rules.SimpleModeState
 
 @Composable
 fun WorkflowStartScreen(

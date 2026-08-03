@@ -1,4 +1,4 @@
-package de.psmobile.ui
+package de.psmobile.shared.rules
 
 /**
  * Einstellungen der App selbst - nicht des Drucks.

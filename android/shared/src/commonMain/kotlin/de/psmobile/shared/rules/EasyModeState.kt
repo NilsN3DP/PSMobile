@@ -1,4 +1,4 @@
-package de.psmobile.ui
+package de.psmobile.shared.rules
 
 /** Pure, derived UI state for Easy Mode; selections remain owned by SlicerService. */
 data class EasyReadiness(

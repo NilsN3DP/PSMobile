@@ -1,55 +1,60 @@
-Erste Regel liegt im gemeinsamen Modul - beide Apps holen sie dort
+Neun Regeln ins gemeinsame Modul, bevor die iOS-Oberflaeche entsteht
 
-Umsetzung von E-13, an einem Stueck durchgezogen: Android-Kotlin ->
-gemeinsames Modul -> Kotlin/Native-Framework -> Swift. Die Skalierung
-war der richtige Anfang, weil sie bereits doppelt existierte: dieselben
-Zahlen in Theme.kt und in PSScale.swift, dieselben Testfaelle zweimal.
-Nichts haette gemerkt, wenn eine der beiden Seiten sich verschoben
-haette.
+Reihenfolge aus E-13: erst die Regeln teilen, dann Bildschirme bauen.
+Andersherum haette ich jede dieser Regeln in Swift nachgeschrieben und
+spaeter wieder herausloesen muessen - Arbeit, die niemand mehr macht,
+wenn die App laeuft.
 
-Jetzt stehen die Zahlen einmal in UiScale, beide Seiten reichen durch.
-Wie die Zahl angewandt wird, bleibt Sache der Plattform - Android
-staucht die wirksame Dichte, iOS rechnet die Masse einzeln durch. Das
-ist der Schnitt, den E-13 meint: geteilt wird die Entscheidung, nicht
-die Darstellung.
+Verschoben, nicht abgetippt: AdhesionAdvice, PrinterGrouping,
+AppSettings, SimpleModeState, EasyModeState, EasyPanel,
+SpecialValueCodec, RemovableStorage, ColorMixCodec - samt Kommentaren
+und samt ihren Tests. Auf der Android-Seite bleibt ein Import stehen.
 
-Die doppelte Android-Testdatei ist weg. Die Faelle stehen im Modul und
-laufen dort fuer beide. Die Swift-Tests bleiben, pruefen jetzt aber
-etwas anderes: dass die Bruecke durchreicht und PSScale nicht
-irgendwann wieder anfaengt, selbst zu rechnen. Deshalb stehen die
-erwarteten Werte dort ausgeschrieben.
+Drei Kopplungen mussten dafuer aufgeloest werden:
 
-Zum Bauen:
+PrinterGrouping haengte an PsmCore.PrinterModel, einer inneren Klasse
+der JNI-Bruecke. Statt sie herauszubrechen nimmt die Regel jetzt einen
+Zugriff auf die Familie entgegen und laesst den Modelltyp offen. Sie
+interessiert sich ohnehin nur dafuer, und iOS bringt seinen eigenen Typ
+mit.
 
-Kotlin/Native uebersetzt iOS nur auf einem Mac, und Gradle braucht dafuer
-ein JDK. macOS bringt keines mit, und ueber das Benutzer-Homebrew waere
-es aus dem Quelltext zu bauen - schon gettext scheiterte daran. Deshalb
-holt macos-bootstrap.sh jetzt ein fertiges Archiv von Adoptium und
-traegt JAVA_HOME in env.sh ein, so wie es cmake und ninja schon
-handhabt. Auf Linux baut dasselbe Modul nur seine Android-Fassung; das
-ist kein Fehler, sondern die Arbeitsteilung.
+SimpleModeState fragte PsUi nach der Sprache. Die Frage "welche Sprache
+gilt gerade" gehoert zu den Regeln - beide Apps beantworten sie gleich -,
+also steht sie jetzt in Lang. Die Beschriftungen selbst bleiben je
+Plattform, sie kommen aus PrusaSlicers Katalog (E-12).
 
-build-apk.sh kennt "shared" als vierte Variante - die Regeln laufen ohne
-Emulator und ohne NDK.
+SpecialValueCodec war internal. Das hiess "modulintern", und das Modul
+ist jetzt ein anderes.
 
-Drei Stolpersteine, die dabei auftauchten:
+Was nicht mitging: SimpleModelSheetState. Es haengt an einem Typ aus der
+Oberflaeche, und das aufzuloesen haette die Regel nicht besser gemacht.
+Es bleibt auf der Android-Seite, bis die iOS-Seite zeigt, was sie
+wirklich braucht.
 
-Der Kotlin-Multiplatform-Klassenpfad muss im Wurzelprojekt bekannt sein,
-sonst lehnt Gradle die Anfrage im Untermodul mit "already on the
-classpath with an unknown version" ab.
+Zwei Dinge, die erst der iOS-Bau aufdeckte und die auf Android
+jahrelang unauffaellig geblieben waeren:
 
-Und einer, der erst jetzt sichtbar wurde, weil endlich beide Ziele
-gebaut sind: Geraet und Simulator standen gemeinsam in je einer
-Suchpfadliste, mit der Begruendung, Xcode ignoriere nicht vorhandene
-Pfade. Das stimmte nur, solange genau eine Fassung existierte. Sobald
-beide da waren, gewann die erstgenannte, und der Simulatorbau scheiterte
-an "building for iOS-simulator, but linking in object file built for
-iOS". Die Pfade sind jetzt nach Plattform getrennt.
+SpecialValueCodec formatierte mit String.format und Locale.ROOT - beides
+gibt es nur auf der JVM. Jetzt wird von Hand gerechnet, was fuer diesen
+Zweck ohnehin richtiger ist: die Werte gehen in PrusaSlicers
+Konfiguration und muessen einen Punkt tragen, kein deutsches Komma.
 
-Nebenbei: das Geraeteziel OS64 ist durchgebaut. Damit ist der Weg zu
-einer Datei fuers echte iPad offen.
+Und deleteCharAt ist auf Kotlin/Native missbilligt. deleteAt heisst
+dasselbe und gilt auf beiden Seiten.
 
-Geprueft: Android-Tests gruen, Modultests gruen, iOS-Tests gruen - und
-die iOS-Tests laufen jetzt gegen die Kotlin-Regeln.
+Dazu eine Namenskollision, die ich selbst gebaut hatte: das gestern
+angelegte UiScale im Modul und das bestehende UiScale auf Android
+beantworten verschiedene Fragen - um wieviel wird verkleinert gegen wie
+eng ist es. Beide zusammen in einem Namensraum brauchen klare Namen,
+also heisst das neue jetzt WindowScale.
+
+Beinahe waere dabei ein echter Fehler stehengeblieben: die Sprachumstellung
+setzte Lang nicht, weil mein Suchmuster die Typangabe nicht traf. Simple
+Mode haette ab sofort immer englisch geantwortet, waehrend der Rest der
+App deutsch spricht - und niemand haette den Fehler im gemeinsamen Modul
+gesucht.
+
+Geprueft: Android-App und -Tests gruen, Modultests gruen, Modul baut fuer
+beide iOS-Ziele, iOS-App und -Tests gruen.
 
 Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>

@@ -1,8 +1,8 @@
-package de.psmobile.slicing.colormix
+package de.psmobile.shared.rules
 
-import org.junit.Assert.assertEquals
-import org.junit.Assert.assertTrue
-import org.junit.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertTrue
+import kotlin.test.Test
 
 class ColorMixCodecTest {
     @Test fun `two heads are normalized and serialized in desktop numbering`() {

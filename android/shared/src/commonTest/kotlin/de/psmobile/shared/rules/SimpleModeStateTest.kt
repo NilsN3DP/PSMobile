@@ -1,8 +1,8 @@
-package de.psmobile.ui
+package de.psmobile.shared.rules
 
-import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
-import org.junit.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.Test
 
 class SimpleModeStateTest {
     @Test
@@ -17,12 +17,6 @@ class SimpleModeStateTest {
             listOf("Projects", "Printer", "Material", "Settings", "Preview", "G-Code"),
             SimpleModeState.toolbarLabels(),
         )
-    }
-
-    @Test
-    fun simpleProjectSummaryUsesEnglishWhenTheAppLanguageIsEnglish() {
-        assertEquals("Current project", applicationText("en", "Current project", "Aktuelles Projekt"))
-        assertEquals("This session", applicationText("en", "This session", "Diese Sitzung"))
     }
 
     @Test

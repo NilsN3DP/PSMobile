@@ -1,9 +1,9 @@
-package de.psmobile.ui
+package de.psmobile.shared.rules
 
-import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
-import org.junit.Assert.assertTrue
-import org.junit.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
+import kotlin.test.Test
 
 class AppSettingsTest {
 
@@ -17,8 +17,8 @@ class AppSettingsTest {
     fun `jeder Schalter sagt, wofuer er da ist`() {
         // Eine Einstellung ohne Begruendung zwingt zum Ausprobieren.
         AppSettings.toggles.forEach {
-            assertTrue(it.key, it.why.first.isNotBlank() && it.why.second.isNotBlank())
-            assertTrue(it.key, it.title.first.isNotBlank() && it.title.second.isNotBlank())
+            assertTrue(it.why.first.isNotBlank() && it.why.second.isNotBlank(), it.key)
+            assertTrue(it.title.first.isNotBlank() && it.title.second.isNotBlank(), it.key)
         }
     }
 
@@ -47,7 +47,7 @@ class AppSettingsTest {
     @Test
     fun `jede Gruppe hat eine Ueberschrift`() {
         AppSettings.groupsInOrder.forEach {
-            assertTrue(it.name, AppSettings.groupTitle(it).isNotBlank())
+            assertTrue(AppSettings.groupTitle(it).isNotBlank(), it.name)
         }
     }
 

@@ -1,4 +1,4 @@
-package de.psmobile.ui
+package de.psmobile.shared.rules
 
 /**
  * Erkennt einen angeschlossenen Wechselspeicher, damit der G-Code direkt

@@ -1,4 +1,4 @@
-package de.psmobile.slicing.colormix
+package de.psmobile.shared.rules
 
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.buildJsonArray

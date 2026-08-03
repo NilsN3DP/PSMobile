@@ -51,13 +51,14 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import de.psmobile.core.PsmCore
-import de.psmobile.ui.SpecialValueCodec.BedPoint
 import de.psmobile.ui.theme.PrusaColors
 import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlin.math.sqrt
+import de.psmobile.shared.rules.SpecialValueCodec
+import de.psmobile.shared.rules.SpecialValueCodec.BedPoint
 
 private data class SubstitutionRow(
     val find: String = "",

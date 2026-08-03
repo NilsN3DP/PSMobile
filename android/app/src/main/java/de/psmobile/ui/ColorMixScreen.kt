@@ -27,8 +27,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import de.psmobile.slicing.SlicerService
-import de.psmobile.slicing.colormix.ColorMixComponent
-import de.psmobile.slicing.colormix.ColorMixRecipe
+import de.psmobile.shared.rules.ColorMixComponent
+import de.psmobile.shared.rules.ColorMixRecipe
 import de.psmobile.ui.theme.PrusaColors
 
 /** Advanced-Editor für echte virtuelle ColorMix-Extruder. */

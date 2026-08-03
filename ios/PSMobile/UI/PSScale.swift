@@ -20,18 +20,18 @@ import PSMShared
 struct PSScale: Equatable {
 
     /// Die Groesse, fuer die die Masse gedacht sind.
-    static let referenceWidth = CGFloat(UiScale.shared.REFERENCE_WIDTH)
-    static let referenceHeight = CGFloat(UiScale.shared.REFERENCE_HEIGHT)
+    static let referenceWidth = CGFloat(WindowScale.shared.REFERENCE_WIDTH)
+    static let referenceHeight = CGFloat(WindowScale.shared.REFERENCE_HEIGHT)
 
     /// Untergrenze. Darunter waeren Zielflaechen physisch zu klein zum
     /// Treffen. Wo es enger wird, muss der Bildschirm selbst Inhalt
     /// weglassen, statt weiter zu schrumpfen.
-    static let minScale = CGFloat(UiScale.shared.MIN_SCALE)
+    static let minScale = CGFloat(WindowScale.shared.MIN_SCALE)
 
     /// Wie stark die Schrift dem Kastenmass folgt. Text darf nicht so
     /// stark schrumpfen wie Kaesten, sonst wird er unleserlich, bevor der
     /// Platz wirklich knapp ist.
-    static let fontFollow = CGFloat(UiScale.shared.FONT_FOLLOW)
+    static let fontFollow = CGFloat(WindowScale.shared.FONT_FOLLOW)
 
     let factor: CGFloat
 
@@ -42,12 +42,12 @@ struct PSScale: Equatable {
     /// Die knappere Kante entscheidet. Hochskaliert wird nie: ab der
     /// Referenzgroesse stimmen die Masse bereits.
     static func scaleFor(width: CGFloat, height: CGFloat) -> CGFloat {
-        CGFloat(UiScale.shared.forWindow(width: Float(width), height: Float(height)))
+        CGFloat(WindowScale.shared.forWindow(width: Float(width), height: Float(height)))
     }
 
     /// Gedaempfte Fassung fuer Schriftgroessen.
     static func fontScaleFor(_ scale: CGFloat) -> CGFloat {
-        CGFloat(UiScale.shared.fontScale(scale: Float(scale)))
+        CGFloat(WindowScale.shared.fontScale(scale: Float(scale)))
     }
 
     /// Ein Kastenmass: Abstand, Breite, Hoehe, Eckenradius.

@@ -1,6 +1,5 @@
-package de.psmobile.ui
+package de.psmobile.shared.rules
 
-import java.util.Locale
 import kotlin.math.abs
 import kotlin.math.ceil
 
@@ -9,7 +8,7 @@ import kotlin.math.ceil
  * normalen Konfigurationsfeldern serialisiert. Die UI arbeitet dadurch mit
  * Zeilen, Punkten und Matrizen; die Prusa-Syntax bleibt an einer Stelle.
  */
-internal object SpecialValueCodec {
+object SpecialValueCodec {
     data class BedPoint(val x: Double, val y: Double)
 
     data class Ramming(
@@ -121,7 +120,9 @@ internal object SpecialValueCodec {
                 }
                 while (output.isNotEmpty() &&
                     (output.last() == ' ' || output.last() == '\t')) {
-                    output.deleteCharAt(output.lastIndex)
+                    // deleteCharAt ist auf Kotlin/Native missbilligt - deleteAt heisst
+                    // dasselbe und gilt auf beiden Plattformen.
+                    output.deleteAt(output.lastIndex)
                 }
             }
             result += output.toString()
@@ -202,11 +203,31 @@ internal object SpecialValueCodec {
         return a.y + (b.y - a.y) * ((x - a.x) / (b.x - a.x))
     }
 
+    /**
+     * Sechs Nachkommastellen, immer mit Punkt, ohne nachlaufende Nullen.
+     *
+     * Von Hand gerechnet statt mit String.format: das gibt es nur auf der
+     * JVM. Auf die Landeseinstellung darf es hier ohnehin nicht ankommen -
+     * die Werte gehen in PrusaSlicers Konfiguration, und die erwartet
+     * einen Punkt. Ein deutsches Komma haette dort eine unlesbare Datei
+     * ergeben.
+     *
+     * Gerundet wird von der Null weg, wie es %.6f auch tut. Die sechste
+     * Nachkommastelle entscheidet bei Bettkoordinaten ueber ein
+     * Tausendstel Millimeter - der Unterschied ist rechnerisch da und
+     * praktisch bedeutungslos.
+     */
     private fun decimal(value: Double): String {
         if (!value.isFinite()) return "0"
-        val text = String.format(Locale.ROOT, "%.6f", value)
+
+        val negativ = value < 0
+        val skaliert = kotlin.math.round(kotlin.math.abs(value) * 1_000_000.0).toLong()
+        val ganz = skaliert / 1_000_000
+        val bruch = (skaliert % 1_000_000).toString().padStart(6, '0')
+
+        val text = ((if (negativ) "-" else "") + ganz + "." + bruch)
             .trimEnd('0')
             .trimEnd('.')
-        return if (text == "-0") "0" else text
+        return if (text == "-0" || text.isEmpty()) "0" else text
     }
 }

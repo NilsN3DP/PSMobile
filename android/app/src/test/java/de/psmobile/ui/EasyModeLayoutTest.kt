@@ -4,6 +4,8 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import de.psmobile.shared.rules.EasyModeState
+import de.psmobile.shared.rules.EasyPanel
 
 class EasyModeLayoutTest {
     @Test

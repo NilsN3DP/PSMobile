@@ -21,8 +21,8 @@ import de.psmobile.slicing.profileupdate.ProfileUpdateRepository
 import de.psmobile.slicing.profileupdate.ProfileUpdateState
 import de.psmobile.slicing.profileupdate.ProfileVersion
 import de.psmobile.slicing.profileupdate.HttpUrlConnectionProfileUpdateHttp
-import de.psmobile.slicing.colormix.ColorMixCodec
-import de.psmobile.slicing.colormix.ColorMixRecipe
+import de.psmobile.shared.rules.ColorMixCodec
+import de.psmobile.shared.rules.ColorMixRecipe
 import de.psmobile.ui.BedLockPolicy
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers

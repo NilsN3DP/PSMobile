@@ -1,4 +1,4 @@
-package de.psmobile.ui
+package de.psmobile.shared.rules
 
 /** Pure labels and panel state for the reference-aligned Simple Mode UI. */
 enum class SimplePanel {
@@ -23,7 +23,7 @@ enum class SimpleSupportChoice {
 object SimpleModeState {
     /** Simple Mode owns a few curated phrases absent from the desktop PO catalog. */
     fun text(english: String, german: String): String =
-        if (PsUi.language == "de") german else english
+        if (Lang.isGerman) german else english
 
     fun visibleBrand() = "Simple Mode"
 

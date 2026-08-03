@@ -14,6 +14,9 @@
 plugins {
     alias(libs.plugins.kotlin.multiplatform)
     alias(libs.plugins.android.library)
+    // ColorMixCodec liest und schreibt JSON. Weitere Regeln werden
+    // folgen - die Profile und tabs.json sind auch JSON.
+    alias(libs.plugins.kotlin.serialization)
 }
 
 kotlin {
@@ -43,6 +46,9 @@ kotlin {
     }
 
     sourceSets {
+        val commonMain by getting {
+            dependencies { implementation(libs.kotlinx.serialization.json) }
+        }
         val commonTest by getting {
             dependencies { implementation(libs.kotlin.test) }
         }

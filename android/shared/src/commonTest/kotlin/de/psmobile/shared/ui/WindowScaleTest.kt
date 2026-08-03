@@ -9,7 +9,7 @@ import kotlin.test.assertTrue
  * jetzt an einer Stelle. Vorher gab es sie zweimal, und nichts haette
  * gemerkt, wenn eine der beiden Seiten sich verschoben haette.
  */
-class UiScaleTest {
+class WindowScaleTest {
 
     private fun assertClose(expected: Float, actual: Float) =
         assertTrue(kotlin.math.abs(expected - actual) < 0.001f,
@@ -19,31 +19,31 @@ class UiScaleTest {
     fun grossesTabletBleibtUnveraendert() {
         // Ab der Referenzgroesse wird nicht mehr hochskaliert - die Masse
         // sind fuer diesen Fall geschrieben.
-        assertClose(1f, UiScale.forWindow(1000f, 720f))
-        assertClose(1f, UiScale.forWindow(1280f, 800f))
+        assertClose(1f, WindowScale.forWindow(1000f, 720f))
+        assertClose(1f, WindowScale.forWindow(1280f, 800f))
     }
 
     @Test
     fun dieKnappereKanteEntscheidet() {
         // 900x576: Breite 0.90, Hoehe 0.80 - die Hoehe gewinnt.
-        assertClose(0.8f, UiScale.forWindow(900f, 576f))
+        assertClose(0.8f, WindowScale.forWindow(900f, 576f))
         // Und andersherum: 750x720 -> Breite 0.75 gewinnt.
-        assertClose(0.75f, UiScale.forWindow(750f, 720f))
+        assertClose(0.75f, WindowScale.forWindow(750f, 720f))
     }
 
     @Test
     fun untergrenzeGreift() {
         // Rechnerisch waeren das 0.556 - die Untergrenze faengt es ab,
         // damit Zielflaechen treffbar bleiben.
-        assertClose(UiScale.MIN_SCALE, UiScale.forWindow(600f, 400f))
-        assertClose(UiScale.MIN_SCALE, UiScale.forWindow(200f, 200f))
-        assertClose(UiScale.MIN_SCALE, UiScale.forWindow(1f, 1f))
+        assertClose(WindowScale.MIN_SCALE, WindowScale.forWindow(600f, 400f))
+        assertClose(WindowScale.MIN_SCALE, WindowScale.forWindow(200f, 200f))
+        assertClose(WindowScale.MIN_SCALE, WindowScale.forWindow(1f, 1f))
     }
 
     @Test
     fun schriftSchrumpftSchwaecherAlsKaesten() {
-        val scale = UiScale.forWindow(600f, 400f)
-        val fontScale = UiScale.fontScale(scale)
+        val scale = WindowScale.forWindow(600f, 400f)
+        val fontScale = WindowScale.fontScale(scale)
         assertTrue(fontScale > scale, "Schrift darf nicht staerker schrumpfen als Kaesten")
         assertTrue(fontScale < 1f, "Schrift muss aber mitgehen")
     }
@@ -64,8 +64,8 @@ class UiScaleTest {
             Triple("gemeldetes Fenster", 600f, 400f),
         )
         for ((name, w, h) in groessen) {
-            val s = UiScale.forWindow(w, h)
-            assertTrue(s >= UiScale.MIN_SCALE, "$name faellt unter die Untergrenze")
+            val s = WindowScale.forWindow(w, h)
+            assertTrue(s >= WindowScale.MIN_SCALE, "$name faellt unter die Untergrenze")
             assertTrue(s <= 1f, "$name wird hochskaliert")
         }
     }

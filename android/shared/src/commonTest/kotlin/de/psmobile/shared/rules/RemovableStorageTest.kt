@@ -1,9 +1,9 @@
-package de.psmobile.ui
+package de.psmobile.shared.rules
 
-import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNull
-import org.junit.Assert.assertTrue
-import org.junit.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertNull
+import kotlin.test.assertTrue
+import kotlin.test.Test
 
 class RemovableStorageTest {
 
@@ -57,7 +57,7 @@ class RemovableStorageTest {
     @Test
     fun `ohne Namen bleibt die Beschriftung trotzdem lesbar`() {
         val text = RemovableStorage.label(vol("   "))
-        assertTrue(text, text.isNotBlank())
-        assertTrue(text, text.contains("USB"))
+        assertTrue(text.isNotBlank(), text)
+        assertTrue(text.contains("USB"), text)
     }
 }

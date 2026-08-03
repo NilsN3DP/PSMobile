@@ -1,24 +1,25 @@
-package de.psmobile.ui
+package de.psmobile.shared.rules
 
-import de.psmobile.core.PsmCore
-import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
-import org.junit.Assert.assertTrue
-import org.junit.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
+import kotlin.test.Test
 
 class PrinterGroupingTest {
 
-    private fun model(name: String, family: String) = PsmCore.PrinterModel(
-        key = "PrusaResearch:$name",
-        name = name,
-        family = family,
-        isSla = false,
-        variants = listOf("0.4"),
-    )
+    private fun grouped(models: List<Model>) =
+        PrinterGrouping.grouped(models) { it.family }
+
+
+    // Ein eigener Miniaturtyp statt PsmCore.PrinterModel: der Test prueft
+    // die Gruppierung, nicht die JNI-Bruecke.
+    private data class Model(val name: String, val family: String)
+
+    private fun model(name: String, family: String) = Model(name, family)
 
     @Test
     fun `die Reihenfolge der Familien kommt aus der Vendor-Datei, nicht aus dem Alphabet`() {
-        val groups = PrinterGrouping.grouped(
+        val groups = grouped(
             listOf(
                 model("Prusa CORE One", "CORE"),
                 model("Original Prusa MK4S", "MK4"),
@@ -34,7 +35,7 @@ class PrinterGroupingTest {
 
     @Test
     fun `Altgeraete stehen am Ende, egal wo sie in der Quelle auftauchen`() {
-        val groups = PrinterGrouping.grouped(
+        val groups = grouped(
             listOf(
                 model("Original Prusa XL", "Legacy profiles"),
                 model("Prusa CORE One", "CORE"),
@@ -48,7 +49,7 @@ class PrinterGroupingTest {
 
     @Test
     fun `mehrere Altgeraete-Familien behalten untereinander ihre Reihenfolge`() {
-        val groups = PrinterGrouping.grouped(
+        val groups = grouped(
             listOf(
                 model("A", "Legacy profiles"),
                 model("B", "MK4"),
@@ -60,7 +61,8 @@ class PrinterGroupingTest {
 
     @Test
     fun `ohne Familienangabe landet der Drucker sichtbar unter Weitere`() {
-        val groups = PrinterGrouping.grouped(listOf(model("Fremdgeraet", "")))
+        val groups = grouped(
+            listOf(model("Fremdgeraet", "")))
         assertEquals(listOf(PrinterGrouping.OTHER), groups.map { it.family })
         assertEquals(1, groups.first().models.size)
     }
@@ -74,6 +76,6 @@ class PrinterGroupingTest {
 
     @Test
     fun `eine leere Liste ergibt keine Gruppen`() {
-        assertTrue(PrinterGrouping.grouped(emptyList()).isEmpty())
+        assertTrue(grouped(emptyList()).isEmpty())
     }
 }

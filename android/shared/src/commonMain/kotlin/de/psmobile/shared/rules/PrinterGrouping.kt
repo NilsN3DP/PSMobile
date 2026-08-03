@@ -1,6 +1,4 @@
-package de.psmobile.ui
-
-import de.psmobile.core.PsmCore
+package de.psmobile.shared.rules
 
 /**
  * Ordnet die Druckerliste der Ersteinrichtung nach Familien.
@@ -22,24 +20,29 @@ import de.psmobile.core.PsmCore
  */
 object PrinterGrouping {
 
-    data class Group(
+    // Der Modelltyp bleibt offen. Auf Android ist es PsmCore.PrinterModel,
+    // auf iOS wird es ein Swift-Gegenstueck sein - die Regel interessiert
+    // sich nur fuer die Familie. Sie hier hereinzuziehen haette bedeutet,
+    // eine innere Klasse aus der JNI-Bruecke herauszuloesen, ohne dass die
+    // Regel dadurch besser wuerde.
+    data class Group<T>(
         val family: String,
-        val models: List<PsmCore.PrinterModel>,
+        val models: List<T>,
         val isLegacy: Boolean,
     )
 
     fun isLegacy(family: String): Boolean = family.contains("legacy", ignoreCase = true)
 
-    fun grouped(models: List<PsmCore.PrinterModel>): List<Group> {
+    fun <T> grouped(models: List<T>, family: (T) -> String): List<Group<T>> {
         // LinkedHashMap haelt die Reihenfolge des ersten Auftretens fest.
-        val byFamily = LinkedHashMap<String, MutableList<PsmCore.PrinterModel>>()
+        val byFamily = LinkedHashMap<String, MutableList<T>>()
         for (m in models) {
-            val family = m.family.ifBlank { OTHER }
-            byFamily.getOrPut(family) { mutableListOf() }.add(m)
+            val f = family(m).ifBlank { OTHER }
+            byFamily.getOrPut(f) { mutableListOf() }.add(m)
         }
 
-        val groups = byFamily.map { (family, list) ->
-            Group(family, list, isLegacy(family))
+        val groups = byFamily.map { (f, list) ->
+            Group(f, list, isLegacy(f))
         }
         // sortedBy ist stabil - die Reihenfolge innerhalb der beiden
         // Bloecke bleibt also die aus der Vendor-Datei.

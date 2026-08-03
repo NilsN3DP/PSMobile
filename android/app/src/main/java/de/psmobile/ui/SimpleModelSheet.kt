@@ -40,6 +40,7 @@ import androidx.compose.ui.unit.sp
 import de.psmobile.core.PsmCore
 import de.psmobile.slicing.SlicerService
 import de.psmobile.ui.theme.PrusaColors
+import de.psmobile.shared.rules.SimpleModeState
 
 /** Die C-ABI erlaubt 36 Druckbetten; siehe PSM_MAX_BEDS. */
 private const val MAX_BEDS = 36

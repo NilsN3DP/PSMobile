@@ -1,7 +1,7 @@
-package de.psmobile.ui
+package de.psmobile.shared.rules
 
-import org.junit.Assert.assertEquals
-import org.junit.Test
+import kotlin.test.assertEquals
+import kotlin.test.Test
 
 /**
  * Die Automatik soll nachvollziehbar entscheiden. Frueher schrieb sie

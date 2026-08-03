@@ -15,7 +15,11 @@ package de.psmobile.shared.ui
  * Vorher stand sie zweimal, und nichts haette gemerkt, wenn eine Seite
  * sich verschoben haette.
  */
-object UiScale {
+object WindowScale {
+    // Der Name sagt, worauf sich der Faktor bezieht: auf die Groesse des
+    // Fensters. Nicht zu verwechseln mit UiScale nebenan, das eine andere
+    // Frage beantwortet - wie eng es ist, nicht um wieviel verkleinert
+    // wird. Beide zusammen in einem Namensraum brauchen klare Namen.
 
     /** Die Groesse, fuer die die Masse gedacht sind. */
     const val REFERENCE_WIDTH = 1000f

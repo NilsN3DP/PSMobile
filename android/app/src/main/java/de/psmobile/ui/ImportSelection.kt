@@ -1,4 +1,5 @@
 package de.psmobile.ui
+import de.psmobile.shared.rules.SimpleModeState
 
 /**
  * Regeln fuer eine Dateiauswahl mit mehreren Eintraegen.
