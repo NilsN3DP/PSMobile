@@ -95,6 +95,9 @@ set(PSM_CORE_SOURCES
     core/src/psmobile_extruders.cpp
     core/src/psmobile_toggles.cpp
     core/src/psmobile_toggles_generated.cpp
+    # GL-unabhaengig: Vertragstest und Renderer muessen dieselben aus dem
+    # gespeicherten Profil erzeugten Farbdaten sehen.
+    viewport/src/psm_layer_profile_render.cpp
 )
 
 # Der Viewport liegt in derselben Bibliothek wie der Kern: er liest das

@@ -27,6 +27,11 @@ final class PsmViewport {
         let normal: (Float, Float, Float)
     }
 
+    struct LayerVisualization: Equatable {
+        let minHeight: Float
+        let maxHeight: Float
+    }
+
     private let handle: OpaquePointer
 
     /// Legt den Viewport an. Muss im GL-Thread mit gueltigem Kontext
@@ -47,6 +52,19 @@ final class PsmViewport {
     }
 
     func render() { psm_viewport_render(handle) }
+
+    /// Erst nach dem Rendern vorhanden: damit kann die Oberfläche nicht
+    /// versehentlich ein Profil behaupten, dessen Shader oder GL-Textur
+    /// gar nicht aufgebaut wurde.
+    var activeLayerVisualization: LayerVisualization? {
+        var info = psm_layer_visualization_info()
+        guard psm_viewport_active_layer_visualization(handle, &info) != 0 else {
+            return nil
+        }
+        return LayerVisualization(
+            minHeight: info.min_layer_height,
+            maxHeight: info.max_layer_height)
+    }
 
     /// Sagt dem Viewport, dass sich das Modell geaendert hat. Ohne das
     /// zeichnet er weiter den alten Stand - ein skaliertes Objekt bliebe

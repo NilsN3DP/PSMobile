@@ -64,6 +64,43 @@ PSM_API void psm_viewport_set_selections(psm_viewport *v,
                                          size_t count,
                                          psm_object_id primary);
 
+/**
+ * Vom gespeicherten Schichthoehenprofil abgeleitete Renderdaten.
+ *
+ * Der Vertragstest und native Diagnosecode koennen damit pruefen, ob aus
+ * dem gespeicherten Profil renderbare Daten entstanden sind. Die
+ * Farbdaten selbst bleiben im C++-Renderer.
+ */
+typedef struct {
+    int32_t texture_width;
+    int32_t texture_height;
+    int32_t texture_cells;
+    float   object_max_z;
+    float   min_layer_height;
+    float   max_layer_height;
+} psm_layer_visualization_info;
+
+/**
+ * Erzeugt dieselben Profildaten, die der Editor-Shader verwendet.
+ *
+ * @return 1 bei nichtleerem, renderbarem Profil, sonst 0.
+ */
+PSM_API int psm_viewport_layer_visualization_info(
+    psm_session *session,
+    psm_object_id object_id,
+    psm_layer_visualization_info *out);
+
+/**
+ * Meldet nur eine im GL-Viewport wirklich aktive Profildarstellung.
+ *
+ * Anders als psm_viewport_layer_visualization_info ist dies kein
+ * CPU-Vorabtest: Shader und Textur muessen bereits erfolgreich im
+ * letzten Renderdurchlauf aufgebaut worden sein.
+ */
+PSM_API int psm_viewport_active_layer_visualization(
+    psm_viewport *v,
+    psm_layer_visualization_info *out);
+
 typedef struct {
     psm_object_id object_id;
     int32_t       volume_index;

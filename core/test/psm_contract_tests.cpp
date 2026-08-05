@@ -1,4 +1,5 @@
 #include "psmobile_core.h"
+#include "psm_viewport.h"
 
 #include <cmath>
 #include <cstdio>
@@ -295,19 +296,44 @@ int main(int argc, char **argv)
                 session, tool_object, PSM_PAINT_SEAM) == PSM_OK,
             "clear seam painting");
 
-    const double layer_profile[] = { 0.0, 0.20, 10.0, 0.10 };
+    psm_object_info layer_object_info{};
+    require(psm_model_info(session, tool_object, &layer_object_info) == PSM_OK,
+            "read object height for variable layer profile");
+    const double layer_object_height =
+        layer_object_info.bbox_max[2] - layer_object_info.bbox_min[2];
+    const double layer_profile[] = {
+        0.0,                         0.20,
+        layer_object_height * 0.5,   0.10,
+        layer_object_height,         0.28
+    };
     require(psm_model_layer_profile_set(
-                session, tool_object, layer_profile, 2) == PSM_OK &&
-            psm_model_layer_profile_count(session, tool_object) == 2,
+                session, tool_object, layer_profile, 3) == PSM_OK &&
+            psm_model_layer_profile_count(session, tool_object) == 3,
             "store variable layer profile");
     double profile_z = -1.0;
     double profile_height = -1.0;
     require(psm_model_layer_profile_at(
                 session, tool_object, 1,
                 &profile_z, &profile_height) == PSM_OK &&
-            std::abs(profile_z - 10.0) < 0.0001 &&
+            std::abs(profile_z - layer_object_height * 0.5) < 0.0001 &&
             std::abs(profile_height - 0.10) < 0.0001,
             "read variable layer profile");
+    psm_layer_visualization_info layer_visualization{};
+    require(psm_viewport_layer_visualization_info(
+                session, tool_object, &layer_visualization) == 1 &&
+            layer_visualization.texture_width > 0 &&
+            layer_visualization.texture_height > 0 &&
+            layer_visualization.texture_cells > 0 &&
+            close_to(layer_visualization.object_max_z,
+                     layer_object_height, 0.01f) &&
+            close_to(layer_visualization.min_layer_height, 0.10f) &&
+            close_to(layer_visualization.max_layer_height, 0.28f),
+            "stored layer profile activates real renderer texture data");
+    require(psm_model_layer_profile_set(
+                session, tool_object, nullptr, 0) == PSM_OK &&
+            psm_viewport_layer_visualization_info(
+                session, tool_object, &layer_visualization) == 0,
+            "clearing layer profile removes renderer visualization data");
 
     require(psm_model_colour_set(
                 session, tool_object, "#3366CC") == PSM_OK,

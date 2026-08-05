@@ -16,6 +16,7 @@
 
 #include "psm_viewport.h"
 #include "psm_gizmo_internal.hpp"
+#include "psm_layer_profile_render.hpp"
 #include "psmobile_session.hpp"
 
 // Derselbe GLES-Bestand, zwei Ablageorte: Android legt die Header unter
@@ -75,6 +76,14 @@ struct Program {
     GLint  u_texture     = -1;
     GLint  u_transparent = -1;
     GLint  u_svg_source  = -1;
+    /* Nur variable_layer_height: Prusas gepackte Z-Farbtextur. */
+    GLint  u_z_texture = -1;
+    GLint  u_z_to_texture_row = -1;
+    GLint  u_z_texture_row_to_normalized = -1;
+    GLint  u_z_cursor = -1;
+    GLint  u_z_cursor_band_width = -1;
+    GLint  u_object_max_z = -1;
+    GLint  u_volume_world = -1;
 
     void use() const { glUseProgram(id); }
 
@@ -158,6 +167,17 @@ bool link_program(Program &prg, const std::string &dir, const std::string &name,
     prg.u_texture     = glGetUniformLocation(prg.id, "texture");
     prg.u_transparent = glGetUniformLocation(prg.id, "transparent_background");
     prg.u_svg_source  = glGetUniformLocation(prg.id, "svg_source");
+    prg.u_z_texture = glGetUniformLocation(prg.id, "z_texture");
+    prg.u_z_to_texture_row =
+        glGetUniformLocation(prg.id, "z_to_texture_row");
+    prg.u_z_texture_row_to_normalized =
+        glGetUniformLocation(prg.id, "z_texture_row_to_normalized");
+    prg.u_z_cursor = glGetUniformLocation(prg.id, "z_cursor");
+    prg.u_z_cursor_band_width =
+        glGetUniformLocation(prg.id, "z_cursor_band_width");
+    prg.u_object_max_z = glGetUniformLocation(prg.id, "object_max_z");
+    prg.u_volume_world =
+        glGetUniformLocation(prg.id, "volume_world_matrix");
     return true;
 }
 
@@ -210,6 +230,37 @@ struct Mesh {
     {
         if (vbo != 0) { glDeleteBuffers(1, &vbo); vbo = 0; }
         vertex_count = 0;
+    }
+};
+
+struct LayerTexture {
+    GLuint id = 0;
+    psm_object_id owner = PSM_INVALID_ID;
+    int width = 0;
+    int height = 0;
+    int cells = 0;
+    float object_min_z = 0.f;
+    float object_max_z = 0.f;
+    float min_layer_height = 0.f;
+    float max_layer_height = 0.f;
+
+    void destroy()
+    {
+        if (id != 0) {
+            glDeleteTextures(1, &id);
+            id = 0;
+        }
+        owner = PSM_INVALID_ID;
+        width = height = cells = 0;
+        object_min_z = 0.f;
+        object_max_z = 0.f;
+        min_layer_height = 0.f;
+        max_layer_height = 0.f;
+    }
+
+    bool enabled_for(psm_object_id object_id) const
+    {
+        return id != 0 && cells > 0 && object_id == owner;
     }
 };
 
@@ -266,10 +317,12 @@ struct psm_viewport
     std::string  last_error;
 
     Program prog_lit;    // gouraud_light - Modelle
+    Program prog_layer;  // variable_layer_height - gespeichertes Profil
     Program prog_flat;   // flat          - Bett und Raster
     Program prog_bed;    // printbed      - Bettflaeche mit Textur
 
     std::vector<Mesh> meshes;
+    LayerTexture layer_texture;
     Mesh bed_fill;
     Mesh bed_grid;
     /* Zwoelf Kanten um die Auswahl - siehe render(). */
@@ -602,6 +655,7 @@ void build_meshes(psm_viewport *v)
     for (Mesh &m : v->meshes)
         m.destroy();
     v->meshes.clear();
+    v->layer_texture.destroy();
     v->scene_bbox = Slic3r::BoundingBoxf3();
 
     for (const Slic3r::ModelObject *obj : v->session->model().objects) {
@@ -663,6 +717,85 @@ void build_meshes(psm_viewport *v)
             }
         }
     }
+
+    /*
+     * Nur die primaere Auswahl bekommt die Profildarstellung. Ein Profil
+     * gehoert zwar dem ModelObject, aber andere Objekte gleichzeitig bunt
+     * zu zeichnen wuerde ihre Extruderfarben verdecken und die Zuordnung
+     * im Editor unklar machen.
+     */
+    if (v->selection != PSM_INVALID_ID && v->prog_layer.id != 0) {
+        for (const Slic3r::ModelObject *object :
+                 v->session->model().objects) {
+            if (static_cast<psm_object_id>(object->id().id) != v->selection)
+                continue;
+
+            const psm::LayerVisualizationData data =
+                psm::build_layer_visualization(*v->session, *object);
+            if (! data.enabled())
+                break;
+
+            LayerTexture &texture = v->layer_texture;
+            /* Nur Fehler dieses Uploads auswerten, nicht einen alten
+             * Zustand eines zuvor verwendeten Bett- oder Gizmo-Shaders. */
+            while (glGetError() != GL_NO_ERROR) {}
+            glGenTextures(1, &texture.id);
+            glBindTexture(GL_TEXTURE_2D, texture.id);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+#if defined(GL_TEXTURE_MAX_LEVEL_APPLE)
+            glTexParameteri(
+                GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER,
+                GL_LINEAR_MIPMAP_NEAREST);
+            /*
+             * iOS stellt das fehlende GLES2-Core-Token ueber
+             * GL_APPLE_texture_max_level bereit. Damit bedeutet der
+             * hohe Bias in Prusas unveraendertem Shader wirklich Level
+             * 1 und nicht das letzte Level einer kuenstlichen Kette.
+             */
+            glTexParameteri(
+                GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL_APPLE, 1);
+#else
+            /* Portabler Basis-Fallback; auf iOS greift immer der
+             * originalgetreue Zwei-Level-Pfad oberhalb. */
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+#endif
+            glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+            glTexImage2D(
+                GL_TEXTURE_2D, 0, GL_RGBA, data.width, data.height, 0,
+                GL_RGBA, GL_UNSIGNED_BYTE, data.rgba.data());
+#if defined(GL_TEXTURE_MAX_LEVEL_APPLE)
+            glTexImage2D(
+                GL_TEXTURE_2D, 1, GL_RGBA,
+                data.width / 2, data.height / 2,
+                0,
+                GL_RGBA, GL_UNSIGNED_BYTE,
+                data.rgba.data() +
+                    static_cast<size_t>(data.width * data.height * 4));
+#endif
+            glBindTexture(GL_TEXTURE_2D, 0);
+            const GLenum upload_error = glGetError();
+            if (upload_error != GL_NO_ERROR) {
+                texture.destroy();
+                psm_emit_log(
+                    PSM_LOG_WARN,
+                    "Schichthoehen-Textur konnte nicht geladen werden: GL " +
+                        std::to_string(static_cast<unsigned>(upload_error)));
+                break;
+            }
+
+            texture.owner = v->selection;
+            texture.width = data.width;
+            texture.height = data.height;
+            texture.cells = data.cells;
+            texture.object_min_z = data.object_min_z;
+            texture.object_max_z = data.object_max_z;
+            texture.min_layer_height = data.min_layer_height;
+            texture.max_layer_height = data.max_layer_height;
+            break;
+        }
+    }
 }
 
 void draw(const Program &p, const Mesh &m, GLenum mode,
@@ -706,6 +839,50 @@ void draw(const Program &p, const Mesh &m, GLenum mode,
     glBindBuffer(GL_ARRAY_BUFFER, 0);
 }
 
+void draw_layer_profile(psm_viewport *v, const Mesh &mesh,
+                        const Mat4 &view, const Mat4 &projection)
+{
+    const LayerTexture &texture = v->layer_texture;
+    if (! texture.enabled_for(mesh.owner) || texture.object_max_z <= 0.f)
+        return;
+
+    Program &program = v->prog_layer;
+    program.use();
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, texture.id);
+    if (program.u_z_texture >= 0)
+        glUniform1i(program.u_z_texture, 0);
+    if (program.u_z_to_texture_row >= 0)
+        glUniform1f(
+            program.u_z_to_texture_row,
+            static_cast<float>(texture.cells - 1) /
+                (static_cast<float>(texture.width) * texture.object_max_z));
+    if (program.u_z_texture_row_to_normalized >= 0)
+        glUniform1f(program.u_z_texture_row_to_normalized,
+                    1.f / static_cast<float>(texture.height));
+    if (program.u_z_cursor >= 0)
+        glUniform1f(program.u_z_cursor, -1000.f);
+    if (program.u_z_cursor_band_width >= 0)
+        glUniform1f(program.u_z_cursor_band_width, 2.f);
+    if (program.u_object_max_z >= 0)
+        glUniform1f(program.u_object_max_z, 0.f);
+    if (program.u_volume_world >= 0) {
+        Mat4 identity = Mat4::Identity();
+        /*
+         * Die gespeicherten Profil-Z-Werte beginnen an der
+         * Objektunterkante. Unsere VBO-Positionen sind bereits in
+         * Bettkoordinaten, daher diese eine Rueckverschiebung.
+         */
+        identity(2, 3) = -texture.object_min_z;
+        glUniformMatrix4fv(
+            program.u_volume_world, 1, GL_FALSE, identity.data());
+    }
+
+    static const float white[4] = { 1.f, 1.f, 1.f, 1.f };
+    draw(program, mesh, GL_TRIANGLES, view, projection, white);
+    glBindTexture(GL_TEXTURE_2D, 0);
+}
+
 } // namespace
 
 /* ------------------------------------------------------------------ */
@@ -728,6 +905,9 @@ PSM_API psm_viewport *psm_viewport_create(psm_session *session, const char *shad
      * einfarbig. Deshalb getrennt und ohne Abbruch. */
     if (! link_program(v->prog_bed, v->shader_dir, "printbed", err))
         psm_emit_log(PSM_LOG_WARN, "Bett-Shader: " + err);
+    if (! link_program(
+            v->prog_layer, v->shader_dir, "variable_layer_height", err))
+        psm_emit_log(PSM_LOG_WARN, "Schichthoehen-Shader: " + err);
 
     if (! link_program(v->prog_lit, v->shader_dir, "gouraud_light", err) ||
         ! link_program(v->prog_flat, v->shader_dir, "flat", err)) {
@@ -754,7 +934,9 @@ PSM_API void psm_viewport_destroy(psm_viewport *v)
     v->bed_fill.destroy();
     v->bed_grid.destroy();
     v->auswahlkasten.destroy();
+    v->layer_texture.destroy();
     v->prog_lit.destroy();
+    v->prog_layer.destroy();
     v->prog_flat.destroy();
     v->prog_bed.destroy();
     if (v->bed_tex != 0) { glDeleteTextures(1, &v->bed_tex); v->bed_tex = 0; }
@@ -780,6 +962,26 @@ PSM_API void psm_viewport_invalidate(psm_viewport *v)
 {
     if (v != nullptr)
         v->dirty = true;
+}
+
+PSM_API int psm_viewport_active_layer_visualization(
+    psm_viewport *v,
+    psm_layer_visualization_info *out)
+{
+    if (v == nullptr || out == nullptr)
+        return 0;
+    std::memset(out, 0, sizeof(*out));
+    const LayerTexture &texture = v->layer_texture;
+    if (v->prog_layer.id == 0 ||
+        ! texture.enabled_for(v->selection))
+        return 0;
+    out->texture_width = texture.width;
+    out->texture_height = texture.height;
+    out->texture_cells = texture.cells;
+    out->object_max_z = texture.object_max_z;
+    out->min_layer_height = texture.min_layer_height;
+    out->max_layer_height = texture.max_layer_height;
+    return 1;
 }
 
 namespace {
@@ -899,7 +1101,10 @@ PSM_API void psm_viewport_render(psm_viewport *v)
         if (gewaehlt)
             for (int k = 0; k < 3; ++k)
                 farbe[k] = std::min(1.f, farbe[k] * 0.45f + 0.55f);
-        draw(v->prog_lit, m, GL_TRIANGLES, view, proj, farbe);
+        if (v->layer_texture.enabled_for(m.owner))
+            draw_layer_profile(v, m, view, proj);
+        else
+            draw(v->prog_lit, m, GL_TRIANGLES, view, proj, farbe);
     }
 
     /*
@@ -1075,10 +1280,13 @@ PSM_API psm_object_id psm_viewport_pick(psm_viewport *v, float x, float y)
 PSM_API void psm_viewport_set_selection(psm_viewport *v, psm_object_id id)
 {
     if (v != nullptr) {
+        const bool changed = v->selection != id;
         v->selection = id;
         v->selections.clear();
         if (id != PSM_INVALID_ID)
             v->selections.push_back(id);
+        if (changed)
+            v->dirty = true;
     }
 }
 
@@ -1089,6 +1297,7 @@ PSM_API void psm_viewport_set_selections(psm_viewport *v,
 {
     if (v == nullptr)
         return;
+    const bool changed = v->selection != primary;
     v->selection = primary;
     v->selections.clear();
     if (ids != nullptr)
@@ -1097,6 +1306,8 @@ PSM_API void psm_viewport_set_selections(psm_viewport *v,
         std::find(v->selections.begin(), v->selections.end(), primary)
             == v->selections.end())
         v->selections.push_back(primary);
+    if (changed)
+        v->dirty = true;
 }
 
 static int raycast_model(psm_viewport *v, float x, float y,

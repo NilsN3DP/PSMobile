@@ -65,6 +65,8 @@ struct SimpleModeView: View {
     @State private var nachDemSchnittZeigen = false
     @State private var schicht: Double = 0
     @State private var schichten: Int32 = 0
+    @State private var schichthoehenDarstellung:
+        PsmViewport.LayerVisualization?
     @State private var ansichtZuruecksetzen = 0
 
     /// Auf schmalen Geraeten ruecken Kopfzeile und Leiste zusammen -
@@ -147,52 +149,64 @@ struct SimpleModeView: View {
 
     @ViewBuilder private var arbeitsbereich: some View {
         if let session = model.sessionHandle {
-            ViewportView(
-                session: session,
-                shaderDir: model.shaderDir,
-                selectedId: model.selectedId ?? -1,
-                selectedIds: Array(model.selectedIds),
-                invalidateKey: model.sceneRevision,
-                // Bei offenem Panel darf der Viewport die Beruehrung nicht
-                // schlucken: ein Tippen daneben soll das Panel schliessen,
-                // nicht die Kamera drehen.
-                inputEnabled: panel == .workspace,
-                gizmo: gizmo,
-                viewportMode: vorschau ? .preview : .editor,
-                layerRange: vorschau && schichten > 0
-                    ? 0...Int32(schicht) : nil,
-                resetViewKey: ansichtZuruecksetzen,
-                onPreviewLoaded: { anzahl in
-                    schichten = anzahl
-                    schicht = Double(max(anzahl - 1, 0))
-                    // Kommt nichts zurueck, gibt es auch nichts zu
-                    // zeigen - dann zurueck aufs Bett statt eine leere
-                    // Flaeche.
-                    if anzahl == 0 { vorschau = false }
-                },
-                onSelect: { model.select($0 < 0 ? nil : $0) },
-                onObjectChanged: { model.refresh() },
-                // Nur solange das Werkzeug an ist. Sonst gehoert jede
-                // Beruehrung der Kamera, und ein Tippen ist eine
-                // Auswahl.
-                onSurfaceTap: (aufFlaeche && model.selectedId != nil)
-                    ? { (treffer: PsmViewport.SurfaceHit) in
-                        guard let id = model.selectedId else { return }
-                        model.layOnFace(id,
-                                        instance: Int(treffer.instanceIndex),
-                                        volume: Int(treffer.volumeIndex),
-                                        facet: Int(treffer.facetIndex))
-                        // Das Werkzeug bleibt an. Sich nach einem
-                        // Tippen selbst abzuschalten war gut gemeint -
-                        // beim ersten Versuch trifft man aber selten
-                        // die gemeinte Flaeche, und dann steht man vor
-                        // einem Werkzeug, das nicht mehr reagiert.
-                        // Aus geht es ueber denselben Knopf.
-                      }
-                    : nil,
-                onBlockedInput: { panel = .workspace }
-            )
-            .ignoresSafeArea()
+            ZStack(alignment: .bottomLeading) {
+                ViewportView(
+                    session: session,
+                    shaderDir: model.shaderDir,
+                    selectedId: model.selectedId ?? -1,
+                    selectedIds: Array(model.selectedIds),
+                    invalidateKey: model.sceneRevision,
+                    // Bei offenem Panel darf der Viewport die Beruehrung nicht
+                    // schlucken: ein Tippen daneben soll das Panel schliessen,
+                    // nicht die Kamera drehen.
+                    inputEnabled: panel == .workspace,
+                    gizmo: gizmo,
+                    viewportMode: vorschau ? .preview : .editor,
+                    layerRange: vorschau && schichten > 0
+                        ? 0...Int32(schicht) : nil,
+                    resetViewKey: ansichtZuruecksetzen,
+                    onPreviewLoaded: { anzahl in
+                        schichten = anzahl
+                        schicht = Double(max(anzahl - 1, 0))
+                        // Kommt nichts zurueck, gibt es auch nichts zu
+                        // zeigen - dann zurueck aufs Bett statt eine leere
+                        // Flaeche.
+                        if anzahl == 0 { vorschau = false }
+                    },
+                    onSelect: { model.select($0 < 0 ? nil : $0) },
+                    onObjectChanged: { model.refresh() },
+                    // Nur solange das Werkzeug an ist. Sonst gehoert jede
+                    // Beruehrung der Kamera, und ein Tippen ist eine
+                    // Auswahl.
+                    onSurfaceTap: (aufFlaeche && model.selectedId != nil)
+                        ? { (treffer: PsmViewport.SurfaceHit) in
+                            guard let id = model.selectedId else { return }
+                            model.layOnFace(id,
+                                            instance: Int(treffer.instanceIndex),
+                                            volume: Int(treffer.volumeIndex),
+                                            facet: Int(treffer.facetIndex))
+                            // Das Werkzeug bleibt an. Sich nach einem
+                            // Tippen selbst abzuschalten war gut gemeint -
+                            // beim ersten Versuch trifft man aber selten
+                            // die gemeinte Flaeche, und dann steht man vor
+                            // einem Werkzeug, das nicht mehr reagiert.
+                            // Aus geht es ueber denselben Knopf.
+                          }
+                        : nil,
+                    onBlockedInput: { panel = .workspace },
+                    onLayerVisualizationChanged: {
+                        schichthoehenDarstellung = $0
+                    }
+                )
+                .ignoresSafeArea()
+
+                if !vorschau, let grenzen = schichthoehenDarstellung {
+                    LayerProfileViewportLegend(
+                        minHeight: Double(grenzen.minHeight),
+                        maxHeight: Double(grenzen.maxHeight))
+                        .padding(ps.pt(12))
+                }
+            }
         }
     }
 

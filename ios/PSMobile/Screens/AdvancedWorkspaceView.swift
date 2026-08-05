@@ -85,6 +85,8 @@ struct AdvancedWorkspaceView: View {
     @State private var aufFlaeche = false
     @State private var schicht: Double = 0
     @State private var schichten: Int32 = 0
+    @State private var schichthoehenDarstellung:
+        PsmViewport.LayerVisualization?
     /// Ob nach dem laufenden Schnitt die Vorschau aufgehen soll.
     @State private var nachDemSchnittZeigen = false
 
@@ -658,56 +660,68 @@ struct AdvancedWorkspaceView: View {
 
     @ViewBuilder private var arbeitsflaeche: some View {
         if let session = model.sessionHandle {
-            ViewportView(
-                session: session,
-                shaderDir: model.shaderDir,
-                selectedId: model.selectedId ?? -1,
-                selectedIds: Array(model.selectedIds),
-                invalidateKey: model.sceneRevision,
-                gizmo: malwerkzeug == nil ? gizmo : .none,
-                viewportMode: vorschau ? .preview : .editor,
-                layerRange: vorschau && schichten > 0 ? 0...Int32(schicht) : nil,
-                resetViewKey: ansichtZuruecksetzen,
-                viewPreset: ansicht,
-                viewPresetKey: ansichtZaehler,
-                onPreviewLoaded: { anzahl in
-                    schichten = anzahl
-                    schicht = Double(max(anzahl - 1, 0))
-                    // Kommt nichts zurueck, gibt es nichts zu zeigen.
-                    if anzahl == 0 { vorschau = false }
-                },
-                onSelect: { model.select($0 < 0 ? nil : $0) },
-                onObjectChanged: { model.refresh() },
-                // Solange ein Malwerkzeug gewaehlt ist, geht jede
-                // Beruehrung an die Flaeche statt an die Kamera. Der
-                // Viewport unterscheidet das daran, ob hier jemand
-                // zuhoert.
-                // Zwei Werkzeuge teilen sich dieselbe Beruehrung: der
-                // Pinsel und das Hinlegen auf eine Flaeche. Beide
-                // brauchen ein getroffenes Dreieck, nur macht jedes
-                // etwas anderes damit.
-                onSurfaceTap: (malwerkzeug == nil && !aufFlaeche) ? nil : { treffer in
-                    if let werkzeug = malwerkzeug {
-                        model.paint(treffer.objectId,
-                                    volume: Int(treffer.volumeIndex),
-                                    facet: Int(treffer.facetIndex),
-                                    tool: werkzeug,
-                                    state: malzustand,
-                                    radiusMm: malradius)
-                    } else if aufFlaeche {
-                        model.layOnFace(treffer.objectId,
-                                        instance: Int(treffer.instanceIndex),
+            ZStack(alignment: .bottomLeading) {
+                ViewportView(
+                    session: session,
+                    shaderDir: model.shaderDir,
+                    selectedId: model.selectedId ?? -1,
+                    selectedIds: Array(model.selectedIds),
+                    invalidateKey: model.sceneRevision,
+                    gizmo: malwerkzeug == nil ? gizmo : .none,
+                    viewportMode: vorschau ? .preview : .editor,
+                    layerRange: vorschau && schichten > 0 ? 0...Int32(schicht) : nil,
+                    resetViewKey: ansichtZuruecksetzen,
+                    viewPreset: ansicht,
+                    viewPresetKey: ansichtZaehler,
+                    onPreviewLoaded: { anzahl in
+                        schichten = anzahl
+                        schicht = Double(max(anzahl - 1, 0))
+                        // Kommt nichts zurueck, gibt es nichts zu zeigen.
+                        if anzahl == 0 { vorschau = false }
+                    },
+                    onSelect: { model.select($0 < 0 ? nil : $0) },
+                    onObjectChanged: { model.refresh() },
+                    // Solange ein Malwerkzeug gewaehlt ist, geht jede
+                    // Beruehrung an die Flaeche statt an die Kamera. Der
+                    // Viewport unterscheidet das daran, ob hier jemand
+                    // zuhoert.
+                    // Zwei Werkzeuge teilen sich dieselbe Beruehrung: der
+                    // Pinsel und das Hinlegen auf eine Flaeche. Beide
+                    // brauchen ein getroffenes Dreieck, nur macht jedes
+                    // etwas anderes damit.
+                    onSurfaceTap: (malwerkzeug == nil && !aufFlaeche) ? nil : { treffer in
+                        if let werkzeug = malwerkzeug {
+                            model.paint(treffer.objectId,
                                         volume: Int(treffer.volumeIndex),
-                                        facet: Int(treffer.facetIndex))
+                                        facet: Int(treffer.facetIndex),
+                                        tool: werkzeug,
+                                        state: malzustand,
+                                        radiusMm: malradius)
+                        } else if aufFlaeche {
+                            model.layOnFace(treffer.objectId,
+                                            instance: Int(treffer.instanceIndex),
+                                            volume: Int(treffer.volumeIndex),
+                                            facet: Int(treffer.facetIndex))
+                        }
+                    },
+                    onLayerVisualizationChanged: {
+                        schichthoehenDarstellung = $0
                     }
+                )
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                // Eine eigene Kennung, damit Gesten im Test die Flaeche
+                // treffen und nicht die Marke des Bildschirms. Am Viewport
+                // ist das gefahrlos: er ist eine einzelne UIView ohne
+                // SwiftUI-Kinder, die Kennung vererbt sich an niemanden.
+                .accessibilityIdentifier("viewport")
+
+                if !vorschau, let grenzen = schichthoehenDarstellung {
+                    LayerProfileViewportLegend(
+                        minHeight: Double(grenzen.minHeight),
+                        maxHeight: Double(grenzen.maxHeight))
+                        .padding(ps.pt(12))
                 }
-            )
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            // Eine eigene Kennung, damit Gesten im Test die Flaeche
-            // treffen und nicht die Marke des Bildschirms. Am Viewport
-            // ist das gefahrlos: er ist eine einzelne UIView ohne
-            // SwiftUI-Kinder, die Kennung vererbt sich an niemanden.
-            .accessibilityIdentifier("viewport")
+            }
         } else {
             PrusaColors.background.frame(maxWidth: .infinity, maxHeight: .infinity)
         }

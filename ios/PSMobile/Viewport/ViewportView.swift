@@ -2,6 +2,7 @@ import SwiftUI
 import UIKit
 import OpenGLES
 import QuartzCore
+import PSMShared
 
 /// Der 3D-Arbeitsbereich.
 ///
@@ -49,6 +50,8 @@ struct ViewportView: UIViewRepresentable {
     var onObjectChanged: (() -> Void)?
     var onSurfaceTap: ((PsmViewport.SurfaceHit) -> Void)?
     var onBlockedInput: (() -> Void)?
+    var onLayerVisualizationChanged:
+        ((PsmViewport.LayerVisualization?) -> Void)?
 
     func makeUIView(context: Context) -> PSMGLView {
         let v = PSMGLView(session: session, shaderDir: shaderDir)
@@ -62,6 +65,7 @@ struct ViewportView: UIViewRepresentable {
         v.onObjectChanged = onObjectChanged
         v.onSurfaceTap = onSurfaceTap
         v.onBlockedInput = onBlockedInput
+        v.onLayerVisualizationChanged = onLayerVisualizationChanged
         v.inputEnabled = inputEnabled
         let zuruecksetzen = v.letzterResetKey != resetViewKey
         v.letzterResetKey = resetViewKey
@@ -88,6 +92,55 @@ struct ViewportView: UIViewRepresentable {
 
     static func dismantleUIView(_ v: PSMGLView, coordinator: ()) {
         v.release()
+    }
+}
+
+/// Erklaert die vom C++-Viewport gezeichnete Schichthoehenfarbe.
+///
+/// Das ist bewusst nur eine Legende, keine SwiftUI-Ersatzzeichnung des
+/// Modells. Die eigentliche Z-Farbe entsteht im PrusaSlicer-Shader; hier
+/// bleiben lediglich die beiden gespeicherten Grenzwerte les- und fuer
+/// VoiceOver pruefbar.
+struct LayerProfileViewportLegend: View {
+    let minHeight: Double
+    let maxHeight: Double
+
+    @Environment(\.psScale) private var ps
+
+    var body: some View {
+        HStack(spacing: ps.pt(7)) {
+            Image(systemName: "square.3.layers.3d")
+                .foregroundStyle(PrusaColors.orange)
+            Text(st("Fine", "Fein") + " " + mm(minHeight))
+            Image(systemName: "arrow.left.and.right")
+                .foregroundStyle(PrusaColors.textMuted)
+            Text(st("Coarse", "Grob") + " " + mm(maxHeight))
+        }
+        .font(.system(size: ps.font(11), weight: .semibold))
+        .foregroundStyle(PrusaColors.textPrimary)
+        .padding(.horizontal, ps.pt(10))
+        .frame(minHeight: ps.touch(44))
+        .background(PrusaColors.panel.opacity(0.94))
+        .clipShape(RoundedRectangle(cornerRadius: ps.pt(5)))
+        .overlay(
+            RoundedRectangle(cornerRadius: ps.pt(5))
+                .stroke(PrusaColors.orange.opacity(0.65), lineWidth: 1)
+        )
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(st("Layer height visualization",
+                               "Schichthöhen-Visualisierung"))
+        .accessibilityValue(
+            st("Fine \(mm(minHeight)), coarse \(mm(maxHeight))",
+               "Fein \(mm(minHeight)), grob \(mm(maxHeight))"))
+        .accessibilityIdentifier("viewport.schichthoehen")
+    }
+
+    private func mm(_ value: Double) -> String {
+        String(format: "%.2f mm", value)
+    }
+
+    private func st(_ english: String, _ german: String) -> String {
+        SimpleModeState.shared.text(english: english, german: german)
     }
 }
 
@@ -124,6 +177,9 @@ final class PSMGLView: UIView {
     var onObjectChanged: (() -> Void)?
     var onSurfaceTap: ((PsmViewport.SurfaceHit) -> Void)?
     var onBlockedInput: (() -> Void)?
+    var onLayerVisualizationChanged:
+        ((PsmViewport.LayerVisualization?) -> Void)?
+    private var letzteSchichtdarstellung: PsmViewport.LayerVisualization?
 
     // Zustand der laufenden Geste - dieselbe Aufteilung wie auf Android.
     private var lastPoint: CGPoint = .zero
@@ -253,6 +309,11 @@ final class PSMGLView: UIView {
         glBindRenderbuffer(GLenum(GL_RENDERBUFFER), colorbuffer)
         context.presentRenderbuffer(Int(GL_RENDERBUFFER))
         aktualisiereGizmoMarker(vp)
+        let schichtdarstellung = vp.activeLayerVisualization
+        if schichtdarstellung != letzteSchichtdarstellung {
+            letzteSchichtdarstellung = schichtdarstellung
+            onLayerVisualizationChanged?(schichtdarstellung)
+        }
     }
 
     private func aktualisiereGizmoMarker(_ vp: PsmViewport) {

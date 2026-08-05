@@ -53,6 +53,7 @@ struct LayerProfileView: View {
                 Spacer()
                 Button(st("Cancel", "Abbrechen"), action: onClose)
                     .foregroundStyle(PrusaColors.textMuted)
+                    .accessibilityIdentifier("schichten.abbrechen")
                 Button {
                     model.setLayerProfile(objekt.id,
                                           points: LayerProfile.shared.points(rows: zeilen))

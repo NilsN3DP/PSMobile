@@ -76,6 +76,46 @@ final class LayerProfileUITests: XCTestCase {
                       "Ein ungueltiges Profil liesse sich uebernehmen")
     }
 
+    func testAnwendenMarkiertDasModellUndZuruecksetzenEntferntDieMarkierung() {
+        app.buttons["schichten.neu"].tap()
+
+        let mittlereHoehe = app.textFields["schichten.h.1"]
+        XCTAssertTrue(mittlereHoehe.waitForExistence(timeout: 5),
+                      "Die neue Stützstelle ist nicht editierbar")
+        ersetzeText(in: mittlereHoehe, durch: "0.10")
+
+        app.buttons["schichten.uebernehmen"].tap()
+
+        let markierung = app.otherElements["viewport.schichthoehen"]
+        XCTAssertTrue(markierung.waitForExistence(timeout: 10),
+                      "Das angewendete Profil wird am Modell nicht sichtbar erklärt")
+        XCTAssertTrue((markierung.value as? String)?.contains("0.10") == true,
+                      "Die Viewport-Markierung beschreibt die feine Schichthöhe nicht")
+
+        let schichten = app.buttons["advanced.schichten"]
+        XCTAssertTrue(warteBisTreffbar(schichten),
+                      "Der Schichthöhen-Editor lässt sich nicht erneut öffnen")
+        schichten.tap()
+        XCTAssertTrue(app.buttons["schichten.zuruecksetzen"].waitForExistence(timeout: 5))
+        app.buttons["schichten.zuruecksetzen"].tap()
+        // Zurücksetzen löscht sofort. „Übernehmen“ würde die danach
+        // angezeigten Standardwerte bewusst wieder als neues Profil
+        // speichern; zum Prüfen des Löschpfads schließen wir daher ab.
+        app.buttons["schichten.abbrechen"].tap()
+
+        XCTAssertTrue(warte(bis: { !markierung.exists }),
+                      "Ein gelöschtes Profil lässt seine Viewport-Markierung zurück")
+    }
+
+    private func ersetzeText(in feld: XCUIElement, durch text: String) {
+        feld.tap()
+        feld.press(forDuration: 1.0)
+        if app.menuItems["Select All"].waitForExistence(timeout: 2) {
+            app.menuItems["Select All"].tap()
+        }
+        feld.typeText(text)
+    }
+
     private func warte(bis bedingung: () -> Bool, timeout: TimeInterval = 10) -> Bool {
         let ende = Date().addingTimeInterval(timeout)
         while Date() < ende {
