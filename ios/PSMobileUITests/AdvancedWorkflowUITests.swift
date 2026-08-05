@@ -101,6 +101,40 @@ final class AdvancedWorkflowUITests: XCTestCase {
                       "Die Auswahlzeile ist nicht mehr erreichbar")
     }
 
+    func testMehrereObjekteFuehrenAuchBeiKompakterHoeheZumInspector() {
+        app.terminate()
+        app.launchArguments = ["-psm-preset-printer", "-psm-start-advanced",
+                               "-psm-load-cube", "-psm-test-many-cubes"]
+        app.launch()
+        XCTAssertTrue(app.otherElements["arbeitsbereich"].waitForExistence(timeout: 60))
+
+        XCUIDevice.shared.orientation = .landscapeLeft
+        addTeardownBlock { XCUIDevice.shared.orientation = .portrait }
+
+        let objekteReiter = app.buttons["inspektor.objekte"]
+        XCTAssertTrue(warteBisTreffbar(objekteReiter),
+                      "Der Objektbereich ist im Querformat nicht erreichbar")
+        objekteReiter.tap()
+
+        let objektzeilen = app.buttons.matching(
+            NSPredicate(format: "identifier BEGINSWITH 'advanced.objekt.'"))
+        XCTAssertTrue(warte(bis: { objektzeilen.count == 12 }, timeout: 30),
+                      "Die Mehrfachobjekt-Szene wurde nicht geladen")
+        let ersteZeile = objektzeilen.firstMatch
+        XCTAssertTrue(warteBisTreffbar(ersteZeile),
+                      "Die erste Objektzeile ist nicht erreichbar")
+        ersteZeile.tap()
+
+        XCTAssertTrue(warteBisTreffbar(app.textFields["advanced.scale.prozent"]),
+                      "Das Größenfeld bleibt bei vielen Objekten abgeschnitten")
+        XCTAssertTrue(warteBisTreffbar(app.textFields["advanced.rotate.Z"]),
+                      "Das Drehfeld bleibt bei vielen Objekten abgeschnitten")
+        XCTAssertTrue(warteBisTreffbar(app.buttons["advanced.einpassen"]),
+                      "Einpassen bleibt bei vielen Objekten abgeschnitten")
+        XCTAssertTrue(warteBisTreffbar(app.buttons["advanced.schichten"]),
+                      "Schichthöhen bleiben bei vielen Objekten abgeschnitten")
+    }
+
     func testEineVierteldrehungKommtAmModellAn() {
         erstesObjektWaehlen()
         let rechts = app.buttons["advanced.drehen.rechts"]

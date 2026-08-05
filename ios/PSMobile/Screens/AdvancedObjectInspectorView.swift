@@ -60,6 +60,7 @@ struct AdvancedObjectInspectorView: View {
                         value: geo.frame(in: .global))
                 }
             }
+            .id("advanced.bearbeiten.aktionen")
             Divider().background(PrusaColors.divider)
             geometrie
             Divider().background(PrusaColors.divider)

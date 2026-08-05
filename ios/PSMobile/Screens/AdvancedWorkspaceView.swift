@@ -65,6 +65,9 @@ struct AdvancedWorkspaceView: View {
     /// Solange gesetzt, wartet die Seitenleiste auf die echten Rahmen
     /// von Scrollfläche und Bearbeitenblock.
     @State private var seitenleistenZiel: Int32?
+    /// Null: zuerst die Auswahlzeile erhalten. Eins: falls der danach
+    /// neu gemessene Block noch abgeschnitten ist, direkt nachkorrigieren.
+    @State private var seitenleistenFokusSchritt = 0
     @State private var seitenleistenRahmen: CGRect = .null
     @State private var bearbeitenRahmen: CGRect = .null
     /// Welche Einstellungsseite als schwebendes Fenster offen ist.
@@ -1333,6 +1336,7 @@ struct AdvancedWorkspaceView: View {
                     // Wer ein Objekt antippt, will damit etwas tun. Der
                     // frühere Reiterzustand öffnete im Akkordeon nichts.
                     offeneBereiche.insert(kennung(.bearbeiten))
+                    seitenleistenFokusSchritt = 0
                     seitenleistenZiel = objekt.id
                 } label: {
                     HStack {
@@ -1388,8 +1392,9 @@ struct AdvancedWorkspaceView: View {
     }
 
     /// Scrollt nur, wenn der obere Aktionsblock nicht vollständig in der
-    /// gemessenen Seitenleistenfläche liegt. Als Ziel dient die gewählte
-    /// Objektzeile; dadurch bleibt sie auch nach dem Sprung treffbar.
+    /// gemessenen Seitenleistenfläche liegt. Zuerst bleibt die gewählte
+    /// Objektzeile am oberen Rand. Reicht das bei einer langen Liste nicht,
+    /// folgt genau eine Nachkorrektur zum gemessenen Aktionsblock.
     private func bearbeitenFokussierenWennNoetig(
         _ proxy: ScrollViewProxy,
         seitenleiste neuerSeitenleistenRahmen: CGRect? = nil,
@@ -1402,10 +1407,19 @@ struct AdvancedWorkspaceView: View {
               !bearbeiten.isNull else { return }
         let sichtbar = bearbeiten.minY >= seitenleiste.minY
             && bearbeiten.maxY <= seitenleiste.maxY
-        if !sichtbar {
+        if sichtbar {
+            seitenleistenZiel = nil
+            seitenleistenFokusSchritt = 0
+        } else if seitenleistenFokusSchritt == 0 {
+            seitenleistenFokusSchritt = 1
             proxy.scrollTo(scrollKennungFuerObjekt(id), anchor: .top)
+        } else {
+            // Dieser zweite und letzte Sprung ist absichtlich begrenzt:
+            // Seine neue Preference-Messung löst keinen dritten aus.
+            proxy.scrollTo("advanced.bearbeiten.aktionen", anchor: .top)
+            seitenleistenZiel = nil
+            seitenleistenFokusSchritt = 0
         }
-        seitenleistenZiel = nil
     }
 
     private func scrollKennungFuerObjekt(_ id: Int32) -> String {

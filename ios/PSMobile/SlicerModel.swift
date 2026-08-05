@@ -176,7 +176,13 @@ final class SlicerModel: ObservableObject {
                 // brauchen: Schneiden, Auswahl, Gizmos. Er kommt hinter
                 // die Profile - ohne Drucker gibt es kein Bett, und ein
                 // Modell ohne Bett landet irgendwo.
-                if argumente.contains("-psm-load-cube") { ladeTestWuerfel() }
+                if argumente.contains("-psm-load-cube") {
+                    // Viele Würfel erzwingen im UI-Test eine lange
+                    // Objektliste. So bleibt der Inspector-Fokus nicht
+                    // nur für den bequemen Ein-Objekt-Fall geprüft.
+                    let anzahl = argumente.contains("-psm-test-many-cubes") ? 12 : 1
+                    for _ in 0..<anzahl { ladeTestWuerfel() }
+                }
             }
         } catch {
             progress = .failed(error.localizedDescription)
