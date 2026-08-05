@@ -337,3 +337,37 @@ da ist. Er legt die größte ebene Fläche nach unten (`layFlat` →
 `psm_model_lay_flat_auto`). Ein Wort dafür finden, das das sagt — und
 sobald die Flächenanzeige steht (Punkt 1 der Liste), gehören beide
 Hinlegen-Wege ohnehin zusammen betrachtet.
+
+## Nach dem Zusammenfuehren gemeldet (Stand 97114d6)
+
+### Die Bettkarten sind zu schmal fuer ihren Inhalt
+Foto vom iPad: In der Bettleiste steht statt des Namens nur "Be...", und
+"0 objects" bricht ueber drei Zeilen um. Vier Elemente - Name,
+Objektzahl, Sperrsymbol, Loeschsymbol - passen in dieser Kartenbreite
+nicht nebeneinander, und der Text weicht nach unten aus, statt sich zu
+verkleinern.
+
+Zu aendern in der Bettleiste von AdvancedWorkspaceView, seit dem Umbau
+mit psm_bed_metadata:
+
+* lineLimit(1) und minimumScaleFactor(0.75) auf beide Textzeilen - so
+  macht es die Werkzeugschiene fuer ihre Beschriftungen bereits.
+* Karte breiter oder die Objektzahl kuerzer: nur die Zahl statt
+  "0 objects", die Einheit steht schon in der Ueberschrift "Beds".
+* Sperr- und Loeschsymbol gehoeren eher in ein Kontextmenue der Karte
+  als dauerhaft hinein - sie kosten die Breite, die der Name braucht.
+
+Auf einem iPhone wird es noch enger: die Leiste scrollt waagerecht, die
+Karten haben aber feste Breite.
+
+### Die Betten stehen weiterhin nicht nebeneinander
+Der Wunsch aus Punkt 4 der Liste oben ist damit offen: alle Betten auf
+einem Schirm, wie in der PC-Fassung, mit den Knoepfen oben zum
+Umschalten und Namen ueber den Betten. Codex hat die Auswahl und das
+Anordnen je Bett gebaut (psm_arrange_bed, psm_bed_metadata) - die
+raeumliche Darstellung im Viewport fehlt aber weiter. Der Viewport
+zeichnet nach wie vor nur das aktive Bett.
+
+Was dafuer noch fehlt, steht unveraendert in Punkt 4: Geometrie und
+Objekte je Bett versetzt zeichnen, Treffererkennung mit Versatz, und
+eine ABI-Funktion Welt nach Bildschirm fuer die Namen.
