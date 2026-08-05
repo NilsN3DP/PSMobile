@@ -26,6 +26,12 @@ final class FloatingDialogUITests: XCTestCase {
                           "\(name) darf nicht den ganzen Bildschirm bedecken")
     }
 
+    private func lage(_ element: XCUIElement, im dialog: XCUIElement) -> String {
+        "Fenster: \(app.windows.firstMatch.frame); Dialog: \(dialog.frame); " +
+        "Element: \(element.frame); enabled: \(element.isEnabled); " +
+        "\n\(element.debugDescription)\n\(dialog.debugDescription)"
+    }
+
     /// Dieser Fall wird auf dem iPad-Destination-Lauf ausgefuehrt.
     func testAufRegulaererBreiteBleibenAppEinstellungenDialogUeberDemSimpleMode() {
         starte(["-psm-preset-printer", "-psm-start-simple"])
@@ -60,7 +66,8 @@ final class FloatingDialogUITests: XCTestCase {
         pruefeDialog(dialog, "Einrichtungsdialog")
         dialog.swipeUp()
         XCTAssertTrue(app.buttons["fertig"].isHittable,
-                      "Der Abschluss der Einrichtung bleibt bei geringer Hoehe nicht erreichbar")
+                      "Der Abschluss der Einrichtung bleibt bei geringer Hoehe nicht erreichbar. " +
+                      lage(app.buttons["fertig"], im: dialog))
         let schliessen = app.buttons["einrichtung.schliessen"]
         XCTAssertTrue(schliessen.waitForExistence(timeout: 10),
                       "Der Rueckweg aus der erneut geoeffneten Einrichtung fehlt")

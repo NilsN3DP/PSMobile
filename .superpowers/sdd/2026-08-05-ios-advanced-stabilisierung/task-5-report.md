@@ -28,6 +28,11 @@
 - Der gezielte iPad-Lauf erreichte beide Dialoge, meldete aber den Setup-Abschluss bei geringer Hoehe als nicht treffbar.
 - Ursache: Der Setup-Stapel nahm die vom Dialog angebotene Maximalhoehe nicht selbst an; sein Listenbereich konnte dadurch den Footer aus der Kartenflaeche druecken. Der Setup-Stapel fuellt nun die begrenzte Dialoghoehe, sodass nur die Liste den verbleibenden Raum erhaelt und `Fertig` fest unter ihr bleibt.
 
+## Fix-Runde 3 – Diagnose
+
+- Der Mac-Test meldet den Abschluss unveraendert als nicht treffbar. Die bisherige Hoehenhypothese ist damit nicht ausreichend bestaetigt.
+- Der Test protokolliert fuer den naechsten Mac-Lauf Fenster-, Dialog- und Footer-Frame, Enable-Status sowie die beiden Accessibility-Unterbaeume. Damit wird zwischen Footer ausserhalb der Karte, verdecktem Footer und einem reinen Accessibility-Problem unterschieden, bevor der Produktionscode erneut geaendert wird.
+
 ## Scope
 
 Geaendert wurden nur Dialogpraesentation, deren Host-Zustand, der minimale Close-Pfad im `SlicerModel` und die fokussierten UI-Tests. Persistente App-Einstellungen und Setup-Auswahl bleiben unveraendert.
