@@ -371,3 +371,33 @@ zeichnet nach wie vor nur das aktive Bett.
 Was dafuer noch fehlt, steht unveraendert in Punkt 4: Geometrie und
 Objekte je Bett versetzt zeichnen, Treffererkennung mit Versatz, und
 eine ABI-Funktion Welt nach Bildschirm fuer die Namen.
+
+### Selbsttest auf dem iPad: elf gruen, einer rot
+Kein Absturz mehr, und der rote Schritt nennt seinen Grund - die
+Protokollbruecke arbeitet.
+
+Fehlgeschlagen ist "G-Code schreiben" mit:
+
+    The file could not be opened because it is not in the correct
+    format. - slic3r: flatten_configbundle_hierarchy: The preset
+    Prusament Resin Model Transparent Clear @0.1 SL1S inherits an
+    unknown preset "*legacy_slow*"
+
+Das ist kein Fehler am Export, sondern ein kaputtes SLA-Profil in den
+mitgelieferten Ressourcen: das Resin-Profil erbt von einer Vorlage
+*legacy_slow*, die im Buendel fehlt. PrusaSlicer bricht beim Aufloesen
+der Vererbung ab, und das trifft jeden Schritt, der danach die
+Konfiguration braucht.
+
+Zwei Ansaetze, beide in build/scripts/stage-resources.sh:
+
+* PrusaResearchSLA wird unvollstaendig kopiert - die Vorlage
+  *legacy_slow* steht in der Vendor-Datei, wird aber weggeschnitten.
+* Oder das SLA-Buendel gehoert gar nicht mitgeliefert, solange es keine
+  SLA-Unterstuetzung gibt. Dann faellt der Fehler von selbst weg.
+
+Zum Vergleich die gruenen Werte vom Geraet, sie sind die erste echte
+Messung auf Hardware: Schneiden 0,1 s, Projekt sichern und wieder laden
+7 kB, Bemalen 2 Facetten, mehrfarbig T1 46 mm3 und T2 3002 mm3,
+Lasttest mit 25 Koerpern 1,1 s. Aufgabe 30 - Lasttest auf dem Geraet -
+ist damit beantwortet: das iPad packt es muehelos.
