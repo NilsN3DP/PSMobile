@@ -458,3 +458,92 @@ Zeitlich nah an `386f317 fix: richte getroffene Instanz auf Flaeche aus`
 aus dieser Sitzung - dort ansetzen. Noch nicht reproduziert, keine
 Codestelle bestaetigt.
 
+## Feedback vom Nutzer, 6. August nachts (noch nicht umgesetzt)
+
+Praezisierungen zu den vier Befunden weiter oben:
+
+* **Hochkant skaliert falsch**: bisher nur auf dem **iPad** getestet, das
+  iPhone stand noch nicht auf der Werkbank. Der automatisierte Testlauf
+  dieser Sitzung bestaetigt zusaetzlich einen konkreten iPhone-Fehler:
+  `PreviewUITests.testPhoneVerwendetBottomSheetMitBeidseitigemRange`
+  schlaegt fehl - im Vorschau-Bottom-Sheet auf dem Telefon fehlt der
+  untere Schichtregler (`vorschau.layer.unten`). Das ist vermutlich nur
+  ein Teil des gemeldeten Skalierungsproblems, aber der erste bestaetigte
+  Teil.
+* **Variable Schichthoehe**: der Punkt braucht zusaetzlich **adaptive
+  Schichthoehe** (automatische Berechnung nach Kontur, nicht nur die
+  manuelle Kurve). Bisher nicht im Umfang.
+
+Neue Punkte:
+
+### Bettleiste: Funktion behalten, altes Aussehen zurueck
+Das Sperren/Umbenennen als Funktion ist gewollt, aber optisch war die
+Fassung vor Codex' Umbau (`a557d08`) besser: eine **einzeilige,
+waagerecht scrollende Reihe schmaler Kapseln** (`bettleiste` in der
+damaligen `AdvancedWorkspaceView.swift`, ca. 38pt hoch, Name + Objektzahl
+in einer Zeile, Schloss nur als Icon wenn gesperrt, Umbenennen/Sperren
+per **Kontextmenue via langem Druck** statt dauerhaft sichtbarer
+Mini-Knoepfe). Die heutige `BedSelector.swift` baut stattdessen ein
+Kartenraster mit 64pt hohen Karten und eigener Ueberschriftenzeile - das
+ist der Sprung, der als "blockiert" empfunden wurde. Ziel: die
+kompakte Kapselreihe zurueckbauen, Sperren/Umbenennen/Loeschen bleiben
+erreichbar (Kontextmenue statt Mini-Knoepfe), Arrange-Verhalten
+(Tipp/Halten) bleibt wie eben gebaut.
+
+### Weitere Hersteller-Profile mit Bettmodellen
+Sind schon vorbereitet: `build/scripts/stage-resources.sh` kennt
+`PSM_VENDORS=all` (36 Hersteller statt nur Prusa, ca. 41 statt 6 MB) -
+Bettmodelle/-texturen liegen je Hersteller-Unterordner bei
+(`profiles/<Hersteller>/*_bed.stl` etc.), soweit PrusaSlicer sie
+mitliefert. Fuer die naechste IPA aktiviert.
+
+### Filamente: Spulendesign
+Die Karte in `MaterialAuswahlView.swift` zeigt aktuell eine simple
+Kapsel-Grafik (`spule(_:)`) statt eines echten Spulenbilds. Gewuenscht:
+ein Design, das wirklich wie eine Filamentspule aussieht, nicht nur ein
+Farbklecks in Kapselform.
+
+### Advanced-Kopfzeile: grosse Umstrukturierung
+Mehrere Punkte zusammen, weil sie dieselbe Leiste betreffen:
+
+1. Neben "Print Settings" liegt ein Zahnrad fuer App-Einstellungen - der
+   Punkt "App Settings" steht aber schon oben in der Leiste. App
+   Settings soll **unten links** stehen, nicht oben.
+2. Der obere Punkt "View" kann weg (redundant, siehe Beschreibung des
+   Nutzers "der ist ueber").
+3. Der obere Punkt "Printers" soll ebenfalls **unten links** neben den
+   Einstellungen stehen, nicht oben in der Leiste.
+4. "Volumes" links ist in seiner Funktion unklar - zu pruefen, was es
+   tut und ob es so bleiben soll oder umbenannt/entfernt gehoert.
+5. Rotate/Scale/Move gehoeren nicht fest oben ins Bild, sondern in die
+   Leiste, die beim Anklicken eines Objekts erscheint (die
+   Objektleiste) - dort aber mit kleineren Symbolen, und die ganze
+   Leiste soll direkt ueber dem angeklickten Objekt schweben statt fix
+   oben zu stehen.
+
+### Slice-now-Popup ersetzen
+Nach dem Schneiden soll statt des aktuellen Popups **"Export G-Code"**
+und ein eigener **"Send to Printer"**-Knopf erscheinen, letzterer sendet
+direkt an PrusaLink.
+
+### Allgemeiner Feinschliff Easy Mode
+Symbole sollen optisch besser zusammenpassen, Menues platzsparender und
+klarer strukturiert werden, am Vorbild EasyPrint (siehe bereits
+vorhandene Referenz in `docs/superpowers/specs/
+2026-07-31-easy-advanced-ui-design.md` und die Kommentare in
+`MaterialAuswahlView.swift`).
+
+**Reihenfolge, mit der ich das angehe** (Bugs zuerst, dann Features):
+1. Viewer-Freeze nach "On face"
+2. Filamente nicht uebernommen (erst reproduzieren)
+3. iPhone-Vorschau-Regler (jetzt per Test bestaetigt)
+4. Kaputtes SLA-Profil
+5. Bettleiste optisch zurueckbauen (Kapselreihe, Funktion behalten)
+6. Advanced-Kopfzeile umbauen (App Settings/Printers nach unten links,
+   View weg, Objektleiste mit Rotate/Scale/Move schwebend am Objekt)
+7. Slice-Popup durch Export G-Code / Send to Printer ersetzen
+8. Filament-Spulendesign
+9. Restliche Feature-Liste wie zuletzt besprochen (Flaechen beim
+   Hinlegen, adaptive + variable Schichthoehe, Pinseloptionen,
+   Mehrbett-Ansicht im Viewport, Profilsuche, Vorschau-Farben)
+
