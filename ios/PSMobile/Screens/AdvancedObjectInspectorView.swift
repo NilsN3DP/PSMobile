@@ -188,6 +188,7 @@ struct AdvancedObjectInspectorView: View {
                 .font(.system(size: ps.font(14)))
                 .foregroundStyle(PrusaColors.textPrimary)
                 .frame(width: ps.pt(44))
+                .accessibilityIdentifier("advanced.kopien.anzahl")
             knopf("+", kennung: "advanced.kopien.mehr") {
                 model.setInstances(objekt.id, count: Int32(objekt.instances + 1))
             }

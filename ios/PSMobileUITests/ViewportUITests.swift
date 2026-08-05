@@ -138,6 +138,72 @@ final class ViewportUITests: XCTestCase {
         pruefeGizmoOhneDirektzug("advanced.gizmo.scale")
     }
 
+    func testAufFlaecheLegtGezieltDieGetroffeneZweiteInstanz() {
+        let flaeche = app.otherElements["viewport"]
+        XCTAssertTrue(flaeche.waitForExistence(timeout: 60))
+        sleep(3)
+        objektWaehlen()
+
+        let mehr = app.buttons["advanced.kopien.mehr"]
+        XCTAssertTrue(mehr.waitForExistence(timeout: 10),
+                      "Der Inspector bietet keine zweite Instanz an")
+        mehr.tap()
+        let anzahl = app.staticTexts["advanced.kopien.anzahl"]
+        XCTAssertTrue(warte(bis: { anzahl.label == "2" }),
+                      "Die zweite Instanz wurde nicht angelegt")
+
+        let drehfelder = ["X", "Y", "Z"].map {
+            app.textFields["advanced.rotate." + $0]
+        }
+        XCTAssertTrue(drehfelder.allSatisfy { $0.waitForExistence(timeout: 5) })
+        XCTAssertTrue(drehfelder.allSatisfy { ($0.value as? String) == "0" },
+                      "Instanz 0 startet nicht unveraendert")
+
+        let werkzeug = app.buttons["objekt.aufflaeche"]
+        XCTAssertTrue(werkzeug.waitForExistence(timeout: 10),
+                      "Das Flaechenwerkzeug ist nicht erreichbar")
+        werkzeug.tap()
+
+        /*
+         * Die zweite Kopie liegt rechts neben der ersten. Mehrere Punkte
+         * machen den Test unabhaengig davon, welche sichtbare Dreiecks-
+         * haelfte die aktuelle Projektion an dieser Stelle zeigt.
+         *
+         * Nach einem Treffer nimmt das erste Undo nur das Hinlegen
+         * zurueck und beide Kopien bleiben da. Bei einem Fehltipp nimmt
+         * es stattdessen das Anlegen der zweiten Kopie zurueck; dann
+         * stellt Redo sie fuer den naechsten Punkt wieder her.
+         */
+        let punkte = [
+            CGVector(dx: 0.58, dy: 0.48),
+            CGVector(dx: 0.62, dy: 0.50),
+            CGVector(dx: 0.58, dy: 0.54),
+        ]
+        var zweiteGetroffen = false
+        for punkt in punkte {
+            flaeche.coordinate(withNormalizedOffset: punkt).tap()
+            usleep(500_000)
+            XCTAssertTrue(drehfelder.allSatisfy {
+                ($0.value as? String) == "0"
+            }, "Der Treffer auf Kopie 1 hat faelschlich Kopie 0 gedreht")
+
+            app.buttons["advanced.zurueck"].tap()
+            objektzeileWaehlen()
+            if warte(bis: { anzahl.label == "2" }, timeout: 3) {
+                zweiteGetroffen = true
+                break
+            }
+            XCTAssertTrue(warte(bis: { anzahl.label == "1" }, timeout: 3),
+                          "Undo zeigt weder Flaechentreffer noch Fehltipp")
+            app.buttons["advanced.wiederholen"].tap()
+            objektzeileWaehlen()
+            XCTAssertTrue(warte(bis: { anzahl.label == "2" }, timeout: 5),
+                          "Die zweite Kopie liess sich nicht wiederherstellen")
+        }
+        XCTAssertTrue(zweiteGetroffen,
+                      "Keiner der rechten Punkte traf die zweite Instanz")
+    }
+
     private func pruefeGizmoOhneDirektzug(_ kennung: String) {
         let flaeche = app.otherElements["viewport"]
         XCTAssertTrue(flaeche.waitForExistence(timeout: 60))
@@ -166,6 +232,11 @@ final class ViewportUITests: XCTestCase {
         let objekte = app.buttons["inspektor.objekte"]
         XCTAssertTrue(objekte.waitForExistence(timeout: 10))
         objekte.tap()
+        return objektzeileWaehlen()
+    }
+
+    @discardableResult
+    private func objektzeileWaehlen() -> XCUIElement {
         let zeile = app.buttons.matching(
             NSPredicate(format: "identifier BEGINSWITH 'advanced.objekt.'")).firstMatch
         XCTAssertTrue(zeile.waitForExistence(timeout: 10))

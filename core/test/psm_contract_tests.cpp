@@ -333,6 +333,137 @@ int main(int argc, char **argv)
                 session, tool_object, 0, 0) == PSM_OK,
             std::string("lay on selected facet: ") +
                 psm_last_error(session));
+#if defined(PSM_TEST_MULTIPLE_BEDS_STATE)
+    /*
+     * Ein Oberflaechentreffer benennt eine konkrete Instanz. Der alte
+     * ABI-Einstieg verlor diese Zahl und drehte immer Kopie 0. Die
+     * ungleichmaessige Skalierung ist wichtig: Bei einem Wuerfel saehe
+     * eine Vierteldrehung gleich aus und koennte den Fehler verdecken.
+     */
+    {
+        const std::filesystem::path surface_data =
+            std::filesystem::path(argv[1]) / "surface-instance-data";
+        psm_session *surface_session = psm_session_create(
+            surface_data.string().c_str(), argv[2]);
+        require(surface_session != nullptr,
+                "create isolated surface-lay session");
+        psm_object_id surface_object = PSM_INVALID_ID;
+        size_t surface_count = 0;
+        require(psm_model_load(
+                    surface_session, argv[3], &surface_object, 1,
+                    &surface_count) == PSM_OK &&
+                surface_count == 1,
+                "load object for instance-specific surface lay");
+        require(psm_model_set_scale(
+                    surface_session, surface_object,
+                    1.f, 1.5f, 2.f) == PSM_OK,
+                std::string("make surface-lay object asymmetric: ") +
+                    psm_last_error(surface_session));
+        require(psm_model_drop_to_bed(
+                    surface_session, surface_object) == PSM_OK,
+                "put asymmetric source instance on bed");
+        require(psm_model_set_instances(
+                    surface_session, surface_object, 2) == PSM_OK,
+                "create two instances for surface lay");
+
+        size_t side_facet = 0;
+        Slic3r::Transform3d first_before =
+            Slic3r::Transform3d::Identity();
+        Slic3r::Transform3d second_before =
+            Slic3r::Transform3d::Identity();
+        {
+            std::lock_guard<std::recursive_mutex> data_lock(
+                surface_session->data_mtx);
+            const Slic3r::ModelObject *object = nullptr;
+            for (const Slic3r::ModelObject *candidate :
+                 surface_session->model().objects) {
+                if (static_cast<psm_object_id>(candidate->id().id) ==
+                    surface_object) {
+                    object = candidate;
+                    break;
+                }
+            }
+            require(object != nullptr && object->instances.size() == 2,
+                    "surface-lay fixture exposes two internal instances");
+            const auto &its = object->volumes.front()->mesh().its;
+            bool found_side = false;
+            for (size_t index = 0; index < its.indices.size(); ++index) {
+                const Slic3r::Vec3i32 &face = its.indices[index];
+                const Slic3r::Vec3d a =
+                    its.vertices[face(0)].cast<double>();
+                const Slic3r::Vec3d b =
+                    its.vertices[face(1)].cast<double>();
+                const Slic3r::Vec3d c =
+                    its.vertices[face(2)].cast<double>();
+                const Slic3r::Vec3d normal = (b - a).cross(c - a);
+                if (normal.squaredNorm() > 1e-18 &&
+                    std::abs(normal.normalized().z()) < 0.1) {
+                    side_facet = index;
+                    found_side = true;
+                    break;
+                }
+            }
+            require(found_side, "asymmetric fixture has a side facet");
+            first_before = object->instances[0]->get_matrix();
+            second_before = object->instances[1]->get_matrix();
+        }
+
+        require(psm_model_lay_on_facet_instance(
+                    surface_session, surface_object,
+                    2, 0, side_facet) == PSM_ERR_INVALID_ARG,
+                "surface lay rejects an unknown instance index");
+        require(psm_model_lay_on_facet_instance(
+                    surface_session, surface_object,
+                    1, 0, side_facet) == PSM_OK,
+                std::string("lay hit instance on selected facet: ") +
+                    psm_last_error(surface_session));
+
+        {
+            std::lock_guard<std::recursive_mutex> data_lock(
+                surface_session->data_mtx);
+            const Slic3r::ModelObject *object = nullptr;
+            for (const Slic3r::ModelObject *candidate :
+                 surface_session->model().objects) {
+                if (static_cast<psm_object_id>(candidate->id().id) ==
+                    surface_object) {
+                    object = candidate;
+                    break;
+                }
+            }
+            require(object != nullptr && object->instances.size() == 2,
+                    "surface-lay result retains both instances");
+            require(object->instances[0]->get_matrix().isApprox(
+                        first_before, 1e-12),
+                    "laying instance one leaves instance zero unchanged");
+            require(! object->instances[1]->get_matrix().isApprox(
+                        second_before, 1e-6),
+                    "laying instance one changes that instance");
+
+            const Slic3r::ModelVolume *volume = object->volumes.front();
+            const auto &its = volume->mesh().its;
+            const Slic3r::Vec3i32 &face = its.indices[side_facet];
+            const Slic3r::Vec3d a =
+                its.vertices[face(0)].cast<double>();
+            const Slic3r::Vec3d b =
+                its.vertices[face(1)].cast<double>();
+            const Slic3r::Vec3d c =
+                its.vertices[face(2)].cast<double>();
+            Slic3r::Vec3d normal = (b - a).cross(c - a);
+            const Slic3r::Transform3d local_to_world =
+                object->instances[1]->get_matrix() *
+                volume->get_matrix();
+            normal =
+                (local_to_world.linear().inverse().transpose() * normal)
+                    .normalized();
+            require(normal.isApprox(-Slic3r::Vec3d::UnitZ(), 1e-6),
+                    "the hit facet of instance one faces the bed");
+            require(std::abs(
+                        object->instance_bounding_box(1).min.z()) < 1e-6,
+                    "the hit instance alone rests on the bed");
+        }
+        psm_session_destroy(surface_session);
+    }
+#endif
     uint32_t simplify_before = 0;
     uint32_t simplify_after = 0;
     require(psm_model_simplify(

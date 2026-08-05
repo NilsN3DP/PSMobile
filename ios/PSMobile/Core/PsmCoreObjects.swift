@@ -267,9 +267,13 @@ extension PsmCore {
                                   psm_paint_tool(rawValue: UInt32(tool.rawValue))))
     }
 
-    /// Legt die angetippte Flaeche nach unten und das Objekt auf Z=0.
-    func layOnFacet(_ id: Int32, volume: Int, facet: Int) throws {
-        try check(psm_model_lay_on_facet(raw, id, size_t(volume), size_t(facet)),
+    /// Legt die angetippte Flaeche dieser Kopie nach unten und auf Z=0.
+    func layOnFacet(_ id: Int32,
+                    instance: Int = 0,
+                    volume: Int,
+                    facet: Int) throws {
+        try check(psm_model_lay_on_facet_instance(
+                    raw, id, size_t(instance), size_t(volume), size_t(facet)),
                   "Flaeche nach unten legen")
     }
 

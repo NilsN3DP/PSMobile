@@ -970,8 +970,12 @@ final class SlicerModel: ObservableObject {
         core?.paintCount(id, tool: tool) ?? 0
     }
 
-    func layOnFacet(_ id: Int32, volume: Int, facet: Int) {
-        try? core?.layOnFacet(id, volume: volume, facet: facet)
+    func layOnFacet(_ id: Int32,
+                    instance: Int = 0,
+                    volume: Int,
+                    facet: Int) {
+        try? core?.layOnFacet(id, instance: instance,
+                              volume: volume, facet: facet)
         refresh()
     }
 
@@ -999,8 +1003,12 @@ final class SlicerModel: ObservableObject {
     }
 
     /// Dreht die angetippte Flaeche nach unten.
-    func layOnFace(_ id: Int32, volume: Int, facet: Int) {
-        try? core?.layOnFacet(id, volume: volume, facet: facet)
+    func layOnFace(_ id: Int32,
+                   instance: Int = 0,
+                   volume: Int,
+                   facet: Int) {
+        try? core?.layOnFacet(id, instance: instance,
+                              volume: volume, facet: facet)
         sceneRevision += 1
         refresh()
     }

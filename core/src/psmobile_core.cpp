@@ -2476,19 +2476,32 @@ PSM_API psm_result psm_model_lay_on_facet(psm_session *s,
                                           size_t volume_index,
                                           size_t facet_index)
 {
+    return psm_model_lay_on_facet_instance(
+        s, id, 0, volume_index, facet_index);
+}
+
+PSM_API psm_result psm_model_lay_on_facet_instance(
+    psm_session *s,
+    psm_object_id id,
+    size_t instance_index,
+    size_t volume_index,
+    size_t facet_index)
+{
     PSM_GUARD_BEGIN(s)
         std::lock_guard<std::recursive_mutex> data_lock(s->data_mtx);
         Slic3r::ModelObject *object = find_object(s, id);
         if (object == nullptr)
             return PSM_ERR_NOT_FOUND;
-        if (volume_index >= object->volumes.size())
+        if (instance_index >= object->instances.size() ||
+            volume_index >= object->volumes.size())
             return PSM_ERR_INVALID_ARG;
         Slic3r::ModelVolume *volume = object->volumes[volume_index];
         if (! volume->is_model_part() ||
             facet_index >= volume->mesh().its.indices.size())
             return PSM_ERR_INVALID_ARG;
 
-        Slic3r::ModelInstance *instance = first_instance(object);
+        Slic3r::ModelInstance *instance =
+            object->instances[instance_index];
         const auto &its = volume->mesh().its;
         const Slic3r::Vec3i32 &face = its.indices[facet_index];
         const Slic3r::Vec3d a = its.vertices[face(0)].cast<double>();
@@ -2512,7 +2525,16 @@ PSM_API psm_result psm_model_lay_on_facet(psm_session *s,
         instance->set_transformation(
             Slic3r::Geometry::Transformation(transformed));
         object->invalidate_bounding_box();
-        object->ensure_on_bed();
+        /*
+         * Der Treffer gilt nur fuer diese Kopie. ensure_on_bed() wuerde
+         * dagegen alle Instanzen gemeinsam verschieben und damit eine
+         * unberuehrte Kopie veraendern.
+         */
+        const double min_z =
+            object->instance_bounding_box(instance_index).min.z();
+        if (std::isfinite(min_z) && std::abs(min_z) > 1e-12)
+            object->translate_instance(
+                instance_index, -min_z * Slic3r::Vec3d::UnitZ());
         s->mark_design_changed();
         return PSM_OK;
     PSM_GUARD_END(s)

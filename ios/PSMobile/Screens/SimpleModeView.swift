@@ -179,6 +179,7 @@ struct SimpleModeView: View {
                     ? { (treffer: PsmViewport.SurfaceHit) in
                         guard let id = model.selectedId else { return }
                         model.layOnFace(id,
+                                        instance: Int(treffer.instanceIndex),
                                         volume: Int(treffer.volumeIndex),
                                         facet: Int(treffer.facetIndex))
                         // Das Werkzeug bleibt an. Sich nach einem

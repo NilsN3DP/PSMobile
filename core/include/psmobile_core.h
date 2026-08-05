@@ -464,6 +464,18 @@ PSM_API psm_result psm_model_lay_on_facet(psm_session *s,
                                           size_t volume_index,
                                           size_t facet_index);
 
+/**
+ * Wie psm_model_lay_on_facet, aber fuer die Instanz aus dem
+ * Oberflaechentreffer. Der alte Einstieg bleibt fuer bestehende
+ * Eininstanz-Aufrufer erhalten und verwendet Instanz 0.
+ */
+PSM_API psm_result psm_model_lay_on_facet_instance(
+    psm_session *s,
+    psm_object_id id,
+    size_t instance_index,
+    size_t volume_index,
+    size_t facet_index);
+
 typedef enum {
     PSM_PAINT_SUPPORT = 0,
     PSM_PAINT_SEAM    = 1,

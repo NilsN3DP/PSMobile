@@ -696,6 +696,7 @@ struct AdvancedWorkspaceView: View {
                                     radiusMm: malradius)
                     } else if aufFlaeche {
                         model.layOnFace(treffer.objectId,
+                                        instance: Int(treffer.instanceIndex),
                                         volume: Int(treffer.volumeIndex),
                                         facet: Int(treffer.facetIndex))
                     }
