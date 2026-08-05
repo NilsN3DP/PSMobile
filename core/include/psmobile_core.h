@@ -37,7 +37,7 @@ extern "C" {
 /* Version                                                             */
 /* ------------------------------------------------------------------ */
 
-#define PSM_ABI_VERSION 5
+#define PSM_ABI_VERSION 6
 
 /** Gibt die ABI-Version zurueck. Die App prueft sie beim Start gegen
  *  PSM_ABI_VERSION und verweigert den Dienst bei Abweichung. */
@@ -1090,6 +1090,93 @@ PSM_API size_t psm_slice_extruder_count(psm_session *s);
 
 PSM_API psm_result psm_slice_extruder_at(psm_session *s, size_t index,
                                          psm_extruder_usage *out);
+
+/* ------------------------------------------------------------------ */
+/* Finale G-Code-Vorschau                                              */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Rollen aus PrusaSlicers finalem GCodeProcessorResult.
+ *
+ * Die Werte sind absichtlich eine eigene C-Enum. Damit hängt Swift weder
+ * an C++-Enums noch an der internen Reihenfolge von libvgcode.
+ */
+typedef enum {
+    PSM_PREVIEW_ROLE_NONE                       = 0,
+    PSM_PREVIEW_ROLE_PERIMETER                  = 1,
+    PSM_PREVIEW_ROLE_EXTERNAL_PERIMETER         = 2,
+    PSM_PREVIEW_ROLE_OVERHANG_PERIMETER         = 3,
+    PSM_PREVIEW_ROLE_INTERNAL_INFILL            = 4,
+    PSM_PREVIEW_ROLE_SOLID_INFILL               = 5,
+    PSM_PREVIEW_ROLE_TOP_SOLID_INFILL           = 6,
+    PSM_PREVIEW_ROLE_IRONING                    = 7,
+    PSM_PREVIEW_ROLE_BRIDGE_INFILL              = 8,
+    PSM_PREVIEW_ROLE_GAP_FILL                   = 9,
+    PSM_PREVIEW_ROLE_SKIRT                     = 10,
+    PSM_PREVIEW_ROLE_SUPPORT_MATERIAL          = 11,
+    PSM_PREVIEW_ROLE_SUPPORT_MATERIAL_INTERFACE = 12,
+    PSM_PREVIEW_ROLE_WIPE_TOWER                = 13,
+    PSM_PREVIEW_ROLE_CUSTOM                    = 14
+} psm_preview_feature_role;
+
+#define PSM_PREVIEW_SNAPSHOT_VERSION_1 1u
+
+/**
+ * Kopf des final verarbeiteten Preview-Datensatzes.
+ *
+ * Vor dem Aufruf muss version auf PSM_PREVIEW_SNAPSHOT_VERSION_1 stehen.
+ * Der Snapshot bleibt Eigentum des Kerns. Die indexierten Funktionen
+ * kopieren jeweils genau einen kleinen Datensatz in Aufruferspeicher.
+ */
+typedef struct {
+    uint32_t version;
+    uint32_t final_move_count;
+    uint32_t layer_count;
+    uint32_t extruder_count;
+    uint32_t role_count;
+    double   print_time_seconds;
+    double   filament_used_mm;
+    double   filament_used_g;
+    float    min_z;
+    float    max_z;
+} psm_preview_snapshot;
+
+typedef struct {
+    uint32_t index;
+    uint32_t source_layer_id;
+    float    z_lower;
+    float    z_upper;
+    double   time_seconds;
+    double   filament_used_mm;
+    double   filament_used_g;
+} psm_preview_layer;
+
+typedef struct {
+    int32_t  extruder;       /**< 0-basiert wie im finalen G-Code */
+    uint32_t color_rgba;     /**< 0xRRGGBBAA aus dem finalen Profil */
+    uint64_t move_count;
+    double   time_seconds;
+    double   filament_used_mm;
+    double   filament_used_g;
+} psm_preview_extruder;
+
+typedef struct {
+    psm_preview_feature_role role;
+    uint32_t color_rgba;     /**< libvgcodes Farbe 0xRRGGBBAA */
+    uint64_t move_count;
+    double   time_seconds;
+    double   filament_used_mm;
+    double   filament_used_g;
+} psm_preview_role;
+
+PSM_API psm_result psm_preview_snapshot_get(psm_session *s,
+                                            psm_preview_snapshot *out);
+PSM_API psm_result psm_preview_layer_at(psm_session *s, size_t index,
+                                       psm_preview_layer *out);
+PSM_API psm_result psm_preview_extruder_at(psm_session *s, size_t index,
+                                          psm_preview_extruder *out);
+PSM_API psm_result psm_preview_role_at(psm_session *s, size_t index,
+                                      psm_preview_role *out);
 
 
 /**

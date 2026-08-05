@@ -47,6 +47,66 @@ final class PsmCore {
         let objects: Int
     }
 
+    enum PreviewFeatureRole: Int32, CaseIterable, Hashable {
+        case none = 0
+        case perimeter
+        case externalPerimeter
+        case overhangPerimeter
+        case internalInfill
+        case solidInfill
+        case topSolidInfill
+        case ironing
+        case bridgeInfill
+        case gapFill
+        case skirt
+        case supportMaterial
+        case supportMaterialInterface
+        case wipeTower
+        case custom
+    }
+
+    struct PreviewLayer: Equatable {
+        let index: Int
+        let sourceLayerId: UInt32
+        let zLower: Double
+        let zUpper: Double
+        let timeSeconds: Double
+        let filamentMm: Double
+        let filamentGrams: Double
+    }
+
+    struct PreviewExtruder: Equatable, Identifiable {
+        var id: Int32 { extruder }
+        let extruder: Int32
+        let colorRGBA: UInt32
+        let moveCount: UInt64
+        let timeSeconds: Double
+        let filamentMm: Double
+        let filamentGrams: Double
+    }
+
+    struct PreviewRole: Equatable, Identifiable {
+        var id: PreviewFeatureRole { role }
+        let role: PreviewFeatureRole
+        let colorRGBA: UInt32
+        let moveCount: UInt64
+        let timeSeconds: Double
+        let filamentMm: Double
+        let filamentGrams: Double
+    }
+
+    struct PreviewSnapshot: Equatable {
+        let finalMoveCount: UInt32
+        let printTimeSeconds: Double
+        let filamentMm: Double
+        let filamentGrams: Double
+        let minZ: Double
+        let maxZ: Double
+        let layers: [PreviewLayer]
+        let extruders: [PreviewExtruder]
+        let roles: [PreviewRole]
+    }
+
     private static let log = Logger(subsystem: "de.psmobile", category: "core")
 
     private var handle: OpaquePointer?
@@ -288,6 +348,81 @@ final class PsmCore {
             cost: st.filament_cost,
             objects: Int(st.object_count)
         )
+    }
+
+    /// Kleine Swift-Ansicht auf den finalen GCodeProcessorResult.
+    ///
+    /// Sobald auch nur ein indexierter Datensatz stale ist, wird nichts
+    /// geliefert. Eine teilweise Vorschau würde Werte aus zwei Revisionen
+    /// mischen.
+    func previewSnapshot() -> PreviewSnapshot? {
+        var head = psm_preview_snapshot()
+        head.version = UInt32(PSM_PREVIEW_SNAPSHOT_VERSION_1)
+        guard psm_preview_snapshot_get(raw, &head) == PSM_OK,
+              head.final_move_count > 0 else { return nil }
+
+        var layers: [PreviewLayer] = []
+        layers.reserveCapacity(Int(head.layer_count))
+        for index in 0..<Int(head.layer_count) {
+            var value = psm_preview_layer()
+            guard psm_preview_layer_at(raw, index, &value) == PSM_OK
+            else { return nil }
+            layers.append(PreviewLayer(
+                index: Int(value.index),
+                sourceLayerId: value.source_layer_id,
+                zLower: Double(value.z_lower),
+                zUpper: Double(value.z_upper),
+                timeSeconds: value.time_seconds,
+                filamentMm: value.filament_used_mm,
+                filamentGrams: value.filament_used_g))
+        }
+
+        var extruders: [PreviewExtruder] = []
+        extruders.reserveCapacity(Int(head.extruder_count))
+        for index in 0..<Int(head.extruder_count) {
+            var value = psm_preview_extruder()
+            guard psm_preview_extruder_at(raw, index, &value) == PSM_OK
+            else { return nil }
+            extruders.append(PreviewExtruder(
+                extruder: value.extruder,
+                colorRGBA: value.color_rgba,
+                moveCount: value.move_count,
+                timeSeconds: value.time_seconds,
+                filamentMm: value.filament_used_mm,
+                filamentGrams: value.filament_used_g))
+        }
+
+        var roles: [PreviewRole] = []
+        roles.reserveCapacity(Int(head.role_count))
+        for index in 0..<Int(head.role_count) {
+            var value = psm_preview_role()
+            guard psm_preview_role_at(raw, index, &value) == PSM_OK,
+                  let role = PreviewFeatureRole(
+                    rawValue: Int32(value.role.rawValue)),
+                  role != .none
+            else { return nil }
+            roles.append(PreviewRole(
+                role: role,
+                colorRGBA: value.color_rgba,
+                moveCount: value.move_count,
+                timeSeconds: value.time_seconds,
+                filamentMm: value.filament_used_mm,
+                filamentGrams: value.filament_used_g))
+        }
+
+        guard layers.count == Int(head.layer_count),
+              extruders.count == Int(head.extruder_count),
+              roles.count == Int(head.role_count) else { return nil }
+        return PreviewSnapshot(
+            finalMoveCount: head.final_move_count,
+            printTimeSeconds: head.print_time_seconds,
+            filamentMm: head.filament_used_mm,
+            filamentGrams: head.filament_used_g,
+            minZ: Double(head.min_z),
+            maxZ: Double(head.max_z),
+            layers: layers,
+            extruders: extruders,
+            roles: roles)
     }
 
     func exportGcode(to path: String) throws {

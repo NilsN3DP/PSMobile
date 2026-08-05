@@ -49,6 +49,7 @@
 #include "libslic3r/TriangleSelector.hpp"
 #include "libslic3r/TextConfiguration.hpp"
 #include "libslic3r/BuildVolume.hpp"
+#include "libslic3r/Color.hpp"
 #include <map>
 #include <set>
 #include <tuple>
@@ -95,6 +96,234 @@ psm_session::psm_session()
 {
     bed_models.emplace_back(std::make_unique<Slic3r::Model>());
     bed_metadata.emplace_back();
+}
+
+psm_preview_feature_role preview_role(Slic3r::GCodeExtrusionRole role)
+{
+    using Role = Slic3r::GCodeExtrusionRole;
+    switch (role) {
+        case Role::Perimeter:                return PSM_PREVIEW_ROLE_PERIMETER;
+        case Role::ExternalPerimeter:        return PSM_PREVIEW_ROLE_EXTERNAL_PERIMETER;
+        case Role::OverhangPerimeter:        return PSM_PREVIEW_ROLE_OVERHANG_PERIMETER;
+        case Role::InternalInfill:           return PSM_PREVIEW_ROLE_INTERNAL_INFILL;
+        case Role::SolidInfill:              return PSM_PREVIEW_ROLE_SOLID_INFILL;
+        case Role::TopSolidInfill:           return PSM_PREVIEW_ROLE_TOP_SOLID_INFILL;
+        case Role::Ironing:                  return PSM_PREVIEW_ROLE_IRONING;
+        case Role::BridgeInfill:             return PSM_PREVIEW_ROLE_BRIDGE_INFILL;
+        case Role::GapFill:                  return PSM_PREVIEW_ROLE_GAP_FILL;
+        case Role::Skirt:                    return PSM_PREVIEW_ROLE_SKIRT;
+        case Role::SupportMaterial:          return PSM_PREVIEW_ROLE_SUPPORT_MATERIAL;
+        case Role::SupportMaterialInterface: return PSM_PREVIEW_ROLE_SUPPORT_MATERIAL_INTERFACE;
+        case Role::WipeTower:                return PSM_PREVIEW_ROLE_WIPE_TOWER;
+        case Role::Custom:                   return PSM_PREVIEW_ROLE_CUSTOM;
+        default:                             return PSM_PREVIEW_ROLE_NONE;
+    }
+}
+
+uint32_t preview_rgba(const std::string &encoded)
+{
+    Slic3r::ColorRGBA color;
+    if (! Slic3r::decode_color(encoded, color))
+        return 0;
+    return (static_cast<uint32_t>(color.r_uchar()) << 24) |
+           (static_cast<uint32_t>(color.g_uchar()) << 16) |
+           (static_cast<uint32_t>(color.b_uchar()) << 8) |
+            static_cast<uint32_t>(color.a_uchar());
+}
+
+uint32_t preview_role_rgba(psm_preview_feature_role role)
+{
+    /*
+     * DEFAULT_EXTRUSION_ROLES_COLORS aus libvgcode/ViewerImpl.cpp.
+     * Die Legende zeigt damit exakt die Farbe, die Viewer im
+     * FeatureType-Modus verwendet.
+     */
+    static constexpr uint32_t colors[] = {
+        0xe6b3b3ff, 0xffe64dff, 0xff7d38ff, 0x1f1fffff,
+        0xb03029ff, 0x9654ccff, 0xf04040ff, 0xff8c69ff,
+        0x4d80baff, 0xffffffff, 0x00876eff, 0x00ff00ff,
+        0x008000ff, 0xb3e3abff, 0x5ed194ff
+    };
+    const size_t index = static_cast<size_t>(role);
+    return index < sizeof(colors) / sizeof(colors[0])
+        ? colors[index] : 0;
+}
+
+struct FinalPreviewData {
+    psm_preview_snapshot snapshot{};
+    std::vector<psm_preview_layer> layers;
+    std::vector<psm_preview_extruder> extruders;
+    std::vector<psm_preview_role> roles;
+};
+
+/**
+ * Baut die kleine C-Ansicht ausschließlich aus dem finalen
+ * GCodeProcessorResult. Die eigentlichen Moves bleiben unkopiert im
+ * gespeicherten Result und gehen direkt an libvgcode.
+ */
+FinalPreviewData final_preview_data(
+    const Slic3r::GCodeProcessorResult &result)
+{
+    FinalPreviewData data;
+    data.snapshot.version = PSM_PREVIEW_SNAPSHOT_VERSION_1;
+    data.snapshot.final_move_count =
+        static_cast<uint32_t>(std::min<size_t>(
+            result.moves.size(), UINT32_MAX));
+    data.snapshot.print_time_seconds =
+        result.print_statistics.modes[
+            static_cast<size_t>(
+                Slic3r::PrintEstimatedStatistics::ETimeMode::Normal)].time;
+
+    std::map<unsigned int, psm_preview_layer> layer_map;
+    std::map<unsigned char, psm_preview_extruder> extruder_map;
+    std::map<psm_preview_feature_role, psm_preview_role> role_map;
+
+    for (const auto &move : result.moves) {
+        if (move.type != Slic3r::EMoveType::Extrude)
+            continue;
+
+        auto &layer = layer_map[move.layer_id];
+        layer.source_layer_id = move.layer_id;
+        if (layer.z_upper == 0.f && layer.z_lower == 0.f) {
+            layer.z_lower = move.position.z() - move.height;
+            layer.z_upper = move.position.z();
+        } else {
+            layer.z_lower = std::min(
+                layer.z_lower, move.position.z() - move.height);
+            layer.z_upper = std::max(layer.z_upper, move.position.z());
+        }
+
+        auto &extruder = extruder_map[move.extruder_id];
+        extruder.extruder = static_cast<int32_t>(move.extruder_id);
+        ++extruder.move_count;
+        extruder.time_seconds +=
+            move.time[static_cast<size_t>(
+                Slic3r::PrintEstimatedStatistics::ETimeMode::Normal)];
+        extruder.filament_used_mm +=
+            std::max(static_cast<double>(move.delta_extruder), 0.0);
+
+        const psm_preview_feature_role role =
+            preview_role(move.extrusion_role);
+        if (role != PSM_PREVIEW_ROLE_NONE) {
+            auto &entry = role_map[role];
+            entry.role = role;
+            entry.color_rgba = preview_role_rgba(role);
+            ++entry.move_count;
+            entry.time_seconds +=
+                move.time[static_cast<size_t>(
+                    Slic3r::PrintEstimatedStatistics::ETimeMode::Normal)];
+        }
+    }
+
+    /*
+     * Reise- und Sonderbewegungen tragen ebenfalls Zeit. Prusa ordnet
+     * sie bereits einer finalen layer_id zu; diese Zeit gehört daher in
+     * die Echtzeit-Summe des sichtbaren Bereichs.
+     */
+    for (const auto &move : result.moves) {
+        const auto found = layer_map.find(move.layer_id);
+        if (found == layer_map.end())
+            continue;
+        found->second.time_seconds +=
+            move.time[static_cast<size_t>(
+                Slic3r::PrintEstimatedStatistics::ETimeMode::Normal)];
+        if (move.type == Slic3r::EMoveType::Extrude) {
+            found->second.filament_used_mm +=
+                std::max(static_cast<double>(move.delta_extruder), 0.0);
+            if (move.extruder_id < result.filament_diameters.size() &&
+                move.extruder_id < result.filament_densities.size()) {
+                const double diameter =
+                    result.filament_diameters[move.extruder_id];
+                const double area =
+                    0.25 * ::PI * diameter * diameter;
+                found->second.filament_used_g +=
+                    std::max(
+                        static_cast<double>(move.delta_extruder), 0.0) *
+                    area * result.filament_densities[move.extruder_id] /
+                    1000.0;
+            }
+        }
+    }
+
+    for (const auto &used : result.print_statistics.used_filaments_per_role) {
+        const psm_preview_feature_role role = preview_role(used.first);
+        const auto found = role_map.find(role);
+        if (found == role_map.end())
+            continue;
+        /* Prusa speichert je Rolle Meter und Gramm. */
+        found->second.filament_used_mm = used.second.first * 1000.0;
+        found->second.filament_used_g = used.second.second;
+    }
+
+    for (auto &pair : extruder_map) {
+        auto &entry = pair.second;
+        const size_t index = pair.first;
+        if (index < result.extruder_colors.size())
+            entry.color_rgba = preview_rgba(result.extruder_colors[index]);
+
+        /*
+         * Aus finalem Volumen und finalem Filamentdurchmesser wird die
+         * Länge unabhängig von Retract-/Unretract-Bewegungen bestimmt.
+         */
+        const auto volume =
+            result.print_statistics.volumes_per_extruder.find(index);
+        if (volume != result.print_statistics.volumes_per_extruder.end() &&
+            index < result.filament_diameters.size()) {
+            const double diameter = result.filament_diameters[index];
+            const double area = 0.25 * ::PI * diameter * diameter;
+            if (area > 0.0)
+                entry.filament_used_mm = volume->second / area;
+            if (index < result.filament_densities.size())
+                entry.filament_used_g =
+                    volume->second * result.filament_densities[index] /
+                    1000.0;
+        }
+        data.snapshot.filament_used_mm += entry.filament_used_mm;
+        data.snapshot.filament_used_g += entry.filament_used_g;
+        data.extruders.push_back(entry);
+    }
+
+    for (auto &pair : layer_map)
+        data.layers.push_back(pair.second);
+    std::sort(
+        data.layers.begin(), data.layers.end(),
+        [](const psm_preview_layer &left,
+           const psm_preview_layer &right) {
+            if (left.z_upper != right.z_upper)
+                return left.z_upper < right.z_upper;
+            return left.source_layer_id < right.source_layer_id;
+        });
+    if (! data.layers.empty()) {
+        /*
+         * move.height beschreibt die Extrusionshöhe, nicht die
+         * Auswahlgrenze einer Vorschau-Schicht. Bei variablen Höhen
+         * können sich diese Rohbereiche überlappen. Für den beidseitigen
+         * Schichtregler bilden wir deshalb monotone, lückenlose Bänder
+         * zwischen den finalen Z-Ebenen.
+         */
+        float previous_z = data.layers.front().z_lower;
+        for (uint32_t index = 0; index < data.layers.size(); ++index) {
+            auto &layer = data.layers[index];
+            layer.index = index;
+            layer.z_lower = previous_z;
+            layer.z_upper = std::max(layer.z_upper, layer.z_lower);
+            previous_z = layer.z_upper;
+        }
+    }
+    for (auto &pair : role_map)
+        data.roles.push_back(pair.second);
+
+    if (! data.layers.empty()) {
+        data.snapshot.min_z = data.layers.front().z_lower;
+        data.snapshot.max_z = data.layers.back().z_upper;
+    }
+    data.snapshot.layer_count =
+        static_cast<uint32_t>(data.layers.size());
+    data.snapshot.extruder_count =
+        static_cast<uint32_t>(data.extruders.size());
+    data.snapshot.role_count =
+        static_cast<uint32_t>(data.roles.size());
+    return data;
 }
 
 void psm_session::teardown_print()
@@ -3322,6 +3551,12 @@ PSM_API psm_result psm_slice_start(psm_session *s, psm_progress_cb cb, void *use
                 s->gcode_tmp_path.clear();
             }
             s->stats = psm_slice_stats{};
+            s->extruder_usage.clear();
+            s->preview_result.reset();
+            s->preview_snapshot = psm_preview_snapshot{};
+            s->preview_layers.clear();
+            s->preview_extruders.clear();
+            s->preview_roles.clear();
         }
         s->result_revision.store(0, std::memory_order_release);
         s->cancel_requested = false;
@@ -3420,15 +3655,19 @@ PSM_API psm_result psm_slice_start(psm_session *s, psm_progress_cb cb, void *use
                  * einen Treffer liefert, schreibt PrusaSlicer 2.9.6 ohne
                  * Nullpruefung in diesen Zeiger. Das crashte bei grossen
                  * oder ueberlappenden Modellen mit SIGSEGV auf 0x268.
-                 * Ein lokales Ergebnis haelt denselben Exportpfad sicher
-                 * und wird direkt nach der Statistikauswertung freigegeben.
+                 * Das Ergebnis bleibt nach erfolgreicher Revisionspruefung
+                 * erhalten: genau diese finalen Moves brauchen Vorschau,
+                 * Filter und Layerstatistik.
                  */
-                Slic3r::GCodeProcessorResult processor_result;
+                auto processor_result =
+                    std::make_shared<Slic3r::GCodeProcessorResult>();
                 const std::string generated =
                     print_ptr->export_gcode(
                         tmp.string(),
-                        &processor_result,
+                        processor_result.get(),
                         nullptr);
+                FinalPreviewData preview =
+                    final_preview_data(*processor_result);
 
                 psm_slice_stats result_stats{};
                 const Slic3r::PrintStatistics &ps = print_ptr->print_statistics();
@@ -3483,17 +3722,21 @@ PSM_API psm_result psm_slice_start(psm_session *s, psm_progress_cb cb, void *use
                  * Daten-Lock passieren wie jede Designaenderung. Sonst
                  * koennte eine Aenderung genau zwischen Vergleich und
                  * PSM_STATE_DONE fallen.
-                 */
+                */
                 std::lock_guard<std::recursive_mutex> data_lock(s->data_mtx);
-                {
-                    std::lock_guard<std::mutex> result_lock(s->result_mtx);
-                    s->extruder_usage = verbrauch;
-                }
                 if (s->design_revision.load(std::memory_order_acquire) == job_revision) {
                     {
                         std::lock_guard<std::mutex> result_lock(s->result_mtx);
                         s->gcode_tmp_path = generated;
                         s->stats = result_stats;
+                        s->extruder_usage = std::move(verbrauch);
+                        s->preview_result =
+                            std::move(processor_result);
+                        s->preview_snapshot = preview.snapshot;
+                        s->preview_layers = std::move(preview.layers);
+                        s->preview_extruders =
+                            std::move(preview.extruders);
+                        s->preview_roles = std::move(preview.roles);
                     }
                     s->result_revision.store(job_revision, std::memory_order_release);
                     s->state.store(PSM_STATE_DONE, std::memory_order_release);
@@ -3606,6 +3849,86 @@ PSM_API psm_result psm_slice_extruder_at(psm_session *s, size_t index,
         if (index >= s->extruder_usage.size())
             return PSM_ERR_NOT_FOUND;
         *out = s->extruder_usage[index];
+        return PSM_OK;
+    PSM_GUARD_END(s)
+}
+
+PSM_API psm_result psm_preview_snapshot_get(
+    psm_session *s,
+    psm_preview_snapshot *out)
+{
+    PSM_GUARD_BEGIN(s)
+        if (out == nullptr ||
+            out->version != PSM_PREVIEW_SNAPSHOT_VERSION_1)
+            return PSM_ERR_INVALID_ARG;
+        std::lock_guard<std::recursive_mutex> data_lock(s->data_mtx);
+        if (! s->result_is_current()) {
+            s->set_error(
+                "Finaler Preview-Snapshot ist nicht mehr aktuell");
+            return PSM_ERR_STALE_RESULT;
+        }
+        std::lock_guard<std::mutex> result_lock(s->result_mtx);
+        if (! s->preview_result ||
+            s->preview_snapshot.final_move_count == 0)
+            return PSM_ERR_NOT_FOUND;
+        *out = s->preview_snapshot;
+        return PSM_OK;
+    PSM_GUARD_END(s)
+}
+
+PSM_API psm_result psm_preview_layer_at(
+    psm_session *s,
+    size_t index,
+    psm_preview_layer *out)
+{
+    PSM_GUARD_BEGIN(s)
+        if (out == nullptr)
+            return PSM_ERR_INVALID_ARG;
+        std::lock_guard<std::recursive_mutex> data_lock(s->data_mtx);
+        if (! s->result_is_current())
+            return PSM_ERR_STALE_RESULT;
+        std::lock_guard<std::mutex> result_lock(s->result_mtx);
+        if (index >= s->preview_layers.size())
+            return PSM_ERR_NOT_FOUND;
+        *out = s->preview_layers[index];
+        return PSM_OK;
+    PSM_GUARD_END(s)
+}
+
+PSM_API psm_result psm_preview_extruder_at(
+    psm_session *s,
+    size_t index,
+    psm_preview_extruder *out)
+{
+    PSM_GUARD_BEGIN(s)
+        if (out == nullptr)
+            return PSM_ERR_INVALID_ARG;
+        std::lock_guard<std::recursive_mutex> data_lock(s->data_mtx);
+        if (! s->result_is_current())
+            return PSM_ERR_STALE_RESULT;
+        std::lock_guard<std::mutex> result_lock(s->result_mtx);
+        if (index >= s->preview_extruders.size())
+            return PSM_ERR_NOT_FOUND;
+        *out = s->preview_extruders[index];
+        return PSM_OK;
+    PSM_GUARD_END(s)
+}
+
+PSM_API psm_result psm_preview_role_at(
+    psm_session *s,
+    size_t index,
+    psm_preview_role *out)
+{
+    PSM_GUARD_BEGIN(s)
+        if (out == nullptr)
+            return PSM_ERR_INVALID_ARG;
+        std::lock_guard<std::recursive_mutex> data_lock(s->data_mtx);
+        if (! s->result_is_current())
+            return PSM_ERR_STALE_RESULT;
+        std::lock_guard<std::mutex> result_lock(s->result_mtx);
+        if (index >= s->preview_roles.size())
+            return PSM_ERR_NOT_FOUND;
+        *out = s->preview_roles[index];
         return PSM_OK;
     PSM_GUARD_END(s)
 }

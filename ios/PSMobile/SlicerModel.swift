@@ -1116,6 +1116,13 @@ final class SlicerModel: ObservableObject {
     /// Ob ein Hinsehen ohne neues Rechnen genuegt.
     var sliceResultIsCurrent: Bool { core?.sliceResultIsCurrent ?? false }
 
+    /// Keine zwischengespeicherte Swift-Kopie: so kann eine neue
+    /// Designrevision nie versehentlich den alten Preview-Wert zeigen.
+    func previewSnapshot() -> PsmCore.PreviewSnapshot? {
+        guard sliceResultIsCurrent else { return nil }
+        return core?.previewSnapshot()
+    }
+
     func slice() {
         guard let core, sliceTask == nil else { return }
 

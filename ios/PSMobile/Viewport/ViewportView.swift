@@ -36,6 +36,11 @@ struct ViewportView: UIViewRepresentable {
     var viewportMode: PsmViewport.Mode = .editor
     /// Sichtbarer Schichtbereich in der Vorschau. Nil heisst: alles.
     var layerRange: ClosedRange<Int32>?
+    var previewView: PsmViewport.PreviewView = .feature
+    var previewRoles: [PsmCore.PreviewFeatureRole] = []
+    var hiddenPreviewRoles: Set<PsmCore.PreviewFeatureRole> = []
+    var previewExtruders: [Int32] = []
+    var hiddenPreviewExtruders: Set<Int32> = []
     /// Steigt, wenn die Ansicht zurueckgesetzt werden soll. Ein Ereignis
     /// laesst sich in SwiftUI nicht als Zustand ausdruecken - ein
     /// Zaehler schon.
@@ -80,12 +85,28 @@ struct ViewportView: UIViewRepresentable {
             vp.setSelections(selectedIds, primary: selectedId)
             vp.setPaintOptions(paintOptions)
             if vp.gizmo != gizmo { vp.gizmo = gizmo }
-            if viewportMode == .preview && !v.vorschauGeladen {
-                v.vorschauGeladen = true
+            let vorschauBetreten =
+                viewportMode == .preview && v.letzterModus != .preview
+            v.letzterModus = viewportMode
+            if vorschauBetreten {
                 let schichten = vp.loadPreview() ? vp.layerCount : 0
                 DispatchQueue.main.async { onPreviewLoaded?(schichten) }
             }
             if vp.mode != viewportMode { vp.mode = viewportMode }
+            if viewportMode == .preview {
+                vp.setPreviewView(previewView)
+                for role in previewRoles {
+                    vp.setRole(
+                        role,
+                        visible: !hiddenPreviewRoles.contains(role))
+                }
+                for extruder in previewExtruders {
+                    vp.setExtruder(
+                        extruder,
+                        visible:
+                            !hiddenPreviewExtruders.contains(extruder))
+                }
+            }
             if let bereich = layerRange {
                 vp.setLayerRange(first: bereich.lowerBound, last: bereich.upperBound)
             }
@@ -176,9 +197,9 @@ final class PSMGLView: UIView {
     /// bei jeder Neuzeichnung erneut.
     var letzterResetKey = 0
     var letzterViewKey = 0
-    /// Ob die Werkzeugwege schon geladen sind. Sie noch einmal zu laden
-    /// kostet Sekunden und aendert nichts.
-    var vorschauGeladen = false
+    /// Nur beim Übergang Editor → Vorschau laden. C++ erkennt denselben
+    /// finalen Result-Zeiger und überspringt eine teure Wiederholung.
+    var letzterModus: PsmViewport.Mode = .editor
     var onSelect: ((Int32) -> Void)?
     var onObjectChanged: (() -> Void)?
     var onSurfaceTap: ((PsmViewport.SurfaceHit) -> Void)?

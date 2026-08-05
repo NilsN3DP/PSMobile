@@ -790,6 +790,11 @@ int main(int argc, char **argv)
     require(psm_slice_stats_get(session, &slice_stats) ==
                 PSM_ERR_STALE_RESULT,
             "stale stats are rejected");
+    psm_preview_snapshot stale_preview{};
+    stale_preview.version = PSM_PREVIEW_SNAPSHOT_VERSION_1;
+    require(psm_preview_snapshot_get(session, &stale_preview) ==
+                PSM_ERR_STALE_RESULT,
+            "stale final preview snapshot is rejected");
 
     require(psm_slice_start(session, nullptr, nullptr) == PSM_OK,
             "start current slice");
@@ -798,6 +803,75 @@ int main(int argc, char **argv)
     require(psm_slice_stats_get(session, &slice_stats) == PSM_OK,
             "current stats are available");
     require(slice_stats.object_count == 1, "slice contains one object");
+
+    /*
+     * Dieser Vertrag muss an der finalen G-Code-Verarbeitung hängen.
+     * Ein Print-Schnappschuss vor dem Export kennt weder finale Moves noch
+     * die vom GCodeProcessor berechneten Zeiten und Filamentmengen.
+     */
+    psm_preview_snapshot preview{};
+    preview.version = PSM_PREVIEW_SNAPSHOT_VERSION_1;
+    require(psm_preview_snapshot_get(session, &preview) == PSM_OK,
+            std::string("final preview snapshot: ") +
+                psm_last_error(session));
+    require(preview.final_move_count > 0,
+            "final preview contains processed G-code moves");
+    require(preview.layer_count > 0 && preview.role_count > 0 &&
+                preview.extruder_count > 0,
+            "final preview exposes layers, roles and used extruders");
+    require(preview.print_time_seconds > 0.0 &&
+                preview.filament_used_mm > 0.0 &&
+                preview.max_z > preview.min_z,
+            "final preview exposes real time, filament and Z bounds");
+
+    float previous_z = preview.min_z;
+    double layer_time = 0.0;
+    double layer_filament = 0.0;
+    for (uint32_t layer_index = 0;
+         layer_index < preview.layer_count;
+         ++layer_index) {
+        psm_preview_layer layer{};
+        require(psm_preview_layer_at(
+                    session, layer_index, &layer) == PSM_OK,
+                "final preview layer is available");
+        require(layer.index == layer_index &&
+                    layer.z_lower >= previous_z - 0.0001f &&
+                    layer.z_upper >= layer.z_lower,
+                "final preview layer Z bounds are monotonic");
+        previous_z = layer.z_upper;
+        layer_time += layer.time_seconds;
+        layer_filament += layer.filament_used_mm;
+    }
+    require(previous_z > preview.min_z && layer_time > 0.0 &&
+                layer_filament > 0.0,
+            "final layer range carries live time and filament totals");
+
+    uint64_t role_moves = 0;
+    for (uint32_t role_index = 0;
+         role_index < preview.role_count;
+         ++role_index) {
+        psm_preview_role role{};
+        require(psm_preview_role_at(
+                    session, role_index, &role) == PSM_OK,
+                "detected final feature role is available");
+        require(role.role != PSM_PREVIEW_ROLE_NONE &&
+                    role.move_count > 0,
+                "only real extrusion feature roles are exposed");
+        role_moves += role.move_count;
+    }
+    require(role_moves > 0, "final feature roles reference processed moves");
+
+    for (uint32_t extruder_index = 0;
+         extruder_index < preview.extruder_count;
+         ++extruder_index) {
+        psm_preview_extruder extruder{};
+        require(psm_preview_extruder_at(
+                    session, extruder_index, &extruder) == PSM_OK,
+                "used final extruder is available");
+        require(extruder.move_count > 0 &&
+                    extruder.filament_used_mm > 0.0,
+                "preview extruder is backed by final extrusion moves");
+    }
 
     const std::filesystem::path ascii_gcode =
         std::filesystem::path(argv[1]) / "conversion-source.gcode";
@@ -846,6 +920,10 @@ int main(int argc, char **argv)
     require(psm_slice_stats_get(session, &slice_stats) ==
                 PSM_ERR_STALE_RESULT,
             "config change invalidates finished slice");
+    preview.version = PSM_PREVIEW_SNAPSHOT_VERSION_1;
+    require(psm_preview_snapshot_get(session, &preview) ==
+                PSM_ERR_STALE_RESULT,
+            "config change invalidates final preview snapshot");
 
     size_t second_bed = 0;
     require(psm_bed_add(session, &second_bed) == PSM_OK,

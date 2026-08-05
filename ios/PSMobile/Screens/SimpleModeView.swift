@@ -65,8 +65,12 @@ struct SimpleModeView: View {
     /// "Vorschau" tippt, will die Wege sehen - nicht die
     /// Zusammenfassung und dann noch einmal tippen.
     @State private var nachDemSchnittZeigen = false
-    @State private var schicht: Double = 0
-    @State private var schichten: Int32 = 0
+    @State private var finalPreview: PsmCore.PreviewSnapshot?
+    @State private var previewRange = PreviewRange(layerCount: 0)
+    @State private var previewView: PsmViewport.PreviewView = .feature
+    @State private var hiddenPreviewRoles:
+        Set<PsmCore.PreviewFeatureRole> = []
+    @State private var hiddenPreviewExtruders: Set<Int32> = []
     @State private var schichthoehenDarstellung:
         PsmViewport.LayerVisualization?
     @State private var ansichtZuruecksetzen = 0
@@ -109,7 +113,15 @@ struct SimpleModeView: View {
             if panel == .workspace && !vorschau { modellKnopf }
             if panel == .workspace && !vorschau { schrittleiste }
             if panel == .workspace { werkzeugspalte }
-            if vorschau && schichten > 0 { schichtregler }
+            if vorschau, let snapshot = finalPreview {
+                FinalPreviewOverlay(
+                    snapshot: snapshot,
+                    range: $previewRange,
+                    view: $previewView,
+                    hiddenRoles: $hiddenPreviewRoles,
+                    hiddenExtruders: $hiddenPreviewExtruders,
+                    onEditor: vorschauSchliessen)
+            }
             if let hinweis = model.projectNotice { projektHinweis(hinweis) }
             if model.progress != .idle {
                 SliceSheet(model: model,
@@ -151,6 +163,11 @@ struct SimpleModeView: View {
             ColorMixView { zeigeColorMix = false }
                 .environmentObject(model)
         }
+        .onChange(of: model.sceneRevision) { _ in
+            if vorschau && model.previewSnapshot() == nil {
+                vorschauSchliessen()
+            }
+        }
         .sheet(isPresented: $zeigeArrange) {
             ArrangePanel(model: model, isPresented: $zeigeArrange)
         }
@@ -173,16 +190,24 @@ struct SimpleModeView: View {
                     inputEnabled: panel == .workspace,
                     gizmo: gizmo,
                     viewportMode: vorschau ? .preview : .editor,
-                    layerRange: vorschau && schichten > 0
-                        ? 0...Int32(schicht) : nil,
+                    layerRange: vorschau && !previewRange.isEmpty
+                        ? (Int32(previewRange.lower) ... Int32(previewRange.upper))
+                        : nil,
+                    previewView: previewView,
+                    previewRoles:
+                        finalPreview?.roles.map(\.role) ?? [],
+                    hiddenPreviewRoles: hiddenPreviewRoles,
+                    previewExtruders:
+                        finalPreview?.extruders.map(\.extruder) ?? [],
+                    hiddenPreviewExtruders: hiddenPreviewExtruders,
                     resetViewKey: ansichtZuruecksetzen,
                     onPreviewLoaded: { anzahl in
-                        schichten = anzahl
-                        schicht = Double(max(anzahl - 1, 0))
-                        // Kommt nichts zurueck, gibt es auch nichts zu
-                        // zeigen - dann zurueck aufs Bett statt eine leere
-                        // Flaeche.
-                        if anzahl == 0 { vorschau = false }
+                        guard let snapshot = finalPreview,
+                              anzahl == Int32(snapshot.layers.count),
+                              anzahl > 0 else {
+                            vorschauSchliessen()
+                            return
+                        }
                     },
                     onSelect: { model.select($0 < 0 ? nil : $0) },
                     onObjectChanged: { model.refresh() },
@@ -475,12 +500,28 @@ struct SimpleModeView: View {
 
     private func vorschauUmschalten() {
         if vorschau {
-            vorschau = false
+            vorschauSchliessen()
+            return
+        }
+        guard let snapshot = model.previewSnapshot(),
+              !snapshot.layers.isEmpty else {
+            vorschauSchliessen()
             return
         }
         // In der Vorschau gibt es keine Objekte zum Anfassen.
         model.select(nil)
+        finalPreview = snapshot
+        previewRange = PreviewRange(layerCount: snapshot.layers.count)
+        previewView = .feature
+        hiddenPreviewRoles.removeAll()
+        hiddenPreviewExtruders.removeAll()
         vorschau = true
+    }
+
+    private func vorschauSchliessen() {
+        vorschau = false
+        finalPreview = nil
+        previewRange = PreviewRange(layerCount: 0)
     }
 
     private func werkzeugKnopf(_ glyph: String,
@@ -501,23 +542,6 @@ struct SimpleModeView: View {
         }
         .buttonStyle(.plain)
         .accessibilityIdentifier(kennung)
-    }
-
-    /// Bis zu welcher Schicht die Vorschau zeigt.
-    ///
-    /// Rechts und senkrecht, wie in PrusaSlicer: eine Schichthoehe ist
-    /// eine senkrechte Groesse, und oben ist oben.
-    private var schichtregler: some View {
-        HStack {
-            Spacer()
-            SenkrechterRegler(wert: $schicht,
-                              maximum: Double(max(schichten - 1, 1)),
-                              beschriftung: "\(Int(schicht) + 1)/\(schichten)")
-                .frame(width: ps.pt(54))
-                .padding(.trailing, ps.pt(76))
-                .padding(.vertical, ps.pt(90))
-                .accessibilityIdentifier("vorschau.schicht")
-        }
     }
 
     // MARK: - Zurueck und wiederholen

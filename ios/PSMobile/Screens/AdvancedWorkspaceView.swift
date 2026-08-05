@@ -82,8 +82,12 @@ struct AdvancedWorkspaceView: View {
     @State private var vorschau = false
     /// Ist das Flaechenwerkzeug an, gehoert die Beruehrung der Flaeche.
     @State private var aufFlaeche = false
-    @State private var schicht: Double = 0
-    @State private var schichten: Int32 = 0
+    @State private var finalPreview: PsmCore.PreviewSnapshot?
+    @State private var previewRange = PreviewRange(layerCount: 0)
+    @State private var previewView: PsmViewport.PreviewView = .feature
+    @State private var hiddenPreviewRoles:
+        Set<PsmCore.PreviewFeatureRole> = []
+    @State private var hiddenPreviewExtruders: Set<Int32> = []
     @State private var schichthoehenDarstellung:
         PsmViewport.LayerVisualization?
     /// Ob nach dem laufenden Schnitt die Vorschau aufgehen soll.
@@ -141,21 +145,14 @@ struct AdvancedWorkspaceView: View {
                     seitenleiste.frame(width: seitenleistenbreite)
                 }
             }
-            // Rechts und senkrecht, wie in PrusaSlicer: eine
-            // Schichthoehe ist eine senkrechte Groesse.
-            if vorschau && schichten > 0 {
-                HStack {
-                    Spacer()
-                    SenkrechterRegler(wert: $schicht,
-                                      maximum: Double(max(schichten - 1, 1)),
-                                      beschriftung: "\(Int(schicht) + 1)/\(schichten)")
-                        .frame(width: ps.pt(54))
-                        .padding(.trailing, seiteOffen && !schmal
-                                 ? min(ps.pt(360), ps.windowSize.width * 0.44)
-                                 : ps.pt(20))
-                        .padding(.vertical, ps.pt(90))
-                        .accessibilityIdentifier("vorschau.schicht")
-                }
+            if vorschau, let snapshot = finalPreview {
+                FinalPreviewOverlay(
+                    snapshot: snapshot,
+                    range: $previewRange,
+                    view: $previewView,
+                    hiddenRoles: $hiddenPreviewRoles,
+                    hiddenExtruders: $hiddenPreviewExtruders,
+                    onEditor: vorschauSchliessen)
             }
             // Dieselbe schwebende Leiste wie im Einfachen Modus: was man
             // am ausgewaehlten Objekt am haeufigsten tut, gehoert an das
@@ -234,7 +231,12 @@ struct AdvancedWorkspaceView: View {
         }
         // Was sich auf dem Bett ändert, macht eine ausgegebene Platte
         // hinfällig - sonst gäbe man eine Anordnung von vorhin weiter.
-        .onChange(of: model.sceneRevision) { _ in platte = nil }
+        .onChange(of: model.sceneRevision) { _ in
+            platte = nil
+            if vorschau && model.previewSnapshot() == nil {
+                vorschauSchliessen()
+            }
+        }
         // Wer auf "Vorschau" tippt und dafuer warten musste, will danach
         // die Wege sehen - nicht die Zusammenfassung.
         .onChange(of: model.progress) { neu in
@@ -596,15 +598,26 @@ struct AdvancedWorkspaceView: View {
                     paintOptions:
                         maloptionen.tool == nil ? nil : maloptionen,
                     viewportMode: vorschau ? .preview : .editor,
-                    layerRange: vorschau && schichten > 0 ? 0...Int32(schicht) : nil,
+                    layerRange: vorschau && !previewRange.isEmpty
+                        ? (Int32(previewRange.lower) ... Int32(previewRange.upper))
+                        : nil,
+                    previewView: previewView,
+                    previewRoles:
+                        finalPreview?.roles.map(\.role) ?? [],
+                    hiddenPreviewRoles: hiddenPreviewRoles,
+                    previewExtruders:
+                        finalPreview?.extruders.map(\.extruder) ?? [],
+                    hiddenPreviewExtruders: hiddenPreviewExtruders,
                     resetViewKey: ansichtZuruecksetzen,
                     viewPreset: ansicht,
                     viewPresetKey: ansichtZaehler,
                     onPreviewLoaded: { anzahl in
-                        schichten = anzahl
-                        schicht = Double(max(anzahl - 1, 0))
-                        // Kommt nichts zurueck, gibt es nichts zu zeigen.
-                        if anzahl == 0 { vorschau = false }
+                        guard let snapshot = finalPreview,
+                              anzahl == Int32(snapshot.layers.count),
+                              anzahl > 0 else {
+                            vorschauSchliessen()
+                            return
+                        }
                     },
                     onSelect: { model.select($0 < 0 ? nil : $0) },
                     onObjectChanged: { model.refresh() },
@@ -728,7 +741,7 @@ struct AdvancedWorkspaceView: View {
 
     /// Vorschau oeffnen - und nur dann rechnen, wenn es sein muss.
     private func vorschauZeigen() {
-        if vorschau { vorschau = false; return }
+        if vorschau { vorschauSchliessen(); return }
         if model.sliceResultIsCurrent {
             vorschauUmschalten()
             return
@@ -743,11 +756,27 @@ struct AdvancedWorkspaceView: View {
     }
 
     private func vorschauUmschalten() {
+        guard let snapshot = model.previewSnapshot(),
+              !snapshot.layers.isEmpty else {
+            vorschauSchliessen()
+            return
+        }
         // In der Vorschau gibt es keine Objekte zum Anfassen, und kein
         // Werkzeug, das auf sie zeigt.
         model.select(nil)
         maloptionen.tool = nil
+        finalPreview = snapshot
+        previewRange = PreviewRange(layerCount: snapshot.layers.count)
+        previewView = .feature
+        hiddenPreviewRoles.removeAll()
+        hiddenPreviewExtruders.removeAll()
         vorschau = true
+    }
+
+    private func vorschauSchliessen() {
+        vorschau = false
+        finalPreview = nil
+        previewRange = PreviewRange(layerCount: 0)
     }
 
     private func schneiden() {

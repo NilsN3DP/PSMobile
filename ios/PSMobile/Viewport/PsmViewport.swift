@@ -15,6 +15,7 @@ final class PsmViewport {
 
     enum ViewPreset: Int32 { case iso = 0, top, front, back, left, right }
     enum Mode: Int32 { case editor = 0, preview = 1 }
+    enum PreviewView: Int32 { case feature = 0, extruder = 1 }
     enum Gizmo: Int32 { case none = 0, move, rotate, scale }
 
     struct SurfaceHit {
@@ -202,5 +203,23 @@ final class PsmViewport {
 
     func setLayerRange(first: Int32, last: Int32) {
         psm_viewport_set_layer_range(handle, first, last)
+    }
+
+    func setPreviewView(_ view: PreviewView) {
+        psm_viewport_set_preview_view(
+            handle,
+            psm_preview_view(rawValue: UInt32(view.rawValue)))
+    }
+
+    func setRole(_ role: PsmCore.PreviewFeatureRole, visible: Bool) {
+        psm_viewport_set_role_visible(
+            handle,
+            psm_preview_feature_role(rawValue: UInt32(role.rawValue)),
+            visible ? 1 : 0)
+    }
+
+    func setExtruder(_ extruder: Int32, visible: Bool) {
+        psm_viewport_set_extruder_visible(
+            handle, extruder, visible ? 1 : 0)
     }
 }

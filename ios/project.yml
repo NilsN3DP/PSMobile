@@ -127,6 +127,7 @@ targets:
       # Dasselbe Verhaeltnis wie auf Android: die Regeltests dort laufen
       # ohne das NDK.
       - path: PSMobile/UI/PSScale.swift
+      - path: PSMobile/UI/PreviewRange.swift
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: de.psmobile.tests

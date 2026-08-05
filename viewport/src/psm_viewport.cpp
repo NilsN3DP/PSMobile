@@ -374,6 +374,9 @@ struct psm_viewport
     libvgcode::Viewer       gcode_viewer;
     bool                    gcode_viewer_ready = false;
     bool                    gcode_loaded = false;
+    std::shared_ptr<const Slic3r::GCodeProcessorResult>
+                            loaded_preview_result;
+    std::vector<bool>       preview_extruders_visible;
 
     Vec3 eye() const
     {
@@ -1930,6 +1933,88 @@ PSM_API int psm_viewport_scale_selected(psm_viewport *v, float factor)
 
 /* --- Vorschau ------------------------------------------------------ */
 
+namespace {
+
+libvgcode::EGCodeExtrusionRole libvgcode_role(
+    psm_preview_feature_role role)
+{
+    using Role = libvgcode::EGCodeExtrusionRole;
+    switch (role) {
+        case PSM_PREVIEW_ROLE_PERIMETER:                  return Role::Perimeter;
+        case PSM_PREVIEW_ROLE_EXTERNAL_PERIMETER:         return Role::ExternalPerimeter;
+        case PSM_PREVIEW_ROLE_OVERHANG_PERIMETER:         return Role::OverhangPerimeter;
+        case PSM_PREVIEW_ROLE_INTERNAL_INFILL:            return Role::InternalInfill;
+        case PSM_PREVIEW_ROLE_SOLID_INFILL:               return Role::SolidInfill;
+        case PSM_PREVIEW_ROLE_TOP_SOLID_INFILL:           return Role::TopSolidInfill;
+        case PSM_PREVIEW_ROLE_IRONING:                    return Role::Ironing;
+        case PSM_PREVIEW_ROLE_BRIDGE_INFILL:              return Role::BridgeInfill;
+        case PSM_PREVIEW_ROLE_GAP_FILL:                   return Role::GapFill;
+        case PSM_PREVIEW_ROLE_SKIRT:                      return Role::Skirt;
+        case PSM_PREVIEW_ROLE_SUPPORT_MATERIAL:           return Role::SupportMaterial;
+        case PSM_PREVIEW_ROLE_SUPPORT_MATERIAL_INTERFACE: return Role::SupportMaterialInterface;
+        case PSM_PREVIEW_ROLE_WIPE_TOWER:                 return Role::WipeTower;
+        case PSM_PREVIEW_ROLE_CUSTOM:                     return Role::Custom;
+        default:                                          return Role::None;
+    }
+}
+
+std::vector<std::string> preview_color_print_colors(
+    const Slic3r::GCodeProcessorResult &result)
+{
+    if (result.custom_gcode_per_print_z.empty())
+        return {};
+    std::vector<std::string> colors = result.extruder_colors;
+    for (const auto &item : result.custom_gcode_per_print_z)
+        if (item.type == Slic3r::CustomGCode::ColorChange)
+            colors.push_back(item.color);
+    /*
+     * Derselbe letzte Eintrag wie in GUI_Preview: Pause und freier
+     * Custom-G-Code werden grau gezeichnet.
+     */
+    colors.push_back("#808080");
+    return colors;
+}
+
+bool load_final_preview(
+    psm_viewport *v,
+    const std::shared_ptr<const Slic3r::GCodeProcessorResult> &result)
+{
+    if (! result || result->moves.empty())
+        return false;
+
+    libvgcode::GCodeInputData data = libvgcode::convert(
+        *result,
+        result->extruder_colors,
+        preview_color_print_colors(*result),
+        v->gcode_viewer);
+
+    /*
+     * libvgcode hat Rollen-Sichtbarkeit, aber keine Werkzeug-
+     * Sichtbarkeit. Gefiltert werden deshalb seine bereits offiziell
+     * konvertierten Eingabepunkte, nie selbst geparster G-Code.
+     * Reise-/Werkzeugwechselpunkte bleiben stehen und trennen Pfade.
+     */
+    if (! v->preview_extruders_visible.empty()) {
+        data.vertices.erase(
+            std::remove_if(
+                data.vertices.begin(), data.vertices.end(),
+                [v](const libvgcode::PathVertex &vertex) {
+                    const size_t extruder = vertex.extruder_id;
+                    return vertex.type == libvgcode::EMoveType::Extrude &&
+                           extruder < v->preview_extruders_visible.size() &&
+                           ! v->preview_extruders_visible[extruder];
+                }),
+            data.vertices.end());
+    }
+
+    v->gcode_viewer.load(std::move(data));
+    v->loaded_preview_result = result;
+    v->gcode_loaded = true;
+    return true;
+}
+
+} // namespace
+
 PSM_API void psm_viewport_set_mode(psm_viewport *v, psm_view_mode mode)
 {
     if (v != nullptr)
@@ -1948,9 +2033,6 @@ PSM_API int psm_viewport_load_preview(psm_viewport *v)
         return 0;
 
     try {
-        std::lock_guard<std::mutex> print_lock(v->session->print_mtx);
-        if (! v->session->print)
-            return 0;
         if (! v->gcode_viewer_ready) {
             /* libvgcode laedt seine GL-Funktionen selbst. Die Zeichenkette
              * ist die Kontextversion; unter GLES erwartet es "3.0". */
@@ -1958,28 +2040,36 @@ PSM_API int psm_viewport_load_preview(psm_viewport *v)
             v->gcode_viewer_ready = true;
         }
 
-        const Slic3r::Print &print = *v->session->print;
+        std::shared_ptr<const Slic3r::GCodeProcessorResult> result;
+        {
+            /*
+             * Revisionsprüfung und Zeigerübernahme bilden eine Einheit.
+             * Danach hält shared_ptr den unveränderlichen Final-Datensatz,
+             * ohne den Slice-/Editor-Lock während der Konvertierung zu
+             * blockieren.
+             */
+            std::lock_guard<std::recursive_mutex> data_lock(
+                v->session->data_mtx);
+            if (! v->session->result_is_current())
+                return 0;
+            std::lock_guard<std::mutex> result_lock(
+                v->session->result_mtx);
+            result = v->session->preview_result;
+        }
+        if (! result)
+            return 0;
+        if (v->loaded_preview_result == result && v->gcode_loaded)
+            return 1;
 
-        /* Die Zahl der Extruder steht nirgends als eigener Wert - sie ist
-         * die Laenge von nozzle_diameter. Genau so leitet PrusaSlicer sie
-         * ab. "extruders_count" gibt es nur als Hilfsoption der Tab-GUI
-         * und nicht in PrintConfig; opt_int haette dort null geliefert. */
-        const auto *nozzles =
-            v->session->slice_config.opt<Slic3r::ConfigOptionFloats>("nozzle_diameter");
-        const size_t extruders =
-            (nozzles != nullptr && ! nozzles->values.empty()) ? nozzles->values.size() : 1;
+        size_t extruder_count = result->extruders_count;
+        for (const auto &move : result->moves)
+            extruder_count = std::max(
+                extruder_count,
+                static_cast<size_t>(move.extruder_id) + 1);
+        v->preview_extruders_visible.assign(extruder_count, true);
 
-        /* Umwandlung aus PrusaSlicer selbst - siehe E-12. */
-        libvgcode::GCodeInputData data = libvgcode::convert(
-            print,
-            /* Werkzeugfarben  */ std::vector<std::string>{},
-            /* Farbwechsel     */ std::vector<std::string>{},
-            /* Custom-G-Code   */ std::vector<Slic3r::CustomGCode::Item>{},
-            extruders);
-
-        v->gcode_viewer.load(std::move(data));
-        v->gcode_loaded = true;
-        return 1;
+        /* Finaler GCodeProcessorResult, wie in GCodeViewer::load_as_gcode. */
+        return load_final_preview(v, result) ? 1 : 0;
     } catch (const std::exception &e) {
         v->last_error = std::string("Vorschau: ") + e.what();
         psm_emit_log(PSM_LOG_ERROR, v->last_error);
@@ -2005,6 +2095,55 @@ PSM_API int psm_viewport_pick_surface(psm_viewport *v, float x, float y,
         v->paint_cursor_dirty = true;
     }
     return found;
+}
+
+PSM_API void psm_viewport_set_preview_view(
+    psm_viewport *v,
+    psm_preview_view view)
+{
+    if (v == nullptr || ! v->gcode_loaded)
+        return;
+    v->gcode_viewer.set_view_type(
+        view == PSM_PREVIEW_VIEW_EXTRUDER
+            ? libvgcode::EViewType::Tool
+            : libvgcode::EViewType::FeatureType);
+}
+
+PSM_API void psm_viewport_set_role_visible(
+    psm_viewport *v,
+    psm_preview_feature_role role,
+    int32_t visible)
+{
+    if (v == nullptr || ! v->gcode_loaded)
+        return;
+    const libvgcode::EGCodeExtrusionRole converted =
+        libvgcode_role(role);
+    if (converted == libvgcode::EGCodeExtrusionRole::None)
+        return;
+    const bool current =
+        v->gcode_viewer.is_extrusion_role_visible(converted);
+    if (current != (visible != 0))
+        v->gcode_viewer.toggle_extrusion_role_visibility(converted);
+}
+
+PSM_API void psm_viewport_set_extruder_visible(
+    psm_viewport *v,
+    int32_t extruder,
+    int32_t visible)
+{
+    if (v == nullptr || ! v->gcode_loaded || extruder < 0)
+        return;
+    const size_t index = static_cast<size_t>(extruder);
+    if (index >= v->preview_extruders_visible.size() ||
+        v->preview_extruders_visible[index] == (visible != 0))
+        return;
+    v->preview_extruders_visible[index] = visible != 0;
+    try {
+        load_final_preview(v, v->loaded_preview_result);
+    } catch (const std::exception &e) {
+        v->last_error = std::string("Extruderfilter: ") + e.what();
+        psm_emit_log(PSM_LOG_ERROR, v->last_error);
+    }
 }
 
 PSM_API void psm_viewport_set_paint_options(

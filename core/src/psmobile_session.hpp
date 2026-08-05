@@ -28,7 +28,10 @@
 #include "libslic3r/Print.hpp"
 #include "libslic3r/PrintConfig.hpp"
 
-namespace Slic3r { class PresetBundle; }
+namespace Slic3r {
+class PresetBundle;
+struct GCodeProcessorResult;
+}
 
 void psm_emit_log(psm_log_level lvl, const std::string &msg);
 
@@ -145,6 +148,16 @@ struct psm_session
      * eine Zeile, bei fuenf Farben fuenf - und dann ist die Gesamtsumme
      * in stats fast nichts wert. */
     std::vector<psm_extruder_usage>  extruder_usage;
+    /*
+     * Exakt der Datensatz, den Print::export_gcode finalisiert hat.
+     * Der Viewport und das additive C-ABI lesen beide diese Quelle;
+     * Print-Geometrie vor der G-Code-Verarbeitung ist kein Ersatz.
+     */
+    std::shared_ptr<const Slic3r::GCodeProcessorResult> preview_result;
+    psm_preview_snapshot             preview_snapshot{};
+    std::vector<psm_preview_layer>   preview_layers;
+    std::vector<psm_preview_extruder> preview_extruders;
+    std::vector<psm_preview_role>    preview_roles;
 
     /*
      * design_revision beschreibt exakt den Stand, aus dem ein Slice
@@ -249,6 +262,14 @@ struct psm_session
     {
         design_revision.fetch_add(1, std::memory_order_acq_rel);
         result_revision.store(0, std::memory_order_release);
+        {
+            std::lock_guard<std::mutex> result_lock(result_mtx);
+            preview_result.reset();
+            preview_snapshot = psm_preview_snapshot{};
+            preview_layers.clear();
+            preview_extruders.clear();
+            preview_roles.clear();
+        }
 
         int expected = PSM_STATE_DONE;
         state.compare_exchange_strong(expected, PSM_STATE_STALE,

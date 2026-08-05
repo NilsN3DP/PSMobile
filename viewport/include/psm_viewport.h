@@ -253,6 +253,11 @@ typedef enum {
     PSM_VIEW_PREVIEW = 1    /* Werkzeugwege */
 } psm_view_mode;
 
+typedef enum {
+    PSM_PREVIEW_VIEW_FEATURE  = 0,
+    PSM_PREVIEW_VIEW_EXTRUDER = 1
+} psm_preview_view;
+
 PSM_API void psm_viewport_set_mode(psm_viewport *v, psm_view_mode mode);
 PSM_API psm_view_mode psm_viewport_get_mode(psm_viewport *v);
 
@@ -267,6 +272,18 @@ PSM_API int32_t psm_viewport_layer_count(psm_viewport *v);
 
 /** Sichtbaren Layerbereich setzen, wie der Slider im Desktop. */
 PSM_API void psm_viewport_set_layer_range(psm_viewport *v, int32_t first, int32_t last);
+
+/** Farbsicht und Touch-Filter der finalen Werkzeugwege. */
+PSM_API void psm_viewport_set_preview_view(psm_viewport *v,
+                                           psm_preview_view view);
+PSM_API void psm_viewport_set_role_visible(
+    psm_viewport *v,
+    psm_preview_feature_role role,
+    int32_t visible);
+PSM_API void psm_viewport_set_extruder_visible(
+    psm_viewport *v,
+    int32_t extruder,
+    int32_t visible);
 
 /** Letzte Fehlermeldung des Viewports, etwa beim Laden der Shader. */
 PSM_API const char *psm_viewport_last_error(psm_viewport *v);
