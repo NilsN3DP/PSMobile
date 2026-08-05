@@ -31,7 +31,8 @@
 ## Fix-Runde 3 – Diagnose
 
 - Der Mac-Test meldet den Abschluss unveraendert als nicht treffbar. Die bisherige Hoehenhypothese ist damit nicht ausreichend bestaetigt.
-- Der Test protokolliert fuer den naechsten Mac-Lauf Fenster-, Dialog- und Footer-Frame, Enable-Status sowie die beiden Accessibility-Unterbaeume. Damit wird zwischen Footer ausserhalb der Karte, verdecktem Footer und einem reinen Accessibility-Problem unterschieden, bevor der Produktionscode erneut geaendert wird.
+- Der Test protokollierte Fenster-, Dialog- und Footer-Frame, Enable-Status sowie die beiden Accessibility-Unterbaeume. Der Mac-Befund zeigt: `Fertig` liegt vollstaendig in der Karte und ist aktiviert, wird aber von der vor ihm liegenden Accessibility-Flaeche als nicht treffbar bewertet.
+- Die Dialogkennung liegt deshalb jetzt als gleich grosse Accessibility-Hintergrundflaeche hinter dem Inhalt statt als Overlay darueber. Die UI-Testaussage ist wieder unveraendert; nur ihre kurzfristige Diagnoseausgabe wurde entfernt.
 
 ## Scope
 

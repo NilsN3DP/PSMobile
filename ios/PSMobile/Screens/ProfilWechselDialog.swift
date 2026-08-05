@@ -30,15 +30,15 @@ struct SchwebenderDialog<Inhalt: View>: View {
             inhalt
                 .frame(maxWidth: min(maximaleBreite, breite), maxHeight: hoehe)
                 .background(PrusaColors.panel)
-                .clipShape(RoundedRectangle(cornerRadius: ps.pt(8)))
-                .overlay(RoundedRectangle(cornerRadius: ps.pt(8))
-                    .stroke(PrusaColors.divider, lineWidth: 1))
-                .overlay {
+                .background {
                     Color.clear
                         .accessibilityElement()
                         .accessibilityIdentifier(kennung)
                         .allowsHitTesting(false)
                 }
+                .clipShape(RoundedRectangle(cornerRadius: ps.pt(8)))
+                .overlay(RoundedRectangle(cornerRadius: ps.pt(8))
+                    .stroke(PrusaColors.divider, lineWidth: 1))
                 .shadow(radius: 20)
                 .padding(rand)
         }
