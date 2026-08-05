@@ -23,6 +23,11 @@
 - Der iPad-Simulator fand beide Dialogkennungen nicht. Ursache: Die Kennung hing an einem SwiftUI-Container ohne eigene Accessibility-Entitaet; das Projekt verwendet fuer Screen-Marken bereits explizit `accessibilityElement()`.
 - Die Dialogkarte legt ihre Kennung nun als nicht-interaktive, eigene Accessibility-Flaeche ueber exakt der Kartengeometrie ab. Dadurch bleiben die Kind-IDs bedienbar und die UI-Tests pruefen weiterhin die wirkliche Dialoggroesse.
 
+## Fix-Runde 2
+
+- Der gezielte iPad-Lauf erreichte beide Dialoge, meldete aber den Setup-Abschluss bei geringer Hoehe als nicht treffbar.
+- Ursache: Der Setup-Stapel nahm die vom Dialog angebotene Maximalhoehe nicht selbst an; sein Listenbereich konnte dadurch den Footer aus der Kartenflaeche druecken. Der Setup-Stapel fuellt nun die begrenzte Dialoghoehe, sodass nur die Liste den verbleibenden Raum erhaelt und `Fertig` fest unter ihr bleibt.
+
 ## Scope
 
 Geaendert wurden nur Dialogpraesentation, deren Host-Zustand, der minimale Close-Pfad im `SlicerModel` und die fokussierten UI-Tests. Persistente App-Einstellungen und Setup-Auswahl bleiben unveraendert.

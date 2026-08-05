@@ -92,6 +92,7 @@ struct SetupView: View {
                 abschluss
             }
             .padding(ps.pt(tight ? 12 : 24))
+            .frame(maxHeight: .infinity)
         }
         .onAppear { selected = preselected }
     }
