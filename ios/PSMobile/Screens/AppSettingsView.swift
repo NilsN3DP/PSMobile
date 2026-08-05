@@ -19,23 +19,24 @@ struct AppSettingsView: View {
     @State private var zeigeSelbsttest = false
 
     var body: some View {
-        VStack(spacing: 0) {
-            kopfzeile
-            Divider().background(PrusaColors.divider)
-            ScrollView {
-                VStack(alignment: .leading, spacing: 0) {
-                    ForEach(AppSettings.shared.groupsInOrder, id: \.self) { gruppe in
-                        abschnitt(gruppe)
+        SchwebenderDialog(kennung: "dialog.appeinstellungen", maximaleBreite: ps.pt(760)) {
+            VStack(spacing: 0) {
+                kopfzeile
+                Divider().background(PrusaColors.divider)
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 0) {
+                        ForEach(AppSettings.shared.groupsInOrder, id: \.self) { gruppe in
+                            abschnitt(gruppe)
+                        }
+                        diagnose
                     }
-                    diagnose
+                    .padding(.horizontal, ps.pt(16))
+                    .padding(.bottom, ps.pt(24))
+                    .frame(maxWidth: ps.pt(760))
+                    .frame(maxWidth: .infinity)
                 }
-                .padding(.horizontal, ps.pt(16))
-                .padding(.bottom, ps.pt(24))
-                .frame(maxWidth: ps.pt(760))
-                .frame(maxWidth: .infinity)
             }
         }
-        .background(PrusaColors.background)
         .overlay(alignment: .topLeading) { PSMarke(name: "appeinstellungen") }
     }
 

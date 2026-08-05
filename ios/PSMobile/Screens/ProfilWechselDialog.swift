@@ -1,6 +1,46 @@
 import SwiftUI
 import PSMShared
 
+/// Die gemeinsame Huelle fuer Entscheidungen, die den aktuellen
+/// Arbeitskontext nicht verlassen duerfen.
+struct SchwebenderDialog<Inhalt: View>: View {
+
+    let kennung: String
+    let maximaleBreite: CGFloat
+    let inhalt: Inhalt
+
+    @Environment(\.psScale) private var ps
+
+    init(kennung: String,
+         maximaleBreite: CGFloat,
+         @ViewBuilder inhalt: () -> Inhalt) {
+        self.kennung = kennung
+        self.maximaleBreite = maximaleBreite
+        self.inhalt = inhalt()
+    }
+
+    private var rand: CGFloat { max(ps.pt(12), 12) }
+    private var breite: CGFloat { max(0, ps.windowSize.width - 2 * rand) }
+    private var hoehe: CGFloat { max(0, ps.windowSize.height - 2 * rand) }
+
+    var body: some View {
+        ZStack {
+            Color.black.opacity(0.55).ignoresSafeArea()
+
+            inhalt
+                .frame(maxWidth: min(maximaleBreite, breite), maxHeight: hoehe)
+                .background(PrusaColors.panel)
+                .clipShape(RoundedRectangle(cornerRadius: ps.pt(8)))
+                .overlay(RoundedRectangle(cornerRadius: ps.pt(8))
+                    .stroke(PrusaColors.divider, lineWidth: 1))
+                .shadow(radius: 20)
+                .padding(rand)
+                .accessibilityIdentifier(kennung)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
 /// Was mit geänderten Profilwerten passiert, wenn man in den Einfachen
 /// Modus wechselt.
 ///
@@ -33,23 +73,26 @@ struct ProfilWechselDialog: View {
     @State private var zeigeNamensfeld = false
     @State private var name = ""
 
+    private var niedrigeHoehe: Bool { ps.windowSize.height < 600 }
+
     var body: some View {
+        SchwebenderDialog(kennung: "dialog.profilwechsel", maximaleBreite: ps.pt(680)) {
+            if niedrigeHoehe {
+                ScrollView { dialogInhalt }
+            } else {
+                dialogInhalt
+            }
+        }
+        .overlay(alignment: .topLeading) { PSMarke(name: "profilwechsel") }
+    }
+
+    private var dialogInhalt: some View {
         VStack(alignment: .leading, spacing: ps.pt(14)) {
             kopf
             tabelle
             if zeigeNamensfeld { namensfeld } else { wege }
         }
         .padding(ps.pt(20))
-        .frame(maxWidth: ps.pt(680))
-        .background(PrusaColors.panel)
-        .clipShape(RoundedRectangle(cornerRadius: ps.pt(8)))
-        .overlay(RoundedRectangle(cornerRadius: ps.pt(8))
-            .stroke(PrusaColors.divider, lineWidth: 1))
-        .shadow(radius: 20)
-        .padding(ps.pt(20))
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color.black.opacity(0.55).ignoresSafeArea())
-        .overlay(alignment: .topLeading) { PSMarke(name: "profilwechsel") }
     }
 
     private var kopf: some View {

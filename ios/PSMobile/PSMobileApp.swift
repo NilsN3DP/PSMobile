@@ -90,66 +90,82 @@ struct PSMobileApp: App {
     @State private var profilfrage: [SlicerModel.Profilaenderung] = []
 
     @ViewBuilder private var inhalt: some View {
-        // Ohne Drucker gibt es nichts zu zeigen - die Ersteinrichtung
-        // kommt vor allem anderen.
-        if model.setupNeeded {
-            SetupView(
-                models: model.printerModels,
-                busy: model.setupBusy,
-                preselected: model.installedPrinters,
-                onConfirm: { model.completeSetup($0) },
-                onLanguageChange: { einstellungen.language = $0 }
-            )
-        } else {
-            switch route {
-            case .start:
-                WorkflowStartView(
-                    onSimple: { route = .simple },
-                    onAdvanced: { route = .advanced },
-                    onAppSettings: { zurueckVon = .start; route = .appEinstellungen },
-                    onPrinterSetup: { model.reopenSetup() }
+        ZStack {
+            basisInhalt
+
+            if model.setupNeeded {
+                SetupView(
+                    models: model.printerModels,
+                    busy: model.setupBusy,
+                    preselected: model.installedPrinters,
+                    onConfirm: { model.completeSetup($0) },
+                    onLanguageChange: { einstellungen.language = $0 },
+                    onClose: model.installedPrinters.isEmpty ? nil : { model.dismissSetup() }
                 )
-            case .simple:
-                SimpleModeView(
-                    onHome: { route = .start },
-                    onOpenAdvanced: { route = .advanced },
-                    onOpenPrinterSetup: { model.reopenSetup() },
-                    onAppSettings: { zurueckVon = .simple; route = .appEinstellungen },
-                    onSendToPrinter: { datei in
-                        zurueckVon = .simple
-                        route = .drucker(datei)
-                    }
-                )
-            case .advanced:
-                AdvancedWorkspaceView(
-                    onHome: { route = .start },
-                    onOpenSimple: {
-                        // Der Einfache Modus arbeitet auf dem Profil.
-                        // Sind Werte geaendert, die es dort nicht gibt,
-                        // faellt die Entscheidung darueber vor dem
-                        // Wechsel - nicht stillschweigend danach.
-                        let offen = model.profilaenderungen()
-                        if offen.isEmpty { route = .simple } else { profilfrage = offen }
-                    },
-                    onAppSettings: { zurueckVon = .advanced; route = .appEinstellungen },
-                    onPrinters: { zurueckVon = .advanced; route = .drucker(nil) },
-                    onPrinterSetup: { model.reopenSetup() },
-                    onSettings: { reiter in
-                        einstellungsReiter = reiter
-                        route = .druckEinstellungen
-                    }
-                )
-            case .druckEinstellungen:
-                SettingsView(model: model, startTab: einstellungsReiter) { route = .advanced }
-            case .appEinstellungen:
+            } else if case .appEinstellungen = route {
                 AppSettingsView(einstellungen: einstellungen) { route = zurueckVon }
-            case .drucker(let datei):
-                PrintersView(
-                    store: drucker,
-                    senden: datei,
-                    dateiname: datei?.lastPathComponent ?? "psmobile.gcode"
-                ) { route = zurueckVon }
             }
+        }
+    }
+
+    @ViewBuilder private var basisInhalt: some View {
+        if case .appEinstellungen = route {
+            bildschirm(fuer: zurueckVon)
+        } else {
+            bildschirm(fuer: route)
+        }
+    }
+
+    @ViewBuilder private func bildschirm(fuer route: Route) -> some View {
+        switch route {
+        case .appEinstellungen:
+            WorkflowStartView(
+                onSimple: { self.route = .simple },
+                onAdvanced: { self.route = .advanced },
+                onAppSettings: {},
+                onPrinterSetup: { model.reopenSetup() }
+            )
+        case .start:
+            WorkflowStartView(
+                onSimple: { self.route = .simple },
+                onAdvanced: { self.route = .advanced },
+                onAppSettings: { zurueckVon = .start; self.route = .appEinstellungen },
+                onPrinterSetup: { model.reopenSetup() }
+            )
+        case .simple:
+            SimpleModeView(
+                onHome: { self.route = .start },
+                onOpenAdvanced: { self.route = .advanced },
+                onOpenPrinterSetup: { model.reopenSetup() },
+                onAppSettings: { zurueckVon = .simple; self.route = .appEinstellungen },
+                onSendToPrinter: { datei in
+                    zurueckVon = .simple
+                    self.route = .drucker(datei)
+                }
+            )
+        case .advanced:
+            AdvancedWorkspaceView(
+                onHome: { self.route = .start },
+                onOpenSimple: {
+                    let offen = model.profilaenderungen()
+                    if offen.isEmpty { self.route = .simple } else { profilfrage = offen }
+                },
+                onAppSettings: { zurueckVon = .advanced; self.route = .appEinstellungen },
+                onPrinters: { zurueckVon = .advanced; self.route = .drucker(nil) },
+                onPrinterSetup: { model.reopenSetup() },
+                onSettings: { reiter in
+                    einstellungsReiter = reiter
+                    self.route = .druckEinstellungen
+                }
+            )
+        case .druckEinstellungen:
+            SettingsView(model: model, startTab: einstellungsReiter) { self.route = .advanced }
+        case .drucker(let datei):
+            PrintersView(
+                store: drucker,
+                senden: datei,
+                dateiname: datei?.lastPathComponent ?? "psmobile.gcode"
+            ) { self.route = zurueckVon }
         }
     }
 

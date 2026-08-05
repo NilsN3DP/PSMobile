@@ -532,6 +532,13 @@ final class SlicerModel: ObservableObject {
         setupNeeded = true
     }
 
+    /// Eine laufende App darf die Einrichtung wieder verlassen; beim
+    /// allerersten Start gibt es dagegen keinen nutzbaren Zielbildschirm.
+    func dismissSetup() {
+        guard !Self.storedPrinters.isEmpty, !setupBusy else { return }
+        setupNeeded = false
+    }
+
     /// Die gemerkte Druckerwahl. Gegenstueck zu den Preferences auf
     /// Android - dieselbe Rolle, dieselbe Bedeutung.
     private static let printersKey = "printers"

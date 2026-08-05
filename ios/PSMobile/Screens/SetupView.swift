@@ -20,6 +20,7 @@ struct SetupView: View {
     let preselected: Set<String>
     let onConfirm: ([String]) -> Void
     let onLanguageChange: (String) -> Void
+    var onClose: (() -> Void)? = nil
 
     @Environment(\.psScale) private var ps
     @State private var selected: Set<String> = []
@@ -83,9 +84,7 @@ struct SetupView: View {
     }
 
     var body: some View {
-        ZStack {
-            PrusaColors.background.ignoresSafeArea()
-
+        SchwebenderDialog(kennung: "dialog.einrichtung", maximaleBreite: ps.pt(760)) {
             VStack(alignment: .leading, spacing: ps.pt(tight ? 6 : 14)) {
                 kopfzeile
                 suchfeld
@@ -93,7 +92,6 @@ struct SetupView: View {
                 abschluss
             }
             .padding(ps.pt(tight ? 12 : 24))
-            .frame(maxWidth: ps.pt(760))
         }
         .onAppear { selected = preselected }
     }
@@ -102,6 +100,16 @@ struct SetupView: View {
 
     private var kopfzeile: some View {
         HStack(alignment: .center) {
+            if let onClose {
+                Button(action: onClose) {
+                    Text("‹  " + SimpleModeState.shared.text(english: "Back", german: "Zurück"))
+                        .font(.system(size: ps.font(15)))
+                        .foregroundStyle(PrusaColors.orange)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("einrichtung.schliessen")
+            }
             VStack(alignment: .leading, spacing: ps.pt(2)) {
                 Text(SimpleModeState.shared.text(english: "Configuration Assistant",
                                                  german: "Ersteinrichtung"))
