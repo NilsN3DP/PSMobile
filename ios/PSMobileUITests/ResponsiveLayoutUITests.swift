@@ -74,6 +74,33 @@ final class ResponsiveLayoutUITests: XCTestCase {
         pruefe(app.buttons["advanced.einpassen"], "Einpassen")
     }
 
+    func testAdvancedObjektleisteBleibtVorDerSeitenleiste() {
+        starte(["-psm-preset-printer", "-psm-start-advanced", "-psm-load-cube"])
+        XCTAssertTrue(app.otherElements["arbeitsbereich"].waitForExistence(timeout: 60))
+
+        let objekteReiter = app.buttons["inspektor.objekte"]
+        XCTAssertTrue(objekteReiter.waitForExistence(timeout: 10),
+                      "Der Bereich Objekte fehlt")
+        objekteReiter.tap()
+        app.buttons.matching(
+            NSPredicate(format: "identifier BEGINSWITH 'advanced.objekt.'")).firstMatch.tap()
+
+        let entfernen = app.buttons["objekt.entfernen"]
+        XCTAssertTrue(entfernen.waitForExistence(timeout: 10),
+                      "Die Objektleiste erscheint nicht")
+        XCTAssertFalse(app.buttons["objekt.zurueck"].exists,
+                       "Die Advanced-Objektleiste darf keine Simple-Zurueck-Aktion anbieten")
+
+        // Auf breiten Geraeten bleibt die Leiste vollstaendig links von
+        // der offenen Seitenleiste. Auf schmalen liegt die Seitenleiste
+        // ueber dem Bett und begrenzt den Viewport deshalb nicht.
+        let profil = app.buttons["inspektor.profile"]
+        if profil.exists, profil.frame.minX > app.windows.firstMatch.frame.midX {
+            XCTAssertLessThanOrEqual(entfernen.frame.maxX, profil.frame.minX,
+                                     "Die Objektleiste ragt in die Seitenleiste")
+        }
+    }
+
     func testDieErsteinrichtungPasstAufsSchmaleGeraet() {
         // Der erste Bildschirm ueberhaupt - wenn der nicht passt, kommt
         // niemand weiter.

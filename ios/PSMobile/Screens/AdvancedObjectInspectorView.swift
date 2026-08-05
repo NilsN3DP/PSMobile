@@ -26,7 +26,6 @@ struct AdvancedObjectInspectorView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: ps.pt(10)) {
-            abschnitt(PsUiCatalog.tr("Object manipulation"))
             // Die Griffe stehen jetzt oben in der Werkzeugleiste, bei
             // Ansicht und Vorschau: sie bestimmen, was ein Finger im
             // Viewport tut, und das ist keine Zahleneinstellung.

@@ -88,6 +88,7 @@ struct SimpleModeView: View {
                     SimpleObjectBarView(
                         model: model,
                         objekt: objekt,
+                        zeigtZurueck: true,
                         onClearSelection: {
                             aufFlaeche = false
                             model.select(nil)

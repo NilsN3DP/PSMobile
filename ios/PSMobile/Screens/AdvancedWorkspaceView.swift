@@ -84,6 +84,12 @@ struct AdvancedWorkspaceView: View {
     /// daneben - nebeneinander bliebe fuer beides zu wenig.
     private var schmal: Bool { ps.windowSize.width < 760 }
 
+    /// Die Seitenleiste beansprucht auf breiten Geraeten diesen Teil der
+    /// ZStack. Schwebende Elemente muessen denselben freien Rest nutzen.
+    private var seitenleistenbreite: CGFloat {
+        min(ps.pt(340), ps.windowSize.width * 0.42)
+    }
+
     var body: some View {
         ZStack {
             PrusaColors.background.ignoresSafeArea()
@@ -107,8 +113,7 @@ struct AdvancedWorkspaceView: View {
                     // Hoechstens zwei Fuenftel der Breite: darunter
                     // bleibt vom Bett nichts uebrig, und darum geht es
                     // hier.
-                    seitenleiste.frame(
-                        width: min(ps.pt(340), ps.windowSize.width * 0.42))
+                    seitenleiste.frame(width: seitenleistenbreite)
                 }
             }
             // Rechts und senkrecht, wie in PrusaSlicer: eine
@@ -135,11 +140,22 @@ struct AdvancedWorkspaceView: View {
                let objekt = model.objects.first(where: { $0.id == id }),
                !vorschau {
                 VStack {
-                    SimpleObjectBarView(
-                        model: model,
-                        objekt: objekt,
-                        onClearSelection: { model.select(nil) },
-                        onFlaechenwahl: { aufFlaeche = $0 })
+                    // Die Leiste gehoert zum freien Viewport, nicht zur
+                    // gesamten ZStack: sonst liegt ihre rechte Haelfte
+                    // ueber der offenen Seitenleiste.
+                    HStack {
+                        Spacer(minLength: 0)
+                        SimpleObjectBarView(
+                            model: model,
+                            objekt: objekt,
+                            zeigtZurueck: false,
+                            onClearSelection: { model.select(nil) },
+                            onFlaechenwahl: { aufFlaeche = $0 })
+                            .fixedSize(horizontal: true, vertical: false)
+                        Spacer(minLength: 0)
+                    }
+                    .padding(.trailing, seiteOffen && !schmal
+                             ? seitenleistenbreite : 0)
                     .padding(.top, ps.pt(schmal ? 96 : 118))
                     Spacer()
                 }
@@ -1227,9 +1243,6 @@ struct AdvancedWorkspaceView: View {
                 $0.name.range(of: objektSuche, options: .caseInsensitive) != nil
               }
         return VStack(alignment: .leading, spacing: ps.pt(6)) {
-            Text(st("Objects", "Objekte").uppercased() + " (\(model.objects.count))")
-                .font(.system(size: ps.font(11), weight: .semibold))
-                .foregroundStyle(PrusaColors.textMuted)
             if model.objects.isEmpty {
                 VStack(spacing: ps.pt(6)) {
                     Text(st("No objects yet", "Noch keine Objekte"))

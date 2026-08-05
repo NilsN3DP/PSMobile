@@ -14,6 +14,9 @@ struct SimpleObjectBarView: View {
 
     @ObservedObject var model: SlicerModel
     let objekt: PsmCore.ObjectInfo
+    /// Im Simple Mode setzt dieser Knopf die Auswahl zurueck. Im Advanced
+    /// uebernimmt die Seitenleiste diese Orientierung bereits selbst.
+    let zeigtZurueck: Bool
     var onClearSelection: () -> Void
     /// Meldet, ob das Flaechenwerkzeug an ist - dann muss der Viewport
     /// die Beruehrung an die Flaeche geben statt an die Kamera.
@@ -59,8 +62,10 @@ struct SimpleObjectBarView: View {
                     model.removeObjects([objekt.id])
                     onClearSelection()
                 }
-                aktion("←", st("Back", "Zurück"), kennung: "objekt.zurueck",
-                       aktion: onClearSelection)
+                if zeigtZurueck {
+                    aktion("←", st("Back", "Zurück"), kennung: "objekt.zurueck",
+                           aktion: onClearSelection)
+                }
             }
             .padding(.horizontal, ps.pt(4))
         }

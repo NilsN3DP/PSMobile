@@ -36,6 +36,24 @@ final class AdvancedWorkflowUITests: XCTestCase {
         }
     }
 
+    func testDerObjektbereichHatKeineDoppelteUeberschrift() {
+        // Der Bereichstitel ist bereits der Einstieg selbst. Eine zweite
+        // "Objekte (n)"-Ueberschrift darunter verdoppelt ihn nur und
+        // schiebt die eigentliche Liste ohne Informationsgewinn nach unten.
+        let objekteReiter = app.buttons["inspektor.objekte"]
+        XCTAssertTrue(objekteReiter.waitForExistence(timeout: 10),
+                      "Der Bereich Objekte fehlt")
+        objekteReiter.tap()
+
+        XCTAssertTrue(objekteReiter.isHittable,
+                      "Die einzige Ueberschrift fuer Objekte ist nicht sichtbar")
+        XCTAssertFalse(app.staticTexts.matching(
+            NSPredicate(format: "%K BEGINSWITH[c] %@ OR %K BEGINSWITH[c] %@",
+                        "label", "OBJECTS (", "label", "OBJEKTE (")
+        ).firstMatch.exists,
+        "Der Objektbereich zeigt neben seinem Bereichstitel eine zweite Ueberschrift")
+    }
+
     func testDerObjektbaumErscheintMitDerAuswahl() {
         XCTAssertFalse(app.otherElements["advanced.objectTree"].exists,
                        "Der Inspektor steht ohne Auswahl da")
