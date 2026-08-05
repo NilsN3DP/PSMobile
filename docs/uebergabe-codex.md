@@ -401,3 +401,19 @@ Messung auf Hardware: Schneiden 0,1 s, Projekt sichern und wieder laden
 7 kB, Bemalen 2 Facetten, mehrfarbig T1 46 mm3 und T2 3002 mm3,
 Lasttest mit 25 Koerpern 1,1 s. Aufgabe 30 - Lasttest auf dem Geraet -
 ist damit beantwortet: das iPad packt es muehelos.
+
+### Regression: die Bettleiste erscheint im Easy Mode
+Sie gehoert dort nicht hin. Der Einfache Modus arbeitet bewusst auf
+einem Bett - mehrere Betten sind ein Werkzeug des Expertenmodus, und
+die Leiste hat im Easy Mode weder Platz noch Zweck. Dazu kommt der
+Umbruchfehler aus dem Abschnitt oben, der hier genauso auftritt.
+
+Entstanden ist es beim Umbau der Bettauswahl (psm_bed_metadata,
+psm_arrange_bed): die Leiste wurde offenbar in eine gemeinsame Stelle
+gezogen, die beide Modi zeichnen. Zu pruefen ist SimpleModeView - dort
+darf sie nicht erscheinen - und ob die Bettwahl im Easy Mode ueberhaupt
+noch einen Weg hat oder stillschweigend auf Bett 1 festliegt.
+
+Reihenfolge fuer die naechste Sitzung, weil beides zusammenhaengt:
+zuerst die Leiste aus dem Easy Mode nehmen, dann die Karten im Advanced
+Mode auf eine Breite bringen, in der ihr Text steht.
