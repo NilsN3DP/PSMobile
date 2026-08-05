@@ -18,13 +18,19 @@ final class LayerProfileUITests: XCTestCase {
         XCTAssertTrue(app.otherElements["arbeitsbereich"].waitForExistence(timeout: 60))
         // Die Objektliste liegt hinter ihrem Reiter, wie auf Android.
         let objekteReiter = app.buttons["inspektor.objekte"]
-        if objekteReiter.waitForExistence(timeout: 10), objekteReiter.isEnabled {
+        XCTAssertTrue(warteBisTreffbar(objekteReiter),
+                      "Der Objektbereich ist nicht erreichbar")
+        if objekteReiter.isEnabled {
             objekteReiter.tap()
         }
-        app.buttons.matching(
-            NSPredicate(format: "identifier BEGINSWITH 'advanced.objekt.'")).firstMatch.tap()
-        XCTAssertTrue(app.buttons["advanced.schichten"].waitForExistence(timeout: 10))
-        app.buttons["advanced.schichten"].tap()
+        let objekt = app.buttons.matching(
+            NSPredicate(format: "identifier BEGINSWITH 'advanced.objekt.'")).firstMatch
+        XCTAssertTrue(warteBisTreffbar(objekt), "Die Objektzeile ist nicht erreichbar")
+        objekt.tap()
+        let schichten = app.buttons["advanced.schichten"]
+        XCTAssertTrue(warteBisTreffbar(schichten),
+                      "Der Schichthöhen-Einstieg ist nicht erreichbar")
+        schichten.tap()
         XCTAssertTrue(app.otherElements["schichten"].waitForExistence(timeout: 10),
                       "Der Schichteditor ist nicht erschienen")
     }
@@ -77,5 +83,10 @@ final class LayerProfileUITests: XCTestCase {
             usleep(300_000)
         }
         return bedingung()
+    }
+
+    private func warteBisTreffbar(_ element: XCUIElement,
+                                  timeout: TimeInterval = 10) -> Bool {
+        warte(bis: { element.exists && element.isHittable }, timeout: timeout)
     }
 }

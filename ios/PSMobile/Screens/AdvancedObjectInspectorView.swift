@@ -1,6 +1,19 @@
 import SwiftUI
 import PSMShared
 
+/// Der Rahmen der unmittelbar benötigten Inspector-Aktionen.
+///
+/// Die Seitenleiste entscheidet damit erst nach dem echten Layout, ob
+/// sie überhaupt scrollen muss.
+struct AdvancedInspectorSichtbereichPreferenceKey: PreferenceKey {
+    static var defaultValue: CGRect = .null
+
+    static func reduce(value: inout CGRect, nextValue: () -> CGRect) {
+        let neu = nextValue()
+        if !neu.isNull { value = neu }
+    }
+}
+
 /// Der Objektinspektor im Advanced Mode - Gegenstueck zu
 /// `ObjectPanel.kt`.
 ///
@@ -26,30 +39,26 @@ struct AdvancedObjectInspectorView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: ps.pt(10)) {
-            // Die Griffe stehen jetzt oben in der Werkzeugleiste, bei
-            // Ansicht und Vorschau: sie bestimmen, was ein Finger im
-            // Viewport tut, und das ist keine Zahleneinstellung.
-            groesse
-            Divider().background(PrusaColors.divider)
-            drehung
-            Divider().background(PrusaColors.divider)
-            handgriffe
-            kopien
-            if model.beds.count > 1 { bettwechsel }
-            Divider().background(PrusaColors.divider)
-            Button { zeigeSchichten = true } label: {
-                Text(PsUiCatalog.tr("Variable layer height"))
-                    .font(.system(size: ps.font(12)))
-                    .foregroundStyle(PrusaColors.orange)
-                    .frame(maxWidth: .infinity, minHeight: ps.touch(44))
-                    .background(PrusaColors.panelRaised)
-                    .clipShape(RoundedRectangle(cornerRadius: ps.pt(6)))
-                    .contentShape(Rectangle())
+            VStack(alignment: .leading, spacing: ps.pt(10)) {
+                // Die Griffe stehen jetzt oben in der Werkzeugleiste, bei
+                // Ansicht und Vorschau: sie bestimmen, was ein Finger im
+                // Viewport tut, und das ist keine Zahleneinstellung.
+                groesse
+                Divider().background(PrusaColors.divider)
+                drehung
+                Divider().background(PrusaColors.divider)
+                handgriffe
+                kopien
+                if model.beds.count > 1 { bettwechsel }
+                Divider().background(PrusaColors.divider)
+                schichtenKnopf
             }
-            .buttonStyle(.plain)
-            .accessibilityIdentifier("advanced.schichten")
-            .sheet(isPresented: $zeigeSchichten) {
-                LayerProfileView(model: model, objekt: objekt) { zeigeSchichten = false }
+            .background {
+                GeometryReader { geo in
+                    Color.clear.preference(
+                        key: AdvancedInspectorSichtbereichPreferenceKey.self,
+                        value: geo.frame(in: .global))
+                }
             }
             Divider().background(PrusaColors.divider)
             geometrie
@@ -59,6 +68,23 @@ struct AdvancedObjectInspectorView: View {
             // an jedes Kind und ueberschreibt deren eigene. Genau daran
             // sind heute schon zwei Bildschirme gescheitert.
             PSMarke(name: "advanced.objectTree")
+        }
+    }
+
+    private var schichtenKnopf: some View {
+        Button { zeigeSchichten = true } label: {
+            Text(PsUiCatalog.tr("Variable layer height"))
+                .font(.system(size: ps.font(12)))
+                .foregroundStyle(PrusaColors.orange)
+                .frame(maxWidth: .infinity, minHeight: ps.touch(44))
+                .background(PrusaColors.panelRaised)
+                .clipShape(RoundedRectangle(cornerRadius: ps.pt(6)))
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("advanced.schichten")
+        .sheet(isPresented: $zeigeSchichten) {
+            LayerProfileView(model: model, objekt: objekt) { zeigeSchichten = false }
         }
     }
 

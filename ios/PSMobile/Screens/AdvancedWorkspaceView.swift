@@ -2,6 +2,16 @@ import SwiftUI
 import UniformTypeIdentifiers
 import PSMShared
 
+/// Die tatsächlich sichtbare Fläche des scrollbaren Seitenleistenteils.
+private struct AdvancedSeitenleistenRahmenPreferenceKey: PreferenceKey {
+    static var defaultValue: CGRect = .null
+
+    static func reduce(value: inout CGRect, nextValue: () -> CGRect) {
+        let neu = nextValue()
+        if !neu.isNull { value = neu }
+    }
+}
+
 /// Der Arbeitsbereich im Advanced Mode.
 ///
 /// Gegenstueck zu `SlicerScreen.kt`. Bis hierhin war das auf iOS eine
@@ -52,9 +62,11 @@ struct AdvancedWorkspaceView: View {
     /// Welche Bereiche der Seitenleiste offen sind. Profile immer, der
     /// Rest auf Wunsch - sonst ist die Leiste beim Start eine Wand.
     @State private var offeneBereiche: Set<String> = ["profile"]
-    /// Ein Ziel wird erst nach dem Öffnen angesprungen, damit SwiftUI
-    /// dessen tatsächliche Höhe für den sichtbaren Ausschnitt kennt.
-    @State private var seitenleistenZiel: String?
+    /// Solange gesetzt, wartet die Seitenleiste auf die echten Rahmen
+    /// von Scrollfläche und Bearbeitenblock.
+    @State private var seitenleistenZiel: Int32?
+    @State private var seitenleistenRahmen: CGRect = .null
+    @State private var bearbeitenRahmen: CGRect = .null
     /// Welche Einstellungsseite als schwebendes Fenster offen ist.
     @State private var einstellungenTab: String?
     @State private var objektSuche = ""
@@ -800,15 +812,23 @@ struct AdvancedWorkspaceView: View {
                     }
                     .padding(ps.pt(12))
                 }
-                .onChange(of: seitenleistenZiel) { ziel in
-                    guard let ziel else { return }
-                    // Öffnen und Scrollen sind zwei Layoutschritte.
-                    // Erst im nächsten Durchlauf hat der Inspector seine
-                    // Höhe und landet zuverlässig am oberen Rand.
-                    DispatchQueue.main.async {
-                        proxy.scrollTo(ziel, anchor: .top)
-                        seitenleistenZiel = nil
+                .background {
+                    GeometryReader { geo in
+                        Color.clear.preference(
+                            key: AdvancedSeitenleistenRahmenPreferenceKey.self,
+                            value: geo.frame(in: .global))
                     }
+                }
+                .onPreferenceChange(AdvancedSeitenleistenRahmenPreferenceKey.self) {
+                    seitenleistenRahmen = $0
+                    bearbeitenFokussierenWennNoetig(proxy, seitenleiste: $0)
+                }
+                .onPreferenceChange(AdvancedInspectorSichtbereichPreferenceKey.self) {
+                    bearbeitenRahmen = $0
+                    bearbeitenFokussierenWennNoetig(proxy, bearbeiten: $0)
+                }
+                .onChange(of: seitenleistenZiel) { _ in
+                    bearbeitenFokussierenWennNoetig(proxy)
                 }
             }
             // Ausserhalb der Reiter: was ein Schnitt ergeben hat, ist
@@ -1313,7 +1333,7 @@ struct AdvancedWorkspaceView: View {
                     // Wer ein Objekt antippt, will damit etwas tun. Der
                     // frühere Reiterzustand öffnete im Akkordeon nichts.
                     offeneBereiche.insert(kennung(.bearbeiten))
-                    seitenleistenZiel = kennung(.bearbeiten)
+                    seitenleistenZiel = objekt.id
                 } label: {
                     HStack {
                         // Das Kästchen nimmt hinzu oder heraus, die Zeile
@@ -1362,8 +1382,34 @@ struct AdvancedWorkspaceView: View {
                 }
                 .buttonStyle(.plain)
                 .accessibilityIdentifier("advanced.objekt.\(objekt.id)")
+                .id(scrollKennungFuerObjekt(objekt.id))
             }
         }
+    }
+
+    /// Scrollt nur, wenn der obere Aktionsblock nicht vollständig in der
+    /// gemessenen Seitenleistenfläche liegt. Als Ziel dient die gewählte
+    /// Objektzeile; dadurch bleibt sie auch nach dem Sprung treffbar.
+    private func bearbeitenFokussierenWennNoetig(
+        _ proxy: ScrollViewProxy,
+        seitenleiste neuerSeitenleistenRahmen: CGRect? = nil,
+        bearbeiten neuerBearbeitenRahmen: CGRect? = nil
+    ) {
+        let seitenleiste = neuerSeitenleistenRahmen ?? seitenleistenRahmen
+        let bearbeiten = neuerBearbeitenRahmen ?? bearbeitenRahmen
+        guard let id = seitenleistenZiel,
+              !seitenleiste.isNull,
+              !bearbeiten.isNull else { return }
+        let sichtbar = bearbeiten.minY >= seitenleiste.minY
+            && bearbeiten.maxY <= seitenleiste.maxY
+        if !sichtbar {
+            proxy.scrollTo(scrollKennungFuerObjekt(id), anchor: .top)
+        }
+        seitenleistenZiel = nil
+    }
+
+    private func scrollKennungFuerObjekt(_ id: Int32) -> String {
+        "advanced.objekt.scroll.\(id)"
     }
 
     private func st(_ english: String, _ german: String) -> String {
