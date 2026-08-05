@@ -68,6 +68,11 @@ cp -R "${APP}" "${ARBEIT}/Payload/"
 ZIEL_VERZEICHNIS="$(dirname "${ZIEL}")"
 mkdir -p "${ZIEL_VERZEICHNIS}"
 TEMP_IPA="$(mktemp "${ZIEL_VERZEICHNIS}/.PSMobile.ipa.XXXXXX")"
+# mktemp legt die Datei an, damit der Name reserviert ist. zip haelt
+# eine vorhandene Datei aber fuer ein Archiv, das es ergaenzen soll,
+# und bricht mit "Zip file structure invalid" ab. Also den Namen
+# behalten und die leere Huelle wegnehmen.
+rm -f "${TEMP_IPA}"
 (cd "${ARBEIT}" && zip -qry "${TEMP_IPA}" Payload)
 unzip -t "${TEMP_IPA}" >/dev/null
 mv -f "${TEMP_IPA}" "${ZIEL}"
