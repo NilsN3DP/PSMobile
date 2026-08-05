@@ -150,6 +150,7 @@ final class PSMGLView: UIView {
     private var gizmoAxis: Int32 = -1
 
     private static let handleRadiusPx: Float = 44
+    private var gizmoMarkers: [UIView] = []
 
     init(session: OpaquePointer, shaderDir: String) {
         // GLES 2.0: genau dafuer sind die Shader aus PrusaSlicer
@@ -179,6 +180,28 @@ final class PSMGLView: UIView {
             kEAGLDrawablePropertyColorFormat: kEAGLColorFormatRGBA8,
         ]
         isMultipleTouchEnabled = true
+
+        /*
+         * OpenGL-Inhalt taucht nicht von selbst im Accessibility-Baum auf.
+         * Diese nicht interaktiven Marker geben VoiceOver und XCUITest die
+         * echten, vom Viewport projizierten Positionen. Sie bleiben optisch
+         * durchsichtig und nehmen dem GL-View keine Beruehrungen weg.
+         */
+        gizmoMarkers = (0...3).map { index in
+            let marker = UIView(frame: .zero)
+            marker.backgroundColor = .clear
+            marker.isUserInteractionEnabled = false
+            marker.isAccessibilityElement = true
+            marker.accessibilityIdentifier = index == 0
+                ? "viewport.gizmo.origin"
+                : "viewport.gizmo.axis.\(index - 1)"
+            marker.accessibilityLabel = index == 0
+                ? "Ursprung des Verschiebewerkzeugs"
+                : ["X-Achse", "Y-Achse", "Z-Achse"][index - 1]
+            marker.isHidden = true
+            addSubview(marker)
+            return marker
+        }
     }
 
     required init?(coder: NSCoder) { fatalError("nicht aus dem Storyboard") }
@@ -229,6 +252,34 @@ final class PSMGLView: UIView {
         vp.render()
         glBindRenderbuffer(GLenum(GL_RENDERBUFFER), colorbuffer)
         context.presentRenderbuffer(Int(GL_RENDERBUFFER))
+        aktualisiereGizmoMarker(vp)
+    }
+
+    private func aktualisiereGizmoMarker(_ vp: PsmViewport) {
+        gizmoMarkers.forEach { $0.isHidden = true }
+        guard vp.mode == .editor, selectedId >= 0, vp.gizmo == .move,
+              contentScaleFactor > 0 else { return }
+
+        let punktgroesse: CGFloat = 12
+        var ursprung: CGPoint?
+        for axis in 0..<3 {
+            guard let screen = vp.gizmoScreenAxis(Int32(axis)) else { continue }
+            let from = CGPoint(x: screen.from.x / contentScaleFactor,
+                               y: screen.from.y / contentScaleFactor)
+            let to = CGPoint(x: screen.to.x / contentScaleFactor,
+                             y: screen.to.y / contentScaleFactor)
+            ursprung = ursprung ?? from
+            gizmoMarkers[axis + 1].frame = CGRect(
+                x: to.x - punktgroesse / 2, y: to.y - punktgroesse / 2,
+                width: punktgroesse, height: punktgroesse)
+            gizmoMarkers[axis + 1].isHidden = false
+        }
+        if let punkt = ursprung {
+            gizmoMarkers[0].frame = CGRect(
+                x: punkt.x - punktgroesse / 2, y: punkt.y - punktgroesse / 2,
+                width: punktgroesse, height: punktgroesse)
+            gizmoMarkers[0].isHidden = false
+        }
     }
 
     deinit {
@@ -386,7 +437,7 @@ final class PSMGLView: UIView {
          * Orbit. Ohne Move-Gizmo darf dagegen das Objekt selbst direkt
          * gezogen werden; freie Flaeche bleibt weiterhin Orbit.
          */
-        dragObject = vp.gizmo != .move
+        dragObject = vp.gizmo == .none
             && vp.mode == .editor
             && selectedId >= 0
             && vp.pick(x: x, y: y) == selectedId

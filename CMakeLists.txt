@@ -225,6 +225,17 @@ if (PSM_BUILD_TESTS)
     target_include_directories(psm_contract_tests PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/core/include)
     target_compile_features(psm_contract_tests PRIVATE cxx_std_17)
+    if (IOS)
+        # Auf iOS ist der Kern statisch gelinkt. Der Vertragstest sieht
+        # deshalb denselben Prusa-Mehrbett-Singleton wie psm_arrange und
+        # kann seine unerlaubte Mutation direkt nachweisen.
+        target_compile_definitions(psm_contract_tests PRIVATE
+            PSM_TEST_MULTIPLE_BEDS_STATE=1)
+        target_include_directories(psm_contract_tests PRIVATE
+            ${CMAKE_CURRENT_SOURCE_DIR}/core/src
+            ${PSM_PS_DIR}/src)
+        target_link_libraries(psm_contract_tests PRIVATE libslic3r)
+    endif ()
 
     # Die Griff-Treffererkennung braucht weder GL-Kontext noch Modell.
     # Als eigener Test bleibt ihr Pixelvertrag deshalb auch auf dem Host

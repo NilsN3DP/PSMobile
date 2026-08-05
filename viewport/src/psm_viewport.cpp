@@ -1658,6 +1658,41 @@ PSM_API int psm_viewport_gizmo_pick(psm_viewport *v, float x, float y,
                             v->width, v->height, x, y, radius_px);
 }
 
+PSM_API int psm_viewport_gizmo_axis_screen(psm_viewport *v, int axis,
+                                           psm_gizmo_screen_axis *out)
+{
+    if (v == nullptr || out == nullptr || axis < 0 || axis > 2 ||
+        v->gizmo != PSM_GIZMO_MOVE)
+        return 0;
+
+    std::lock_guard<std::recursive_mutex> data_lock(v->session->data_mtx);
+    Slic3r::Vec3d c;
+    if (! selected_center(v, c))
+        return 0;
+
+    const psm::Vec3 origin(static_cast<float>(c.x()), static_cast<float>(c.y()),
+                           static_cast<float>(c.z()));
+    const psm::Mat4 vp = v->projection() * v->view();
+    const float mm = psm::screen_scale(vp, origin, v->width, v->height);
+    const std::vector<psm::Anchor> anchors =
+        psm::gizmo_anchors(PSM_GIZMO_MOVE, origin, mm);
+
+    for (const psm::Anchor &anchor : anchors) {
+        if (anchor.axis != axis)
+            continue;
+        psm::Vec2 from, to;
+        if (! psm::project_point(vp, anchor.from, v->width, v->height, from) ||
+            ! psm::project_point(vp, anchor.to, v->width, v->height, to))
+            return 0;
+        out->from_x = from.x();
+        out->from_y = from.y();
+        out->to_x   = to.x();
+        out->to_y   = to.y();
+        return 1;
+    }
+    return 0;
+}
+
 PSM_API int psm_viewport_gizmo_drag(psm_viewport *v, int axis,
                                     float from_x, float from_y,
                                     float to_x, float to_y, int snap)

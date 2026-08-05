@@ -8,6 +8,11 @@
 #include <iostream>
 #include <string>
 
+#if defined(PSM_TEST_MULTIPLE_BEDS_STATE)
+#include "psmobile_session.hpp"
+#include "libslic3r/MultipleBeds.hpp"
+#endif
+
 namespace {
 
 void require(bool value, const std::string &message)
@@ -560,10 +565,8 @@ int main(int argc, char **argv)
             psm_history_redo_count(session) == 0,
             "opening a project starts a clean history");
     /*
-     * Arrange auf Bett 2 darf weder den Inhalt von Bett 1 noch die
-     * sichtbare Bettauswahl anfassen. Ein explizites Ziel macht diesen
-     * Vertrag auch fuer Aufrufer testbar, ohne vorher das UI-Bett
-     * umzuschalten.
+     * Arrange auf dem aktiven Bett 2 darf weder den Inhalt von Bett 1
+     * noch Prusas prozessglobalen Mehrbettzustand anfassen.
      */
     require(psm_bed_select(session, 0) == PSM_OK,
             "keep first local bed active for arrange regression");
@@ -585,13 +588,30 @@ int main(int argc, char **argv)
             "one object available on second bed");
     require(psm_model_set_instances(session, arrange_ids[0], 12) == PSM_OK,
             "create twelve instances on second bed");
-    require(psm_bed_select(session, 0) == PSM_OK,
-            "restore first bed before targeted arrange");
-    require(psm_arrange_bed(session, 1, 0.f) == PSM_OK,
-            std::string("arrange only second bed: ") +
+    /*
+     * Der alte Fehler sass im bestehenden psm_arrange: Er ersetzte den
+     * prozessglobalen Desktop-Mehrbettzustand durch lokale Bett-0-
+     * Eintraege. Der iOS-Simulatortest liest genau diesen Singleton vor
+     * und nach dem echten Aufruf.
+     */
+#if defined(PSM_TEST_MULTIPLE_BEDS_STATE)
+    Slic3r::s_multiple_beds.set_active_bed(1);
+    const auto global_beds_before =
+        Slic3r::s_multiple_beds.get_inst_map();
+#endif
+    require(psm_arrange(session, 0.f) == PSM_OK,
+            std::string("arrange active second bed: ") +
                 psm_last_error(session));
-    require(psm_bed_active(session) == 0,
-            "targeted arrange does not switch the active bed");
+    require(psm_bed_active(session) == 1,
+            "arrange keeps the active second bed selected");
+#if defined(PSM_TEST_MULTIPLE_BEDS_STATE)
+    require(Slic3r::s_multiple_beds.get_active_bed() == 1,
+            "arrange does not activate Prusa desktop bed zero");
+    require(Slic3r::s_multiple_beds.get_inst_map() == global_beds_before,
+            "arrange does not replace the global desktop bed membership");
+#endif
+    require(psm_bed_select(session, 0) == PSM_OK,
+            "inspect untouched first bed after arranging second bed");
     psm_object_info first_after{};
     require(psm_model_info(session, first_bed_ids[0], &first_after) == PSM_OK,
             "first bed object remains visible after arranging second bed");
@@ -604,7 +624,37 @@ int main(int argc, char **argv)
     psm_object_info arranged_info{};
     require(psm_model_info(session, arrange_ids[0], &arranged_info) == PSM_OK &&
             arranged_info.instance_count == 12,
-            "targeted arrange preserves all second-bed instances");
+            "arrange preserves all second-bed instances");
+#if defined(PSM_TEST_MULTIPLE_BEDS_STATE)
+    /*
+     * instance_count allein wuerde auch einen No-op bestehen lassen.
+     * Deshalb prueft der gelinkte iOS-Vertrag die echten transformierten
+     * Huellboxen jeder Instanz: Kein Paar darf sich in XY ueberlappen.
+     */
+    {
+        std::lock_guard<std::recursive_mutex> data_lock(session->data_mtx);
+        const Slic3r::ModelObject *arranged =
+            session->bed_models[1]->objects.front();
+        require(arranged->instances.size() == 12,
+                "arrange retains twelve internal instance transforms");
+        for (size_t i = 0; i < arranged->instances.size(); ++i) {
+            const Slic3r::BoundingBoxf3 a =
+                arranged->instance_bounding_box(i);
+            for (size_t j = i + 1; j < arranged->instances.size(); ++j) {
+                const Slic3r::BoundingBoxf3 b =
+                    arranged->instance_bounding_box(j);
+                constexpr double tolerance = 0.01;
+                const bool getrennt =
+                    a.max.x() <= b.min.x() + tolerance ||
+                    b.max.x() <= a.min.x() + tolerance ||
+                    a.max.y() <= b.min.y() + tolerance ||
+                    b.max.y() <= a.min.y() + tolerance;
+                require(getrennt,
+                        "arrange separates every pair of second-bed instances");
+            }
+        }
+    }
+#endif
 
     /*
      * Der vorherige Projektfall deckt bewusst den Fallback auf ein

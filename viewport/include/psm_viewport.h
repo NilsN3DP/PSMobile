@@ -146,6 +146,28 @@ PSM_API psm_gizmo_mode psm_viewport_get_gizmo(const psm_viewport *v);
 PSM_API int psm_viewport_gizmo_pick(psm_viewport *v, float x, float y, float radius_px);
 
 /**
+ * Bildschirmsegment einer Move-Gizmo-Achse.
+ *
+ * Die Werte sind Renderpixel mit Ursprung links oben. Damit kann die
+ * Bedienoberflaeche dieselbe Geometrie fuer Barrierefreiheit und Tests
+ * melden, die auch die viewportseitige Treffererkennung verwendet.
+ */
+typedef struct {
+    float from_x;
+    float from_y;
+    float to_x;
+    float to_y;
+} psm_gizmo_screen_axis;
+
+/**
+ * Projiziert eine Move-Gizmo-Achse auf den Bildschirm.
+ *
+ * @return 1 bei sichtbarer Achse, sonst 0.
+ */
+PSM_API int psm_viewport_gizmo_axis_screen(psm_viewport *v, int axis,
+                                           psm_gizmo_screen_axis *out);
+
+/**
  * Wendet einen Zug auf den zuvor gegriffenen Griff an.
  *
  * @param axis   Ergebnis von psm_viewport_gizmo_pick

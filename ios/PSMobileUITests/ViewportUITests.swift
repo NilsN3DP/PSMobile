@@ -64,15 +64,7 @@ final class ViewportUITests: XCTestCase {
         XCTAssertTrue(flaeche.waitForExistence(timeout: 60))
         sleep(3)
 
-        // Ueber die Objektliste auswaehlen, damit die Geste selbst nicht
-        // erst Auswahl und Bewegung miteinander vermischt.
-        let objekte = app.buttons["inspektor.objekte"]
-        XCTAssertTrue(objekte.waitForExistence(timeout: 10))
-        objekte.tap()
-        let zeile = app.buttons.matching(
-            NSPredicate(format: "identifier BEGINSWITH 'advanced.objekt.'")).firstMatch
-        XCTAssertTrue(zeile.waitForExistence(timeout: 10))
-        zeile.tap()
+        objektWaehlen()
         XCTAssertTrue(app.buttons["advanced.gizmo.none"].waitForExistence(timeout: 10))
         app.buttons["advanced.gizmo.none"].tap()
 
@@ -94,6 +86,102 @@ final class ViewportUITests: XCTestCase {
         XCTAssertTrue(warte(bis: {
             self.app.buttons["advanced.gizmo.none"].isEnabled
         }), "Das direkt gezogene Objekt ist am Ziel nicht treffbar")
+    }
+
+    func testMoveGizmoZiehtNurEntlangDerGepicktenAchse() {
+        let flaeche = app.otherElements["viewport"]
+        XCTAssertTrue(flaeche.waitForExistence(timeout: 60))
+        sleep(3)
+        objektWaehlen()
+        app.buttons["advanced.gizmo.move"].tap()
+
+        let ursprung = app.otherElements["viewport.gizmo.origin"]
+        let xAchse = app.otherElements["viewport.gizmo.axis.0"]
+        XCTAssertTrue(ursprung.waitForExistence(timeout: 10),
+                      "Der Viewport meldet keinen Gizmo-Ursprung")
+        XCTAssertTrue(xAchse.waitForExistence(timeout: 10),
+                      "Der Viewport meldet keinen X-Achsgriff")
+
+        let vorher = mitte(ursprung.frame)
+        let griff = mitte(xAchse.frame)
+        let dx = griff.x - vorher.x
+        let dy = griff.y - vorher.y
+        let laenge = max(hypot(dx, dy), 1)
+        let einheit = CGVector(dx: dx / laenge, dy: dy / laenge)
+        let ziel = CGPoint(x: griff.x + einheit.dx * 60,
+                           y: griff.y + einheit.dy * 60)
+
+        bildschirmKoordinate(griff).press(
+            forDuration: 0.1, thenDragTo: bildschirmKoordinate(ziel))
+
+        XCTAssertTrue(warte(bis: {
+            hypot(self.mitte(ursprung.frame).x - vorher.x,
+                  self.mitte(ursprung.frame).y - vorher.y) > 5
+        }), "Der gepickte X-Achsgriff hat das Objekt nicht bewegt")
+
+        let nachher = mitte(ursprung.frame)
+        let bewegung = CGVector(dx: nachher.x - vorher.x,
+                               dy: nachher.y - vorher.y)
+        let entlang = bewegung.dx * einheit.dx + bewegung.dy * einheit.dy
+        let quer = abs(bewegung.dx * -einheit.dy + bewegung.dy * einheit.dx)
+        XCTAssertGreaterThan(entlang, 5,
+                             "Der X-Achsgriff bewegt nicht in Achsrichtung")
+        XCTAssertLessThan(quer, 8,
+                          "Der X-Achsgriff laesst unerlaubte Querbewegung zu")
+    }
+
+    func testRotateGizmoMachtObjektflaecheNichtZumDirektzug() {
+        pruefeGizmoOhneDirektzug("advanced.gizmo.rotate")
+    }
+
+    func testScaleGizmoMachtObjektflaecheNichtZumDirektzug() {
+        pruefeGizmoOhneDirektzug("advanced.gizmo.scale")
+    }
+
+    private func pruefeGizmoOhneDirektzug(_ kennung: String) {
+        let flaeche = app.otherElements["viewport"]
+        XCTAssertTrue(flaeche.waitForExistence(timeout: 60))
+        sleep(3)
+        objektWaehlen()
+        app.buttons[kennung].tap()
+
+        let start = flaeche.coordinate(
+            withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+        let ziel = flaeche.coordinate(
+            withNormalizedOffset: CGVector(dx: 0.68, dy: 0.5))
+        start.press(forDuration: 0.1, thenDragTo: ziel)
+        sleep(1)
+
+        // Orbit behaelt den Wuerfel im Blickzentrum. Ein verbotener
+        // Direktzug wuerde ihn dagegen an die Zielposition verschieben.
+        start.tap()
+        XCTAssertTrue(app.buttons[kennung].isEnabled,
+                      "\(kennung) hat die Objektflaeche direkt verschoben")
+    }
+
+    @discardableResult
+    private func objektWaehlen() -> XCUIElement {
+        // Ueber die Objektliste auswaehlen, damit die Geste selbst nicht
+        // erst Auswahl und Bewegung miteinander vermischt.
+        let objekte = app.buttons["inspektor.objekte"]
+        XCTAssertTrue(objekte.waitForExistence(timeout: 10))
+        objekte.tap()
+        let zeile = app.buttons.matching(
+            NSPredicate(format: "identifier BEGINSWITH 'advanced.objekt.'")).firstMatch
+        XCTAssertTrue(zeile.waitForExistence(timeout: 10))
+        zeile.tap()
+        return zeile
+    }
+
+    private func mitte(_ rahmen: CGRect) -> CGPoint {
+        CGPoint(x: rahmen.midX, y: rahmen.midY)
+    }
+
+    private func bildschirmKoordinate(_ punkt: CGPoint) -> XCUICoordinate {
+        let rahmen = app.frame
+        return app.coordinate(withNormalizedOffset: CGVector(
+            dx: (punkt.x - rahmen.minX) / max(rahmen.width, 1),
+            dy: (punkt.y - rahmen.minY) / max(rahmen.height, 1)))
     }
 
     private func warte(bis bedingung: () -> Bool,

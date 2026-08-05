@@ -113,6 +113,24 @@ final class PsmViewport {
         psm_viewport_gizmo_pick(handle, x, y, radius)
     }
 
+    struct GizmoScreenAxis {
+        let from: CGPoint
+        let to: CGPoint
+    }
+
+    /// Dieselbe projizierte Achse, die der Viewport beim Greifen benutzt.
+    /// UIKit braucht sie, damit VoiceOver und XCUITest den unsichtbaren
+    /// GL-Inhalt an seiner wirklichen Bildschirmposition beschreiben.
+    func gizmoScreenAxis(_ axis: Int32) -> GizmoScreenAxis? {
+        var screen = psm_gizmo_screen_axis()
+        guard psm_viewport_gizmo_axis_screen(handle, axis, &screen) != 0 else {
+            return nil
+        }
+        return GizmoScreenAxis(
+            from: CGPoint(x: CGFloat(screen.from_x), y: CGFloat(screen.from_y)),
+            to: CGPoint(x: CGFloat(screen.to_x), y: CGFloat(screen.to_y)))
+    }
+
     @discardableResult
     /// - Parameter snap: auf sinnvolle Schritte rasten, 15 Grad und 1 mm.
     ///   Auf dem Tablet standardmaessig an: freihaendig genau zu treffen
