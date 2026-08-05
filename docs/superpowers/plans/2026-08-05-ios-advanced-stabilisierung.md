@@ -155,7 +155,35 @@ Run: alle neuen Core-/Viewport-Tests und `ViewportUITests`.
 
 Expected: Objektziehen, Orbit ohne Objekt und Achsziehen haben jeweils getrennte, grüne Fälle.
 
-### Task 5: Abschluss des Blocks
+### Task 5: Schwebende Einrichtung und App-Einstellungen
+
+**Files:**
+
+- Modify: `ios/PSMobile/Screens/SetupWizardView.swift`
+- Modify: `ios/PSMobile/Screens/AppSettingsView.swift`
+- Modify: host views that currently present either screen full-screen
+- Add/modify: focused iOS UI tests for compact and regular widths
+
+**Interfaces:**
+
+- Consumes: existing profile-dialog presentation and `PSScale` breakpoint values.
+- Produces: setup and app settings as centred, dimmed, scrolling dialogs with an explicit close/back path; no visual change to their contents or persistent settings semantics.
+
+- [ ] **Step 1: Presentation tests zuerst ergänzen**
+
+Ein Test prueft, dass der Setup-Wizard und die App-Einstellungen auf iPad als schwebende Oberflaeche erscheinen, auf schmalen Geraeten aber weder abgeschnitten noch unbedienbar sind.
+
+- [ ] **Step 2: Gemeinsame Dialogoberflaeche verwenden**
+
+Dieselbe zentrierte, gedimmte Huelle wie bei den Profileinstellungen verwenden. Die Breite wird auf der grossen Klasse begrenzt; bei geringer Hoehe bleibt der Inhalt scrollend und die Navigation erreichbar.
+
+- [ ] **Step 3: iOS UI-Tests ausfuehren**
+
+Run: focused setup/settings UI tests on the configured iPad simulator.
+
+Expected: beide Dialoge sind auf regular und compact width erreichbar; keine Vollbildueberlagerung und kein Verlust des Rueckwegs.
+
+### Task 6: Abschluss des Blocks
 
 **Files:**
 
