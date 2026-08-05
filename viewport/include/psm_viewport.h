@@ -105,6 +105,15 @@ PSM_API int psm_viewport_drag_selected(psm_viewport *v,
  */
 PSM_API int psm_viewport_scale_selected(psm_viewport *v, float factor);
 
+/**
+ * Meldet den Anfang einer Geste.
+ *
+ * Danach setzt der naechste veraendernde Aufruf genau einen
+ * Wiederherstellungspunkt, die folgenden keinen mehr. Ohne das ist ein
+ * Zug am Griff hundert Schritte in der Rueckgaengig-Kette.
+ */
+PSM_API void psm_viewport_gesture_begin(psm_viewport *v);
+
 /* --- Griffe am Objekt ---------------------------------------------- */
 /*
  * PrusaSlicers Gizmo-Klassen haengen an wx und an dessen eigenem

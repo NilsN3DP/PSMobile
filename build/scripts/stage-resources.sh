@@ -28,6 +28,16 @@ fi
 # nachladen.
 VENDORS="${PSM_VENDORS:-prusa}"
 
+# Welche Herstellerbuendel mitgehen, wenn nicht "all" gefordert ist.
+#
+# Prusa ist der Grund, warum es die App gibt. Voron kam auf Wunsch dazu -
+# die Profile liegen in PrusaSlicers Ressourcen bereit, mit Bettmodellen
+# und -texturen. Templates ist der generische Drucker: dasselbe Buendel,
+# aus dem PrusaSlicers Assistent seinen "Custom Printer" baut. Ohne das
+# gibt es keinen Weg, einen Drucker einzurichten, den kein Hersteller
+# kennt.
+MITGELIEFERT="${PSM_VENDORS_LIST:-PrusaResearch PrusaResearchSLA Voron Templates}"
+
 stage_into() {
     local dest="$1"
     psm_log "Ressourcen nach ${dest} (Vendors: ${VENDORS})"
@@ -38,8 +48,10 @@ stage_into() {
         cp -r "${SRC}/profiles/." "${dest}/profiles/"
     else
         # .ini plus zugehoeriger .idx und Unterordner mit Bettmodellen
-        for f in "${SRC}"/profiles/Prusa*.ini "${SRC}"/profiles/Prusa*.idx; do
-            [ -e "$f" ] && cp "$f" "${dest}/profiles/"
+        for name in ${MITGELIEFERT}; do
+            for f in "${SRC}/profiles/${name}.ini" "${SRC}/profiles/${name}.idx"; do
+                [ -e "$f" ] && cp "$f" "${dest}/profiles/"
+            done
         done
         # Der abschliessende Schraegstrich muss weg, bevor kopiert wird.
         #
@@ -52,8 +64,9 @@ stage_into() {
         #
         # Gefunden auf einem echten iPad, nachdem es im Simulator
         # monatelang genauso falsch war und niemandem auffiel.
-        for d in "${SRC}"/profiles/Prusa*/; do
-            [ -d "$d" ] && cp -r "${d%/}" "${dest}/profiles/"
+        for name in ${MITGELIEFERT}; do
+            d="${SRC}/profiles/${name}"
+            [ -d "$d" ] && cp -r "$d" "${dest}/profiles/"
         done
     fi
 

@@ -15,9 +15,13 @@ struct SimpleObjectBarView: View {
     @ObservedObject var model: SlicerModel
     let objekt: PsmCore.ObjectInfo
     var onClearSelection: () -> Void
+    /// Meldet, ob das Flaechenwerkzeug an ist - dann muss der Viewport
+    /// die Beruehrung an die Flaeche geben statt an die Kamera.
+    var onFlaechenwahl: (Bool) -> Void = { _ in }
 
     @Environment(\.psScale) private var ps
     @State private var zeigeSchnitt = false
+    @State private var flaechenwahl = false
     @State private var schnittHoehe: Float = 0
 
     var body: some View {
@@ -35,6 +39,18 @@ struct SimpleObjectBarView: View {
                 }
                 aktion("⭳", st("Drop", "Ablegen"), kennung: "objekt.ablegen") {
                     model.dropToBed(objekt.id)
+                }
+                // Ein Tippen, kein Nachdenken: die groesste ebene
+                // Flaeche kommt nach unten.
+                aktion("⬓", st("Lay flat", "Hinlegen"), kennung: "objekt.hinlegen") {
+                    model.layFlat(objekt.id)
+                }
+                // Und fuer die Faelle, in denen die groesste Flaeche
+                // nicht die gemeinte ist: eine antippen.
+                aktion("◈", st("On face", "Auf Fläche"), kennung: "objekt.aufflaeche",
+                       aktiv: flaechenwahl) {
+                    flaechenwahl.toggle()
+                    onFlaechenwahl(flaechenwahl)
                 }
                 aktion("⇔", st("Fit", "Einpassen"), kennung: "objekt.einpassen") {
                     model.fitToBed(objekt.id)
@@ -109,14 +125,16 @@ struct SimpleObjectBarView: View {
     private func aktion(_ glyph: String,
                         _ label: String,
                         kennung: String,
+                        aktiv: Bool = false,
                         aktion: @escaping () -> Void) -> some View {
         Button(action: aktion) {
             VStack(spacing: 0) {
                 Text(glyph).font(.system(size: ps.font(15)))
                 Text(label).font(.system(size: ps.font(8))).lineLimit(1)
             }
-            .foregroundStyle(PrusaColors.textPrimary)
+            .foregroundStyle(aktiv ? PrusaColors.background : PrusaColors.textPrimary)
             .frame(width: ps.pt(58), height: ps.touch(46))
+            .background(aktiv ? PrusaColors.orange : Color.clear)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)

@@ -1,4 +1,5 @@
 import XCTest
+import UIKit
 
 /// Prueft die Werkzeugspalte und die G-Code-Vorschau.
 ///
@@ -35,6 +36,21 @@ final class PreviewUITests: XCTestCase {
         XCTAssertTrue(app.buttons["werkzeug.skalieren"].exists)
     }
 
+    /// Die Bildmitte als PNG, ohne Raender und ohne den Regler.
+    private func ausschnitt() throws -> Data {
+        let bild = app.screenshot().image
+        let voll = CGRect(origin: .zero, size: bild.size)
+        let mitte = voll.insetBy(dx: voll.width * 0.25, dy: voll.height * 0.25)
+        guard let cg = bild.cgImage?.cropping(
+                to: CGRect(x: mitte.minX * bild.scale, y: mitte.minY * bild.scale,
+                           width: mitte.width * bild.scale,
+                           height: mitte.height * bild.scale)),
+              let daten = UIImage(cgImage: cg).pngData()
+        else { throw XCTSkip("Bildausschnitt nicht moeglich") }
+        return daten
+    }
+
+
     func testDieVorschauErscheintErstNachDemSchneiden() {
         XCTAssertFalse(app.buttons["werkzeug.vorschau"].exists,
                        "Die Vorschau steht schon vor dem Schneiden bereit")
@@ -51,19 +67,33 @@ final class PreviewUITests: XCTestCase {
 
         // Der Schichtregler erscheint nur, wenn libvgcode wirklich
         // Schichten geliefert hat.
-        XCTAssertTrue(app.sliders["vorschau.schicht"].waitForExistence(timeout: 60),
+        // Als Slider gemeldet, weil er einer ist - gezogen wird er
+        // trotzdem ueber Koordinaten, wie mit dem Finger.
+        let regler = app.sliders["vorschau.schicht"]
+        XCTAssertTrue(regler.waitForExistence(timeout: 60),
                       "Die Vorschau zeigt keine Schichten")
 
         // Und sie muss auch etwas zeichnen. Der Schichtregler allein
         // beweist nur, dass libvgcode Schichten gemeldet hat - nicht,
         // dass davon etwas auf dem Schirm landet.
         sleep(2)
-        let mitAllen = XCUIScreen.main.screenshot().pngRepresentation
-        app.sliders["vorschau.schicht"].adjust(toNormalizedSliderPosition: 0.1)
+        // Verglichen wird die Bildmitte, nicht der ganze Schirm: dort
+        // liegt das Modell. Im ganzen Bild steht auch die Beschriftung
+        // des Reglers, und die aendert sich bei jedem Zug - ein
+        // Vergleich darueber bestuende auch dann, wenn im Viewport
+        // nichts passiert. Genau daran ist der Fehler lange
+        // vorbeigelaufen.
+        let mitAllen = (try? ausschnitt()) ?? Data()
+        XCTAssertFalse(mitAllen.isEmpty, "Kein Bildausschnitt zu bekommen")
+        // Oben ist die oberste Schicht: nach unten ziehen zeigt weniger.
+        regler.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.1))
+            .press(forDuration: 0.1,
+                   thenDragTo: regler.coordinate(
+                       withNormalizedOffset: CGVector(dx: 0.5, dy: 0.85)))
         sleep(2)
-        let mitWenigen = XCUIScreen.main.screenshot().pngRepresentation
+        let mitWenigen = (try? ausschnitt()) ?? Data()
         XCTAssertNotEqual(mitAllen, mitWenigen,
-                          "Der Schichtregler aendert das Bild nicht")
-        try? mitAllen.write(to: URL(fileURLWithPath: "/tmp/psm-vorschau.png"))
+                          "Die Vorschau zeigt bei wenigen Schichten dasselbe Bild "
+                          + "wie bei allen - die Schichtgrenze wirkt nicht")
     }
 }

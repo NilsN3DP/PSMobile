@@ -63,6 +63,10 @@ final class PsmCore {
     static var coreVersion: String { String(cString: psm_core_version()) }
 
     init(dataDir: String, resourceDir: String) throws {
+        // Vor psm_session_create, wie die Kopfdatei es verlangt: sonst
+        // faellt weg, was beim Aufbau schiefgeht - und dort werden
+        // Profile und Ressourcen gelesen.
+        PsmLog.install()
         let abi = psm_abi_version()
         guard abi == Int32(PSM_ABI_VERSION) else {
             throw PsmError.createFailed("ABI-Bruch: Bibliothek \(abi), App \(PSM_ABI_VERSION)")
@@ -225,6 +229,35 @@ final class PsmCore {
     func cancelSlice() {
         guard handle != nil else { return }
         psm_slice_cancel(raw)
+    }
+
+    /// Ob das letzte Ergebnis noch zur Szene und zur Konfiguration
+    /// passt. Die Vorschau fragt danach, bevor sie neu rechnen laesst.
+    var sliceResultIsCurrent: Bool { psm_slice_result_is_current(raw) == 1 }
+
+    /// Verbrauch eines Extruders, in Kubikmillimetern.
+    struct ExtruderUsage {
+        let extruder: Int32
+        let volumeMm3: Double
+        let wipeTowerMm3: Double
+        let flushMm3: Double
+        /// Was insgesamt von dieser Rolle geht.
+        var totalMm3: Double { volumeMm3 + wipeTowerMm3 + flushMm3 }
+    }
+
+    /// Wer im letzten Ergebnis wirklich gedruckt hat. Bei einem
+    /// einfarbigen Druck eine Zeile, auch auf einem Fünf-Farb-Drucker.
+    func extruderUsage() -> [ExtruderUsage] {
+        let anzahl = Int(psm_slice_extruder_count(raw))
+        guard anzahl > 0 else { return [] }
+        return (0..<anzahl).compactMap { i in
+            var u = psm_extruder_usage()
+            guard psm_slice_extruder_at(raw, size_t(i), &u) == PSM_OK else { return nil }
+            return ExtruderUsage(extruder: u.extruder,
+                                 volumeMm3: u.volume_mm3,
+                                 wipeTowerMm3: u.wipe_tower_mm3,
+                                 flushMm3: u.flush_mm3)
+        }
     }
 
     var sliceState: SliceState {

@@ -25,6 +25,7 @@ struct SetupView: View {
     @State private var selected: Set<String> = []
     @State private var showSla = false
     @State private var query = ""
+    @State private var expandedVendors: Set<String> = []
     @State private var expandedFamilies: Set<String> = []
 
     /// Ist es eng? Dann faellt Beiwerk weg, statt alles zu schrumpfen.
@@ -52,13 +53,32 @@ struct SetupView: View {
         var id: String { name }
     }
 
-    private var groups: [Familie] {
+    /// Ein Hersteller mit seinen Familien.
+    private struct Hersteller: Identifiable {
+        let name: String
+        let familien: [Familie]
+        var anzahl: Int { familien.reduce(0) { $0 + $1.modelle.count } }
+        var id: String { name }
+    }
+
+    /// Zwei Ebenen: Hersteller, darunter Familien.
+    ///
+    /// Beide Einteilungen kommen aus dem gemeinsamen Modul und beide
+    /// aus PrusaSlicers eigenen Daten - der Hersteller aus dem
+    /// Schluessel, die Familie aus der Vendor-Datei.
+    private var hersteller: [Hersteller] {
         let liste = shown
-        return PrinterGrouping.shared.group(families: liste.map { $0.family })
-            .map { g in
-                Familie(name: g.family,
-                        isLegacy: g.isLegacy,
-                        modelle: g.indices.map { liste[$0.intValue] })
+        return PrinterGrouping.shared.groupByVendor(keys: liste.map { $0.key })
+            .map { v in
+                let modelle = v.indices.map { liste[$0.intValue] }
+                let familien = PrinterGrouping.shared
+                    .group(families: modelle.map { $0.family })
+                    .map { g in
+                        Familie(name: g.family,
+                                isLegacy: g.isLegacy,
+                                modelle: g.indices.map { modelle[$0.intValue] })
+                    }
+                return Hersteller(name: v.family, familien: familien)
             }
     }
 
@@ -139,19 +159,61 @@ struct SetupView: View {
     }
 
     private var liste: some View {
-        ScrollView {
+        let alle = hersteller
+        return ScrollView {
             LazyVStack(alignment: .leading, spacing: 0) {
-                ForEach(groups) { gruppe in
-                    familienKopf(gruppe)
-                    if expandedFamilies.contains(gruppe.name) || !query.isEmpty {
-                        ForEach(gruppe.modelle, id: \.key) { modell in
-                            modellZeile(modell)
+                ForEach(alle) { marke in
+                    // Bei nur einem Hersteller waere die oberste Ebene
+                    // eine Zeile, die man immer erst aufklappen muss,
+                    // ohne dass sie etwas unterscheidet.
+                    let offen = alle.count == 1
+                        || expandedVendors.contains(marke.name)
+                        || !query.isEmpty
+                    if alle.count > 1 {
+                        herstellerKopf(marke, offen: offen)
+                    }
+                    if offen {
+                        ForEach(marke.familien) { gruppe in
+                            familienKopf(gruppe)
+                            if expandedFamilies.contains(gruppe.name) || !query.isEmpty {
+                                ForEach(gruppe.modelle, id: \.key) { modell in
+                                    modellZeile(modell)
+                                }
+                            }
                         }
                     }
                 }
             }
         }
         .frame(maxHeight: .infinity)
+    }
+
+    private func herstellerKopf(_ marke: Hersteller, offen: Bool) -> some View {
+        Button {
+            if expandedVendors.contains(marke.name) {
+                expandedVendors.remove(marke.name)
+            } else {
+                expandedVendors.insert(marke.name)
+            }
+        } label: {
+            HStack {
+                Text(marke.name)
+                    .font(.system(size: ps.font(17), weight: .bold))
+                    .foregroundStyle(PrusaColors.textPrimary)
+                Text("\(marke.anzahl)")
+                    .font(.system(size: ps.font(13)))
+                    .foregroundStyle(PrusaColors.textMuted)
+                Spacer()
+                Image(systemName: offen ? "chevron.down" : "chevron.right")
+                    .font(.system(size: ps.font(14)))
+                    .foregroundStyle(PrusaColors.textMuted)
+            }
+            .padding(.top, ps.pt(8))
+            .frame(minHeight: ps.touch(52))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("hersteller.\(marke.name)")
     }
 
     private func familienKopf(_ gruppe: Familie) -> some View {
@@ -164,19 +226,20 @@ struct SetupView: View {
         } label: {
             HStack {
                 Text(gruppe.name.uppercased())
-                    .font(.system(size: ps.font(12), weight: .semibold))
+                    .font(.system(size: ps.font(14), weight: .semibold))
+                    .padding(.leading, ps.pt(12))
                     .foregroundStyle(gruppe.isLegacy
                                      ? PrusaColors.textMuted : PrusaColors.orange)
                 Text("\(gruppe.modelle.count)")
-                    .font(.system(size: ps.font(11)))
+                    .font(.system(size: ps.font(13)))
                     .foregroundStyle(PrusaColors.textMuted)
                 Spacer()
                 Image(systemName: expandedFamilies.contains(gruppe.name)
                       ? "chevron.down" : "chevron.right")
-                    .font(.system(size: ps.font(11)))
+                    .font(.system(size: ps.font(14)))
                     .foregroundStyle(PrusaColors.textMuted)
             }
-            .padding(.vertical, ps.pt(8))
+            .frame(minHeight: ps.touch(52))
             // Ohne das ist nur der Text antippbar, nicht die Zeile: der
             // Spacer dazwischen ist leerer Raum, und leeren Raum nimmt
             // SwiftUI von der Trefferpruefung aus. Wer auf die Mitte der
@@ -197,7 +260,7 @@ struct SetupView: View {
         // nicht die 0.4er Profile.
         VStack(alignment: .leading, spacing: ps.pt(4)) {
             Text(modell.name)
-                .font(.system(size: ps.font(tight ? 14 : 15)))
+                .font(.system(size: ps.font(tight ? 16 : 17)))
                 .foregroundStyle(PrusaColors.textPrimary)
 
             HStack(spacing: ps.pt(6)) {
@@ -208,11 +271,12 @@ struct SetupView: View {
                         else { selected.insert(key) }
                     } label: {
                         Text(variante)
-                            .font(.system(size: ps.font(12)))
+                            .font(.system(size: ps.font(15)))
                             .foregroundStyle(selected.contains(key)
                                              ? .white : PrusaColors.textMuted)
-                            .padding(.horizontal, ps.pt(10))
-                            .frame(height: ps.touch(tight ? 38 : 48))
+                            .padding(.horizontal, ps.pt(16))
+                            .frame(minWidth: ps.touch(64),
+                                   minHeight: ps.touch(tight ? 48 : 56))
                             .background(selected.contains(key)
                                         ? PrusaColors.orange : PrusaColors.panelRaised)
                             .clipShape(RoundedCornerShape(ps.pt(4)))
@@ -222,7 +286,7 @@ struct SetupView: View {
                 }
             }
         }
-        .padding(.vertical, ps.pt(tight ? 6 : 12))
+        .padding(.vertical, ps.pt(tight ? 10 : 14))
     }
 
     private var abschluss: some View {

@@ -12,6 +12,7 @@ struct WorkflowStartView: View {
     var onSimple: () -> Void
     var onAdvanced: () -> Void
     var onAppSettings: () -> Void
+    var onPrinterSetup: () -> Void = {}
 
     @Environment(\.psScale) private var ps
     private var eng: Bool { ps.factor <= 0.8 }
@@ -24,6 +25,9 @@ struct WorkflowStartView: View {
                 textKnopf(st("App settings", "App-Einstellungen"),
                           kennung: "start.appeinstellungen",
                           aktion: onAppSettings)
+                textKnopf(st("Printer setup", "Ersteinrichtung"),
+                          kennung: "start.einrichtung",
+                          aktion: onPrinterSetup)
             }
             .frame(maxWidth: ps.pt(760))
             .frame(maxWidth: .infinity)

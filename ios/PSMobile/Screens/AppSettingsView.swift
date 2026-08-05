@@ -16,6 +16,7 @@ struct AppSettingsView: View {
     var onClose: () -> Void
 
     @Environment(\.psScale) private var ps
+    @State private var zeigeSelbsttest = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -26,6 +27,7 @@ struct AppSettingsView: View {
                     ForEach(AppSettings.shared.groupsInOrder, id: \.self) { gruppe in
                         abschnitt(gruppe)
                     }
+                    diagnose
                 }
                 .padding(.horizontal, ps.pt(16))
                 .padding(.bottom, ps.pt(24))
@@ -92,6 +94,52 @@ struct AppSettingsView: View {
 
             ForEach(schalter, id: \.key) { eintrag in
                 schalterZeile(eintrag)
+            }
+        }
+    }
+
+    /// Der Selbsttest, ganz unten.
+    ///
+    /// Er gehoert nicht zwischen die Schalter: das sind Vorlieben, das
+    /// hier ist ein Werkzeug. Und er gehoert in die App und nicht in
+    /// einen Testlauf am Rechner - was auf diesem Geraet gilt, weiss
+    /// nur dieses Geraet.
+    private var diagnose: some View {
+        VStack(alignment: .leading, spacing: ps.pt(8)) {
+            Text(st("Diagnostics", "Diagnose").uppercased())
+                .font(.system(size: ps.font(11), weight: .semibold))
+                .foregroundStyle(PrusaColors.textMuted)
+                .padding(.top, ps.pt(20))
+                .padding(.bottom, ps.pt(6))
+
+            Button { zeigeSelbsttest = true } label: {
+                HStack(spacing: ps.pt(12)) {
+                    VStack(alignment: .leading, spacing: ps.pt(2)) {
+                        Text(st("Self-test", "Selbsttest"))
+                            .font(.system(size: ps.font(14)))
+                            .foregroundStyle(PrusaColors.textPrimary)
+                        Text(st("Runs loading, slicing, saving, painting and a load test on this device, and writes a report.",
+                                "Prüft Laden, Schneiden, Sichern, Bemalen und eine Volllast auf diesem Gerät und schreibt einen Bericht."))
+                            .font(.system(size: ps.font(11)))
+                            .foregroundStyle(PrusaColors.textMuted)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    Spacer()
+                    Text("›")
+                        .font(.system(size: ps.font(18)))
+                        .foregroundStyle(PrusaColors.orange)
+                }
+                .padding(.horizontal, ps.pt(14))
+                .padding(.vertical, ps.pt(10))
+                .frame(minHeight: ps.touch(56))
+                .background(PrusaColors.panelRaised)
+                .clipShape(RoundedRectangle(cornerRadius: ps.pt(10)))
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("appeinstellungen.selbsttest")
+            .sheet(isPresented: $zeigeSelbsttest) {
+                SelbsttestView { zeigeSelbsttest = false }
             }
         }
     }

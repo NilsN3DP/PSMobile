@@ -254,6 +254,25 @@ typedef struct {
 
 PSM_API psm_result psm_model_info(psm_session *s, psm_object_id id, psm_object_info *out);
 
+/** Lage eines Objekts zum Druckraum. Reihenfolge wie BuildVolume::ObjectState. */
+typedef enum {
+    PSM_BED_INSIDE    = 0,  /**< vollstaendig im Druckraum, druckbar */
+    PSM_BED_COLLIDING = 1,  /**< schneidet den Rand - nicht druckbar */
+    PSM_BED_OUTSIDE   = 2,  /**< ganz daneben */
+    PSM_BED_BELOW     = 3,  /**< vollstaendig unter dem Bett */
+    PSM_BED_UNKNOWN   = 4   /**< Bettgeometrie fehlt oder Objekt unbekannt */
+} psm_bed_state;
+
+/**
+ * Wo das Objekt relativ zum Druckraum liegt.
+ *
+ * Die Auskunft stammt aus PrusaSlicers eigener Pruefung; hier wird
+ * nichts nachgerechnet. Hat ein Objekt mehrere Instanzen, gilt die
+ * schlechteste - eine einzige kollidierende Instanz macht den Druck
+ * unmoeglich.
+ */
+PSM_API psm_bed_state psm_model_bed_state(psm_session *s, psm_object_id id);
+
 typedef enum {
     PSM_VOLUME_MODEL_PART       = 0,
     PSM_VOLUME_NEGATIVE         = 1,
@@ -314,6 +333,14 @@ PSM_API psm_result psm_model_set_instances(psm_session *s, psm_object_id id, int
 
 /** Legt das Objekt flach auf das Bett (kleinster Z-Punkt auf 0). */
 PSM_API psm_result psm_model_drop_to_bed(psm_session *s, psm_object_id id);
+
+/**
+ * Legt das Objekt auf seine groesste ebene Flaeche.
+ *
+ * Sucht die Richtung, in die der groesste Flaecheninhalt zeigt, und
+ * dreht sie nach unten. Das ist, was ein Mensch beim Hinlegen auch tut.
+ */
+PSM_API psm_result psm_model_lay_flat_auto(psm_session *s, psm_object_id id);
 
 /** Skaliert so, dass die groesste Kante genau size_mm betraegt. */
 PSM_API psm_result psm_model_scale_to_fit(psm_session *s, psm_object_id id, float size_mm);
@@ -677,6 +704,18 @@ PSM_API psm_result psm_preset_config_set(psm_session *s, psm_preset_type type,
                                          const char *key, const char *value);
 
 /**
+ * Liest einen Wert aus einem benannten Preset, ohne es auszuwaehlen.
+ *
+ * Gedacht fuer Uebersichten: die Materialauswahl braucht von jedem
+ * Filamentprofil Typ und Farbe, und zwar von allen gleichzeitig. Ueber
+ * die Auswahl zu gehen hiesse, fuer jede Zeile die ganze Konfiguration
+ * umzubauen und das Slice-Ergebnis zu verwerfen.
+ */
+PSM_API psm_result psm_preset_option_at(psm_session *s, psm_preset_type type,
+                                        const char *preset_name, const char *key,
+                                        char *out, size_t out_cap);
+
+/**
  * Ist ein Parameter im aktuellen Zustand ueberhaupt wirksam?
  *
  * PrusaSlicer graut aus, was gerade nichts bewirkt - alle Stuetzenwerte
@@ -893,6 +932,15 @@ PSM_API void psm_slice_cancel(psm_session *s);
 
 PSM_API psm_slice_state psm_slice_state_get(psm_session *s);
 
+/**
+ * Ob das letzte Ergebnis noch zur Szene und zur Konfiguration passt.
+ *
+ * 1 = gueltig, es gibt Werkzeugwege zum Anzeigen und einen G-Code zum
+ * Weitergeben. 0 = es muss neu geschnitten werden. Die Oberflaeche
+ * braucht das, um die Vorschau nicht bei jedem Hinsehen neu zu rechnen.
+ */
+PSM_API int psm_slice_result_is_current(psm_session *s);
+
 /** Blockiert, bis der Job fertig ist. timeout_ms < 0 = unbegrenzt. */
 PSM_API psm_result psm_slice_wait(psm_session *s, int timeout_ms);
 
@@ -907,6 +955,32 @@ typedef struct {
 } psm_slice_stats;
 
 PSM_API psm_result psm_slice_stats_get(psm_session *s, psm_slice_stats *out);
+
+/**
+ * Verbrauch eines Extruders im letzten Ergebnis.
+ *
+ * Alles in Kubikmillimetern, wie PrusaSlicer es fuehrt. Gramm und
+ * Kosten rechnet die Oberflaeche daraus aus - Dichte und Preis stehen
+ * im Filamentprofil, das sie ohnehin kennt.
+ */
+typedef struct {
+    int32_t extruder;       /**< 0-basiert, wie in den Profilen */
+    double  volume_mm3;     /**< im Modell */
+    double  wipe_tower_mm3; /**< im Reinigungsturm */
+    double  flush_mm3;      /**< beim Spuelen verworfen */
+} psm_extruder_usage;
+
+/**
+ * Wie viele Extruder im letzten Ergebnis wirklich gedruckt haben.
+ *
+ * Nicht dasselbe wie die Zahl der eingerichteten: ein Fuenf-Farb-Drucker
+ * kann einfarbig drucken, und dann gibt es nur eine Zeile.
+ */
+PSM_API size_t psm_slice_extruder_count(psm_session *s);
+
+PSM_API psm_result psm_slice_extruder_at(psm_session *s, size_t index,
+                                         psm_extruder_usage *out);
+
 
 /**
  * Der Dateiname, den PrusaSlicer fuer dieses Ergebnis vergeben wuerde.

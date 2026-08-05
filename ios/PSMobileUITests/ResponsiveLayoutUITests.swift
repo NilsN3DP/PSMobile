@@ -63,6 +63,11 @@ final class ResponsiveLayoutUITests: XCTestCase {
 
         // Auf schmalen Fenstern liegt der Inspektor ueber dem Bett. Er
         // muss trotzdem ganz sichtbar sein.
+        // Die Objektliste liegt hinter ihrem Reiter, wie auf Android.
+        let objekteReiter = app.buttons["inspektor.objekte"]
+        if objekteReiter.waitForExistence(timeout: 10), objekteReiter.isEnabled {
+            objekteReiter.tap()
+        }
         app.buttons.matching(
             NSPredicate(format: "identifier BEGINSWITH 'advanced.objekt.'")).firstMatch.tap()
         pruefe(app.buttons["advanced.gizmo.move"], "Gizmo Verschieben")

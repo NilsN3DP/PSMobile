@@ -21,6 +21,7 @@ struct SettingsView: View {
     let onClose: () -> Void
 
     @Environment(\.psScale) private var ps
+    @State private var zeigeZuruecksetzen = false
     @State private var tab = "print"
     @State private var pageIndex = 0
     /// Welcher Sonderbearbeiter offen ist, wenn ueberhaupt.
@@ -64,6 +65,15 @@ struct SettingsView: View {
 
     // MARK: - Kopf und Reiter
 
+    /// Was gegenueber den gespeicherten Profilen geaendert ist.
+    private var geaenderte: [SlicerModel.Profilaenderung] {
+        model.profilaenderungen()
+    }
+
+    private func st(_ english: String, _ german: String) -> String {
+        SimpleModeState.shared.text(english: english, german: german)
+    }
+
     private var kopfzeile: some View {
         HStack {
             Button(action: onClose) {
@@ -75,6 +85,8 @@ struct SettingsView: View {
             .buttonStyle(.plain)
             .accessibilityIdentifier("einstellungen.zurueck")
 
+            einstufung
+
             Spacer()
 
             // Das gewaehlte Profil gehoert in den Kopf: ohne es weiss
@@ -85,9 +97,73 @@ struct SettingsView: View {
                     .foregroundStyle(PrusaColors.textMuted)
                     .lineLimit(1)
             }
+
+            // Zuruecksetzen gehoert hierher und nicht nur in den Dialog
+            // beim Moduswechsel: man will es auch dann, wenn man gerade
+            // nirgendwohin wechselt. Es erscheint erst, wenn es etwas
+            // zurueckzusetzen gibt - ein Knopf ohne Wirkung ist eine
+            // Frage, die man sich stellt und nicht beantwortet bekommt.
+            if !geaenderte.isEmpty {
+                Button { zeigeZuruecksetzen = true } label: {
+                    HStack(spacing: ps.pt(4)) {
+                        Image(systemName: "arrow.counterclockwise")
+                        Text("\(geaenderte.count)")
+                    }
+                    .font(.system(size: ps.font(12)))
+                    .foregroundStyle(PrusaColors.orange)
+                    .padding(.horizontal, ps.pt(10))
+                    .frame(height: ps.touch(40))
+                    .background(PrusaColors.panelRaised)
+                    .clipShape(RoundedRectangle(cornerRadius: ps.pt(4)))
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("einstellungen.zuruecksetzen")
+                .confirmationDialog(
+                    st("Reset profile to its saved values?",
+                       "Profil auf seine gespeicherten Werte zurücksetzen?"),
+                    isPresented: $zeigeZuruecksetzen, titleVisibility: .visible) {
+                        Button(st("Reset \(geaenderte.count) values",
+                                  "\(geaenderte.count) Werte zurücksetzen"),
+                               role: .destructive) {
+                            model.profilaenderungenVerwerfen()
+                        }
+                        Button(st("Cancel", "Abbrechen"), role: .cancel) {}
+                    }
+            }
         }
         .padding(.horizontal, ps.pt(16))
         .frame(height: ps.touch(48))
+    }
+
+    /// Simple, Advanced, Expert - wie in PrusaSlicer oben links.
+    ///
+    /// Nicht als Menue, sondern als drei Knoepfe: es sind drei, sie sind
+    /// kurz, und man wechselt oft genug zwischen ihnen, dass ein
+    /// zusaetzliches Antippen zum Aufklappen stoert.
+    private var einstufung: some View {
+        HStack(spacing: ps.pt(2)) {
+            stufe(PsUiCatalog.tr("Simple"), .simple)
+            stufe(PsUiCatalog.tr("Advanced"), .advanced)
+            stufe(PsUiCatalog.tr("Expert"), .expert)
+        }
+        .padding(.leading, ps.pt(12))
+    }
+
+    private func stufe(_ label: String, _ wert: PsmCore.ConfigMode) -> some View {
+        let aktiv = model.sichtbarkeit == wert
+        return Button { model.sichtbarkeit = wert } label: {
+            Text(label)
+                .font(.system(size: ps.font(11)))
+                .foregroundStyle(aktiv ? PrusaColors.background : PrusaColors.textMuted)
+                .padding(.horizontal, ps.pt(10))
+                .frame(minHeight: ps.touch(36))
+                .background(aktiv ? PrusaColors.orange : PrusaColors.panelRaised)
+                .clipShape(RoundedRectangle(cornerRadius: ps.pt(3)))
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("einstellungen.stufe." + String(wert.rawValue))
     }
 
     private var reiter: some View {
@@ -230,6 +306,17 @@ struct SettingsView: View {
         .frame(maxWidth: .infinity)
     }
 
+    /// Ob ein Parameter auf der gewaehlten Stufe gezeigt wird.
+    ///
+    /// Kennt der Kern die Einstufung nicht, wird gezeigt. Etwas
+    /// wegzulassen, weil man es nicht einordnen kann, waere die
+    /// schlechtere Richtung: ein fehlender Parameter faellt niemandem
+    /// auf, bis der Druck misslingt.
+    private func sichtbarAufStufe(_ key: String) -> Bool {
+        guard let meta = model.core?.configMeta(for: key) else { return true }
+        return meta.mode.rawValue <= model.sichtbarkeit.rawValue
+    }
+
     private func gruppenBlock(_ gruppe: TabsCatalog.Group) -> some View {
         VStack(alignment: .leading, spacing: ps.pt(8)) {
             if !gruppe.title.isEmpty {
@@ -242,19 +329,22 @@ struct SettingsView: View {
             // Zeile zeigt. Die Zuordnung kommt aus dem gemeinsamen Modul.
             ForEach(Array(TabsCatalog.shared.lines(group: gruppe).enumerated()),
                     id: \.offset) { _, zeile in
-                if let name = zeile.title, zeile.options.count > 1 {
+                let sichtbar = zeile.options.filter { sichtbarAufStufe($0.key) }
+                if sichtbar.isEmpty {
+                    EmptyView()
+                } else if let name = zeile.title, sichtbar.count > 1 {
                     VStack(alignment: .leading, spacing: ps.pt(4)) {
                         Text(PsUiCatalog.tr(name))
                             .font(.system(size: ps.font(13)))
                             .foregroundStyle(PrusaColors.textPrimary)
                         HStack(spacing: ps.pt(8)) {
-                            ForEach(zeile.options, id: \.key) { option in
+                            ForEach(sichtbar, id: \.key) { option in
                                 SettingField(model: model, option: option, kompakt: true)
                             }
                         }
                     }
                 } else {
-                    ForEach(zeile.options, id: \.key) { option in
+                    ForEach(sichtbar, id: \.key) { option in
                         SettingField(model: model, option: option, kompakt: false)
                     }
                 }
@@ -270,4 +360,8 @@ private struct Schluessel: Identifiable {
     let wert: String
     var id: String { wert }
     init(_ wert: String) { self.wert = wert }
+
+    private func st(_ english: String, _ german: String) -> String {
+        SimpleModeState.shared.text(english: english, german: german)
+    }
 }

@@ -20,11 +20,16 @@ struct AdvancedObjectInspectorView: View {
 
     @Environment(\.psScale) private var ps
     @State private var zeigeSchichten = false
+    /// Was das letzte Vereinfachen oder Zerlegen ergeben hat.
+    @State private var vereinfachtText = ""
+    @State private var zeigeTeilBlatt = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: ps.pt(10)) {
             abschnitt(PsUiCatalog.tr("Object manipulation"))
-            griffe
+            // Die Griffe stehen jetzt oben in der Werkzeugleiste, bei
+            // Ansicht und Vorschau: sie bestimmen, was ein Finger im
+            // Viewport tut, und das ist keine Zahleneinstellung.
             groesse
             Divider().background(PrusaColors.divider)
             drehung
@@ -48,6 +53,8 @@ struct AdvancedObjectInspectorView: View {
                 LayerProfileView(model: model, objekt: objekt) { zeigeSchichten = false }
             }
             Divider().background(PrusaColors.divider)
+            geometrie
+            Divider().background(PrusaColors.divider)
             teile
             // Eine Marke, kein Bezeichner am Stapel: SwiftUI vererbt den
             // an jedes Kind und ueberschreibt deren eigene. Genau daran
@@ -61,23 +68,6 @@ struct AdvancedObjectInspectorView: View {
     /// Welche Griffe am Objekt haengen. Wie am Desktop die Gizmo-Leiste
     /// links, hier als Zeile - auf einem Tablet ist waagerecht billiger
     /// als eine zweite senkrechte Leiste.
-    private var griffe: some View {
-        HStack(spacing: ps.pt(6)) {
-            wahl(PsUiCatalog.tr("None"), an: gizmo == .none, kennung: "advanced.gizmo.none") {
-                gizmo = .none
-            }
-            wahl(PsUiCatalog.tr("Move"), an: gizmo == .move, kennung: "advanced.gizmo.move") {
-                gizmo = .move
-            }
-            wahl(PsUiCatalog.tr("Rotate"), an: gizmo == .rotate, kennung: "advanced.gizmo.rotate") {
-                gizmo = .rotate
-            }
-            wahl(PsUiCatalog.tr("Scale"), an: gizmo == .scale, kennung: "advanced.gizmo.scale") {
-                gizmo = .scale
-            }
-        }
-    }
-
     // MARK: - Groesse
 
     /// Prozent und Millimeter nebeneinander: am Modell denkt man in
@@ -202,6 +192,70 @@ struct AdvancedObjectInspectorView: View {
     /// Der Objektbaum: aus wie vielen Koerpern besteht das Objekt, und
     /// welcher Extruder druckt welchen. Bei einem Extruder ist die
     /// Zuweisung sinnlos und bleibt weg.
+    /// Was an der Geometrie selbst geaendert wird.
+    ///
+    /// Vereinfachen meldet zurueck, was es gebracht hat: ohne die beiden
+    /// Zahlen tippt man darauf und weiss nicht, ob etwas passiert ist.
+    private var geometrie: some View {
+        VStack(alignment: .leading, spacing: ps.pt(6)) {
+            abschnitt(st("Geometry", "Geometrie"))
+            if !vereinfachtText.isEmpty {
+                Text(vereinfachtText)
+                    .font(.system(size: ps.font(10)))
+                    .foregroundStyle(PrusaColors.orange)
+            }
+            HStack(spacing: ps.pt(8)) {
+                Button {
+                    if let e = model.simplify(objekt.id, ratio: 0.5) {
+                        vereinfachtText = "\(e.before) → \(e.after)"
+                    }
+                } label: {
+                    Text(st("Simplify by half", "Auf die Hälfte"))
+                        .font(.system(size: ps.font(12)))
+                        .foregroundStyle(PrusaColors.orange)
+                        .frame(maxWidth: .infinity, minHeight: ps.touch(44))
+                        .background(PrusaColors.panelRaised)
+                        .clipShape(RoundedRectangle(cornerRadius: ps.pt(4)))
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("advanced.vereinfachen")
+                Button {
+                    let n = model.splitVolumes(objekt.id)
+                    vereinfachtText = st("Parts", "Teile") + ": \(n)"
+                } label: {
+                    Text(st("Split into parts", "In Teile zerlegen"))
+                        .font(.system(size: ps.font(12)))
+                        .foregroundStyle(PrusaColors.orange)
+                        .frame(maxWidth: .infinity, minHeight: ps.touch(44))
+                        .background(PrusaColors.panelRaised)
+                        .clipShape(RoundedRectangle(cornerRadius: ps.pt(4)))
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("advanced.zerlegen")
+            }
+            // Aussparung, Modifier, Stuetzenblocker: das, wofuer man
+            // sonst das Programm wechselt.
+            Button { zeigeTeilBlatt = true } label: {
+                Text(st("Add part", "Teil hinzufügen"))
+                    .font(.system(size: ps.font(12)))
+                    .foregroundStyle(PrusaColors.orange)
+                    .frame(maxWidth: .infinity, minHeight: ps.touch(44))
+                    .background(PrusaColors.panelRaised)
+                    .clipShape(RoundedRectangle(cornerRadius: ps.pt(4)))
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("advanced.teilHinzufuegen")
+            .sheet(isPresented: $zeigeTeilBlatt) {
+                TeilHinzufuegenView(model: model, objektId: objekt.id) {
+                    zeigeTeilBlatt = false
+                }
+            }
+        }
+    }
+
     private var teile: some View {
         let anzahl = model.volumeCount(objekt.id)
         return VStack(alignment: .leading, spacing: ps.pt(6)) {
@@ -242,6 +296,23 @@ struct AdvancedObjectInspectorView: View {
                                     .clipShape(RoundedRectangle(cornerRadius: ps.pt(4)))
                             }
                             .accessibilityIdentifier("advanced.teil.\(i).extruder")
+                        }
+                        // Der Modellkoerper bleibt: nimmt man ihn weg,
+                        // bleibt ein Objekt ohne Geometrie zurueck.
+                        // Alles andere ist ein Zusatz und darf wieder weg.
+                        if teil.type != 0 {
+                            Button {
+                                model.removeVolume(objekt.id, at: i)
+                            } label: {
+                                Text(st("Remove", "Entfernen"))
+                                    .font(.system(size: ps.font(12)))
+                                    .foregroundStyle(PrusaColors.danger)
+                                    .padding(.horizontal, ps.pt(10))
+                                    .frame(height: ps.touch(40))
+                                    .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityIdentifier("advanced.teil.\(i).entfernen")
                         }
                     }
                     .padding(.vertical, ps.pt(2))

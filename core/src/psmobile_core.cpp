@@ -15,6 +15,7 @@
 #include <cmath>
 #include <chrono>
 #include <cstdio>
+#include <cerrno>
 #include <cstring>
 #include <memory>
 #include <string>
@@ -24,6 +25,12 @@
 #include <boost/filesystem.hpp>
 #include <boost/algorithm/string/predicate.hpp>
 #include <boost/nowide/cstdio.hpp>
+#include <boost/make_shared.hpp>
+#include <boost/log/core.hpp>
+#include <boost/log/trivial.hpp>
+#include <boost/log/expressions.hpp>
+#include <boost/log/sinks/sync_frontend.hpp>
+#include <boost/log/sinks/basic_sink_backend.hpp>
 
 #include "libslic3r/libslic3r.h"
 #include "libslic3r/PresetBundle.hpp"
@@ -42,6 +49,9 @@
 #include "libslic3r/TriangleSelector.hpp"
 #include "libslic3r/TextConfiguration.hpp"
 #include "libslic3r/BuildVolume.hpp"
+#include <map>
+#include <set>
+#include <tuple>
 #include "libslic3r/MultipleBeds.hpp"
 #include "libslic3r/Utils.hpp"
 #include "libslic3r/Feature/FullSpectrum/VirtualExtruder.hpp"
@@ -576,10 +586,60 @@ PSM_API const char *psm_last_error(void *session)
     return static_cast<psm_session *>(session)->last_error.c_str();
 }
 
+namespace {
+
+/* Eine Senke, die boost::log in unseren Rueckruf schiebt.
+ *
+ * libslic3r protokolliert ueber BOOST_LOG_TRIVIAL. Der 3MF-Exporter
+ * sammelt seine Gruende in m_errors und gibt sie am Ende mit
+ * log_errors() dorthin aus - wer keine Senke haengt, sieht davon
+ * nichts und haelt eine fehlgeschlagene Ausgabe fuer grundlos.
+ */
+class SlicerLogSenke final
+    : public boost::log::sinks::basic_formatted_sink_backend<
+          char, boost::log::sinks::synchronized_feeding>
+{
+public:
+    void consume(const boost::log::record_view &satz, const string_type &text)
+    {
+        psm_log_level stufe = PSM_LOG_INFO;
+        if (auto schwere = satz[boost::log::trivial::severity]) {
+            switch (schwere.get()) {
+            case boost::log::trivial::fatal:
+            case boost::log::trivial::error:   stufe = PSM_LOG_ERROR; break;
+            case boost::log::trivial::warning: stufe = PSM_LOG_WARN;  break;
+            case boost::log::trivial::info:    stufe = PSM_LOG_INFO;  break;
+            default:                           stufe = PSM_LOG_DEBUG; break;
+            }
+        }
+        psm_emit_log(stufe, "slic3r: " + text);
+    }
+};
+
+/* Einmal einhaengen, und nur wenn jemand zuhoert. */
+void slicer_log_anhaengen()
+{
+    static bool getan = false;
+    if (getan)
+        return;
+    getan = true;
+    using Senke = boost::log::sinks::synchronous_sink<SlicerLogSenke>;
+    auto senke = boost::make_shared<Senke>();
+    /* Warnung und schlimmer. Alles darunter ist beim Schneiden eines
+     * grossen Modells ein Strom, den kein Geraet mitschreiben will. */
+    senke->set_filter(boost::log::trivial::severity >=
+                      boost::log::trivial::warning);
+    boost::log::core::get()->add_sink(senke);
+}
+
+} // namespace
+
 PSM_API void psm_set_log_callback(psm_log_cb cb, void *user)
 {
     g_log_cb  = cb;
     g_log_usr = user;
+    if (cb != nullptr)
+        slicer_log_anhaengen();
 }
 
 /* ------------------------------------------------------------------ */
@@ -952,8 +1012,16 @@ PSM_API psm_result psm_project_save_3mf(psm_session *s, const char *path)
             boost::filesystem::create_directories(output.parent_path());
         if (! Slic3r::store_3mf(path, &merged, &export_config,
                                 false, nullptr, true)) {
+            /* PrusaSlicer meldet nur "Unable to open the file". Das ist
+             * fopen, und fopen hat einen Grund - er steht in errno und
+             * ginge sonst verloren. */
+            const int nummer = errno;
+            boost::system::error_code fehlercode;
+            const bool ordner_da =
+                boost::filesystem::is_directory(output.parent_path(), fehlercode);
             s->set_error(std::string("3MF-Projekt konnte nicht gespeichert werden: ") +
-                         path);
+                         path + " (" + std::strerror(nummer) +
+                         "; Ordner " + (ordner_da ? "vorhanden" : "fehlt") + ")");
             return PSM_ERR_IO;
         }
 
@@ -1268,6 +1336,9 @@ PSM_API psm_result psm_model_list(psm_session *s, psm_object_id *out_ids,
     PSM_GUARD_END(s)
 }
 
+/* Weiter unten definiert - psm_model_info braucht sie schon hier. */
+static psm_bed_state bed_state_of(psm_session *s, const Slic3r::ModelObject *object);
+
 PSM_API psm_result psm_model_info(psm_session *s, psm_object_id id, psm_object_info *out)
 {
     PSM_GUARD_BEGIN(s)
@@ -1304,9 +1375,74 @@ PSM_API psm_result psm_model_info(psm_session *s, psm_object_id id, psm_object_i
                 tri += v->mesh().facets_count();
         out->triangle_count = static_cast<uint32_t>(tri);
         out->instance_count = static_cast<int32_t>(o->instances.size());
-        out->outside_bed    = inst->is_printable() ? 0 : 1;
+        /* Frueher stand hier is_printable(). Das ist der Schalter, mit
+         * dem man ein Objekt von Hand vom Druck ausnimmt, und nicht die
+         * Lage im Raum: ein Objekt neben dem Bett meldete damit, alles
+         * sei in Ordnung. */
+        const psm_bed_state lage = bed_state_of(s, o);
+        out->outside_bed    = (lage == PSM_BED_INSIDE || lage == PSM_BED_UNKNOWN) ? 0 : 1;
         return PSM_OK;
     PSM_GUARD_END(s)
+}
+
+/*
+ * Gemeinsame Pruefung fuer psm_model_bed_state und das Feld
+ * outside_bed in psm_model_info. Der Aufrufer haelt data_mtx.
+ */
+static psm_bed_state bed_state_of(psm_session *s, const Slic3r::ModelObject *object)
+{
+    if (s == nullptr || object == nullptr)
+        return PSM_BED_UNKNOWN;
+
+    const auto *bed_shape = s->config.opt<Slic3r::ConfigOptionPoints>("bed_shape");
+    const auto *max_height = s->config.opt<Slic3r::ConfigOptionFloat>("max_print_height");
+    if (bed_shape == nullptr || bed_shape->values.size() < 3 || max_height == nullptr)
+        return PSM_BED_UNKNOWN;
+
+    try {
+        const Slic3r::BuildVolume volume(bed_shape->values, max_height->value);
+        if (! volume.valid())
+            return PSM_BED_UNKNOWN;
+
+        /* Die schlechteste Instanz entscheidet: eine einzige, die
+         * kollidiert, macht den Druck unmoeglich - da hilft es nicht,
+         * dass die zweite sauber steht. */
+        psm_bed_state schlechteste = PSM_BED_INSIDE;
+        for (const Slic3r::ModelInstance *instance : object->instances) {
+            if (instance == nullptr)
+                continue;
+            const Slic3r::Transform3d trafo = instance->get_matrix();
+            for (const Slic3r::ModelVolume *v : object->volumes) {
+                if (v == nullptr || ! v->is_model_part())
+                    continue;
+                const Slic3r::Transform3f gesamt =
+                    (trafo * v->get_matrix()).cast<float>();
+                const auto lage = volume.object_state(
+                    v->mesh().its, gesamt, /* may_be_below_bed */ false);
+                psm_bed_state hier = PSM_BED_INSIDE;
+                switch (lage) {
+                case Slic3r::BuildVolume::ObjectState::Inside:    hier = PSM_BED_INSIDE; break;
+                case Slic3r::BuildVolume::ObjectState::Colliding: hier = PSM_BED_COLLIDING; break;
+                case Slic3r::BuildVolume::ObjectState::Outside:   hier = PSM_BED_OUTSIDE; break;
+                case Slic3r::BuildVolume::ObjectState::Below:     hier = PSM_BED_BELOW; break;
+                }
+                if (hier > schlechteste)
+                    schlechteste = hier;
+            }
+        }
+        return schlechteste;
+    } catch (const std::exception &e) {
+        psm_emit_log(PSM_LOG_WARN, std::string("Bettlage: ") + e.what());
+        return PSM_BED_UNKNOWN;
+    }
+}
+
+PSM_API psm_bed_state psm_model_bed_state(psm_session *s, psm_object_id id)
+{
+    if (s == nullptr)
+        return PSM_BED_UNKNOWN;
+    std::lock_guard<std::recursive_mutex> data_lock(s->data_mtx);
+    return bed_state_of(s, find_object(s, id));
 }
 
 PSM_API int32_t psm_model_extruder_get(psm_session *s, psm_object_id id)
@@ -1449,6 +1585,92 @@ PSM_API psm_result psm_model_set_rotation(psm_session *s, psm_object_id id, floa
         s->history_checkpoint("Objekt drehen");
         first_instance(o)->set_rotation(Slic3r::Vec3d(rx, ry, rz));
         o->invalidate_bounding_box();
+        s->mark_design_changed();
+        return PSM_OK;
+    PSM_GUARD_END(s)
+}
+
+/*
+ * Dreht `richtung` (in Weltkoordinaten) nach unten und setzt das Objekt
+ * aufs Bett. Der Aufrufer haelt data_mtx und hat den Wiederherstellungs-
+ * punkt gesetzt.
+ */
+static void lay_on(Slic3r::ModelObject *o, Slic3r::Vec3d richtung)
+{
+    if (richtung.norm() < 1e-9)
+        return;
+    richtung.normalize();
+
+    Slic3r::ModelInstance *inst = first_instance(o);
+    if (inst == nullptr)
+        return;
+
+    /* Die Normale liegt in Weltkoordinaten - die zusaetzliche Drehung
+     * kommt deshalb vor die vorhandene. */
+    const Slic3r::Vec3d ziel(0.0, 0.0, -1.0);
+    const Eigen::Quaterniond q =
+        Eigen::Quaterniond::FromTwoVectors(richtung, ziel);
+    const Slic3r::Transform3d neu =
+        Slic3r::Transform3d(q) * inst->get_transformation().get_rotation_matrix();
+    inst->set_rotation(Slic3r::Geometry::extract_rotation(neu));
+    o->invalidate_bounding_box();
+    o->ensure_on_bed();
+}
+
+PSM_API psm_result psm_model_lay_flat_auto(psm_session *s, psm_object_id id)
+{
+    PSM_GUARD_BEGIN(s)
+        std::lock_guard<std::recursive_mutex> data_lock(s->data_mtx);
+        Slic3r::ModelObject *o = find_object(s, id);
+        if (o == nullptr) return PSM_ERR_NOT_FOUND;
+
+        const Slic3r::ModelInstance *inst = first_instance(o);
+        if (inst == nullptr) return PSM_ERR_NOT_FOUND;
+
+        /*
+         * Flaechen nach Richtung gruppieren und die Flaecheninhalte
+         * summieren. Gerundet wird auf zwei Nachkommastellen: eine
+         * gedruckte Rundung besteht aus tausenden Dreiecken, deren
+         * Normalen minimal streuen, und ohne Rundung waere jede fuer
+         * sich winzig.
+         */
+        std::map<std::tuple<int, int, int>, double> nach_richtung;
+        for (const Slic3r::ModelVolume *v : o->volumes) {
+            if (v == nullptr || ! v->is_model_part())
+                continue;
+            const Slic3r::Transform3d nach_welt =
+                inst->get_matrix() * v->get_matrix();
+            const auto &netz = v->mesh().its;
+            for (const Slic3r::Vec3i32 &f : netz.indices) {
+                const Slic3r::Vec3d a = nach_welt * netz.vertices[f(0)].cast<double>();
+                const Slic3r::Vec3d b = nach_welt * netz.vertices[f(1)].cast<double>();
+                const Slic3r::Vec3d c = nach_welt * netz.vertices[f(2)].cast<double>();
+                const Slic3r::Vec3d kreuz = (b - a).cross(c - a);
+                const double flaeche = 0.5 * kreuz.norm();
+                if (flaeche < 1e-9)
+                    continue;
+                const Slic3r::Vec3d n = kreuz.normalized();
+                const auto schluessel = std::make_tuple(
+                    static_cast<int>(std::lround(n.x() * 100.0)),
+                    static_cast<int>(std::lround(n.y() * 100.0)),
+                    static_cast<int>(std::lround(n.z() * 100.0)));
+                nach_richtung[schluessel] += flaeche;
+            }
+        }
+        if (nach_richtung.empty())
+            return PSM_ERR_NOT_FOUND;
+
+        const auto groesste = std::max_element(
+            nach_richtung.begin(), nach_richtung.end(),
+            [](const auto &l, const auto &r) { return l.second < r.second; });
+
+        const Slic3r::Vec3d richtung(
+            std::get<0>(groesste->first) / 100.0,
+            std::get<1>(groesste->first) / 100.0,
+            std::get<2>(groesste->first) / 100.0);
+
+        s->history_checkpoint("Flach hinlegen");
+        lay_on(o, richtung);
         s->mark_design_changed();
         return PSM_OK;
     PSM_GUARD_END(s)
@@ -2976,6 +3198,33 @@ PSM_API psm_result psm_slice_start(psm_session *s, psm_progress_cb cb, void *use
 
                 psm_slice_stats result_stats{};
                 const Slic3r::PrintStatistics &ps = print_ptr->print_statistics();
+
+                /*
+                 * Verbrauch je Extruder. PrusaSlicer fuehrt drei Karten:
+                 * was ins Modell geht, was der Reinigungsturm kostet und
+                 * was beim Spuelen verworfen wird. Bei einem
+                 * Mehrfarbdruck ist der Turm oft die Haelfte, und wer das
+                 * nicht sieht, wundert sich ueber die Rolle.
+                 */
+                std::vector<psm_extruder_usage> verbrauch;
+                {
+                    std::set<size_t> koepfe;
+                    for (const auto &e : ps.filament_stats)   koepfe.insert(e.first);
+                    for (const auto &e : ps.wipe_tower_stats) koepfe.insert(e.first);
+                    for (const auto &e : ps.flush_stats)      koepfe.insert(e.first);
+                    for (size_t kopf : koepfe) {
+                        psm_extruder_usage u{};
+                        u.extruder = static_cast<int32_t>(kopf);
+                        const auto im_modell = ps.filament_stats.find(kopf);
+                        const auto im_turm   = ps.wipe_tower_stats.find(kopf);
+                        const auto gespuelt  = ps.flush_stats.find(kopf);
+                        if (im_modell != ps.filament_stats.end())   u.volume_mm3 = im_modell->second;
+                        if (im_turm   != ps.wipe_tower_stats.end()) u.wipe_tower_mm3 = im_turm->second;
+                        if (gespuelt  != ps.flush_stats.end())      u.flush_mm3 = gespuelt->second;
+                        verbrauch.push_back(u);
+                    }
+                }
+
                 result_stats.print_time_seconds = ps.normal_print_time_seconds;
                 result_stats.filament_used_mm   = ps.total_used_filament;
                 result_stats.filament_used_g    = ps.total_weight;
@@ -3002,6 +3251,10 @@ PSM_API psm_result psm_slice_start(psm_session *s, psm_progress_cb cb, void *use
                  * PSM_STATE_DONE fallen.
                  */
                 std::lock_guard<std::recursive_mutex> data_lock(s->data_mtx);
+                {
+                    std::lock_guard<std::mutex> result_lock(s->result_mtx);
+                    s->extruder_usage = verbrauch;
+                }
                 if (s->design_revision.load(std::memory_order_acquire) == job_revision) {
                     {
                         std::lock_guard<std::mutex> result_lock(s->result_mtx);
@@ -3055,6 +3308,13 @@ PSM_API psm_slice_state psm_slice_state_get(psm_session *s)
     return static_cast<psm_slice_state>(s->state.load());
 }
 
+PSM_API int psm_slice_result_is_current(psm_session *s)
+{
+    if (s == nullptr)
+        return 0;
+    return s->result_is_current() ? 1 : 0;
+}
+
 PSM_API psm_result psm_slice_wait(psm_session *s, int timeout_ms)
 {
     PSM_GUARD_BEGIN(s)
@@ -3086,6 +3346,32 @@ PSM_API psm_result psm_slice_stats_get(psm_session *s, psm_slice_stats *out)
         }
         std::lock_guard<std::mutex> result_lock(s->result_mtx);
         *out = s->stats;
+        return PSM_OK;
+    PSM_GUARD_END(s)
+}
+
+PSM_API size_t psm_slice_extruder_count(psm_session *s)
+{
+    if (s == nullptr || ! s->result_is_current())
+        return 0;
+    std::lock_guard<std::mutex> result_lock(s->result_mtx);
+    return s->extruder_usage.size();
+}
+
+PSM_API psm_result psm_slice_extruder_at(psm_session *s, size_t index,
+                                         psm_extruder_usage *out)
+{
+    PSM_GUARD_BEGIN(s)
+        if (out == nullptr)
+            return PSM_ERR_INVALID_ARG;
+        if (! s->result_is_current()) {
+            s->set_error("Slice-Ergebnis ist nach einer Projektaenderung veraltet");
+            return PSM_ERR_STALE_RESULT;
+        }
+        std::lock_guard<std::mutex> result_lock(s->result_mtx);
+        if (index >= s->extruder_usage.size())
+            return PSM_ERR_NOT_FOUND;
+        *out = s->extruder_usage[index];
         return PSM_OK;
     PSM_GUARD_END(s)
 }

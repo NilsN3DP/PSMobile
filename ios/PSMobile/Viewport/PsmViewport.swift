@@ -86,6 +86,10 @@ final class PsmViewport {
         psm_viewport_drag_selected(handle, fromX, fromY, toX, toY) != 0
     }
 
+    /// Meldet den Anfang einer Geste - danach setzt der Kern genau
+    /// einen Wiederherstellungspunkt.
+    func gestureBegin() { psm_viewport_gesture_begin(handle) }
+
     @discardableResult
     func scaleSelected(_ factor: Float) -> Bool {
         psm_viewport_scale_selected(handle, factor) != 0

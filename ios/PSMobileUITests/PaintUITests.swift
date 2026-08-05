@@ -16,8 +16,18 @@ final class PaintUITests: XCTestCase {
         app.launchArguments = ["-psm-preset-printer", "-psm-start-advanced", "-psm-load-cube"]
         app.launch()
         XCTAssertTrue(app.otherElements["arbeitsbereich"].waitForExistence(timeout: 60))
+        // Die Objektliste liegt hinter ihrem Reiter, wie auf Android.
+        let objekteReiter = app.buttons["inspektor.objekte"]
+        if objekteReiter.waitForExistence(timeout: 10), objekteReiter.isEnabled {
+            objekteReiter.tap()
+        }
         app.buttons.matching(
             NSPredicate(format: "identifier BEGINSWITH 'advanced.objekt.'")).firstMatch.tap()
+        // Und die Malwerkzeuge liegen im Reiter daneben.
+        let werkzeugeReiter = app.buttons["inspektor.werkzeuge"]
+        if werkzeugeReiter.waitForExistence(timeout: 5), werkzeugeReiter.isEnabled {
+            werkzeugeReiter.tap()
+        }
     }
 
     func testDieWerkzeugeErscheinenMitDerAuswahl() {

@@ -56,6 +56,100 @@ extension PsmCore {
         try check(psm_project_save_3mf(raw, path), "Projekt sichern")
     }
 
+    /// Der Dateiname, den PrusaSlicer fuer dieses Ergebnis vergaebe.
+    ///
+    /// Nicht selbst zusammengesetzt: `output_filename_format` steht im
+    /// Druckprofil und enthaelt Modellname, Schichthoehe, Material,
+    /// Drucker und Druckzeit. Bisher hiess hier jede Datei
+    /// psmobile.gcode - wer drei Varianten auf den Stick legt, findet
+    /// keine wieder.
+    func suggestedGcodeName() -> String {
+        string { psm_gcode_suggested_name(self.raw, $0, $1) } ?? "psmobile.gcode"
+    }
+
+    // MARK: - Custom G-code
+
+    /// Ein Eintrag: auf dieser Hoehe passiert etwas.
+    struct CustomGcode {
+        /// In Millimetern, nicht in Schichten. PrusaSlicer fuehrt es so,
+        /// und eine Schichtnummer waere nach jeder Aenderung der
+        /// Schichthoehe eine andere Stelle.
+        var printZ: Double
+        var type: Kind
+        var extruder: Int32
+        var color: String
+        var extra: String
+
+        enum Kind: UInt32 {
+            case colorChange = 0, pause = 1, toolChange = 2, template = 3, code = 4
+        }
+    }
+
+    func customGcodeList() -> [CustomGcode] {
+        let anzahl = Int(psm_custom_gcode_count(raw))
+        guard anzahl > 0 else { return [] }
+        return (0..<anzahl).compactMap { i in
+            var c = psm_custom_gcode()
+            guard psm_custom_gcode_at(raw, size_t(i), &c) == PSM_OK else { return nil }
+            return CustomGcode(printZ: c.print_z,
+                               type: CustomGcode.Kind(rawValue: c.type.rawValue) ?? .code,
+                               extruder: c.extruder,
+                               color: Self.text(c.color),
+                               extra: Self.text(c.extra))
+        }
+    }
+
+    private func roh(_ e: CustomGcode) -> psm_custom_gcode {
+        var c = psm_custom_gcode()
+        c.print_z = e.printZ
+        c.type = psm_custom_gcode_type(rawValue: e.type.rawValue)
+        c.extruder = e.extruder
+        withUnsafeMutableBytes(of: &c.color) { ziel in
+            let bytes = Array(e.color.utf8.prefix(31))
+            ziel.copyBytes(from: bytes)
+        }
+        withUnsafeMutableBytes(of: &c.extra) { ziel in
+            let bytes = Array(e.extra.utf8.prefix(1023))
+            ziel.copyBytes(from: bytes)
+        }
+        return c
+    }
+
+    func addCustomGcode(_ e: CustomGcode) throws {
+        var c = roh(e)
+        try check(psm_custom_gcode_add(raw, &c), "Custom G-code hinzufuegen")
+    }
+
+    func updateCustomGcode(_ index: Int, _ e: CustomGcode) throws {
+        var c = roh(e)
+        try check(psm_custom_gcode_update(raw, size_t(index), &c), "Custom G-code aendern")
+    }
+
+    func removeCustomGcode(_ index: Int) throws {
+        try check(psm_custom_gcode_remove(raw, size_t(index)), "Custom G-code entfernen")
+    }
+
+    func clearCustomGcode() throws {
+        try check(psm_custom_gcode_clear(raw), "Custom G-code leeren")
+    }
+
+    /// Repariert eine STL und schreibt sie neu.
+    ///
+    /// libslic3r/admesh flickt offene Kanten und verdrehte Normalen
+    /// beim Einlesen - aber nur, wenn jemand danach fragt.
+    func repairSTL(input: String, output: String) throws {
+        try check(psm_stl_repair(raw, input, output), "STL reparieren")
+    }
+
+    /// Wandelt G-Code zwischen ASCII und Prusas binaerem BGCode.
+    ///
+    /// Neuere Drucker lesen binaer, aeltere nur ASCII. Wer eine Datei
+    /// fuer den falschen hat, dreht sie um statt neu zu schneiden.
+    func convertGcode(input: String, output: String, toBinary: Bool) throws {
+        try check(psm_gcode_convert(raw, input, output, toBinary ? 1 : 0),
+                  "G-Code wandeln")
+    }
+
     func exportPlateSTL(path: String) throws {
         try check(psm_plate_export_stl(raw, path), "Platte als STL")
     }

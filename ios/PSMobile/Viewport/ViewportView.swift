@@ -37,8 +37,16 @@ struct ViewportView: UIViewRepresentable {
     /// laesst sich in SwiftUI nicht als Zustand ausdruecken - ein
     /// Zaehler schon.
     var resetViewKey: Int = 0
+    /// Feste Blickrichtung. Wirkt, sobald sich der Zaehler aendert -
+    /// so laesst sich dieselbe Richtung zweimal hintereinander anfahren.
+    var viewPreset: PsmViewport.ViewPreset?
+    var viewPresetKey: Int = 0
     var onPreviewLoaded: ((Int32) -> Void)?
     var onSelect: (Int32) -> Void
+    /// Ruft zurueck, sobald eine Geste das Objekt im Kern veraendert
+    /// hat - Groesse, Lage, Drehung. Ohne das zeigt die Objektleiste
+    /// waehrend des Ziehens noch die Werte von vorher.
+    var onObjectChanged: (() -> Void)?
     var onSurfaceTap: ((PsmViewport.SurfaceHit) -> Void)?
     var onBlockedInput: (() -> Void)?
 
@@ -51,11 +59,14 @@ struct ViewportView: UIViewRepresentable {
     func updateUIView(_ v: PSMGLView, context: Context) {
         v.selectedId = selectedId
         v.onSelect = onSelect
+        v.onObjectChanged = onObjectChanged
         v.onSurfaceTap = onSurfaceTap
         v.onBlockedInput = onBlockedInput
         v.inputEnabled = inputEnabled
         let zuruecksetzen = v.letzterResetKey != resetViewKey
         v.letzterResetKey = resetViewKey
+        let blickwinkel = v.letzterViewKey != viewPresetKey ? viewPreset : nil
+        v.letzterViewKey = viewPresetKey
         v.perform { vp in
             vp.setSelections(selectedIds, primary: selectedId)
             if vp.gizmo != gizmo { vp.gizmo = gizmo }
@@ -69,6 +80,7 @@ struct ViewportView: UIViewRepresentable {
                 vp.setLayerRange(first: bereich.lowerBound, last: bereich.upperBound)
             }
             if zuruecksetzen { vp.resetView() }
+            if let blick = blickwinkel { vp.setView(blick) }
             vp.invalidate()
         }
         v.requestRender()
@@ -104,10 +116,12 @@ final class PSMGLView: UIView {
     /// Zuletzt ausgefuehrtes Zuruecksetzen. Ohne diesen Merker liefe es
     /// bei jeder Neuzeichnung erneut.
     var letzterResetKey = 0
+    var letzterViewKey = 0
     /// Ob die Werkzeugwege schon geladen sind. Sie noch einmal zu laden
     /// kostet Sekunden und aendert nichts.
     var vorschauGeladen = false
     var onSelect: ((Int32) -> Void)?
+    var onObjectChanged: (() -> Void)?
     var onSurfaceTap: ((PsmViewport.SurfaceHit) -> Void)?
     var onBlockedInput: (() -> Void)?
 
@@ -116,6 +130,19 @@ final class PSMGLView: UIView {
     private var lastSpan: CGFloat = 0
     private var moved = false
     private var dragObject = false
+    /// Der Takt des Bildschirms, und ob fuers naechste Bild etwas zu
+    /// tun ist.
+    private var takt: CADisplayLink?
+    private var brauchtBild = false
+    private var letzteMeldung: CFTimeInterval = 0
+    /// Ob dieser Zug ein Malstrich ist. Dann dreht sich die Kamera
+    /// nicht mit - sonst malte man auf ein wanderndes Ziel.
+    private var malstrich = false
+    /// Wo zuletzt ein Tupfer sass, in Pixeln.
+    private var letzterTupfer = CGPoint(x: -1000, y: -1000)
+    /// Abstand zwischen zwei Tupfern. Enger waere Rechenzeit ohne Bild:
+    /// der Pinsel ist ein Vielfaches davon breit.
+    private static let tupferAbstandPx: CGFloat = 6
     /// Welcher Griff angefasst wurde. Bleibt fuer die Dauer des Zuges
     /// fest - laesst man ihn beim Ziehen los, spraenge das Objekt sonst
     /// auf eine andere Achse, sobald der Finger einem anderen Griff
@@ -171,7 +198,31 @@ final class PSMGLView: UIView {
     /// haengt nicht am Zeichenzyklus von UIKit, sie bekommt ihren Inhalt
     /// vom Renderbuffer. Der Umweg wuerde nur einen Frame Verzoegerung
     /// einbauen, und beim Ziehen mit dem Finger merkt man das.
+    /// Bescheid sagen, dass sich etwas geaendert hat.
+    ///
+    /// Zeichnet nicht selbst: gezeichnet wird im Takt des Bildschirms.
+    /// Zehn Aufrufe zwischen zwei Bildern kosten so ein Bild, nicht
+    /// zehn.
     func requestRender() {
+        brauchtBild = true
+        if takt == nil { starteTakt() }
+    }
+
+    private func starteTakt() {
+        let link = CADisplayLink(target: self, selector: #selector(taktschlag))
+        link.add(to: .main, forMode: .common)
+        takt = link
+    }
+
+    @objc private func taktschlag() {
+        guard brauchtBild else { return }
+        brauchtBild = false
+        zeichne()
+    }
+
+    /// Sofort zeichnen. Nur fuer den Fall, dass es kein spaeter gibt -
+    /// beim Aufbau und beim Groessenwechsel.
+    func zeichne() {
         guard let vp = viewport, framebuffer != 0 else { return }
         EAGLContext.setCurrent(context)
         glBindFramebuffer(GLenum(GL_FRAMEBUFFER), framebuffer)
@@ -180,8 +231,14 @@ final class PSMGLView: UIView {
         context.presentRenderbuffer(Int(GL_RENDERBUFFER))
     }
 
+    deinit {
+        takt?.invalidate()
+    }
+
     func release() {
         EAGLContext.setCurrent(context)
+        takt?.invalidate()
+        takt = nil
         viewport = nil
         deleteBuffers()
         EAGLContext.setCurrent(nil)
@@ -208,7 +265,7 @@ final class PSMGLView: UIView {
             }
         }
         viewport?.resize(width: Int32(bufferWidth), height: Int32(bufferHeight))
-        requestRender()
+        zeichne()
     }
 
     private func createBuffers() {
@@ -254,6 +311,18 @@ final class PSMGLView: UIView {
         (Float(p.x * contentScaleFactor), Float(p.y * contentScaleFactor))
     }
 
+    /// Sagt der Oberflaeche Bescheid, aber nicht oefter als noetig.
+    ///
+    /// Bei 120 Bildern in der Sekunde jedes Mal die ganze Objektliste
+    /// aus dem Kern zu holen waere Verschwendung; zwoelf Mal in der
+    /// Sekunde sieht der Mensch als fluessig an.
+    private func meldeAenderung() {
+        let jetzt = CACurrentMediaTime()
+        guard jetzt - letzteMeldung > 0.08 else { return }
+        letzteMeldung = jetzt
+        onObjectChanged?()
+    }
+
     private func span(_ touches: Set<UITouch>) -> CGFloat {
         let pts = touches.map { $0.location(in: self) }
         guard pts.count >= 2 else { return 0 }
@@ -276,27 +345,46 @@ final class PSMGLView: UIView {
             lastSpan = span(all)
             lastPoint = mid(all)
             moved = true    // ab zwei Fingern ist es keine Auswahl mehr
+            vp.gestureBegin()
             return
         }
 
         lastPoint = all.first?.location(in: self) ?? .zero
         moved = false
+        // Ein Zug ist ein Schritt: der Kern setzt danach genau einen
+        // Wiederherstellungspunkt, nicht einen je Ereignis.
+        vp.gestureBegin()
         let (x, y) = px(lastPoint)
 
         EAGLContext.setCurrent(context)
+
+        // Ein aktives Malwerkzeug hat Vorrang vor allem anderen: keine
+        // Griffe, kein Verschieben, keine Kameradrehung. Wer malt, will
+        // malen.
+        if let tap = onSurfaceTap {
+            gizmoAxis = -1
+            dragObject = false
+            malstrich = true
+            letzterTupfer = CGPoint(x: CGFloat(x), y: CGFloat(y))
+            if let hit = vp.surfacePick(x: x, y: y) {
+                tap(hit)
+                requestRender()
+            }
+            return
+        }
+        malstrich = false
+
         // Zuerst die Griffe: sie liegen ueber dem Objekt und haben Vorrang
         // vor Auswahl und Kameradrehung.
         gizmoAxis = (vp.mode == .editor && selectedId >= 0)
             ? vp.gizmoPick(x: x, y: y, radius: PSMGLView.handleRadiusPx)
             : -1
 
-        // In der Vorschau gibt es nichts anzufassen - dort dreht jede
-        // Fingerbewegung nur die Kamera.
-        dragObject = onSurfaceTap == nil
-            && gizmoAxis < 0
-            && vp.mode == .editor
-            && selectedId >= 0
-            && vp.pick(x: x, y: y) == selectedId
+        // Frueher schob ein Zug auf dem Objekt es ueber das Bett. Das
+        // war zu leicht ausgeloest: dieselbe Geste dreht ueberall sonst
+        // die Kamera, und wer nur hinsehen wollte, hatte schon
+        // verschoben. Verschoben wird an den Pfeilen.
+        dragObject = false
     }
 
     override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent?) {
@@ -313,6 +401,7 @@ final class PSMGLView: UIView {
                     // sonst die Kamera.
                     if vp.gizmo == .scale && selectedId >= 0 {
                         vp.scaleSelected(f)
+                        meldeAenderung()
                     } else {
                         vp.zoom(f)
                     }
@@ -320,7 +409,12 @@ final class PSMGLView: UIView {
                 lastSpan = s
             }
             let m = mid(all)
-            vp.pan(dx: Float(m.x - lastPoint.x), dy: Float(m.y - lastPoint.y))
+            // In Pixeln, nicht in Punkten. Der Viewport rechnet Wege
+            // gegen seine Puffergroesse, und die ist auf einem
+            // Retina-Schirm doppelt so gross wie die Punktflaeche - in
+            // Punkten geschoben fuehlt sich alles halb so weit an.
+            vp.pan(dx: Float((m.x - lastPoint.x) * contentScaleFactor),
+                   dy: Float((m.y - lastPoint.y) * contentScaleFactor))
             lastPoint = m
             moved = true
             requestRender()
@@ -331,12 +425,27 @@ final class PSMGLView: UIView {
         let (fx, fy) = px(lastPoint)
         let (tx, ty) = px(p)
 
+        if malstrich, let tap = onSurfaceTap {
+            let weit = hypot(CGFloat(tx) - letzterTupfer.x, CGFloat(ty) - letzterTupfer.y)
+            if weit >= PSMGLView.tupferAbstandPx {
+                letzterTupfer = CGPoint(x: CGFloat(tx), y: CGFloat(ty))
+                if let hit = vp.surfacePick(x: tx, y: ty) { tap(hit) }
+            }
+            lastPoint = p
+            moved = true
+            requestRender()
+            return
+        }
+
         if gizmoAxis >= 0 {
             vp.gizmoDrag(axis: gizmoAxis, fromX: fx, fromY: fy, toX: tx, toY: ty)
+            meldeAenderung()
         } else if dragObject {
             vp.dragSelected(fromX: fx, fromY: fy, toX: tx, toY: ty)
+            meldeAenderung()
         } else {
-            vp.orbit(dx: Float(p.x - lastPoint.x), dy: Float(p.y - lastPoint.y))
+            vp.orbit(dx: Float((p.x - lastPoint.x) * contentScaleFactor),
+                     dy: Float((p.y - lastPoint.y) * contentScaleFactor))
         }
 
         lastPoint = p
@@ -352,7 +461,18 @@ final class PSMGLView: UIView {
             onBlockedInput?()
             return
         }
-        defer { gizmoAxis = -1; dragObject = false; lastSpan = 0 }
+        defer {
+            // Der letzte Wert muss stimmen, auch wenn die Drossel oben
+            // die letzte Meldung geschluckt hat.
+            if gizmoAxis >= 0 || dragObject || lastSpan > 0 {
+                letzteMeldung = 0
+                meldeAenderung()
+            }
+            gizmoAxis = -1; dragObject = false; lastSpan = 0; malstrich = false
+        }
+        // Beim Malen ist schon alles gemalt - ein Tupfer zum Abschied
+        // saesse dort, wo der Finger abhebt, und das ist selten gewollt.
+        if malstrich { requestRender(); return }
         guard let vp = viewport, !moved,
               let p = touches.first?.location(in: self) else { return }
 
@@ -370,6 +490,7 @@ final class PSMGLView: UIView {
     override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent?) {
         gizmoAxis = -1
         dragObject = false
+        malstrich = false
         lastSpan = 0
     }
 }

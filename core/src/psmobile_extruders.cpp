@@ -291,6 +291,36 @@ PSM_API psm_result psm_preset_config_get(psm_session *s, psm_preset_type type,
     }
 }
 
+PSM_API psm_result psm_preset_option_at(psm_session *s, psm_preset_type type,
+                                        const char *preset_name, const char *key,
+                                        char *out, size_t out_cap)
+{
+    if (s == nullptr || preset_name == nullptr || key == nullptr ||
+        out == nullptr || out_cap == 0)
+        return PSM_ERR_INVALID_ARG;
+    std::lock_guard<std::recursive_mutex> data_lock(s->data_mtx);
+    PresetCollection *collection = collection_of(s, type);
+    if (collection == nullptr)
+        return PSM_ERR_NOT_FOUND;
+    try {
+        const Preset *preset = collection->find_preset(preset_name, false);
+        if (preset == nullptr)
+            return PSM_ERR_NOT_FOUND;
+        const DynamicPrintConfig &config = preset->config;
+        if (! config.has(key))
+            return PSM_ERR_NOT_FOUND;
+        const ConfigOption *option = config.option(key);
+        if (const auto *string = dynamic_cast<const ConfigOptionString *>(option))
+            copy_str(out, out_cap, string->value);
+        else
+            copy_str(out, out_cap, config.opt_serialize(key));
+        return PSM_OK;
+    } catch (const std::exception &e) {
+        s->set_error(e.what());
+        return PSM_ERR_GENERIC;
+    }
+}
+
 PSM_API psm_result psm_preset_config_set(psm_session *s, psm_preset_type type,
                                          const char *key, const char *value)
 {

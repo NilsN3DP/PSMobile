@@ -32,6 +32,7 @@ struct PSMarke: View {
 struct SimpleModeView: View {
 
     @EnvironmentObject private var model: SlicerModel
+    var onHome: () -> Void = {}
     var onOpenAdvanced: () -> Void = {}
     var onOpenPrinterSetup: () -> Void = {}
     var onAppSettings: () -> Void = {}
@@ -55,7 +56,13 @@ struct SimpleModeView: View {
     @State private var gizmo: PsmViewport.Gizmo = .move
     /// Bett oder G-Code-Vorschau. Die Vorschau gibt es erst nach einem
     /// Schnitt - vorher ist nichts anzuzeigen.
+    /// Ob das Werkzeug "Auf Flaeche legen" an ist.
+    @State private var aufFlaeche = false
     @State private var vorschau = false
+    /// Ob nach dem laufenden Schnitt die Vorschau aufgehen soll. Wer auf
+    /// "Vorschau" tippt, will die Wege sehen - nicht die
+    /// Zusammenfassung und dann noch einmal tippen.
+    @State private var nachDemSchnittZeigen = false
     @State private var schicht: Double = 0
     @State private var schichten: Int32 = 0
     @State private var ansichtZuruecksetzen = 0
@@ -78,9 +85,14 @@ struct SimpleModeView: View {
                let id = model.selectedId,
                let objekt = model.objects.first(where: { $0.id == id }) {
                 VStack {
-                    SimpleObjectBarView(model: model, objekt: objekt) {
-                        model.select(nil)
-                    }
+                    SimpleObjectBarView(
+                        model: model,
+                        objekt: objekt,
+                        onClearSelection: {
+                            aufFlaeche = false
+                            model.select(nil)
+                        },
+                        onFlaechenwahl: { aufFlaeche = $0 })
                     .padding(.top, ps.pt(kompakt ? 116 : 148))
                     Spacer()
                 }
@@ -99,6 +111,21 @@ struct SimpleModeView: View {
                 SliceBlockerSheet(gruende: hinderungsgruende) { hinderungsgruende = [] }
             }
             PSMarke(name: "simple.arbeitsbereich")
+        }
+        // Wer auf "Vorschau" tippt und dafuer warten musste, will
+        // danach die Wege sehen - nicht die Zusammenfassung und dann
+        // noch einmal tippen.
+        .onChange(of: model.progress) { neu in
+            guard nachDemSchnittZeigen else { return }
+            if case .done = neu {
+                nachDemSchnittZeigen = false
+                model.dismissProgress()
+                vorschauUmschalten()
+            } else if case .failed = neu {
+                nachDemSchnittZeigen = false
+            } else if case .cancelled = neu {
+                nachDemSchnittZeigen = false
+            }
         }
         .fileImporter(isPresented: $zeigeImporter,
                       allowedContentTypes: [.item],
@@ -123,7 +150,7 @@ struct SimpleModeView: View {
                 session: session,
                 shaderDir: model.shaderDir,
                 selectedId: model.selectedId ?? -1,
-                selectedIds: model.selectedId.map { [$0] } ?? [],
+                selectedIds: Array(model.selectedIds),
                 invalidateKey: model.sceneRevision,
                 // Bei offenem Panel darf der Viewport die Beruehrung nicht
                 // schlucken: ein Tippen daneben soll das Panel schliessen,
@@ -143,6 +170,24 @@ struct SimpleModeView: View {
                     if anzahl == 0 { vorschau = false }
                 },
                 onSelect: { model.select($0 < 0 ? nil : $0) },
+                onObjectChanged: { model.refresh() },
+                // Nur solange das Werkzeug an ist. Sonst gehoert jede
+                // Beruehrung der Kamera, und ein Tippen ist eine
+                // Auswahl.
+                onSurfaceTap: (aufFlaeche && model.selectedId != nil)
+                    ? { (treffer: PsmViewport.SurfaceHit) in
+                        guard let id = model.selectedId else { return }
+                        model.layOnFace(id,
+                                        volume: Int(treffer.volumeIndex),
+                                        facet: Int(treffer.facetIndex))
+                        // Das Werkzeug bleibt an. Sich nach einem
+                        // Tippen selbst abzuschalten war gut gemeint -
+                        // beim ersten Versuch trifft man aber selten
+                        // die gemeinte Flaeche, und dann steht man vor
+                        // einem Werkzeug, das nicht mehr reagiert.
+                        // Aus geht es ueber denselben Knopf.
+                      }
+                    : nil,
                 onBlockedInput: { panel = .workspace }
             )
             .ignoresSafeArea()
@@ -153,9 +198,15 @@ struct SimpleModeView: View {
 
     private var kopfzeile: some View {
         HStack {
-            Image(systemName: "person.crop.circle")
-                .font(.system(size: ps.font(kompakt ? 24 : 28)))
-                .foregroundStyle(PrusaColors.textMuted)
+            Button(action: onHome) {
+                Image(systemName: "house")
+                    .font(.system(size: ps.font(kompakt ? 22 : 26)))
+                    .foregroundStyle(PrusaColors.textMuted)
+                    .frame(width: ps.touch(44), height: ps.touch(44))
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("kopf.start")
             Spacer()
             HStack(spacing: ps.pt(8)) {
                 Text("S")
@@ -178,13 +229,32 @@ struct SimpleModeView: View {
                 }
             }
             Spacer()
-            Image(systemName: "bell")
-                .font(.system(size: ps.font(kompakt ? 24 : 28)))
-                .foregroundStyle(PrusaColors.orange)
+            kopfMenue
         }
         .padding(.horizontal, ps.pt(kompakt ? 16 : 20))
         .padding(.vertical, ps.pt(kompakt ? 6 : 14))
         .background(PrusaColors.background)
+    }
+
+    /// Alles, was sonst in keiner Leiste steht.
+    ///
+    /// Die Ersteinrichtung steht bewusst nicht hier, sondern auf der
+    /// Startseite: man braucht sie selten, und was man selten braucht,
+    /// verstellt sonst die Sicht auf das Haeufige.
+    private var kopfMenue: some View {
+        Menu {
+            Button(st("Start page", "Startseite"), action: onHome)
+            Button(st("App settings", "App-Einstellungen"), action: onAppSettings)
+            Divider()
+            Button(st("Expert mode", "Expertenmodus"), action: onOpenAdvanced)
+        } label: {
+            Image(systemName: "ellipsis.circle")
+                .font(.system(size: ps.font(kompakt ? 22 : 26)))
+                .foregroundStyle(PrusaColors.orange)
+                .frame(width: ps.touch(44), height: ps.touch(44))
+                .contentShape(Rectangle())
+        }
+        .accessibilityIdentifier("kopf.menue")
     }
 
     // MARK: - Werkzeugleiste
@@ -205,12 +275,11 @@ struct SimpleModeView: View {
                 }
             }
             Spacer(minLength: 0)
-            // Beide Knoepfe fuehren zum selben Schnitt - "Vorschau" und
-            // "G-Code" unterscheiden sich in der Referenz darin, was
-            // danach angezeigt wird. Bis die G-Code-Vorschau steht, ist
-            // das dasselbe.
-            werkzeug(labels[4], gewaehlt: false,
-                     breite: ps.pt(kompakt ? 62 : 74)) { schneiden() }
+            // "Vorschau" zeigt die Werkzeugwege, "G-Code" schneidet und
+            // gibt die Datei aus. Frueher taten beide dasselbe, weil es
+            // die Vorschau noch nicht gab.
+            werkzeug(labels[4], gewaehlt: vorschau,
+                     breite: ps.pt(kompakt ? 62 : 74)) { vorschauZeigen() }
             werkzeug(labels[5], gewaehlt: true,
                      breite: ps.pt(kompakt ? 84 : 100)) { schneiden() }
         }
@@ -353,6 +422,27 @@ struct SimpleModeView: View {
 
     /// Die Vorschau wird beim ersten Hinsehen geladen - die Werkzeugwege
     /// eines Drucks sind zu gross, um sie vorsorglich vorzuhalten.
+    /// Vorschau oeffnen - und nur dann rechnen, wenn es sein muss.
+    ///
+    /// Der Kern weiss, ob sein Ergebnis noch zur Szene passt. Passt es,
+    /// kostet das Hinsehen nichts; sonst wird geschnitten, und die
+    /// Vorschau geht danach von selbst auf.
+    private func vorschauZeigen() {
+        if vorschau { vorschau = false; return }
+        if model.sliceResultIsCurrent {
+            vorschauUmschalten()
+            return
+        }
+        let gruende = model.sliceBlockers
+        if gruende.isEmpty {
+            panel = .workspace
+            nachDemSchnittZeigen = true
+            model.slice()
+        } else {
+            hinderungsgruende = gruende
+        }
+    }
+
     private func vorschauUmschalten() {
         if vorschau {
             vorschau = false
@@ -385,31 +475,18 @@ struct SimpleModeView: View {
 
     /// Bis zu welcher Schicht die Vorschau zeigt.
     ///
-    /// Waagerecht am unteren Rand. Senkrecht am linken Rand waere naeher
-    /// an dem, was der Regler bedeutet - aber ein gedrehter Regler
-    /// stimmt in seinen Trefferflaechen nicht mehr mit dem ueberein, was
-    /// man sieht, und liess sich weder von Hand noch im Test zuverlaessig
-    /// bewegen.
+    /// Rechts und senkrecht, wie in PrusaSlicer: eine Schichthoehe ist
+    /// eine senkrechte Groesse, und oben ist oben.
     private var schichtregler: some View {
-        VStack {
+        HStack {
             Spacer()
-            HStack(spacing: ps.pt(12)) {
-                Text(st("Layer", "Schicht"))
-                    .font(.system(size: ps.font(11)))
-                    .foregroundStyle(PrusaColors.textMuted)
-                Slider(value: $schicht, in: 0...Double(max(schichten - 1, 1)), step: 1)
-                    .tint(PrusaColors.orange)
-                    .accessibilityIdentifier("vorschau.schicht")
-                Text("\(Int(schicht) + 1)/\(schichten)")
-                    .font(.system(size: ps.font(11)))
-                    .foregroundStyle(PrusaColors.textPrimary)
-                    .frame(minWidth: ps.pt(64), alignment: .trailing)
-            }
-            .padding(.horizontal, ps.pt(16))
-            .frame(height: ps.touch(52))
-            .background(PrusaColors.panel.opacity(0.94))
-            .clipShape(RoundedRectangle(cornerRadius: ps.pt(3)))
-            .padding(ps.pt(12))
+            SenkrechterRegler(wert: $schicht,
+                              maximum: Double(max(schichten - 1, 1)),
+                              beschriftung: "\(Int(schicht) + 1)/\(schichten)")
+                .frame(width: ps.pt(54))
+                .padding(.trailing, ps.pt(76))
+                .padding(.vertical, ps.pt(90))
+                .accessibilityIdentifier("vorschau.schicht")
         }
     }
 
@@ -578,6 +655,9 @@ struct SimpleModeView: View {
         return VStack(alignment: .leading, spacing: ps.pt(8)) {
             titel(st("PROJECTS", "PROJEKTE"))
             HStack(spacing: ps.pt(12)) {
+                panelAktion(st("New project", "Neues Projekt"), kennung: "projekt.neu") {
+                    model.newProject()
+                }
                 panelAktion(st("Open model", "Modell öffnen"), kennung: "projekt.modell") {
                     zweck = .modell
                     zeigeImporter = true
@@ -609,6 +689,7 @@ struct SimpleModeView: View {
                     .accessibilityIdentifier("projekt.weitergeben")
                 }
             }
+            zuletzt
             projektZeile(
                 titel: text.title,
                 drucker: drucker.isEmpty
@@ -620,6 +701,57 @@ struct SimpleModeView: View {
                 detail: text.session
             )
         }
+    }
+
+    /// Die gesicherten Projekte, neueste oben.
+    ///
+    /// Acht Zeilen reichen: wer weiter zurueck will, nimmt "Projekt
+    /// oeffnen" und die Dateien-App - dort liegt derselbe Ordner.
+    @ViewBuilder private var zuletzt: some View {
+        let dateien = model.recentProjects()
+        if !dateien.isEmpty {
+            Text(st("Recent", "Zuletzt"))
+                .font(.system(size: ps.font(11)))
+                .foregroundStyle(PrusaColors.textMuted)
+                .padding(.top, ps.pt(4))
+            ForEach(Array(dateien.enumerated()), id: \.offset) { index, url in
+                Button {
+                    zweck = .projekt
+                    model.load(url: url)
+                } label: {
+                    HStack(spacing: ps.pt(8)) {
+                        Text("▣")
+                            .font(.system(size: ps.font(13)))
+                            .foregroundStyle(PrusaColors.orange)
+                        Text(url.deletingPathExtension().lastPathComponent)
+                            .font(.system(size: ps.font(13)))
+                            .foregroundStyle(PrusaColors.textPrimary)
+                            .lineLimit(1)
+                        Spacer()
+                        Text(datum(url))
+                            .font(.system(size: ps.font(10)))
+                            .foregroundStyle(PrusaColors.textMuted)
+                    }
+                    .padding(.horizontal, ps.pt(10))
+                    .frame(height: ps.touch(44))
+                    .background(PrusaColors.panelRaised)
+                    .clipShape(RoundedRectangle(cornerRadius: ps.pt(3)))
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("projekt.zuletzt.\(index)")
+            }
+        }
+    }
+
+    private func datum(_ url: URL) -> String {
+        let wert = (try? url.resourceValues(forKeys: [.contentModificationDateKey]))?
+            .contentModificationDate
+        guard let wert else { return "" }
+        let f = DateFormatter()
+        f.dateStyle = .short
+        f.timeStyle = .short
+        return f.string(from: wert)
     }
 
     private func panelAktion(_ label: String,
@@ -671,28 +803,12 @@ struct SimpleModeView: View {
     // MARK: - Drucker
 
     private var druckerPanel: some View {
-        let modelle = EasyModeState.shared.printerModelsWithNozzles(
-            rawPresets: model.presetNames(.printer))
-        let gewaehlt = model.selectedPreset(for: "printer") ?? ""
-        return VStack(alignment: .leading, spacing: ps.pt(10)) {
+        VStack(alignment: .leading, spacing: ps.pt(10)) {
             titel(st("PRINTER", "DRUCKER"))
             hinweis(st("Choose a printer model · select the nozzle in the slice summary",
                        "Druckermodell wählen · die Düse wird in der Slice-Übersicht festgelegt"))
-            if modelle.isEmpty {
-                leeresPanel(st("No printer configured", "Noch kein Drucker eingerichtet"),
-                            st("Set up printer", "Drucker einrichten"),
-                            onOpenPrinterSetup)
-            } else {
-                ForEach(Array(modelle.enumerated()), id: \.offset) { _, modell in
-                    ForEach(Array(modell.variants.enumerated()), id: \.offset) { _, wahl in
-                        druckerKarte(modell: modell.label,
-                                     duese: wahl.label,
-                                     gewaehlt: wahl.rawPreset == gewaehlt) {
-                            model.selectPreset(.printer, wahl.rawPreset)
-                            panel = .workspace
-                        }
-                    }
-                }
+            DruckerAuswahlView(model: model, onSetup: onOpenPrinterSetup) {
+                model.selectPreset(.printer, $0)
             }
         }
     }
@@ -769,13 +885,9 @@ struct SimpleModeView: View {
                 leeresPanel(st("No material available", "Kein Material vorhanden"),
                             st("Open Advanced Mode", "Advanced Mode öffnen"),
                             onOpenAdvanced)
-            }
-            ForEach(filamente, id: \.self) { name in
-                referenzWahl(titel: EasyModeState.shared.profileDisplayLabel(rawPreset: name),
-                             detail: name,
-                             gewaehlt: name == gewaehlt) {
-                    model.selectPreset(.filament, name)
-                    panel = .workspace
+            } else {
+                MaterialAuswahlView(model: model, gewaehlt: gewaehlt) {
+                    model.selectPreset(.filament, $0)
                 }
             }
         }
@@ -975,18 +1087,18 @@ struct SimpleModeView: View {
         let brim = model.config("brim_width") ?? "0"
         return VStack(alignment: .leading, spacing: ps.pt(2)) {
             titel(st("INCREASE ADHESION", "HAFTUNG VERBESSERN"))
-            referenzWahl(titel: st("Disabled", "Aus"),
-                         detail: st("No additional bed adhesion",
-                                    "Keine zusätzliche Haftung"),
-                         gewaehlt: brim == "0") {
-                model.setConfig("brim_width", "0")
-            }
             referenzWahl(titel: st("Decide automatically", "Automatisch entscheiden"),
                          detail: AdhesionAdvice.shared.explain(advice: rat),
                          gewaehlt: false) {
                 model.setConfig("brim_width", String(rat.brimWidthMm))
             }
             .accessibilityIdentifier("simple.haftung.automatisch")
+            referenzWahl(titel: st("Disabled", "Aus"),
+                         detail: st("No additional bed adhesion",
+                                    "Keine zusätzliche Haftung"),
+                         gewaehlt: brim == "0") {
+                model.setConfig("brim_width", "0")
+            }
             referenzWahl(titel: st("Outline around the model", "Rand um das Modell"),
                          detail: st("A brim helps hold edges down while printing.",
                                     "Ein Rand hält die Kanten während des Drucks unten."),
@@ -1036,7 +1148,6 @@ struct SimpleModeView: View {
                              detail: name,
                              gewaehlt: name == gewaehlt) {
                     model.selectPreset(.print, name)
-                    panel = .workspace
                 }
             }
         }

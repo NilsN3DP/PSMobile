@@ -40,18 +40,31 @@ final class AdvancedWorkflowUITests: XCTestCase {
         XCTAssertFalse(app.otherElements["advanced.objectTree"].exists,
                        "Der Inspektor steht ohne Auswahl da")
 
+        // Die Objektliste liegt hinter ihrem Reiter, wie auf Android.
+        let objekteReiter = app.buttons["inspektor.objekte"]
+        if objekteReiter.waitForExistence(timeout: 10), objekteReiter.isEnabled {
+            objekteReiter.tap()
+        }
         app.buttons.matching(
             NSPredicate(format: "identifier BEGINSWITH 'advanced.objekt.'")).firstMatch.tap()
 
-        XCTAssertTrue(app.buttons["advanced.gizmo.rotate"].waitForExistence(timeout: 5),
+        // Der Inspektor zeigt Zahlen zum Objekt - daran erkennt man ihn,
+        // seit die Griffe oben in der Werkzeugleiste stehen und dort
+        // auch ohne Auswahl vorhanden (nur ausgegraut) sind.
+        XCTAssertTrue(app.textFields["advanced.scale.prozent"].waitForExistence(timeout: 5),
                       "Der Inspektor erscheint nicht")
-        // Die Griffe lassen sich umschalten - der Viewport kennt sie
-        // laengst, erreichbar waren sie im Advanced Mode bisher nicht.
+        // Und die Griffe lassen sich umschalten, jetzt von oben.
         app.buttons["advanced.gizmo.rotate"].tap()
-        XCTAssertTrue(app.buttons["advanced.gizmo.scale"].exists)
+        XCTAssertTrue(app.buttons["advanced.gizmo.scale"].isEnabled,
+                      "Der Griff zum Skalieren ist mit Auswahl nicht bedienbar")
     }
 
     func testEineVierteldrehungKommtAmModellAn() {
+        // Die Objektliste liegt hinter ihrem Reiter, wie auf Android.
+        let objekteReiter = app.buttons["inspektor.objekte"]
+        if objekteReiter.waitForExistence(timeout: 10), objekteReiter.isEnabled {
+            objekteReiter.tap()
+        }
         app.buttons.matching(
             NSPredicate(format: "identifier BEGINSWITH 'advanced.objekt.'")).firstMatch.tap()
         XCTAssertTrue(app.buttons["advanced.drehen.rechts"].waitForExistence(timeout: 5))
@@ -69,6 +82,11 @@ final class AdvancedWorkflowUITests: XCTestCase {
     }
 
     func testEinpassenAendertDieGroesse() {
+        // Die Objektliste liegt hinter ihrem Reiter, wie auf Android.
+        let objekteReiter = app.buttons["inspektor.objekte"]
+        if objekteReiter.waitForExistence(timeout: 10), objekteReiter.isEnabled {
+            objekteReiter.tap()
+        }
         app.buttons.matching(
             NSPredicate(format: "identifier BEGINSWITH 'advanced.objekt.'")).firstMatch.tap()
         let prozent = app.textFields["advanced.scale.prozent"]
@@ -80,6 +98,42 @@ final class AdvancedWorkflowUITests: XCTestCase {
         // Ein 20-mm-Wuerfel auf einem 250er Bett wird deutlich groesser.
         XCTAssertTrue(warte(bis: { (prozent.value as? String) != "100.0" }),
                       "Einpassen hat die Groesse nicht veraendert")
+    }
+
+    func testEinTeilLaesstSichAnlegenUndWiederEntfernen() {
+        // Aussparung, Modifier, Stuetzenwunsch: das, wofuer man sonst
+        // das Programm wechselt. Auf Android laengst da, auf iOS bis
+        // hierher nicht.
+        let objekteReiter = app.buttons["inspektor.objekte"]
+        if objekteReiter.waitForExistence(timeout: 10), objekteReiter.isEnabled {
+            objekteReiter.tap()
+        }
+        app.buttons.matching(
+            NSPredicate(format: "identifier BEGINSWITH 'advanced.objekt.'")).firstMatch.tap()
+
+        let knopf = app.buttons["advanced.teilHinzufuegen"]
+        XCTAssertTrue(knopf.waitForExistence(timeout: 10),
+                      "Kein Weg zu einem neuen Teil")
+        // Vorher hat der Wuerfel genau einen Koerper - und der bleibt
+        // ohne Entfernen-Knopf, sonst bliebe ein Objekt ohne Geometrie.
+        XCTAssertFalse(app.buttons["advanced.teil.0.entfernen"].exists,
+                       "Der Modellkoerper darf nicht entfernbar sein")
+
+        knopf.tap()
+        XCTAssertTrue(app.buttons["teil.hinzufuegen"].waitForExistence(timeout: 5),
+                      "Das Blatt fehlt")
+        app.buttons["teil.art.1"].tap()          // Aussparung
+        app.buttons["teil.form.1"].tap()         // Zylinder
+        app.buttons["teil.hinzufuegen"].tap()
+
+        // Der Beweis ist die Liste, nicht das geschlossene Blatt.
+        let entfernen = app.buttons["advanced.teil.1.entfernen"]
+        XCTAssertTrue(entfernen.waitForExistence(timeout: 10),
+                      "Das neue Teil steht nicht in der Liste")
+
+        entfernen.tap()
+        XCTAssertTrue(warte(bis: { !app.buttons["advanced.teil.1.entfernen"].exists }),
+                      "Das Teil liess sich nicht wieder entfernen")
     }
 
     private func warte(bis bedingung: () -> Bool, timeout: TimeInterval = 15) -> Bool {

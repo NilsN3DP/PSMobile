@@ -32,8 +32,12 @@ class SimpleModeStateTest {
     @Test
     fun supportAndAdhesionMenusKeepTheReferenceGroups() {
         assertEquals(listOf("Disabled", "Everywhere", "Build plate only"), SimpleModeState.supportGroups())
+        // Bewusst nicht die Reihenfolge der Referenz: "Automatisch
+        // entscheiden" steht oben. In der Mitte sah der Rat aus wie eine
+        // dritte Einstellung, die es nicht gibt - und ein Rat kommt vor
+        // die Wahl.
         assertEquals(
-            listOf("Disabled", "Decide automatically", "Outline around the model"),
+            listOf("Decide automatically", "Disabled", "Outline around the model"),
             SimpleModeState.adhesionChoices(),
         )
     }

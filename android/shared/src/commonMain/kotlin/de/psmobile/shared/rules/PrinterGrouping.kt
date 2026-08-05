@@ -57,4 +57,28 @@ object PrinterGrouping {
 
     /** Familie fehlt in der Vendor-Datei - kommt vor, soll aber sichtbar sein. */
     const val OTHER = "Weitere"
+
+    /**
+     * Der Hersteller aus dem Schluessel `Hersteller:Modell`.
+     *
+     * Nicht erfunden, sondern gelesen: PrusaSlicer fuehrt seine Modelle
+     * so, und die Ersteinrichtung gruppiert oberste Ebene danach. Wer
+     * einen Voron sucht, will sich nicht durch Prusa-Familien lesen.
+     */
+    fun vendorOf(key: String): String =
+        key.substringBefore(':', UNKNOWN_VENDOR).ifBlank { UNKNOWN_VENDOR }
+
+    const val UNKNOWN_VENDOR = "Weitere"
+
+    /**
+     * Die Hersteller in der Reihenfolge ihres ersten Auftretens, mit
+     * den Positionen ihrer Modelle.
+     */
+    fun groupByVendor(keys: List<String>): List<Group> {
+        val byVendor = LinkedHashMap<String, MutableList<Int>>()
+        keys.forEachIndexed { index, key ->
+            byVendor.getOrPut(vendorOf(key)) { mutableListOf() }.add(index)
+        }
+        return byVendor.map { (vendor, indices) -> Group(vendor, false, indices) }
+    }
 }

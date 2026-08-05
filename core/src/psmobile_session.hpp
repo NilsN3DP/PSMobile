@@ -132,6 +132,10 @@ struct psm_session
     void                            *progress_usr = nullptr;
     std::string                      gcode_tmp_path;
     psm_slice_stats                  stats{};
+    /* Verbrauch je Extruder des letzten Ergebnisses. Bei einem Extruder
+     * eine Zeile, bei fuenf Farben fuenf - und dann ist die Gesamtsumme
+     * in stats fast nichts wert. */
+    std::vector<psm_extruder_usage>  extruder_usage;
 
     /*
      * design_revision beschreibt exakt den Stand, aus dem ein Slice

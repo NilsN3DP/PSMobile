@@ -164,6 +164,69 @@ extension PsmCore {
                   "Schichtprofil setzen")
     }
 
+    // MARK: - Mehrere Aufrufe, ein Schritt
+
+    /// Fasst alles bis zum passenden `endHistory` zu einem Undo-Schritt
+    /// zusammen.
+    ///
+    /// Ohne das ist jeder Kern-Aufruf ein eigener Schritt: wer zehn
+    /// Objekte auswaehlt und loescht, muss zehnmal zurueck - und weiss
+    /// beim dritten Mal nicht mehr, wo er war.
+    func beginHistory(_ label: String) {
+        _ = psm_history_begin(raw, label)
+    }
+
+    func endHistory() {
+        _ = psm_history_end(raw)
+    }
+
+    // MARK: - Vereinfachen und zerlegen
+
+    /// Reduziert die Dreieckszahl mit PrusaSlicers Quadric-Edge-Collapse.
+    ///
+    /// Gibt vorher und nachher zurueck - ohne die beiden Zahlen raet
+    /// man, ob es etwas gebracht hat.
+    @discardableResult
+    func simplify(_ id: Int32, ratio: Float) throws -> (before: Int, after: Int) {
+        var vorher = UInt32(0)
+        var nachher = UInt32(0)
+        try check(psm_model_simplify(raw, id, ratio, &vorher, &nachher),
+                  "Modell vereinfachen")
+        return (Int(vorher), Int(nachher))
+    }
+
+    /// Zerlegt getrennte Koerper in einzelne Volumen.
+    ///
+    /// Eine STL mit mehreren Koerpern ist ein Objekt mit losen Teilen.
+    /// Zerlegt bekommt jedes seinen eigenen Extruder.
+    @discardableResult
+    func splitVolumes(_ id: Int32) throws -> Int {
+        var anzahl = size_t(0)
+        try check(psm_model_split_volumes(raw, id, &anzahl), "In Volumen teilen")
+        return Int(anzahl)
+    }
+
+    // MARK: - Hinlegen
+
+    /// Legt das Objekt auf seine groesste ebene Flaeche.
+    func layFlatAuto(_ id: Int32) throws {
+        try check(psm_model_lay_flat_auto(raw, id), "Flach hinlegen")
+    }
+
+    // MARK: - Lage zum Druckraum
+
+    /// Wo ein Objekt relativ zum Druckraum liegt.
+    ///
+    /// Die Reihenfolge ist die von PrusaSlicers BuildVolume::ObjectState:
+    /// je hoeher, desto weniger druckbar.
+    enum BedState: UInt32 {
+        case inside = 0, colliding = 1, outside = 2, below = 3, unknown = 4
+    }
+
+    func bedState(_ id: Int32) -> BedState {
+        BedState(rawValue: psm_model_bed_state(raw, id).rawValue) ?? .unknown
+    }
+
     // MARK: - Bemalen
 
     /// Welches Werkzeug malt. Die Werte kommen aus dem C-ABI.
@@ -253,5 +316,47 @@ extension PsmCore {
     func setVolumeExtruder(_ id: Int32, at index: Int, _ extruder: Int32) throws {
         try check(psm_model_volume_extruder_set(raw, id, size_t(index), extruder),
                   "Extruder eines Teils setzen")
+    }
+
+    /// Wofuer ein Teil da ist. Die Zahlen sind die der ABI.
+    enum VolumeType: UInt32 {
+        case modelPart = 0
+        case negative = 1
+        case modifier = 2
+        case supportBlocker = 3
+        case supportEnforcer = 4
+    }
+
+    enum PrimitiveShape: UInt32 {
+        case box = 0
+        case cylinder = 1
+        case sphere = 2
+    }
+
+    /// Legt einen Grundkoerper in die Mitte des Objekts.
+    ///
+    /// In der Mitte und nicht dort, wo man getippt hat: der Kern kennt
+    /// die Tippstelle nicht, und ein Koerper, der halb im Modell steckt,
+    /// ist der Anfang, den man mit den Griffen weiterschiebt - so macht
+    /// es der Desktop auch.
+    @discardableResult
+    func addPrimitiveVolume(_ id: Int32,
+                            type: VolumeType,
+                            shape: PrimitiveShape,
+                            sizeX: Float,
+                            sizeY: Float,
+                            sizeZ: Float) throws -> Int {
+        var index = size_t(0)
+        try check(psm_model_add_primitive_volume(
+                      raw, id,
+                      psm_volume_type(rawValue: type.rawValue),
+                      psm_primitive_shape(rawValue: shape.rawValue),
+                      sizeX, sizeY, sizeZ, &index),
+                  "Teil anlegen")
+        return Int(index)
+    }
+
+    func removeVolume(_ id: Int32, at index: Int) throws {
+        try check(psm_model_remove_volume(raw, id, size_t(index)), "Teil entfernen")
     }
 }

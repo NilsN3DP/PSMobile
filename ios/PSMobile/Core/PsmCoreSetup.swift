@@ -16,7 +16,7 @@ extension PsmCore {
 
     /// Holt eine Zeichenkette aus einer Funktion, die in einen Puffer
     /// schreibt. Das Muster wiederholt sich zwei Dutzend Mal.
-    private func string(_ capacity: Int = 256,
+    func string(_ capacity: Int = 256,
                         _ call: (UnsafeMutablePointer<CChar>, Int) -> psm_result)
         -> String? {
         var buf = [CChar](repeating: 0, count: capacity)
@@ -96,6 +96,15 @@ extension PsmCore {
         (0 ..< presetCount(type)).compactMap { i in
             string { psm_preset_name_at(self.raw, self.cType(type), i, $0, $1) }
         }
+    }
+
+    /// Ein Wert aus einem benannten Preset, ohne es auszuwaehlen.
+    ///
+    /// Fuer Uebersichten: die Materialauswahl braucht von jedem
+    /// Filamentprofil Typ und Farbe. Ueber die Auswahl zu gehen hiesse,
+    /// fuer jede Zeile die ganze Konfiguration umzubauen.
+    func presetOption(_ type: PresetType, _ name: String, _ key: String) -> String? {
+        string { psm_preset_option_at(self.raw, self.cType(type), name, key, $0, $1) }
     }
 
     func selectedPreset(_ type: PresetType) -> String? {

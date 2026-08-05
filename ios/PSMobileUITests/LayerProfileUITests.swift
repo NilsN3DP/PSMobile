@@ -16,6 +16,11 @@ final class LayerProfileUITests: XCTestCase {
         app.launchArguments = ["-psm-preset-printer", "-psm-start-advanced", "-psm-load-cube"]
         app.launch()
         XCTAssertTrue(app.otherElements["arbeitsbereich"].waitForExistence(timeout: 60))
+        // Die Objektliste liegt hinter ihrem Reiter, wie auf Android.
+        let objekteReiter = app.buttons["inspektor.objekte"]
+        if objekteReiter.waitForExistence(timeout: 10), objekteReiter.isEnabled {
+            objekteReiter.tap()
+        }
         app.buttons.matching(
             NSPredicate(format: "identifier BEGINSWITH 'advanced.objekt.'")).firstMatch.tap()
         XCTAssertTrue(app.buttons["advanced.schichten"].waitForExistence(timeout: 10))

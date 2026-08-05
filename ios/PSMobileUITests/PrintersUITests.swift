@@ -60,8 +60,23 @@ final class PrintersUITests: XCTestCase {
         // Ueber die Kennung, nicht ueber die Beschriftung: die App
         // startet auf Englisch, und ein Test, der an einer Uebersetzung
         // haengt, faellt beim naechsten Sprachwechsel um.
-        app.buttons.matching(
-            NSPredicate(format: "identifier BEGINSWITH 'drucker.bearbeiten.'")).firstMatch.tap()
+        let bearbeiten = app.buttons.matching(
+            NSPredicate(format: "identifier BEGINSWITH 'drucker.bearbeiten.'")).firstMatch
+        XCTAssertTrue(bearbeiten.waitForExistence(timeout: 5),
+                      "Der Bearbeiten-Knopf fehlt")
+        // Erst wenn die Liste wieder oben liegt. Solange das Blatt zum
+        // Sichern noch nach unten faehrt, geht ein Tippen mal an das
+        // Ziel und mal daneben - genau daran ist dieser Test zweimal
+        // gescheitert, ohne dass sich etwas am Code geaendert haette.
+        //
+        // Gefragt wird, ob das Formular verschwunden ist, und nicht, ob
+        // irgendetwas anfassbar ist: nach dem Tippen ins Passwortfeld
+        // steht die Tastatur noch und deckt den halben Schirm ab -
+        // anfassbar ist dann fast nichts, obwohl alles in Ordnung ist.
+        expectation(for: NSPredicate(format: "exists == false"),
+                    evaluatedWith: app.textFields["drucker.name"])
+        waitForExpectations(timeout: 10)
+        bearbeiten.tap()
 
         let pw = app.secureTextFields["drucker.passwort"]
         XCTAssertTrue(pw.waitForExistence(timeout: 5), "Das Formular fehlt")

@@ -71,6 +71,12 @@ final class SliceUITests: XCTestCase {
         starte(["-psm-preset-printer", "-psm-start-advanced", "-psm-load-cube"])
         XCTAssertTrue(app.otherElements["arbeitsbereich"].waitForExistence(timeout: 60))
 
+        // Die Objektliste liegt hinter ihrem Reiter, wie auf Android.
+        let objekteReiter = app.buttons["inspektor.objekte"]
+        XCTAssertTrue(objekteReiter.waitForExistence(timeout: 10),
+                      "Der Reiter Objekte fehlt")
+        objekteReiter.tap()
+
         XCTAssertTrue(app.staticTexts.allElementsBoundByIndex.contains {
             $0.label.contains("20.0 × 20.0 × 20.0 mm")
         }, "Der Testwuerfel steht nicht in der Modellliste")

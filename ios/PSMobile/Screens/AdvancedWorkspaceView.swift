@@ -16,9 +16,12 @@ import PSMShared
 struct AdvancedWorkspaceView: View {
 
     @EnvironmentObject private var model: SlicerModel
+    var onHome: () -> Void = {}
     var onOpenSimple: () -> Void = {}
     var onAppSettings: () -> Void = {}
     var onPrinters: () -> Void = {}
+    /// Zurueck in die Ersteinrichtung - der Weg zu einem weiteren Drucker.
+    var onPrinterSetup: () -> Void = {}
     var onSettings: (String) -> Void = { _ in }
 
     @Environment(\.psScale) private var ps
@@ -26,6 +29,49 @@ struct AdvancedWorkspaceView: View {
     @State private var hinderungsgruende: [String] = []
     @State private var gizmo: PsmViewport.Gizmo = .move
     @State private var seiteOffen = true
+    @State private var zeigeDrucker = false
+    @State private var zeigeMaterial = false
+    @State private var zweck: Zweck = .modell
+    /// Die Zwischenablage der Schiene. Sie gehoert hierher und nicht in
+    /// die Schiene selbst: kopiert wird einmal und eingefuegt spaeter,
+    /// vielleicht auf einem anderen Bett.
+    @State private var kopiert: Int32?
+    /// Die zuletzt ausgegebene Platte, solange sie noch weitergegeben
+    /// werden kann.
+    @State private var platte: URL?
+    /// Das Ergebnis des zuletzt benutzten Dateiwerkzeugs, solange es
+    /// noch weitergegeben werden kann.
+    @State private var werkzeugErgebnis: URL?
+    @State private var zeigeReparatur = false
+    @State private var zeigeWandeln = false
+    @State private var zeigeGcodeMarken = false
+    /// Welches Bett gerade umbenannt wird, und wie es heissen soll.
+    @State private var bettUmbenennen: Int?
+    @State private var bettName = ""
+    @State private var reiter: InspektorReiter = .profile
+    /// Welche Bereiche der Seitenleiste offen sind. Profile immer, der
+    /// Rest auf Wunsch - sonst ist die Leiste beim Start eine Wand.
+    @State private var offeneBereiche: Set<String> = ["profile"]
+    /// Welche Einstellungsseite als schwebendes Fenster offen ist.
+    @State private var einstellungenTab: String?
+    @State private var objektSuche = ""
+
+    /// Die vier Abschnitte des Inspektors — dieselben wie auf Android.
+    private enum InspektorReiter: CaseIterable {
+        case profile, objekte, bearbeiten, werkzeuge
+    }
+    @State private var ansicht: PsmViewport.ViewPreset?
+    @State private var ansichtZaehler = 0
+    @State private var vorschau = false
+    /// Ist das Flaechenwerkzeug an, gehoert die Beruehrung der Flaeche.
+    @State private var aufFlaeche = false
+    @State private var schicht: Double = 0
+    @State private var schichten: Int32 = 0
+    /// Ob nach dem laufenden Schnitt die Vorschau aufgehen soll.
+    @State private var nachDemSchnittZeigen = false
+
+    /// Wofuer der Dateiwaehler gerade offen ist.
+    private enum Zweck { case modell, projekt }
     @State private var ansichtZuruecksetzen = 0
 
     /// Womit gemalt wird, und mit welchem Zustand. Nil heisst: gar
@@ -42,14 +88,60 @@ struct AdvancedWorkspaceView: View {
         ZStack {
             PrusaColors.background.ignoresSafeArea()
             HStack(spacing: 0) {
+                // Links die Werkzeuge am Objekt, wie in PrusaSlicers
+                // eigener Leiste und wie auf Android.
+                WerkzeugSchiene(model: model,
+                                kopiert: $kopiert,
+                                onEinfuegen: { zweck = .modell; zeigeImporter = true },
+                                onSettings: { onSettings("print") },
+                                onMalwerkzeug: { malwerkzeugUmschalten($0) })
+                Divider().overlay(PrusaColors.divider)
                 VStack(spacing: 0) {
                     werkzeugleiste
+                    bettleiste
                     arbeitsflaeche
-                    fusszeile
+                    ansichtsleiste
                 }
                 if seiteOffen && !schmal {
                     Divider().overlay(PrusaColors.divider)
-                    seitenleiste.frame(width: ps.pt(340))
+                    // Hoechstens zwei Fuenftel der Breite: darunter
+                    // bleibt vom Bett nichts uebrig, und darum geht es
+                    // hier.
+                    seitenleiste.frame(
+                        width: min(ps.pt(340), ps.windowSize.width * 0.42))
+                }
+            }
+            // Rechts und senkrecht, wie in PrusaSlicer: eine
+            // Schichthoehe ist eine senkrechte Groesse.
+            if vorschau && schichten > 0 {
+                HStack {
+                    Spacer()
+                    SenkrechterRegler(wert: $schicht,
+                                      maximum: Double(max(schichten - 1, 1)),
+                                      beschriftung: "\(Int(schicht) + 1)/\(schichten)")
+                        .frame(width: ps.pt(54))
+                        .padding(.trailing, seiteOffen && !schmal
+                                 ? min(ps.pt(360), ps.windowSize.width * 0.44)
+                                 : ps.pt(20))
+                        .padding(.vertical, ps.pt(90))
+                        .accessibilityIdentifier("vorschau.schicht")
+                }
+            }
+            // Dieselbe schwebende Leiste wie im Einfachen Modus: was man
+            // am ausgewaehlten Objekt am haeufigsten tut, gehoert an das
+            // Objekt und nicht in eine Spalte am Rand. Im Advanced Mode
+            // fehlte sie - dort war jeder Handgriff ein Weg nach rechts.
+            if let id = model.selectedId,
+               let objekt = model.objects.first(where: { $0.id == id }),
+               !vorschau {
+                VStack {
+                    SimpleObjectBarView(
+                        model: model,
+                        objekt: objekt,
+                        onClearSelection: { model.select(nil) },
+                        onFlaechenwahl: { aufFlaeche = $0 })
+                    .padding(.top, ps.pt(schmal ? 96 : 118))
+                    Spacer()
                 }
             }
             if seiteOffen && schmal { schmaleSeite }
@@ -58,6 +150,23 @@ struct AdvancedWorkspaceView: View {
             }
             if !hinderungsgruende.isEmpty {
                 SliceBlockerSheet(gruende: hinderungsgruende) { hinderungsgruende = [] }
+            }
+            // Die Einstellungen schweben ueber der Platte statt sie zu
+            // ersetzen: mit einem Rand ringsherum sieht man, dass es
+            // weiter um dieses Projekt geht.
+            if let tab = einstellungenTab {
+                Color.black.opacity(0.4)
+                    .ignoresSafeArea()
+                    .onTapGesture { einstellungenTab = nil }
+                SettingsView(model: model,
+                             startTab: tab,
+                             onClose: { einstellungenTab = nil })
+                    .background(PrusaColors.background)
+                    .clipShape(RoundedRectangle(cornerRadius: ps.pt(10)))
+                    .overlay(RoundedRectangle(cornerRadius: ps.pt(10))
+                        .stroke(PrusaColors.divider, lineWidth: 1))
+                    .shadow(radius: 24)
+                    .padding(ps.pt(schmal ? 10 : 28))
             }
             PSMarke(name: "arbeitsbereich")
         }
@@ -68,50 +177,420 @@ struct AdvancedWorkspaceView: View {
         .onChange(of: model.selectedId) { neu in
             if neu == nil { malwerkzeug = nil }
         }
+        // Was sich auf dem Bett ändert, macht eine ausgegebene Platte
+        // hinfällig - sonst gäbe man eine Anordnung von vorhin weiter.
+        .onChange(of: model.sceneRevision) { _ in platte = nil }
+        // Wer auf "Vorschau" tippt und dafuer warten musste, will danach
+        // die Wege sehen - nicht die Zusammenfassung.
+        .onChange(of: model.progress) { neu in
+            guard nachDemSchnittZeigen else { return }
+            switch neu {
+            case .done:
+                nachDemSchnittZeigen = false
+                model.dismissProgress()
+                vorschauUmschalten()
+            case .failed, .cancelled:
+                nachDemSchnittZeigen = false
+            default:
+                break
+            }
+        }
+        .sheet(isPresented: $zeigeDrucker) {
+            auswahlblatt(titel: PsUiCatalog.tr("Printer")) {
+                DruckerAuswahlView(model: model, onSetup: {
+                    zeigeDrucker = false
+                    onPrinterSetup()
+                }) {
+                    model.selectPreset(.printer, $0)
+                }
+            }
+        }
+        .sheet(isPresented: $zeigeMaterial) {
+            auswahlblatt(titel: PsUiCatalog.tr("Filament")) {
+                MaterialAuswahlView(
+                    model: model,
+                    gewaehlt: model.selectedPreset(for: "filament") ?? ""
+                ) { model.selectPreset(.filament, $0) }
+            }
+        }
+        .alert(st("Rename bed", "Bett umbenennen"),
+               isPresented: Binding(get: { bettUmbenennen != nil },
+                                    set: { if !$0 { bettUmbenennen = nil } })) {
+            TextField(st("Name", "Name"), text: $bettName)
+            Button(st("Cancel", "Abbrechen"), role: .cancel) { bettUmbenennen = nil }
+            Button(st("Apply", "Übernehmen")) {
+                if let index = bettUmbenennen { model.renameBed(index, to: bettName) }
+                bettUmbenennen = nil
+            }
+        } message: {
+            Text(st("An empty name goes back to the number.",
+                    "Ein leerer Name führt zurück zur Nummer."))
+        }
+        .sheet(isPresented: $zeigeGcodeMarken) {
+            CustomGcodeView(model: model) { zeigeGcodeMarken = false }
+        }
+        .fileImporter(isPresented: $zeigeReparatur,
+                      allowedContentTypes: [.item],
+                      allowsMultipleSelection: false) { ergebnis in
+            guard case .success(let urls) = ergebnis, let u = urls.first else { return }
+            werkzeugErgebnis = model.repairSTL(u)
+        }
+        .fileImporter(isPresented: $zeigeWandeln,
+                      allowedContentTypes: [.item],
+                      allowsMultipleSelection: false) { ergebnis in
+            guard case .success(let urls) = ergebnis, let u = urls.first else { return }
+            // Die Richtung sagt der Dateiname: wer eine .gcode waehlt,
+            // will binaer; wer eine .bgcode waehlt, will Text. Eine
+            // Auswahl, die man ableiten kann, ist eine zu viel.
+            let istBinaer = u.pathExtension.lowercased() == "bgcode"
+            werkzeugErgebnis = model.convertGcode(u, toBinary: !istBinaer)
+        }
         .fileImporter(isPresented: $zeigeImporter,
                       allowedContentTypes: [.item],
                       allowsMultipleSelection: true) { ergebnis in
-            if case .success(let urls) = ergebnis {
-                urls.forEach { model.load(url: $0) }
+            guard case .success(let urls) = ergebnis else { return }
+            switch zweck {
+            case .modell:  urls.forEach { model.load(url: $0) }
+            case .projekt: if let erste = urls.first { model.loadProject(url: erste) }
             }
         }
     }
 
+    /// Der Rahmen um eine Auswahl: Titel, Inhalt, Fertig.
+    ///
+    /// Das Blatt schliesst sich nicht beim Waehlen - man will
+    /// vergleichen und mehrfach umstellen. Geschlossen wird
+    /// ausdruecklich.
+    @ViewBuilder private func auswahlblatt<Inhalt: View>(
+        titel: String,
+        @ViewBuilder inhalt: @escaping () -> Inhalt
+    ) -> some View {
+        VStack(alignment: .leading, spacing: ps.pt(12)) {
+            HStack {
+                Text(titel.uppercased())
+                    .font(.system(size: ps.font(15), weight: .semibold))
+                    .foregroundStyle(PrusaColors.textPrimary)
+                Spacer()
+                Button(st("Done", "Fertig")) {
+                    zeigeDrucker = false
+                    zeigeMaterial = false
+                }
+                .foregroundStyle(PrusaColors.orange)
+                .frame(minHeight: ps.touch(44))
+                .accessibilityIdentifier("auswahl.fertig")
+            }
+            ScrollView { inhalt() }
+        }
+        .padding(ps.pt(16))
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .background(PrusaColors.background)
+    }
+
     // MARK: - Werkzeuge
+
+    /// Welche Griffe der Finger im Viewport bedient.
+    ///
+    /// Hier oben und nicht mehr rechts im Inspektor: die Wahl gehoert
+    /// zum Viewport, nicht zu den Zahlen, und man trifft sie oft
+    /// hintereinander.
+    ///
+    /// Ohne Auswahl ausgegraut - ein Griff ohne Objekt ist keine
+    /// Einstellung, sondern eine Enttaeuschung.
+    @ViewBuilder private var griffe: some View {
+        let hatAuswahl = model.selectedId != nil
+        griffKnopf("arrow.up.and.down.and.arrow.left.and.right",
+                   PsUiCatalog.tr("Move"), .move, hatAuswahl)
+        griffKnopf("arrow.triangle.2.circlepath",
+                   PsUiCatalog.tr("Rotate"), .rotate, hatAuswahl)
+        griffKnopf("arrow.up.left.and.arrow.down.right",
+                   PsUiCatalog.tr("Scale"), .scale, hatAuswahl)
+        griffKnopf("hand.point.up.left", PsUiCatalog.tr("None"), PsmViewport.Gizmo.none, hatAuswahl)
+    }
+
+    private func griffKnopf(_ symbol: String,
+                            _ name: String,
+                            _ wert: PsmViewport.Gizmo,
+                            _ moeglich: Bool) -> some View {
+        let an = gizmo == wert && moeglich
+        return Button {
+            gizmo = wert
+        } label: {
+            VStack(spacing: ps.pt(2)) {
+                Image(systemName: symbol)
+                    .font(.system(size: ps.font(17)))
+                Text(name)
+                    .font(.system(size: ps.font(9)))
+                    .lineLimit(1)
+            }
+            .foregroundStyle(!moeglich ? PrusaColors.textMuted.opacity(0.4)
+                             : an ? PrusaColors.orange : PrusaColors.textPrimary)
+            .frame(width: ps.touch(56), height: ps.touch(52))
+            .background(an ? PrusaColors.panelRaised : Color.clear)
+            .clipShape(RoundedRectangle(cornerRadius: ps.pt(4)))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(!moeglich)
+        .accessibilityIdentifier("advanced.gizmo." + kennungFuer(wert))
+    }
+
+    private func kennungFuer(_ wert: PsmViewport.Gizmo) -> String {
+        switch wert {
+        case .move:   return "move"
+        case .rotate: return "rotate"
+        case .scale:  return "scale"
+        default:      return "none"
+        }
+    }
+
+    /// Einen Pinsel an- oder ausschalten.
+    ///
+    /// Dasselbe Werkzeug noch einmal antippen heisst aus - wie bei den
+    /// Griffen. Und ein Pinsel schliesst das Flaechenwerkzeug aus: beide
+    /// wollen dieselbe Beruehrung.
+    private func malwerkzeugUmschalten(_ werkzeug: PsmCore.PaintTool) {
+        if malwerkzeug == werkzeug {
+            malwerkzeug = nil
+        } else {
+            malwerkzeug = werkzeug
+            aufFlaeche = false
+            reiter = .werkzeuge
+            seiteOffen = true
+        }
+    }
 
     private var werkzeugleiste: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: ps.pt(4)) {
-                werkzeug("＋", st("Model", "Modell"), kennung: "advanced.modell") {
+                werkzeug("house", st("Start", "Start"), kennung: "kopf.start", aktion: onHome)
+                trenner
+                werkzeug("doc", st("New", "Neu"), kennung: "projekt.neu") {
+                    model.newProject()
+                }
+                werkzeug("folder", st("Open", "Öffnen"), kennung: "projekt.oeffnen") {
+                    zweck = .projekt
                     zeigeImporter = true
                 }
-                werkzeug("▤", PsUiCatalog.tr("Arrange"), kennung: "advanced.arrange") {
-                    model.arrange()
+                werkzeug("square.and.arrow.down", st("Save", "Sichern"), kennung: "projekt.sichern") {
+                    model.saveProject()
                 }
-                werkzeug("⌂", st("View", "Ansicht"), kennung: "advanced.ansicht") {
+                werkzeug("cube", st("View", "Ansicht"), kennung: "advanced.ansicht") {
                     ansichtZuruecksetzen += 1
                 }
+                werkzeug(vorschau ? "cube.fill" : "square.stack.3d.up",
+                         vorschau ? st("Bed", "Bett") : st("Preview", "Vorschau"),
+                         kennung: "werkzeug.vorschau") { vorschauZeigen() }
                 trenner
-                werkzeug("☷", PsUiCatalog.tr("Print Settings"),
-                         kennung: "advanced.printSettings") { onSettings("print") }
-                werkzeug("◎", PsUiCatalog.tr("Filament Settings"),
-                         kennung: "advanced.filamentSettings") { onSettings("filament") }
-                werkzeug("▤", PsUiCatalog.tr("Printer Settings"),
-                         kennung: "advanced.printerSettings") { onSettings("printer") }
+                griffe
                 trenner
-                werkzeug("➦", st("Printers", "Drucker"), kennung: "drucker.oeffnen",
+                werkzeug("paperplane", st("Printers", "Drucker"), kennung: "drucker.oeffnen",
                          aktion: onPrinters)
-                werkzeug("⚙", st("App", "App"), kennung: "appeinstellungen.oeffnen",
+                werkzeug("gearshape", st("App", "App"), kennung: "appeinstellungen.oeffnen",
                          aktion: onAppSettings)
-                werkzeug("◱", "Simple", kennung: "simple.oeffnen", aktion: onOpenSimple)
+                werkzeug("square.righthalf.filled", "Simple", kennung: "simple.oeffnen", aktion: onOpenSimple)
                 Spacer(minLength: 0)
-                werkzeug(seiteOffen ? "▸" : "◂", st("Panel", "Leiste"),
+                werkzeug(seiteOffen ? "sidebar.right" : "sidebar.left", st("Panel", "Leiste"),
                          kennung: "advanced.seite") { seiteOffen.toggle() }
             }
             .padding(.horizontal, ps.pt(8))
             .padding(.vertical, ps.pt(4))
         }
         .background(PrusaColors.panel)
+    }
+
+    /// Die Betten des Projekts.
+    ///
+    /// PrusaSlicer am Desktop legt sie als grosse Landschaft
+    /// nebeneinander. Mit dem Finger waere das blindes Scrollen; hier
+    /// bleibt die Kamera auf einem Bett, und jeder Knopf springt
+    /// unmittelbar zum gewaehlten.
+    @ViewBuilder private var bettleiste: some View {
+        // Solange es ein Bett gibt und nichts darauf, gibt es nichts zu
+        // wechseln - dann ist die Leiste eine Zeile, die nur Platz
+        // kostet.
+        if model.beds.count > 1 || !model.objects.isEmpty {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: ps.pt(4)) {
+                    ForEach(Array(model.beds.enumerated()), id: \.offset) { _, bett in
+                        Button { model.selectBed(bett.index) } label: {
+                            HStack(spacing: ps.pt(4)) {
+                                if model.isBedLocked(bett.index) {
+                                    Image(systemName: "lock.fill")
+                                        .font(.system(size: ps.font(9)))
+                                }
+                                Text(model.bedLabel(bett.index))
+                                    .font(.system(size: ps.font(12)))
+                                    .lineLimit(1)
+                                Text("\(bett.objectCount)")
+                                    .font(.system(size: ps.font(10)))
+                                    .foregroundStyle(PrusaColors.textMuted)
+                            }
+                            .foregroundStyle(bett.active
+                                             ? PrusaColors.background : PrusaColors.textPrimary)
+                            .padding(.horizontal, ps.pt(12))
+                            .frame(minHeight: ps.touch(38))
+                            .background(bett.active ? PrusaColors.orange : PrusaColors.panelRaised)
+                            .clipShape(RoundedRectangle(cornerRadius: ps.pt(4)))
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityIdentifier("bett.\(bett.index)")
+                        // Langes Druecken statt eines zweiten Knopfes je
+                        // Bett: umbenennen und sperren macht man selten,
+                        // und die Leiste ist schmal.
+                        .contextMenu {
+                            Button(st("Rename", "Umbenennen")) {
+                                bettUmbenennen = bett.index
+                                bettName = model.bedNames[bett.index] ?? ""
+                            }
+                            Button(model.isBedLocked(bett.index)
+                                   ? st("Unlock", "Entsperren")
+                                   : st("Lock against arranging", "Gegen Anordnen sperren")) {
+                                model.toggleBedLock(bett.index)
+                            }
+                        }
+                    }
+                    Button { model.addBed() } label: {
+                        Text("＋")
+                            .font(.system(size: ps.font(15)))
+                            .foregroundStyle(PrusaColors.orange)
+                            .frame(width: ps.touch(40), height: ps.touch(38))
+                            .background(PrusaColors.panelRaised)
+                            .clipShape(RoundedRectangle(cornerRadius: ps.pt(4)))
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("bett.neu")
+                    // Ein leeres Bett wieder loswerden. Ein volles nicht:
+                    // dann waere ein Fehltipp der Verlust einer Platte.
+                    if let aktiv = model.beds.first(where: { $0.active }),
+                       model.beds.count > 1, aktiv.objectCount == 0 {
+                        Button { model.removeBed(aktiv.index) } label: {
+                            Text("✖")
+                                .font(.system(size: ps.font(13)))
+                                .foregroundStyle(PrusaColors.textMuted)
+                                .frame(width: ps.touch(40), height: ps.touch(38))
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityIdentifier("bett.weg")
+                    }
+                    Spacer(minLength: 0)
+                }
+                .padding(.horizontal, ps.pt(8))
+                .padding(.vertical, ps.pt(3))
+            }
+            .background(PrusaColors.background)
+        }
+    }
+
+    /// Feste Blickrichtungen.
+    ///
+    /// Mit dem Finger eine saubere Draufsicht zu drehen ist Gluecksache -
+    /// und genau die braucht man beim Anordnen am haeufigsten.
+    private var ansichtsleiste: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: ps.pt(3)) {
+                // Zurueck und Vor stehen am Anfang der unteren Leiste:
+                // sie sind das, was man am haeufigsten braucht, und
+                // unten links liegt der Daumen ohnehin. In der linken
+                // Spalte standen sie ganz unten - am weitesten weg von
+                // allem, was man tut.
+                zurueckKnopf(st("Undo", "Zurück"), "arrow.uturn.backward",
+                             moeglich: !model.undoLabel.isEmpty,
+                             kennung: "advanced.zurueck") { model.undo() }
+                zurueckKnopf(st("Redo", "Vor"), "arrow.uturn.forward",
+                             moeglich: !model.redoLabel.isEmpty,
+                             kennung: "advanced.wiederholen") { model.redo() }
+                Divider().frame(height: ps.pt(24)).overlay(PrusaColors.divider)
+                    .padding(.horizontal, ps.pt(4))
+                // Nicht "Iso": der Name ist in der CAD-Welt richtig und
+                // sonst nirgends. Neben Oben/Vorn/Hinten steht damit ein
+                // Wort, das als einziges keine Richtung nennt.
+                blickwinkel(st("3D", "3D"), .iso)
+                blickwinkel(st("Top", "Oben"), .top)
+                blickwinkel(st("Front", "Vorn"), .front)
+                blickwinkel(st("Back", "Hinten"), .back)
+                blickwinkel(st("Left", "Links"), .left)
+                blickwinkel(st("Right", "Rechts"), .right)
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, ps.pt(8))
+            .padding(.vertical, ps.pt(3))
+        }
+        .background(PrusaColors.background)
+    }
+
+    /// Ein Knopf der unteren Leiste, ausgegraut wenn es nichts zu tun gibt.
+    private func zurueckKnopf(_ label: String,
+                              _ symbol: String,
+                              moeglich: Bool,
+                              kennung: String,
+                              aktion: @escaping () -> Void) -> some View {
+        Button(action: aktion) {
+            HStack(spacing: ps.pt(4)) {
+                Image(systemName: symbol)
+                    .font(.system(size: ps.font(14)))
+                Text(label)
+                    .font(.system(size: ps.font(11)))
+            }
+            .foregroundStyle(moeglich ? PrusaColors.textPrimary
+                             : PrusaColors.textMuted.opacity(0.4))
+            .padding(.horizontal, ps.pt(10))
+            .frame(height: ps.touch(40))
+            .background(PrusaColors.panelRaised)
+            .clipShape(RoundedRectangle(cornerRadius: ps.pt(4)))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(!moeglich)
+        .accessibilityIdentifier(kennung)
+    }
+
+    private func blickwinkel(_ label: String, _ preset: PsmViewport.ViewPreset) -> some View {
+        Button {
+            ansicht = preset
+            ansichtZaehler += 1
+        } label: {
+            Text(label)
+                .font(.system(size: ps.font(12)))
+                .foregroundStyle(PrusaColors.textPrimary)
+                .padding(.horizontal, ps.pt(12))
+                .frame(minHeight: ps.touch(38))
+                .background(PrusaColors.panelRaised)
+                .clipShape(RoundedRectangle(cornerRadius: ps.pt(4)))
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("ansicht." + label)
+    }
+
+    private func schritt(_ glyph: String,
+                         _ label: String,
+                         kennung: String,
+                         aktion: @escaping () -> Void) -> some View {
+        Button(action: aktion) {
+            HStack(spacing: ps.pt(4)) {
+                Text(glyph).font(.system(size: ps.font(14)))
+                if !label.isEmpty {
+                    // Gekuerzt: die ganze Beschriftung machte den Knopf
+                    // dreimal so breit wie seinen Nachbarn, und was
+                    // zurueckgenommen wird, erkennt man am Anfang.
+                    Text(label.count > 14 ? String(label.prefix(13)) + "…" : label)
+                        .font(.system(size: ps.font(10)))
+                        .lineLimit(1)
+                }
+            }
+            .foregroundStyle(label.isEmpty ? PrusaColors.textMuted : PrusaColors.textPrimary)
+            .padding(.horizontal, ps.pt(10))
+            .frame(minHeight: ps.touch(38))
+            .background(PrusaColors.panelRaised)
+            .clipShape(RoundedRectangle(cornerRadius: ps.pt(4)))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(label.isEmpty)
+        .accessibilityIdentifier(kennung)
     }
 
     private var trenner: some View {
@@ -121,14 +600,17 @@ struct AdvancedWorkspaceView: View {
             .padding(.horizontal, ps.pt(4))
     }
 
-    private func werkzeug(_ glyph: String,
+    private func werkzeug(_ symbol: String,
                           _ label: String,
                           kennung: String,
                           aktion: @escaping () -> Void) -> some View {
         Button(action: aktion) {
-            VStack(spacing: 0) {
-                Text(glyph).font(.system(size: ps.font(15)))
-                Text(label).font(.system(size: ps.font(8))).lineLimit(1)
+            VStack(spacing: ps.pt(2)) {
+                Image(systemName: symbol).font(.system(size: ps.font(16)))
+                Text(label)
+                    .font(.system(size: ps.font(8)))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
             }
             .foregroundStyle(PrusaColors.textPrimary)
             .frame(width: ps.pt(60), height: ps.touch(46))
@@ -146,23 +628,43 @@ struct AdvancedWorkspaceView: View {
                 session: session,
                 shaderDir: model.shaderDir,
                 selectedId: model.selectedId ?? -1,
-                selectedIds: model.selectedId.map { [$0] } ?? [],
+                selectedIds: Array(model.selectedIds),
                 invalidateKey: model.sceneRevision,
                 gizmo: malwerkzeug == nil ? gizmo : .none,
+                viewportMode: vorschau ? .preview : .editor,
+                layerRange: vorschau && schichten > 0 ? 0...Int32(schicht) : nil,
                 resetViewKey: ansichtZuruecksetzen,
+                viewPreset: ansicht,
+                viewPresetKey: ansichtZaehler,
+                onPreviewLoaded: { anzahl in
+                    schichten = anzahl
+                    schicht = Double(max(anzahl - 1, 0))
+                    // Kommt nichts zurueck, gibt es nichts zu zeigen.
+                    if anzahl == 0 { vorschau = false }
+                },
                 onSelect: { model.select($0 < 0 ? nil : $0) },
+                onObjectChanged: { model.refresh() },
                 // Solange ein Malwerkzeug gewaehlt ist, geht jede
                 // Beruehrung an die Flaeche statt an die Kamera. Der
                 // Viewport unterscheidet das daran, ob hier jemand
                 // zuhoert.
-                onSurfaceTap: malwerkzeug == nil ? nil : { treffer in
-                    guard let werkzeug = malwerkzeug else { return }
-                    model.paint(treffer.objectId,
-                                volume: Int(treffer.volumeIndex),
-                                facet: Int(treffer.facetIndex),
-                                tool: werkzeug,
-                                state: malzustand,
-                                radiusMm: malradius)
+                // Zwei Werkzeuge teilen sich dieselbe Beruehrung: der
+                // Pinsel und das Hinlegen auf eine Flaeche. Beide
+                // brauchen ein getroffenes Dreieck, nur macht jedes
+                // etwas anderes damit.
+                onSurfaceTap: (malwerkzeug == nil && !aufFlaeche) ? nil : { treffer in
+                    if let werkzeug = malwerkzeug {
+                        model.paint(treffer.objectId,
+                                    volume: Int(treffer.volumeIndex),
+                                    facet: Int(treffer.facetIndex),
+                                    tool: werkzeug,
+                                    state: malzustand,
+                                    radiusMm: malradius)
+                    } else if aufFlaeche {
+                        model.layOnFace(treffer.objectId,
+                                        volume: Int(treffer.volumeIndex),
+                                        facet: Int(treffer.facetIndex))
+                    }
                 }
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -176,31 +678,77 @@ struct AdvancedWorkspaceView: View {
         }
     }
 
-    private var fusszeile: some View {
-        HStack(spacing: ps.pt(12)) {
-            if let warnung = model.memoryWarning {
-                Text(warnung)
-                    .font(.system(size: ps.font(11)))
-                    .foregroundStyle(PrusaColors.orange)
-                    .lineLimit(2)
+    /// Was jede Rolle gekostet hat.
+    ///
+    /// Nur bei mehr als einem Extruder: bei einem einfarbigen Druck
+    /// steht dieselbe Zahl zwei Zeilen darüber, und eine Wiederholung
+    /// ist keine Auskunft.
+    ///
+    /// Der Reinigungsturm bekommt eine eigene Spalte. Bei einem
+    /// Mehrfarbdruck ist er oft die Hälfte des Verbrauchs, und wer nur
+    /// die Modellzahl sieht, wundert sich über die Rolle.
+    @ViewBuilder private var verbrauchJeExtruder: some View {
+        let verbrauch = model.extruderUsage()
+        if verbrauch.count > 1 {
+            Divider().overlay(PrusaColors.divider).padding(.vertical, ps.pt(2))
+            HStack {
+                Text(st("Per tool", "Je Werkzeug"))
+                    .font(.system(size: ps.font(10), weight: .semibold))
+                    .foregroundStyle(PrusaColors.textMuted)
+                Spacer()
+                Text(st("Model", "Modell") + " · " + st("Tower", "Turm"))
+                    .font(.system(size: ps.font(9)))
+                    .foregroundStyle(PrusaColors.textMuted)
             }
-            Spacer()
-            Button { schneiden() } label: {
-                Text(PsUiCatalog.tr("Slice now"))
-                    .font(.system(size: ps.font(14)))
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, ps.pt(24))
-                    .frame(height: ps.touch(48))
-                    .background(PrusaColors.orange)
-                    .clipShape(RoundedRectangle(cornerRadius: ps.pt(3)))
-                    .contentShape(Rectangle())
+            ForEach(Array(verbrauch.enumerated()), id: \.offset) { _, u in
+                HStack(spacing: ps.pt(6)) {
+                    RoundedRectangle(cornerRadius: ps.pt(2))
+                        .fill(Color(hexString: model.extruderColor(Int(u.extruder)))
+                              ?? PrusaColors.panelRaised)
+                        .frame(width: ps.pt(10), height: ps.pt(10))
+                        .overlay(RoundedRectangle(cornerRadius: ps.pt(2))
+                            .stroke(PrusaColors.divider, lineWidth: 1))
+                    Text("T\(u.extruder + 1)")
+                        .font(.system(size: ps.font(11)))
+                        .foregroundStyle(PrusaColors.textMuted)
+                    Spacer()
+                    Text(String(format: "%.1f", u.volumeMm3 / 1000.0) + " cm³")
+                        .font(.system(size: ps.font(11)))
+                        .foregroundStyle(PrusaColors.textPrimary)
+                    if u.wipeTowerMm3 + u.flushMm3 > 0 {
+                        Text("+ " + String(format: "%.1f",
+                                           (u.wipeTowerMm3 + u.flushMm3) / 1000.0))
+                            .font(.system(size: ps.font(10)))
+                            .foregroundStyle(PrusaColors.orange)
+                    }
+                }
             }
-            .buttonStyle(.plain)
-            .accessibilityIdentifier("slicen")
+            .accessibilityIdentifier("seite.verbrauch")
         }
-        .padding(.horizontal, ps.pt(12))
-        .padding(.vertical, ps.pt(8))
-        .background(PrusaColors.panel)
+    }
+
+    /// Vorschau oeffnen - und nur dann rechnen, wenn es sein muss.
+    private func vorschauZeigen() {
+        if vorschau { vorschau = false; return }
+        if model.sliceResultIsCurrent {
+            vorschauUmschalten()
+            return
+        }
+        let gruende = model.sliceBlockers
+        if gruende.isEmpty {
+            nachDemSchnittZeigen = true
+            model.slice()
+        } else {
+            hinderungsgruende = gruende
+        }
+    }
+
+    private func vorschauUmschalten() {
+        // In der Vorschau gibt es keine Objekte zum Anfassen, und kein
+        // Werkzeug, das auf sie zeigt.
+        model.select(nil)
+        malwerkzeug = nil
+        vorschau = true
     }
 
     private func schneiden() {
@@ -211,24 +759,333 @@ struct AdvancedWorkspaceView: View {
     // MARK: - Seitenleiste
 
     private var seitenleiste: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: ps.pt(12)) {
-                objektliste
-                if let id = model.selectedId,
-                   let objekt = model.objects.first(where: { $0.id == id }) {
+        VStack(spacing: 0) {
+            ScrollView {
+                VStack(alignment: .leading, spacing: ps.pt(6)) {
+                    // Die drei Einstellungsseiten stehen oben im Band:
+                    // sie wirken auf das Profil, und das Profil steht
+                    // rechts. Oben in der Werkzeugleiste gehoert hin,
+                    // was auf den Viewport wirkt.
+                    einstellungsbereiche
                     Divider().overlay(PrusaColors.divider)
-                    PaintView(model: model,
-                              objektId: id,
-                              werkzeug: $malwerkzeug,
-                              zustand: $malzustand,
-                              radius: $malradius)
-                    Divider().overlay(PrusaColors.divider)
-                    AdvancedObjectInspectorView(model: model, objekt: objekt, gizmo: $gizmo)
+                    // Untereinander statt hinter Reitern: vier Reiter
+                    // heissen, dass drei Viertel des Gesuchten unsichtbar
+                    // sind. So sieht man alle Ueberschriften und klappt
+                    // auf, was man braucht.
+                    ForEach(Array(InspektorReiter.allCases.enumerated()),
+                            id: \.offset) { _, r in
+                        bereich(r)
+                    }
                 }
+                .padding(ps.pt(12))
             }
-            .padding(ps.pt(12))
+            // Ausserhalb der Reiter: was ein Schnitt ergeben hat, ist
+            // keine Frage des gerade offenen Reiters.
+            abschluss
         }
         .background(PrusaColors.background)
+    }
+
+    /// Das untere Ende der Seitenleiste: was der letzte Schnitt ergeben
+    /// hat, und der Knopf für den nächsten.
+    ///
+    /// Wie in PrusaSlicers Sidebar. Die Zahlen gehören neben die
+    /// Profile, die sie erzeugt haben — wer das Druckprofil wechselt,
+    /// sieht in derselben Spalte, was das an Zeit kostet.
+    private var abschluss: some View {
+        VStack(alignment: .leading, spacing: ps.pt(8)) {
+            Divider().overlay(PrusaColors.divider)
+            if let s = model.stats, model.sliceResultIsCurrent {
+                let zeilen = SliceSummary.shared.rows(
+                    seconds: s.printTimeSeconds,
+                    grams: s.filamentGrams,
+                    millimetres: s.filamentMm,
+                    cost: s.cost,
+                    objects: Int32(model.objects.count))
+                VStack(spacing: ps.pt(3)) {
+                    ForEach(Array(zeilen.enumerated()), id: \.offset) { _, zeile in
+                        HStack {
+                            Text(zeile.label)
+                                .font(.system(size: ps.font(11)))
+                                .foregroundStyle(PrusaColors.textMuted)
+                            Spacer()
+                            Text(zeile.value)
+                                .font(.system(size: ps.font(12)))
+                                .foregroundStyle(PrusaColors.textPrimary)
+                        }
+                    }
+                }
+                .accessibilityIdentifier("seite.zusammenfassung")
+                verbrauchJeExtruder
+            } else {
+                Text(st("Not sliced yet", "Noch nicht geschnitten"))
+                    .font(.system(size: ps.font(11)))
+                    .foregroundStyle(PrusaColors.textMuted)
+            }
+            if let warnung = model.memoryWarning {
+                Text(warnung)
+                    .font(.system(size: ps.font(11)))
+                    .foregroundStyle(PrusaColors.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Button { schneiden() } label: {
+                Text(PsUiCatalog.tr("Slice now"))
+                    .font(.system(size: ps.font(15), weight: .semibold))
+                    .foregroundStyle(.white)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: ps.touch(52))
+                    .background(PrusaColors.orange)
+                    .clipShape(RoundedRectangle(cornerRadius: ps.pt(4)))
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("slicen")
+        }
+        .padding(ps.pt(12))
+        .background(PrusaColors.panel)
+    }
+
+    /// Profile │ Objekte │ Bearbeiten │ Werkzeuge.
+    ///
+    /// Die letzten beiden beziehen sich auf ein Objekt und bleiben ohne
+    /// Auswahl gesperrt — ein Reiter, den man anwählen kann und der dann
+    /// leer ist, ist eine Sackgasse.
+    /// Ein aufklappbarer Bereich der Seitenleiste.
+    ///
+    /// Zu ist der Normalfall fuer alles ausser den Profilen: wer eine
+    /// Ueberschrift sieht, weiss, dass es den Bereich gibt, und
+    /// entscheidet selbst, ob er ihn braucht.
+    @ViewBuilder private func bereich(_ r: InspektorReiter) -> some View {
+        let hatAuswahl = model.selectedId != nil
+        let moeglich = (r != .bearbeiten && r != .werkzeuge) || hatAuswahl
+        let offen = offeneBereiche.contains(kennung(r)) && moeglich
+        VStack(alignment: .leading, spacing: ps.pt(8)) {
+            Button {
+                if offeneBereiche.contains(kennung(r)) {
+                    offeneBereiche.remove(kennung(r))
+                } else {
+                    offeneBereiche.insert(kennung(r))
+                }
+            } label: {
+                HStack {
+                    Text(reiterName(r).uppercased())
+                        .font(.system(size: ps.font(11), weight: .semibold))
+                        .foregroundStyle(moeglich ? PrusaColors.textMuted
+                                         : PrusaColors.textMuted.opacity(0.4))
+                    Spacer()
+                    Image(systemName: offen ? "chevron.down" : "chevron.right")
+                        .font(.system(size: ps.font(11)))
+                        .foregroundStyle(PrusaColors.textMuted)
+                }
+                .frame(minHeight: ps.touch(40))
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .disabled(!moeglich)
+            .accessibilityIdentifier("inspektor." + kennung(r))
+
+            if offen {
+                switch r {
+                case .profile:    profilblock
+                case .objekte:    objektliste
+                case .bearbeiten: bearbeitenBlock
+                case .werkzeuge:  werkzeugeBlock
+                }
+            }
+        }
+    }
+
+    /// Die drei Einstellungsseiten, als Zeilen im Band.
+    private var einstellungsbereiche: some View {
+        VStack(spacing: ps.pt(4)) {
+            einstellungsZeile("list.bullet.rectangle",
+                              PsUiCatalog.tr("Print Settings"),
+                              "print", "advanced.printSettings")
+            einstellungsZeile("circle.circle",
+                              PsUiCatalog.tr("Filament Settings"),
+                              "filament", "advanced.filamentSettings")
+            einstellungsZeile("printer",
+                              PsUiCatalog.tr("Printer Settings"),
+                              "printer", "advanced.printerSettings")
+        }
+    }
+
+    private func einstellungsZeile(_ symbol: String,
+                                   _ label: String,
+                                   _ tab: String,
+                                   _ kennung: String) -> some View {
+        Button { einstellungenTab = tab } label: {
+            HStack(spacing: ps.pt(10)) {
+                Image(systemName: symbol)
+                    .font(.system(size: ps.font(14)))
+                    .foregroundStyle(PrusaColors.orange)
+                    .frame(width: ps.pt(22))
+                Text(label)
+                    .font(.system(size: ps.font(13)))
+                    .foregroundStyle(PrusaColors.textPrimary)
+                    .lineLimit(1)
+                Spacer()
+                Text("›")
+                    .font(.system(size: ps.font(15)))
+                    .foregroundStyle(PrusaColors.textMuted)
+            }
+            .padding(.horizontal, ps.pt(10))
+            .frame(minHeight: ps.touch(44))
+            .background(PrusaColors.panelRaised)
+            .clipShape(RoundedRectangle(cornerRadius: ps.pt(4)))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier(kennung)
+    }
+
+    private var reiterleiste: some View {
+        let hatAuswahl = model.selectedId != nil
+        return HStack(spacing: ps.pt(4)) {
+            ForEach(Array(InspektorReiter.allCases.enumerated()), id: \.offset) { _, r in
+                let an = (r != .bearbeiten && r != .werkzeuge) || hatAuswahl
+                let aktiv = r == reiter
+                Button { reiter = r } label: {
+                    Text(reiterName(r))
+                        .font(.system(size: ps.font(12),
+                                      weight: aktiv ? .semibold : .regular))
+                        .foregroundStyle(aktiv ? .white
+                                         : (an ? PrusaColors.textPrimary
+                                              : PrusaColors.textMuted.opacity(0.45)))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.75)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: ps.touch(44))
+                        .background(aktiv ? PrusaColors.orange : Color.clear)
+                        .clipShape(RoundedRectangle(cornerRadius: ps.pt(7)))
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .disabled(!an || aktiv)
+                .accessibilityIdentifier("inspektor." + kennung(r))
+            }
+        }
+        .padding(ps.pt(4))
+        .background(PrusaColors.panel)
+    }
+
+    private func reiterName(_ r: InspektorReiter) -> String {
+        switch r {
+        case .profile:    return st("Profiles", "Profile")
+        case .objekte:    return st("Objects", "Objekte")
+        case .bearbeiten: return st("Edit", "Bearbeiten")
+        case .werkzeuge:  return st("Tools", "Werkzeuge")
+        }
+    }
+
+    private func kennung(_ r: InspektorReiter) -> String {
+        switch r {
+        case .profile:    return "profile"
+        case .objekte:    return "objekte"
+        case .bearbeiten: return "bearbeiten"
+        case .werkzeuge:  return "werkzeuge"
+        }
+    }
+
+    /// Was am ausgewählten Objekt geändert wird.
+    @ViewBuilder private var bearbeitenBlock: some View {
+        if let id = model.selectedId,
+           let objekt = model.objects.first(where: { $0.id == id }) {
+            AdvancedObjectInspectorView(model: model, objekt: objekt, gizmo: $gizmo)
+        }
+    }
+
+    /// Was mit dem Objekt gemacht wird, ohne es zu vermessen: bemalen,
+    /// Schichthöhen — und was mit der ganzen Platte geht.
+    @ViewBuilder private var werkzeugeBlock: some View {
+        if let id = model.selectedId {
+            PaintView(model: model,
+                      objektId: id,
+                      werkzeug: $malwerkzeug,
+                      zustand: $malzustand,
+                      radius: $malradius)
+        }
+        Divider().overlay(PrusaColors.divider)
+        Text(st("Whole plate", "Ganze Platte").uppercased())
+            .font(.system(size: ps.font(11), weight: .semibold))
+            .foregroundStyle(PrusaColors.textMuted)
+        // Die Anordnung ist die Arbeit — als STL geht sie in einem
+        // Stück an jemanden weiter, der einen anderen Slicer benutzt.
+        Button { platte = model.exportPlate() } label: {
+            Text(st("Export plate as STL", "Platte als STL ausgeben"))
+                .font(.system(size: ps.font(13)))
+                .foregroundStyle(model.objects.isEmpty
+                                 ? PrusaColors.textMuted : PrusaColors.orange)
+                .frame(maxWidth: .infinity, minHeight: ps.touch(48))
+                .background(PrusaColors.panelRaised)
+                .clipShape(RoundedRectangle(cornerRadius: ps.pt(6)))
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(model.objects.isEmpty)
+        .accessibilityIdentifier("werkzeuge.platte")
+        // Dateiwerkzeuge: sie beziehen sich nicht auf ein Objekt,
+        // sondern auf eine Datei. Auswählen, das Werkzeug schreibt eine
+        // neue daneben, die geht über das Teilen-Blatt weiter.
+        Button { zeigeGcodeMarken = true } label: {
+            Text(PsUiCatalog.tr("Custom G-code"))
+                .font(.system(size: ps.font(13)))
+                .foregroundStyle(PrusaColors.orange)
+                .frame(maxWidth: .infinity, minHeight: ps.touch(48))
+                .background(PrusaColors.panelRaised)
+                .clipShape(RoundedRectangle(cornerRadius: ps.pt(6)))
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("werkzeuge.gcodemarken")
+        Button { zeigeReparatur = true } label: {
+            Text(st("Repair STL", "STL reparieren"))
+                .font(.system(size: ps.font(13)))
+                .foregroundStyle(PrusaColors.orange)
+                .frame(maxWidth: .infinity, minHeight: ps.touch(48))
+                .background(PrusaColors.panelRaised)
+                .clipShape(RoundedRectangle(cornerRadius: ps.pt(6)))
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("werkzeuge.reparieren")
+        Button { zeigeWandeln = true } label: {
+            Text(st("Convert G-code", "G-Code wandeln"))
+                .font(.system(size: ps.font(13)))
+                .foregroundStyle(PrusaColors.orange)
+                .frame(maxWidth: .infinity, minHeight: ps.touch(48))
+                .background(PrusaColors.panelRaised)
+                .clipShape(RoundedRectangle(cornerRadius: ps.pt(6)))
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("werkzeuge.wandeln")
+        if let url = werkzeugErgebnis {
+            ShareLink(item: url) {
+                Text(st("Share", "Weitergeben") + " · " + url.lastPathComponent)
+                    .font(.system(size: ps.font(12)))
+                    .foregroundStyle(.white)
+                    .lineLimit(1)
+                    .frame(maxWidth: .infinity, minHeight: ps.touch(44))
+                    .background(PrusaColors.orange)
+                    .clipShape(RoundedRectangle(cornerRadius: ps.pt(6)))
+                    .contentShape(Rectangle())
+            }
+            .accessibilityIdentifier("werkzeuge.ergebnis.weitergeben")
+        }
+        if let url = platte {
+            ShareLink(item: url) {
+                Text(st("Share", "Weitergeben") + " · " + url.lastPathComponent)
+                    .font(.system(size: ps.font(12)))
+                    .foregroundStyle(.white)
+                    .lineLimit(1)
+                    .frame(maxWidth: .infinity, minHeight: ps.touch(44))
+                    .background(PrusaColors.orange)
+                    .clipShape(RoundedRectangle(cornerRadius: ps.pt(6)))
+                    .contentShape(Rectangle())
+            }
+            .accessibilityIdentifier("werkzeuge.platte.weitergeben")
+        }
     }
 
     /// Auf schmalen Geraeten als Blatt ueber dem Bett, mit einer
@@ -243,19 +1100,205 @@ struct AdvancedWorkspaceView: View {
         .ignoresSafeArea(edges: .bottom)
     }
 
-    private var objektliste: some View {
+    /// Drucker, Filament, Druckprofil - die drei Angaben, mit denen
+    /// gerechnet wird.
+    private var profilblock: some View {
         VStack(alignment: .leading, spacing: ps.pt(6)) {
+            // Drucker und Filament als Blatt mit denselben Karten wie im
+            // Simple Mode. Ein Aufklappmenue mit dreissig rohen
+            // Profilnamen ist auf einem Geraet, das man in der Hand
+            // haelt, kein Menue, sondern eine Zumutung.
+            profilzeile(titel: PsUiCatalog.tr("Printer"), reiter: "printer",
+                        kennung: "advanced.wahl.printer") { zeigeDrucker = true }
+            profilzeile(titel: PsUiCatalog.tr("Filament"), reiter: "filament",
+                        kennung: "advanced.wahl.filament") { zeigeMaterial = true }
+            // Druckprofile sind eine Handvoll und tragen ihre Auskunft
+            // im Namen - dafuer genuegt ein Menue.
+            profilwahl(titel: PsUiCatalog.tr("Print settings"),
+                       typ: .print, reiter: "print", kennung: "advanced.wahl.print")
+            // Ab zwei Extrudern ist "das Material" keine Frage mehr,
+            // sondern eine je Position.
+            if model.extruderCount > 1 {
+                Divider().overlay(PrusaColors.divider)
+                ExtruderBank(model: model) { _ in zeigeMaterial = true }
+            }
+        }
+    }
+
+    /// Eine Zeile, die ein Blatt oeffnet.
+    private func profilzeile(titel: String,
+                             reiter: String,
+                             kennung: String,
+                             aktion: @escaping () -> Void) -> some View {
+        let gewaehlt = model.selectedPreset(for: reiter) ?? ""
+        return VStack(alignment: .leading, spacing: ps.pt(2)) {
+            Text(titel.uppercased())
+                .font(.system(size: ps.font(10), weight: .semibold))
+                .foregroundStyle(PrusaColors.textMuted)
+            Button(action: aktion) {
+                HStack(spacing: ps.pt(6)) {
+                    Text(gewaehlt.isEmpty
+                         ? st("Not selected", "Nicht gewählt")
+                         : EasyModeState.shared.profileDisplayLabel(rawPreset: gewaehlt))
+                        .font(.system(size: ps.font(13)))
+                        .foregroundStyle(PrusaColors.textPrimary)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                        .minimumScaleFactor(0.75)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    Text("›")
+                        .font(.system(size: ps.font(14)))
+                        .foregroundStyle(PrusaColors.textMuted)
+                }
+                .padding(.horizontal, ps.pt(10))
+                .frame(maxWidth: .infinity, minHeight: ps.touch(44))
+                .background(PrusaColors.panelRaised)
+                .clipShape(RoundedRectangle(cornerRadius: ps.pt(4)))
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier(kennung)
+        }
+    }
+
+    private func profilwahl(titel: String,
+                            typ: PsmCore.PresetType,
+                            reiter: String,
+                            kennung: String) -> some View {
+        let gewaehlt = model.selectedPreset(for: reiter) ?? ""
+        // Dreissig reichen: mehr passt in kein Menue, und wer wirklich
+        // sucht, ist auf der Einstellungsseite besser aufgehoben.
+        let namen = Array(model.presetNames(typ).prefix(30))
+        return VStack(alignment: .leading, spacing: ps.pt(2)) {
+            Text(titel.uppercased())
+                .font(.system(size: ps.font(10), weight: .semibold))
+                .foregroundStyle(PrusaColors.textMuted)
+            HStack(spacing: ps.pt(6)) {
+                Menu {
+                    ForEach(namen, id: \.self) { name in
+                        Button {
+                            model.selectPreset(typ, name)
+                        } label: {
+                            Text(EasyModeState.shared.profileDisplayLabel(rawPreset: name))
+                        }
+                    }
+                } label: {
+                    HStack(spacing: ps.pt(6)) {
+                        Text(gewaehlt.isEmpty
+                             ? st("Not selected", "Nicht gewählt")
+                             : EasyModeState.shared.profileDisplayLabel(rawPreset: gewaehlt))
+                            .font(.system(size: ps.font(13)))
+                            .foregroundStyle(PrusaColors.textPrimary)
+                            .lineLimit(1)
+                        Spacer(minLength: 0)
+                        Text("▾")
+                            .font(.system(size: ps.font(11)))
+                            .foregroundStyle(PrusaColors.textMuted)
+                    }
+                    .padding(.horizontal, ps.pt(10))
+                    .frame(maxWidth: .infinity, minHeight: ps.touch(44))
+                    .background(PrusaColors.panelRaised)
+                    .clipShape(RoundedRectangle(cornerRadius: ps.pt(4)))
+                    .contentShape(Rectangle())
+                }
+                .accessibilityIdentifier(kennung)
+                // Der Stift fuehrt dorthin, wo dieses Profil im Einzelnen
+                // steht - das Menue waehlt nur aus.
+                Button { onSettings(reiter) } label: {
+                    Text("⚙")
+                        .font(.system(size: ps.font(14)))
+                        .foregroundStyle(PrusaColors.textMuted)
+                        .frame(width: ps.touch(44), height: ps.touch(44))
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier(kennung + ".bearbeiten")
+            }
+        }
+    }
+
+    private var objektliste: some View {
+        // Ohne Suchtext alle. Gesucht wird im Namen, und ohne
+        // Rücksicht auf Groß- und Kleinschreibung: wer "würfel" tippt,
+        // meint auch "Würfel".
+        let sichtbar = objektSuche.trimmingCharacters(in: .whitespaces).isEmpty
+            ? model.objects
+            : model.objects.filter {
+                $0.name.range(of: objektSuche, options: .caseInsensitive) != nil
+              }
+        return VStack(alignment: .leading, spacing: ps.pt(6)) {
             Text(st("Objects", "Objekte").uppercased() + " (\(model.objects.count))")
                 .font(.system(size: ps.font(11), weight: .semibold))
                 .foregroundStyle(PrusaColors.textMuted)
             if model.objects.isEmpty {
-                Text(st("Nothing on the bed yet", "Noch nichts auf dem Bett"))
-                    .font(.system(size: ps.font(12)))
-                    .foregroundStyle(PrusaColors.textMuted)
+                VStack(spacing: ps.pt(6)) {
+                    Text(st("No objects yet", "Noch keine Objekte"))
+                        .font(.system(size: ps.font(15), weight: .semibold))
+                        .foregroundStyle(PrusaColors.textPrimary)
+                    Text(st("Import with + in the tool rail",
+                            "Über + in der Werkzeugleiste importieren"))
+                        .font(.system(size: ps.font(12)))
+                        .foregroundStyle(PrusaColors.textMuted)
+                        .multilineTextAlignment(.center)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, ps.pt(28))
+                .background(PrusaColors.panelRaised)
+                .clipShape(RoundedRectangle(cornerRadius: ps.pt(8)))
+            } else {
+                // Erst ab einer Handvoll: bei drei Objekten ist ein
+                // Suchfeld mehr Bedienung als Hilfe.
+                if model.objects.count > 5 {
+                    TextField(st("Search objects", "Objekte suchen"), text: $objektSuche)
+                        .font(.system(size: ps.font(13)))
+                        .padding(.horizontal, ps.pt(10))
+                        .frame(height: ps.touch(44))
+                        .background(PrusaColors.panelRaised)
+                        .clipShape(RoundedRectangle(cornerRadius: ps.pt(6)))
+                        .accessibilityIdentifier("objekte.suche")
+                }
+                HStack(spacing: ps.pt(10)) {
+                    Button(st("Select all", "Alle auswählen")) { model.selectAll() }
+                        .font(.system(size: ps.font(12)))
+                        .foregroundStyle(PrusaColors.orange)
+                        .frame(minHeight: ps.touch(40))
+                        .accessibilityIdentifier("objekte.alle")
+                    Button(st("Clear", "Aufheben")) { model.select(nil) }
+                        .font(.system(size: ps.font(12)))
+                        .foregroundStyle(model.selectedIds.isEmpty
+                                         ? PrusaColors.textMuted : PrusaColors.orange)
+                        .frame(minHeight: ps.touch(40))
+                        .disabled(model.selectedIds.isEmpty)
+                        .accessibilityIdentifier("objekte.auswahlaufheben")
+                    Spacer(minLength: 0)
+                    if model.selectedIds.count > 1 {
+                        Text("\(model.selectedIds.count)")
+                            .font(.system(size: ps.font(11)))
+                            .foregroundStyle(PrusaColors.textMuted)
+                    }
+                }
             }
-            ForEach(model.objects, id: \.id) { objekt in
-                Button { model.select(objekt.id) } label: {
+            ForEach(sichtbar, id: \.id) { objekt in
+                Button {
+                    model.select(objekt.id)
+                    // Wer ein Objekt antippt, will damit etwas tun.
+                    reiter = .bearbeiten
+                } label: {
                     HStack {
+                        // Das Kästchen nimmt hinzu oder heraus, die Zeile
+                        // wählt einzeln aus. Zwei Gesten für zwei
+                        // Absichten, an derselben Zeile.
+                        Button { model.toggleSelection(objekt.id) } label: {
+                            Image(systemName: model.selectedIds.contains(objekt.id)
+                                  ? "checkmark.square.fill" : "square")
+                                .font(.system(size: ps.font(15)))
+                                .foregroundStyle(model.selectedIds.contains(objekt.id)
+                                                 ? PrusaColors.orange : PrusaColors.textMuted)
+                                .frame(width: ps.touch(40), height: ps.touch(40))
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityIdentifier("objekte.haken.\(objekt.id)")
                         ObjektMasse(objekt: objekt)
                         VStack(alignment: .leading, spacing: 0) {
                             Text(objekt.name.isEmpty ? "Objekt \(objekt.id)" : objekt.name)
@@ -281,7 +1324,7 @@ struct AdvancedWorkspaceView: View {
                     }
                     .padding(.horizontal, ps.pt(8))
                     .frame(minHeight: ps.touch(48))
-                    .background(objekt.id == model.selectedId
+                    .background(model.selectedIds.contains(objekt.id)
                                 ? PrusaColors.panelRaised : Color.clear)
                     .clipShape(RoundedRectangle(cornerRadius: ps.pt(4)))
                     .contentShape(Rectangle())

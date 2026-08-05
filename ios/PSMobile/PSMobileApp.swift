@@ -38,6 +38,37 @@ struct PSMobileApp: App {
                 inhalt
             }
                 .environmentObject(model)
+                // Ueber allem: die Frage nach den Profilaenderungen
+                // gehoert vor den Wechsel, nicht daneben.
+                .overlay {
+                    if !profilfrage.isEmpty {
+                        ProfilWechselDialog(
+                            aenderungen: profilfrage,
+                            onVerwerfen: {
+                                model.profilaenderungenVerwerfen()
+                                profilfrage = []
+                                route = .simple
+                            },
+                            onNeuesProfil: { name in
+                                model.profilSichern(als: name)
+                                profilfrage = []
+                                route = .simple
+                            },
+                            onUeberschreiben: {
+                                model.profilUeberschreiben()
+                                profilfrage = []
+                                route = .simple
+                            },
+                            onInsProjekt: {
+                                // Nichts tun heisst: die Aenderungen
+                                // bleiben im bearbeiteten Profil stehen
+                                // und wandern beim Sichern ins 3MF.
+                                profilfrage = []
+                                route = .simple
+                            },
+                            onAbbrechen: { profilfrage = [] })
+                    }
+                }
                 .overlay(alignment: .bottomTrailing) {
                     if let result = model.credentialSelfTestResult {
                         Text(result)
@@ -54,6 +85,9 @@ struct PSMobileApp: App {
                 .onOpenURL { model.load(url: $0) }
         }
     }
+
+    /// Die offenen Profilaenderungen, solange die Frage danach steht.
+    @State private var profilfrage: [SlicerModel.Profilaenderung] = []
 
     @ViewBuilder private var inhalt: some View {
         // Ohne Drucker gibt es nichts zu zeigen - die Ersteinrichtung
@@ -72,10 +106,12 @@ struct PSMobileApp: App {
                 WorkflowStartView(
                     onSimple: { route = .simple },
                     onAdvanced: { route = .advanced },
-                    onAppSettings: { zurueckVon = .start; route = .appEinstellungen }
+                    onAppSettings: { zurueckVon = .start; route = .appEinstellungen },
+                    onPrinterSetup: { model.reopenSetup() }
                 )
             case .simple:
                 SimpleModeView(
+                    onHome: { route = .start },
                     onOpenAdvanced: { route = .advanced },
                     onOpenPrinterSetup: { model.reopenSetup() },
                     onAppSettings: { zurueckVon = .simple; route = .appEinstellungen },
@@ -86,9 +122,18 @@ struct PSMobileApp: App {
                 )
             case .advanced:
                 AdvancedWorkspaceView(
-                    onOpenSimple: { route = .simple },
+                    onHome: { route = .start },
+                    onOpenSimple: {
+                        // Der Einfache Modus arbeitet auf dem Profil.
+                        // Sind Werte geaendert, die es dort nicht gibt,
+                        // faellt die Entscheidung darueber vor dem
+                        // Wechsel - nicht stillschweigend danach.
+                        let offen = model.profilaenderungen()
+                        if offen.isEmpty { route = .simple } else { profilfrage = offen }
+                    },
                     onAppSettings: { zurueckVon = .advanced; route = .appEinstellungen },
                     onPrinters: { zurueckVon = .advanced; route = .drucker(nil) },
+                    onPrinterSetup: { model.reopenSetup() },
                     onSettings: { reiter in
                         einstellungsReiter = reiter
                         route = .druckEinstellungen

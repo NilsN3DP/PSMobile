@@ -72,12 +72,16 @@ object SimpleModeState {
     }
 
     /**
-     * Die mittlere Wahl ist kein eigener Zustand, sondern eine
-     * Entscheidungshilfe: sie beurteilt die Geometrie und setzt danach
-     * eine der beiden echten Einstellungen. Siehe [AdhesionAdvice].
+     * "Automatisch entscheiden" steht oben und ist kein eigener
+     * Zustand, sondern eine Entscheidungshilfe: sie beurteilt die
+     * Geometrie und setzt danach eine der beiden echten Einstellungen.
+     * Siehe [AdhesionAdvice].
+     *
+     * Oben, weil ein Rat vor der Wahl kommt. In der Mitte sah er aus
+     * wie eine dritte Einstellung, die es nicht gibt.
      */
     fun adhesionChoices() =
-        listOf("Disabled", "Decide automatically", "Outline around the model")
+        listOf("Decide automatically", "Disabled", "Outline around the model")
 
     fun printSettingsColumns() = listOf("Print Settings", "Infill", "Shell Thickness")
 
