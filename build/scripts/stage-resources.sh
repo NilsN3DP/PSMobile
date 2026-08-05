@@ -36,7 +36,13 @@ VENDORS="${PSM_VENDORS:-prusa}"
 # aus dem PrusaSlicers Assistent seinen "Custom Printer" baut. Ohne das
 # gibt es keinen Weg, einen Drucker einzurichten, den kein Hersteller
 # kennt.
-MITGELIEFERT="${PSM_VENDORS_LIST:-PrusaResearch PrusaResearchSLA Voron Templates}"
+# SLA ist bewusst aussen vor - PSMobile slict nur FFF (E-08), und das
+# mitgelieferte PrusaResearchSLA-Buendel ist zudem kaputt: das Preset
+# "Prusament Resin Model Transparent Clear @0.1 SL1S" erbt von
+# "*legacy_slow*", das in der Vendor-Datei nirgends definiert ist -
+# PrusaSlicer bricht beim Aufloesen der Vererbung ab. Gemeldet vom
+# Selbsttest auf einem echten iPad.
+MITGELIEFERT="${PSM_VENDORS_LIST:-PrusaResearch Voron Templates}"
 
 stage_into() {
     local dest="$1"
@@ -46,6 +52,9 @@ stage_into() {
 
     if [ "${VENDORS}" = "all" ]; then
         cp -r "${SRC}/profiles/." "${dest}/profiles/"
+        # Auch im "all"-Modus: kein SLA, siehe Begruendung bei MITGELIEFERT.
+        rm -f "${dest}/profiles/"*SLA*.ini "${dest}/profiles/"*SLA*.idx
+        rm -rf "${dest}/profiles/"*SLA*
     else
         # .ini plus zugehoeriger .idx und Unterordner mit Bettmodellen
         for name in ${MITGELIEFERT}; do
