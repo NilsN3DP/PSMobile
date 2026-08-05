@@ -18,6 +18,11 @@
 
 - Statisches Read-only Review: zwei Hinweise (kompakte Testabdeckung/Scrollen sowie Profilwechsel bei niedriger Hoehe) umgesetzt. Es gibt keine offenen Critical-Befunde.
 
+## Fix-Runde 1
+
+- Der iPad-Simulator fand beide Dialogkennungen nicht. Ursache: Die Kennung hing an einem SwiftUI-Container ohne eigene Accessibility-Entitaet; das Projekt verwendet fuer Screen-Marken bereits explizit `accessibilityElement()`.
+- Die Dialogkarte legt ihre Kennung nun als nicht-interaktive, eigene Accessibility-Flaeche ueber exakt der Kartengeometrie ab. Dadurch bleiben die Kind-IDs bedienbar und die UI-Tests pruefen weiterhin die wirkliche Dialoggroesse.
+
 ## Scope
 
 Geaendert wurden nur Dialogpraesentation, deren Host-Zustand, der minimale Close-Pfad im `SlicerModel` und die fokussierten UI-Tests. Persistente App-Einstellungen und Setup-Auswahl bleiben unveraendert.
