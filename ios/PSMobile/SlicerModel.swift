@@ -948,13 +948,16 @@ final class SlicerModel: ObservableObject {
     }
 
     func paint(_ id: Int32,
+               instance: Int,
                volume: Int,
                facet: Int,
-               tool: PsmCore.PaintTool,
-               state: Int32,
-               radiusMm: Float) {
-        try? core?.paint(id, volume: volume, facet: facet,
-                         tool: tool, state: state, radiusMm: radiusMm)
+               hit: (Float, Float, Float),
+               previous: (Float, Float, Float)?,
+               options: PsmCore.PaintOptions) {
+        try? core?.paint(id, instance: instance,
+                         volume: volume, facet: facet,
+                         hit: hit, previous: previous,
+                         options: options)
         // Nur neu zeichnen, nicht die Objektliste neu lesen: beim
         // Streichen kaeme sonst je Beruehrung ein voller Durchlauf.
         sceneRevision += 1

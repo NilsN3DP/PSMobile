@@ -117,6 +117,32 @@ typedef struct {
 PSM_API int psm_viewport_pick_surface(psm_viewport *v, float x, float y,
                                       psm_surface_hit *out);
 
+/**
+ * Aktive Maloptionen fuer abgeleitete Annotation und Cursor.
+ *
+ * Der Viewport speichert keine Facetten. Er liest bei invalidate() erneut
+ * die volumebasierte Annotation aus dem Kern und zeichnet nur deren Pass.
+ */
+PSM_API void psm_viewport_set_paint_options(
+    psm_viewport *v,
+    int32_t enabled,
+    psm_paint_tool tool,
+    const psm_paint_options *options);
+
+typedef struct {
+    int32_t cursor_visible;
+    int32_t annotation_visible;
+    int32_t mode;
+    int32_t shape;
+    float   radius_mm;
+    size_t  annotation_facets;
+} psm_paint_visualization_info;
+
+/** Im letzten Renderdurchlauf tatsaechlich sichtbare Malinformationen. */
+PSM_API int psm_viewport_active_paint_visualization(
+    psm_viewport *v,
+    psm_paint_visualization_info *out);
+
 /*
  * Ausgewaehltes Objekt mit dem Finger verschieben.
  *

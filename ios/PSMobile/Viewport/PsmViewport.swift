@@ -32,6 +32,15 @@ final class PsmViewport {
         let maxHeight: Float
     }
 
+    struct PaintVisualization: Equatable {
+        let cursorVisible: Bool
+        let annotationVisible: Bool
+        let annotationFacets: Int
+        let mode: PsmCore.PaintMode
+        let shape: PsmCore.PaintShape
+        let radiusMm: Float
+    }
+
     private let handle: OpaquePointer
 
     /// Legt den Viewport an. Muss im GL-Thread mit gueltigem Kontext
@@ -64,6 +73,33 @@ final class PsmViewport {
         return LayerVisualization(
             minHeight: info.min_layer_height,
             maxHeight: info.max_layer_height)
+    }
+
+    var activePaintVisualization: PaintVisualization? {
+        var info = psm_paint_visualization_info()
+        guard psm_viewport_active_paint_visualization(
+                handle, &info) != 0,
+              let mode = PsmCore.PaintMode(rawValue: info.mode),
+              let shape = PsmCore.PaintShape(rawValue: info.shape)
+        else { return nil }
+        return PaintVisualization(
+            cursorVisible: info.cursor_visible != 0,
+            annotationVisible: info.annotation_visible != 0,
+            annotationFacets: Int(info.annotation_facets),
+            mode: mode, shape: shape, radiusMm: info.radius_mm)
+    }
+
+    func setPaintOptions(_ options: PsmCore.PaintOptions?) {
+        guard let options, let tool = options.tool else {
+            psm_viewport_set_paint_options(
+                handle, 0, psm_paint_tool(rawValue: 0), nil)
+            return
+        }
+        var cOptions = options.cOptions(hit: (0, 0, 0))
+        psm_viewport_set_paint_options(
+            handle, 1,
+            psm_paint_tool(rawValue: UInt32(tool.rawValue)),
+            &cOptions)
     }
 
     /// Sagt dem Viewport, dass sich das Modell geaendert hat. Ohne das

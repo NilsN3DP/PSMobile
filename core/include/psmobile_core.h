@@ -527,6 +527,55 @@ typedef enum {
     PSM_PAINT_MMU     = 3
 } psm_paint_tool;
 
+typedef enum {
+    PSM_PAINT_MODE_BRUSH       = 0,
+    PSM_PAINT_MODE_SMART_FILL  = 1,
+    PSM_PAINT_MODE_BUCKET_FILL = 2
+} psm_paint_mode;
+
+typedef enum {
+    PSM_PAINT_SHAPE_CIRCLE = 0,
+    PSM_PAINT_SHAPE_SPHERE = 1
+} psm_paint_shape;
+
+#define PSM_PAINT_OPTIONS_VERSION_1 1u
+
+/**
+ * Versionierte Optionen fuer PrusaSlicers TriangleSelector.
+ *
+ * hit_position und previous_position liegen im Welt-/Bettkoordinatenraum.
+ * has_previous_position macht aus Circle/Sphere beim Ziehen die zugehoerige
+ * Capsule2D/Capsule3D. instance_index bleibt ein Trefferparameter; die
+ * Annotation wird weiterhin am gemeinsam genutzten ModelVolume gespeichert.
+ */
+typedef struct {
+    uint32_t        version;
+    psm_paint_mode  mode;
+    psm_paint_shape shape;
+    float           radius_mm;
+    float           fill_angle_deg;
+    int32_t         split_triangles;
+    int32_t         has_previous_position;
+    float           hit_position[3];
+    float           previous_position[3];
+} psm_paint_options;
+
+/**
+ * Parametrisierter Malweg ueber Slic3r::TriangleSelector.
+ *
+ * Support: Brush und Smart Fill. Naht: nur Brush. MMU: Brush, Smart Fill
+ * und Bucket Fill. state=0 radiert, ohne einen zweiten Facettenzustand.
+ */
+PSM_API psm_result psm_model_paint_apply(
+    psm_session *s,
+    psm_object_id id,
+    size_t instance_index,
+    size_t volume_index,
+    size_t facet_index,
+    psm_paint_tool tool,
+    int32_t state,
+    const psm_paint_options *options);
+
 /**
  * Markiert ein Originaldreieck. state: 0 loeschen; Support/Naht nutzen
  * 1=enforce, 2=block; Fuzzy nutzt 1; MMU nutzt die 1-basierte Extrudernummer.
@@ -539,8 +588,7 @@ PSM_API psm_result psm_model_paint_facet(psm_session *s,
                                          int32_t state);
 
 /**
- * Touch-Pinsel um ein Startdreieck. Es werden nur kantenverbundene,
- * ähnlich ausgerichtete Facetten innerhalb radius_mm markiert.
+ * Kompatibilitaetseinstieg fuer einen Sphere-Pinsel auf Instanz 0.
  */
 PSM_API psm_result psm_model_paint_brush(psm_session *s,
                                          psm_object_id id,

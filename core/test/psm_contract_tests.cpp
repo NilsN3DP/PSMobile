@@ -8,6 +8,7 @@
 #include <fstream>
 #include <iostream>
 #include <string>
+#include <vector>
 
 #if defined(PSM_TEST_MULTIPLE_BEDS_STATE)
 #include "psmobile_session.hpp"
@@ -48,6 +49,55 @@ const char *system_font()
     }
     return kandidaten[0];
 }
+
+#if defined(PSM_TEST_MULTIPLE_BEDS_STATE)
+Slic3r::ModelObject *test_object(psm_session *session, psm_object_id id)
+{
+    for (Slic3r::ModelObject *candidate : session->model().objects)
+        if (static_cast<psm_object_id>(candidate->id().id) == id)
+            return candidate;
+    return nullptr;
+}
+
+psm_paint_options paint_options_for(psm_session *session,
+                                    psm_object_id id,
+                                    size_t instance_index,
+                                    size_t facet_index,
+                                    psm_paint_mode mode,
+                                    psm_paint_shape shape,
+                                    float radius_mm,
+                                    float fill_angle_deg = 30.f)
+{
+    Slic3r::ModelObject *object = test_object(session, id);
+    require(object != nullptr && instance_index < object->instances.size() &&
+                ! object->volumes.empty(),
+            "paint fixture object and instance exist");
+    const Slic3r::ModelVolume *volume = object->volumes.front();
+    const indexed_triangle_set &its = volume->mesh().its;
+    require(facet_index < its.indices.size(), "paint fixture facet exists");
+    const Slic3r::Vec3i32 &face = its.indices[facet_index];
+    const Slic3r::Vec3d local_hit =
+        (its.vertices[face(0)].cast<double>() +
+         its.vertices[face(1)].cast<double>() +
+         its.vertices[face(2)].cast<double>()) / 3.0;
+    const Slic3r::Transform3d local_to_world =
+        object->instances[instance_index]->get_matrix() *
+        volume->get_matrix();
+    const Slic3r::Vec3d hit = local_to_world * local_hit;
+
+    psm_paint_options options{};
+    options.version = PSM_PAINT_OPTIONS_VERSION_1;
+    options.mode = mode;
+    options.shape = shape;
+    options.radius_mm = radius_mm;
+    options.fill_angle_deg = fill_angle_deg;
+    options.split_triangles = 0;
+    options.hit_position[0] = static_cast<float>(hit.x());
+    options.hit_position[1] = static_cast<float>(hit.y());
+    options.hit_position[2] = static_cast<float>(hit.z());
+    return options;
+}
+#endif
 
 } // namespace
 
@@ -295,6 +345,135 @@ int main(int argc, char **argv)
     require(psm_model_clear_paint(
                 session, tool_object, PSM_PAINT_SEAM) == PSM_OK,
             "clear seam painting");
+
+#if defined(PSM_TEST_MULTIPLE_BEDS_STATE)
+    /*
+     * Der neue Malvertrag reicht Treffer und Instanz nur an Prusas
+     * TriangleSelector weiter. Persistiert wird weiterhin ausschliesslich
+     * die FacetsAnnotation am Volumen, also fuer alle Kopien gemeinsam.
+     */
+    {
+        const std::filesystem::path paint_data =
+            std::filesystem::path(argv[1]) / "paint-options-data";
+        psm_session *paint_session = psm_session_create(
+            paint_data.string().c_str(), argv[2]);
+        require(paint_session != nullptr, "create isolated paint session");
+        psm_object_id paint_id = PSM_INVALID_ID;
+        size_t paint_loaded = 0;
+        require(psm_model_load(
+                    paint_session, argv[3], &paint_id, 1,
+                    &paint_loaded) == PSM_OK &&
+                    paint_loaded == 1,
+                "load paint fixture");
+        require(psm_model_set_instances(paint_session, paint_id, 2) == PSM_OK,
+                "paint fixture has two instances");
+
+        psm_paint_options instance_probe = paint_options_for(
+            paint_session, paint_id, 1, 0,
+            PSM_PAINT_MODE_BRUSH, PSM_PAINT_SHAPE_SPHERE, 1.f);
+        require(psm_model_paint_apply(
+                    paint_session, paint_id, 1, 0, 0,
+                    PSM_PAINT_SUPPORT, 1, &instance_probe) == PSM_OK &&
+                    psm_model_paint_count(
+                        paint_session, paint_id, PSM_PAINT_SUPPORT) > 0,
+                "small brush uses the hit instance transform");
+        require(psm_model_clear_paint(
+                    paint_session, paint_id, PSM_PAINT_SUPPORT) == PSM_OK,
+                "clear instance-transform probe");
+
+        psm_paint_options sphere = paint_options_for(
+            paint_session, paint_id, 1, 0,
+            PSM_PAINT_MODE_BRUSH, PSM_PAINT_SHAPE_SPHERE, 100.f);
+        psm_paint_options bad = sphere;
+        bad.version = 99;
+        require(psm_model_paint_apply(
+                    paint_session, paint_id, 1, 0, 0,
+                    PSM_PAINT_SUPPORT, 1, &bad) == PSM_ERR_INVALID_ARG,
+                "unknown paint options version is rejected");
+        require(psm_model_paint_apply(
+                    paint_session, paint_id, 2, 0, 0,
+                    PSM_PAINT_SUPPORT, 1, &sphere) == PSM_ERR_INVALID_ARG,
+                "paint instance scope is validated");
+        require(psm_model_paint_apply(
+                    paint_session, paint_id, 1, 0, 0,
+                    PSM_PAINT_SUPPORT, 1, &sphere) == PSM_OK,
+                std::string("sphere brush on second instance: ") +
+                    psm_last_error(paint_session));
+        const size_t sphere_count = psm_model_paint_count(
+            paint_session, paint_id, PSM_PAINT_SUPPORT);
+        require(sphere_count > 2,
+                "sphere reaches facets independent of camera facing");
+
+        require(psm_model_clear_paint(
+                    paint_session, paint_id, PSM_PAINT_SUPPORT) == PSM_OK,
+                "clear sphere fixture");
+        psm_paint_options circle = paint_options_for(
+            paint_session, paint_id, 1, 0,
+            PSM_PAINT_MODE_BRUSH, PSM_PAINT_SHAPE_CIRCLE, 100.f);
+        require(psm_model_paint_apply(
+                    paint_session, paint_id, 1, 0, 0,
+                    PSM_PAINT_SUPPORT, 1, &circle) == PSM_OK,
+                "circle brush on second instance");
+        const size_t circle_count = psm_model_paint_count(
+            paint_session, paint_id, PSM_PAINT_SUPPORT);
+        require(circle_count > 0 && circle_count < sphere_count,
+                "circle excludes backward-facing facets unlike sphere");
+
+        require(psm_model_clear_paint(
+                    paint_session, paint_id, PSM_PAINT_SUPPORT) == PSM_OK,
+                "clear circle fixture");
+        psm_paint_options capsule = paint_options_for(
+            paint_session, paint_id, 1, 0,
+            PSM_PAINT_MODE_BRUSH, PSM_PAINT_SHAPE_SPHERE, 2.f);
+        capsule.has_previous_position = 1;
+        capsule.previous_position[0] = capsule.hit_position[0] + 4.f;
+        capsule.previous_position[1] = capsule.hit_position[1];
+        capsule.previous_position[2] = capsule.hit_position[2];
+        require(psm_model_paint_apply(
+                    paint_session, paint_id, 1, 0, 0,
+                    PSM_PAINT_SUPPORT, 1, &capsule) == PSM_OK &&
+                    psm_model_paint_count(
+                        paint_session, paint_id, PSM_PAINT_SUPPORT) > 0,
+                "two brush points exercise Prusa's capsule cursor");
+        require(psm_model_clear_paint(
+                    paint_session, paint_id, PSM_PAINT_SUPPORT) == PSM_OK,
+                "clear capsule fixture");
+
+        psm_paint_options smart = paint_options_for(
+            paint_session, paint_id, 0, 0,
+            PSM_PAINT_MODE_SMART_FILL, PSM_PAINT_SHAPE_CIRCLE, 5.f, 1.f);
+        require(psm_model_paint_apply(
+                    paint_session, paint_id, 0, 0, 0,
+                    PSM_PAINT_SUPPORT, 2, &smart) == PSM_OK &&
+                    psm_model_paint_count(
+                        paint_session, paint_id, PSM_PAINT_SUPPORT) == 2,
+                "smart fill applies only the coplanar cube face at one degree");
+        require(psm_model_paint_apply(
+                    paint_session, paint_id, 0, 0, 0,
+                    PSM_PAINT_SEAM, 1, &smart) == PSM_ERR_INVALID_ARG,
+                "seam exposes no invented smart fill");
+
+        psm_paint_options bucket = smart;
+        bucket.mode = PSM_PAINT_MODE_BUCKET_FILL;
+        require(psm_model_paint_apply(
+                    paint_session, paint_id, 0, 0, 0,
+                    PSM_PAINT_MMU, 3, &bucket) == PSM_OK &&
+                    psm_model_paint_count(
+                        paint_session, paint_id, PSM_PAINT_MMU) == 2,
+                "MMU bucket fill applies the connected coplanar face");
+        require(psm_model_paint_count(
+                    paint_session, paint_id, PSM_PAINT_SEAM) == 0,
+                "fill writes only the requested annotation");
+        require(psm_model_clear_paint(
+                    paint_session, paint_id, PSM_PAINT_SUPPORT) == PSM_OK &&
+                    psm_model_paint_count(
+                        paint_session, paint_id, PSM_PAINT_SUPPORT) == 0 &&
+                    psm_model_paint_count(
+                        paint_session, paint_id, PSM_PAINT_MMU) == 2,
+                "clear removes only the requested paint tool");
+        psm_session_destroy(paint_session);
+    }
+#endif
 
     psm_object_info layer_object_info{};
     require(psm_model_info(session, tool_object, &layer_object_info) == PSM_OK,
@@ -980,12 +1159,33 @@ int main(int argc, char **argv)
             project_id_count == 1,
             "locate first project object");
     const psm_object_id annotated_id = project_ids[0];
-    require(psm_model_paint_brush(
-                session, annotated_id, 0, 0,
-                PSM_PAINT_SUPPORT, 1, 3.f) == PSM_OK &&
+    psm_paint_options project_support = paint_options_for(
+        session, annotated_id, 0, 0,
+        PSM_PAINT_MODE_SMART_FILL, PSM_PAINT_SHAPE_CIRCLE, 3.f, 30.f);
+    require(psm_model_paint_apply(
+                session, annotated_id, 0, 0, 0,
+                PSM_PAINT_SUPPORT, 1, &project_support) == PSM_OK &&
             psm_model_paint_count(
                 session, annotated_id, PSM_PAINT_SUPPORT) > 0,
-            "project object keeps a support annotation");
+            "project object keeps a support annotation from Smart Fill");
+    psm_paint_options project_seam = paint_options_for(
+        session, annotated_id, 0, 0,
+        PSM_PAINT_MODE_BRUSH, PSM_PAINT_SHAPE_SPHERE, 3.f);
+    require(psm_model_paint_apply(
+                session, annotated_id, 0, 0, 0,
+                PSM_PAINT_SEAM, 1, &project_seam) == PSM_OK &&
+            psm_model_paint_count(
+                session, annotated_id, PSM_PAINT_SEAM) > 0,
+            "project object keeps a seam annotation from the new brush path");
+    psm_paint_options project_mmu = paint_options_for(
+        session, annotated_id, 0, 0,
+        PSM_PAINT_MODE_BUCKET_FILL, PSM_PAINT_SHAPE_CIRCLE, 3.f, 30.f);
+    require(psm_model_paint_apply(
+                session, annotated_id, 0, 0, 0,
+                PSM_PAINT_MMU, 2, &project_mmu) == PSM_OK &&
+            psm_model_paint_count(
+                session, annotated_id, PSM_PAINT_MMU) > 0,
+            "project object keeps an MMU annotation from Bucket Fill");
     size_t project_text_volume = 0;
     require(psm_model_add_text_volume(
                 session, annotated_id, "3MF",
@@ -1077,6 +1277,14 @@ int main(int argc, char **argv)
                 roundtrip_session, reopened_ids[0],
                 PSM_PAINT_SUPPORT) > 0,
             "roundtrip retains support facet annotation");
+    require(psm_model_paint_count(
+                roundtrip_session, reopened_ids[0],
+                PSM_PAINT_SEAM) > 0,
+            "roundtrip retains seam facet annotation");
+    require(psm_model_paint_count(
+                roundtrip_session, reopened_ids[0],
+                PSM_PAINT_MMU) > 0,
+            "roundtrip retains MMU facet annotation");
     require(std::string(reopened.selected_printer).size() > 0,
             "roundtrip selects its embedded printer profile");
     require(psm_custom_gcode_count(roundtrip_session) == 1,

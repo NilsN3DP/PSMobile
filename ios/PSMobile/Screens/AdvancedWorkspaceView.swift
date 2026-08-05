@@ -93,11 +93,8 @@ struct AdvancedWorkspaceView: View {
     private enum Zweck { case modell, projekt }
     @State private var ansichtZuruecksetzen = 0
 
-    /// Womit gemalt wird, und mit welchem Zustand. Nil heisst: gar
-    /// nicht - dann dreht ein Wischen wieder die Kamera.
-    @State private var malwerkzeug: PsmCore.PaintTool?
-    @State private var malzustand: Int32 = 1
-    @State private var malradius: Float = 5
+    /// Dieselben Optionen steuern Bedienung, Kern und Viewport.
+    @State private var maloptionen = PsmCore.PaintOptions()
 
     /// Auf schmalen Fenstern liegt der Inspektor ueber dem Bett statt
     /// daneben - nebeneinander bliebe fuer beides zu wenig.
@@ -233,7 +230,7 @@ struct AdvancedWorkspaceView: View {
         // schwer wieder herausfindet: der Viewport reagiert dann auf
         // keine Geste mehr wie erwartet.
         .onChange(of: model.selectedId) { neu in
-            if neu == nil { malwerkzeug = nil }
+            if neu == nil { maloptionen.tool = nil }
         }
         // Was sich auf dem Bett ändert, macht eine ausgegebene Platte
         // hinfällig - sonst gäbe man eine Anordnung von vorhin weiter.
@@ -397,10 +394,12 @@ struct AdvancedWorkspaceView: View {
     /// Griffen. Und ein Pinsel schliesst das Flaechenwerkzeug aus: beide
     /// wollen dieselbe Beruehrung.
     private func malwerkzeugUmschalten(_ werkzeug: PsmCore.PaintTool) {
-        if malwerkzeug == werkzeug {
-            malwerkzeug = nil
+        if maloptionen.tool == werkzeug {
+            maloptionen.tool = nil
         } else {
-            malwerkzeug = werkzeug
+            maloptionen.tool = werkzeug
+            maloptionen.state = 1
+            maloptionen.normalizeForTool()
             aufFlaeche = false
             reiter = .werkzeuge
             seiteOffen = true
@@ -593,7 +592,9 @@ struct AdvancedWorkspaceView: View {
                     selectedId: model.selectedId ?? -1,
                     selectedIds: Array(model.selectedIds),
                     invalidateKey: model.sceneRevision,
-                    gizmo: malwerkzeug == nil ? gizmo : .none,
+                    gizmo: maloptionen.tool == nil ? gizmo : .none,
+                    paintOptions:
+                        maloptionen.tool == nil ? nil : maloptionen,
                     viewportMode: vorschau ? .preview : .editor,
                     layerRange: vorschau && schichten > 0 ? 0...Int32(schicht) : nil,
                     resetViewKey: ansichtZuruecksetzen,
@@ -615,21 +616,44 @@ struct AdvancedWorkspaceView: View {
                     // Pinsel und das Hinlegen auf eine Flaeche. Beide
                     // brauchen ein getroffenes Dreieck, nur macht jedes
                     // etwas anderes damit.
-                    onSurfaceTap: (malwerkzeug == nil && !aufFlaeche) ? nil : { treffer in
-                        if let werkzeug = malwerkzeug {
-                            model.paint(treffer.objectId,
-                                        volume: Int(treffer.volumeIndex),
-                                        facet: Int(treffer.facetIndex),
-                                        tool: werkzeug,
-                                        state: malzustand,
-                                        radiusMm: malradius)
-                        } else if aufFlaeche {
-                            model.layOnFace(treffer.objectId,
-                                            instance: Int(treffer.instanceIndex),
-                                            volume: Int(treffer.volumeIndex),
-                                            facet: Int(treffer.facetIndex))
-                        }
-                    },
+                    onSurfaceTap: aufFlaeche ? { treffer in
+                        model.layOnFace(
+                            treffer.objectId,
+                            instance: Int(treffer.instanceIndex),
+                            volume: Int(treffer.volumeIndex),
+                            facet: Int(treffer.facetIndex))
+                    } : nil,
+                    onSurfaceStroke:
+                        maloptionen.tool == nil ? nil : {
+                            treffer, vorher in
+                            /*
+                             * Eine Capsule verbindet nur Treffer desselben
+                             * Instanz-Volumens. Beim Sprung auf eine andere
+                             * Kopie oder ein anderes Volumen beginnt ein
+                             * neuer Tupfer; deren Weltpunkt darf nicht mit
+                             * der aktuellen Instanzmatrix zurückgerechnet
+                             * werden.
+                             */
+                            let vorigePosition =
+                                vorher.flatMap { alt
+                                    -> (Float, Float, Float)? in
+                                    guard alt.objectId == treffer.objectId,
+                                          alt.instanceIndex ==
+                                            treffer.instanceIndex,
+                                          alt.volumeIndex ==
+                                            treffer.volumeIndex
+                                    else { return nil }
+                                    return alt.position
+                                }
+                            model.paint(
+                                treffer.objectId,
+                                instance: Int(treffer.instanceIndex),
+                                volume: Int(treffer.volumeIndex),
+                                facet: Int(treffer.facetIndex),
+                                hit: treffer.position,
+                                previous: vorigePosition,
+                                options: maloptionen)
+                        },
                     onLayerVisualizationChanged: {
                         schichthoehenDarstellung = $0
                     }
@@ -722,7 +746,7 @@ struct AdvancedWorkspaceView: View {
         // In der Vorschau gibt es keine Objekte zum Anfassen, und kein
         // Werkzeug, das auf sie zeigt.
         model.select(nil)
-        malwerkzeug = nil
+        maloptionen.tool = nil
         vorschau = true
     }
 
@@ -997,9 +1021,7 @@ struct AdvancedWorkspaceView: View {
         if let id = model.selectedId {
             PaintView(model: model,
                       objektId: id,
-                      werkzeug: $malwerkzeug,
-                      zustand: $malzustand,
-                      radius: $malradius)
+                      options: $maloptionen)
         }
         Divider().overlay(PrusaColors.divider)
         Text(st("Whole plate", "Ganze Platte").uppercased())

@@ -283,23 +283,91 @@ extension PsmCore {
         case support = 0, seam = 1, fuzzy = 2, mmu = 3
     }
 
-    /// Ein Pinselstrich um ein getroffenes Dreieck.
-    ///
-    /// Markiert werden nur kantenverbundene, aehnlich ausgerichtete
-    /// Facetten innerhalb des Radius - sonst faerbt ein Tippen auf eine
-    /// Kante die Rueckseite gleich mit.
-    ///
-    /// `state`: 0 loescht. Stuetzen und Naht kennen 1 (erzwingen) und
-    /// 2 (sperren), MMU die einsbasierte Extrudernummer.
+    enum PaintMode: Int32, CaseIterable {
+        case brush = 0, smartFill = 1, bucketFill = 2
+    }
+
+    enum PaintShape: Int32, CaseIterable {
+        case circle = 0, sphere = 1
+    }
+
+    /// Einziger Optionszustand fuer Bedienung, Kernaufruf und Viewport.
+    struct PaintOptions: Equatable {
+        var tool: PaintTool?
+        var state: Int32 = 1
+        var mode: PaintMode = .brush
+        var shape: PaintShape = .sphere
+        var radiusMm: Float = 5
+        var fillAngleDeg: Float = 30
+        var splitTriangles = true
+
+        var supportedModes: [PaintMode] {
+            switch tool {
+            case .support: return [.brush, .smartFill]
+            case .seam, .fuzzy: return [.brush]
+            case .mmu: return [.brush, .smartFill, .bucketFill]
+            case nil: return []
+            }
+        }
+
+        mutating func normalizeForTool() {
+            if !supportedModes.contains(mode) {
+                mode = .brush
+            }
+            if tool != .mmu && state > 2 {
+                state = 1
+            }
+        }
+
+        func cOptions(hit: (Float, Float, Float),
+                      previous: (Float, Float, Float)? = nil)
+            -> psm_paint_options {
+            var result = psm_paint_options()
+            result.version = UInt32(PSM_PAINT_OPTIONS_VERSION_1)
+            result.mode = psm_paint_mode(
+                rawValue: UInt32(mode.rawValue))
+            result.shape = psm_paint_shape(
+                rawValue: UInt32(shape.rawValue))
+            result.radius_mm = radiusMm
+            result.fill_angle_deg = fillAngleDeg
+            result.split_triangles = splitTriangles ? 1 : 0
+            result.has_previous_position = previous == nil ? 0 : 1
+            result.hit_position = hit
+            result.previous_position = previous ?? (0, 0, 0)
+            return result
+        }
+    }
+
+    /// Treffer und Instanz werden unveraendert an TriangleSelector gereicht.
+    /// Persistiert bleibt nur die gemeinsame Annotation des Volumens.
+    func paint(_ id: Int32,
+               instance: Int,
+               volume: Int,
+               facet: Int,
+               hit: (Float, Float, Float),
+               previous: (Float, Float, Float)?,
+               options: PaintOptions) throws {
+        guard let tool = options.tool else { return }
+        var cOptions = options.cOptions(hit: hit, previous: previous)
+        try check(psm_model_paint_apply(
+                    raw, id, size_t(instance), size_t(volume), size_t(facet),
+                    psm_paint_tool(rawValue: UInt32(tool.rawValue)),
+                    options.state, &cOptions),
+                  "Bemalen")
+    }
+
+    /// Bestehende Diagnose-Aufrufer bleiben ABI-kompatibel; die
+    /// Bedienoberflaeche verwendet ausschliesslich den Optionsweg oben.
     func paint(_ id: Int32,
                volume: Int,
                facet: Int,
                tool: PaintTool,
                state: Int32,
                radiusMm: Float) throws {
-        try check(psm_model_paint_brush(raw, id, size_t(volume), size_t(facet),
-                                        psm_paint_tool(rawValue: UInt32(tool.rawValue)),
-                                        state, radiusMm),
+        try check(psm_model_paint_brush(
+                    raw, id, size_t(volume), size_t(facet),
+                    psm_paint_tool(rawValue: UInt32(tool.rawValue)),
+                    state, radiusMm),
                   "Bemalen")
     }
 

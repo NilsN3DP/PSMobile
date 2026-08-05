@@ -28,6 +28,8 @@ struct ViewportView: UIViewRepresentable {
     /// Welches Gizmo am ausgewaehlten Objekt haengt. Der Viewport kennt
     /// die Betriebsart schon lange; sie war nur nicht einstellbar.
     var gizmo: PsmViewport.Gizmo = .move
+    /// Identische Optionen fuer Cursor und abgeleiteten Annotation-Pass.
+    var paintOptions: PsmCore.PaintOptions? = nil
     /// Bett oder G-Code-Vorschau. Die Werkzeugwege werden beim ersten
     /// Umschalten geladen - sie sind zu gross, um sie vorsorglich
     /// vorzuhalten - und die Zahl der Schichten kommt zurueck.
@@ -49,6 +51,8 @@ struct ViewportView: UIViewRepresentable {
     /// waehrend des Ziehens noch die Werte von vorher.
     var onObjectChanged: (() -> Void)?
     var onSurfaceTap: ((PsmViewport.SurfaceHit) -> Void)?
+    var onSurfaceStroke:
+        ((PsmViewport.SurfaceHit, PsmViewport.SurfaceHit?) -> Void)? = nil
     var onBlockedInput: (() -> Void)?
     var onLayerVisualizationChanged:
         ((PsmViewport.LayerVisualization?) -> Void)?
@@ -64,6 +68,7 @@ struct ViewportView: UIViewRepresentable {
         v.onSelect = onSelect
         v.onObjectChanged = onObjectChanged
         v.onSurfaceTap = onSurfaceTap
+        v.onSurfaceStroke = onSurfaceStroke
         v.onBlockedInput = onBlockedInput
         v.onLayerVisualizationChanged = onLayerVisualizationChanged
         v.inputEnabled = inputEnabled
@@ -73,6 +78,7 @@ struct ViewportView: UIViewRepresentable {
         v.letzterViewKey = viewPresetKey
         v.perform { vp in
             vp.setSelections(selectedIds, primary: selectedId)
+            vp.setPaintOptions(paintOptions)
             if vp.gizmo != gizmo { vp.gizmo = gizmo }
             if viewportMode == .preview && !v.vorschauGeladen {
                 v.vorschauGeladen = true
@@ -176,10 +182,13 @@ final class PSMGLView: UIView {
     var onSelect: ((Int32) -> Void)?
     var onObjectChanged: (() -> Void)?
     var onSurfaceTap: ((PsmViewport.SurfaceHit) -> Void)?
+    var onSurfaceStroke:
+        ((PsmViewport.SurfaceHit, PsmViewport.SurfaceHit?) -> Void)?
     var onBlockedInput: (() -> Void)?
     var onLayerVisualizationChanged:
         ((PsmViewport.LayerVisualization?) -> Void)?
     private var letzteSchichtdarstellung: PsmViewport.LayerVisualization?
+    private var letzterMaltreffer: PsmViewport.SurfaceHit?
 
     // Zustand der laufenden Geste - dieselbe Aufteilung wie auf Android.
     private var lastPoint: CGPoint = .zero
@@ -207,6 +216,7 @@ final class PSMGLView: UIView {
 
     private static let handleRadiusPx: Float = 44
     private var gizmoMarkers: [UIView] = []
+    private let paintMarker = UIView(frame: .zero)
 
     init(session: OpaquePointer, shaderDir: String) {
         // GLES 2.0: genau dafuer sind die Shader aus PrusaSlicer
@@ -258,6 +268,13 @@ final class PSMGLView: UIView {
             addSubview(marker)
             return marker
         }
+        paintMarker.backgroundColor = .clear
+        paintMarker.isUserInteractionEnabled = false
+        paintMarker.isAccessibilityElement = true
+        paintMarker.accessibilityIdentifier = "viewport.malmarkierung"
+        paintMarker.accessibilityLabel = "Bemalung im 3D-Viewport"
+        paintMarker.isHidden = true
+        addSubview(paintMarker)
     }
 
     required init?(coder: NSCoder) { fatalError("nicht aus dem Storyboard") }
@@ -309,11 +326,33 @@ final class PSMGLView: UIView {
         glBindRenderbuffer(GLenum(GL_RENDERBUFFER), colorbuffer)
         context.presentRenderbuffer(Int(GL_RENDERBUFFER))
         aktualisiereGizmoMarker(vp)
+        aktualisiereMalmarker(vp)
         let schichtdarstellung = vp.activeLayerVisualization
         if schichtdarstellung != letzteSchichtdarstellung {
             letzteSchichtdarstellung = schichtdarstellung
             onLayerVisualizationChanged?(schichtdarstellung)
         }
+    }
+
+    private func aktualisiereMalmarker(_ vp: PsmViewport) {
+        guard let info = vp.activePaintVisualization else {
+            paintMarker.isHidden = true
+            return
+        }
+        paintMarker.frame = CGRect(
+            x: 0, y: 0, width: max(bounds.width, 1),
+            height: max(bounds.height, 1))
+        let modus: String
+        switch info.mode {
+        case .brush: modus = "Pinsel"
+        case .smartFill: modus = "Smart Fill"
+        case .bucketFill: modus = "Bucket Fill"
+        }
+        let form = info.shape == .circle ? "Kreis" : "Kugel"
+        paintMarker.accessibilityValue =
+            "\(modus), \(form), \(Int(info.radiusMm.rounded())) mm, " +
+            "\(info.annotationFacets) Facetten"
+        paintMarker.isHidden = false
     }
 
     private func aktualisiereGizmoMarker(_ vp: PsmViewport) {
@@ -473,6 +512,18 @@ final class PSMGLView: UIView {
         // Ein aktives Malwerkzeug hat Vorrang vor allem anderen: keine
         // Griffe, kein Verschieben, keine Kameradrehung. Wer malt, will
         // malen.
+        if let stroke = onSurfaceStroke {
+            gizmoAxis = -1
+            dragObject = false
+            malstrich = true
+            letzterTupfer = CGPoint(x: CGFloat(x), y: CGFloat(y))
+            if let hit = vp.surfacePick(x: x, y: y) {
+                letzterMaltreffer = hit
+                stroke(hit, nil)
+                requestRender()
+            }
+            return
+        }
         if let tap = onSurfaceTap {
             gizmoAxis = -1
             dragObject = false
@@ -542,8 +593,24 @@ final class PSMGLView: UIView {
         let (fx, fy) = px(lastPoint)
         let (tx, ty) = px(p)
 
-        if malstrich, let tap = onSurfaceTap {
+        if malstrich, let stroke = onSurfaceStroke {
             let weit = hypot(CGFloat(tx) - letzterTupfer.x, CGFloat(ty) - letzterTupfer.y)
+            if weit >= PSMGLView.tupferAbstandPx {
+                letzterTupfer = CGPoint(x: CGFloat(tx), y: CGFloat(ty))
+                if let hit = vp.surfacePick(x: tx, y: ty) {
+                    stroke(hit, letzterMaltreffer)
+                    letzterMaltreffer = hit
+                }
+            }
+            lastPoint = p
+            moved = true
+            requestRender()
+            return
+        }
+        if malstrich, let tap = onSurfaceTap {
+            let weit = hypot(
+                CGFloat(tx) - letzterTupfer.x,
+                CGFloat(ty) - letzterTupfer.y)
             if weit >= PSMGLView.tupferAbstandPx {
                 letzterTupfer = CGPoint(x: CGFloat(tx), y: CGFloat(ty))
                 if let hit = vp.surfacePick(x: tx, y: ty) { tap(hit) }
@@ -585,7 +652,11 @@ final class PSMGLView: UIView {
                 letzteMeldung = 0
                 meldeAenderung()
             }
-            gizmoAxis = -1; dragObject = false; lastSpan = 0; malstrich = false
+            gizmoAxis = -1
+            dragObject = false
+            lastSpan = 0
+            malstrich = false
+            letzterMaltreffer = nil
         }
         // Beim Malen ist schon alles gemalt - ein Tupfer zum Abschied
         // saesse dort, wo der Finger abhebt, und das ist selten gewollt.
@@ -608,6 +679,7 @@ final class PSMGLView: UIView {
         gizmoAxis = -1
         dragObject = false
         malstrich = false
+        letzterMaltreffer = nil
         lastSpan = 0
     }
 }

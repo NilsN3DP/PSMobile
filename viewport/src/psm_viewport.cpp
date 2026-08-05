@@ -41,6 +41,7 @@
 
 #include "libslic3r/Model.hpp"
 #include "libslic3r/PrintConfig.hpp"
+#include "libslic3r/TriangleSelector.hpp"
 #include "libslic3r/TriangleMesh.hpp"
 
 /* NanoSVG rastert die Bett-Textur - dieselbe Bibliothek, die
@@ -322,6 +323,15 @@ struct psm_viewport
     Program prog_bed;    // printbed      - Bettflaeche mit Textur
 
     std::vector<Mesh> meshes;
+    std::vector<Mesh> paint_overlays;
+    Mesh paint_cursor;
+    bool paint_enabled = false;
+    psm_paint_tool paint_tool = PSM_PAINT_SUPPORT;
+    psm_paint_options paint_options{};
+    psm_surface_hit paint_hit{};
+    bool paint_hit_valid = false;
+    bool paint_cursor_dirty = false;
+    size_t paint_annotation_facets = 0;
     LayerTexture layer_texture;
     Mesh bed_fill;
     Mesh bed_grid;
@@ -655,6 +665,10 @@ void build_meshes(psm_viewport *v)
     for (Mesh &m : v->meshes)
         m.destroy();
     v->meshes.clear();
+    for (Mesh &m : v->paint_overlays)
+        m.destroy();
+    v->paint_overlays.clear();
+    v->paint_annotation_facets = 0;
     v->layer_texture.destroy();
     v->scene_bbox = Slic3r::BoundingBoxf3();
 
@@ -796,6 +810,140 @@ void build_meshes(psm_viewport *v)
             break;
         }
     }
+
+    /*
+     * Der Farbpass wird direkt aus Prusas serialisierter Annotation
+     * erzeugt. Es gibt weder hier noch in Swift einen zweiten
+     * Facettenzustand. Weil die Annotation am Volumen liegt, erscheint
+     * derselbe Pass folgerichtig auf jeder Instanz dieses Volumens.
+     */
+    if (v->paint_enabled && v->selection != PSM_INVALID_ID) {
+        for (const Slic3r::ModelObject *object :
+                 v->session->model().objects) {
+            if (static_cast<psm_object_id>(object->id().id) !=
+                v->selection)
+                continue;
+            for (size_t volume_index = 0;
+                 volume_index < object->volumes.size(); ++volume_index) {
+                const Slic3r::ModelVolume *volume =
+                    object->volumes[volume_index];
+                if (! volume->is_model_part())
+                    continue;
+                const Slic3r::FacetsAnnotation *annotation = nullptr;
+                switch (v->paint_tool) {
+                    case PSM_PAINT_SUPPORT:
+                        annotation = &volume->supported_facets; break;
+                    case PSM_PAINT_SEAM:
+                        annotation = &volume->seam_facets; break;
+                    case PSM_PAINT_FUZZY:
+                        annotation = &volume->fuzzy_skin_facets; break;
+                    case PSM_PAINT_MMU:
+                        annotation = &volume->mm_segmentation_facets; break;
+                }
+                if (annotation == nullptr || annotation->empty())
+                    continue;
+                Slic3r::TriangleSelector selector(volume->mesh());
+                selector.deserialize(annotation->get_data(), false);
+                for (size_t instance_index = 0;
+                     instance_index < object->instances.size();
+                     ++instance_index) {
+                    const Slic3r::Transform3d local_to_world =
+                        object->instances[instance_index]->get_matrix() *
+                        volume->get_matrix();
+                    std::vector<Vertex> vertices;
+                    for (int raw_state = 1; raw_state <= 254;
+                         ++raw_state) {
+                        const auto state =
+                            static_cast<Slic3r::TriangleStateType>(
+                                raw_state);
+                        if (! selector.has_facets(state))
+                            continue;
+                        const indexed_triangle_set painted =
+                            selector.get_facets_strict(state);
+                        v->paint_annotation_facets +=
+                            painted.indices.size();
+                        for (const Slic3r::Vec3i32 &face :
+                             painted.indices) {
+                            Slic3r::Vec3d points[3];
+                            for (int corner = 0; corner < 3; ++corner)
+                                points[corner] = local_to_world *
+                                    painted.vertices[face(corner)]
+                                        .cast<double>();
+                            const Slic3r::Vec3d normal =
+                                (points[1] - points[0])
+                                    .cross(points[2] - points[0])
+                                    .normalized();
+                            for (const Slic3r::Vec3d &point : points)
+                                vertices.push_back(Vertex{
+                                    static_cast<float>(point.x()),
+                                    static_cast<float>(point.y()),
+                                    static_cast<float>(point.z()),
+                                    static_cast<float>(normal.x()),
+                                    static_cast<float>(normal.y()),
+                                    static_cast<float>(normal.z()) });
+                        }
+                    }
+                    if (! vertices.empty()) {
+                        Mesh overlay;
+                        upload(overlay, vertices);
+                        overlay.owner = v->selection;
+                        v->paint_overlays.push_back(overlay);
+                    }
+                }
+            }
+            break;
+        }
+    }
+}
+
+void build_paint_cursor(psm_viewport *v)
+{
+    v->paint_cursor.destroy();
+    v->paint_cursor_dirty = false;
+    if (! v->paint_enabled || ! v->paint_hit_valid)
+        return;
+
+    Vec3 center(v->paint_hit.position[0], v->paint_hit.position[1],
+                v->paint_hit.position[2]);
+    Vec3 normal(v->paint_hit.normal[0], v->paint_hit.normal[1],
+                v->paint_hit.normal[2]);
+    if (normal.squaredNorm() < 1e-8f)
+        return;
+    normal.normalize();
+    Vec3 tangent = normal.cross(
+        std::abs(normal.z()) < 0.9f
+            ? Vec3(0.f, 0.f, 1.f) : Vec3(0.f, 1.f, 0.f)).normalized();
+    Vec3 bitangent = normal.cross(tangent).normalized();
+
+    const float radius = v->paint_options.radius_mm;
+    const float band = std::max(radius * 0.055f, 0.16f);
+    constexpr int segments = 64;
+    std::vector<Vertex> vertices;
+    auto append_ring = [&](const Vec3 &u, const Vec3 &w) {
+        for (int i = 0; i < segments; ++i) {
+            const float a0 = 2.f * PI_F * i / segments;
+            const float a1 = 2.f * PI_F * (i + 1) / segments;
+            const Vec3 d0 = std::cos(a0) * u + std::sin(a0) * w;
+            const Vec3 d1 = std::cos(a1) * u + std::sin(a1) * w;
+            const Vec3 p[4] = {
+                center + d0 * (radius - band),
+                center + d0 * (radius + band),
+                center + d1 * (radius + band),
+                center + d1 * (radius - band),
+            };
+            const int order[6] = { 0, 1, 2, 0, 2, 3 };
+            for (const int corner : order)
+                vertices.push_back(Vertex{
+                    p[corner].x(), p[corner].y(), p[corner].z(),
+                    normal.x(), normal.y(), normal.z() });
+        }
+    };
+    append_ring(tangent, bitangent);
+    if (v->paint_options.shape == PSM_PAINT_SHAPE_SPHERE) {
+        append_ring(tangent, normal);
+        append_ring(bitangent, normal);
+    }
+    upload(v->paint_cursor, vertices);
 }
 
 void draw(const Program &p, const Mesh &m, GLenum mode,
@@ -931,6 +1079,9 @@ PSM_API void psm_viewport_destroy(psm_viewport *v)
         return;
     for (Mesh &m : v->meshes)
         m.destroy();
+    for (Mesh &m : v->paint_overlays)
+        m.destroy();
+    v->paint_cursor.destroy();
     v->bed_fill.destroy();
     v->bed_grid.destroy();
     v->auswahlkasten.destroy();
@@ -1105,6 +1256,43 @@ PSM_API void psm_viewport_render(psm_viewport *v)
             draw_layer_profile(v, m, view, proj);
         else
             draw(v->prog_lit, m, GL_TRIANGLES, view, proj, farbe);
+    }
+
+    if (v->paint_enabled && ! v->paint_overlays.empty()) {
+        static const float support[4] = { 0.20f, 0.82f, 0.35f, 0.62f };
+        static const float seam[4]    = { 0.94f, 0.24f, 0.22f, 0.62f };
+        static const float fuzzy[4]   = { 0.35f, 0.68f, 0.96f, 0.62f };
+        static const float mmu[4]     = { 0.75f, 0.38f, 0.96f, 0.62f };
+        const float *color = support;
+        if (v->paint_tool == PSM_PAINT_SEAM) color = seam;
+        else if (v->paint_tool == PSM_PAINT_FUZZY) color = fuzzy;
+        else if (v->paint_tool == PSM_PAINT_MMU) color = mmu;
+        glEnable(GL_BLEND);
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+        glDepthMask(GL_FALSE);
+        glDisable(GL_CULL_FACE);
+        for (const Mesh &overlay : v->paint_overlays)
+            draw(v->prog_flat, overlay, GL_TRIANGLES, view, proj, color);
+        glEnable(GL_CULL_FACE);
+        glDepthMask(GL_TRUE);
+        glDisable(GL_BLEND);
+    }
+
+    if (v->paint_cursor_dirty)
+        build_paint_cursor(v);
+    if (v->paint_enabled && v->paint_cursor.vertex_count > 0) {
+        static const float brush[4] = { 1.00f, 0.63f, 0.16f, 0.95f };
+        static const float smart[4] = { 0.18f, 0.82f, 0.94f, 0.95f };
+        static const float bucket[4] = { 0.77f, 0.39f, 1.00f, 0.95f };
+        const float *color =
+            v->paint_options.mode == PSM_PAINT_MODE_SMART_FILL ? smart :
+            v->paint_options.mode == PSM_PAINT_MODE_BUCKET_FILL ? bucket :
+            brush;
+        glDisable(GL_DEPTH_TEST);
+        glDisable(GL_CULL_FACE);
+        draw(v->prog_flat, v->paint_cursor, GL_TRIANGLES, view, proj, color);
+        glEnable(GL_CULL_FACE);
+        glEnable(GL_DEPTH_TEST);
     }
 
     /*
@@ -1809,7 +1997,60 @@ PSM_API int psm_viewport_pick_surface(psm_viewport *v, float x, float y,
      * ausschliesslich dazu. Beim Messen ohne Auswahl darf dagegen die
      * gesamte Platte getroffen werden.
      */
-    return raycast_model(v, x, y, v->selection, out);
+    const int found = raycast_model(v, x, y, v->selection, out);
+    if (v->paint_enabled) {
+        v->paint_hit_valid = found != 0 && out != nullptr;
+        if (v->paint_hit_valid)
+            v->paint_hit = *out;
+        v->paint_cursor_dirty = true;
+    }
+    return found;
+}
+
+PSM_API void psm_viewport_set_paint_options(
+    psm_viewport *v,
+    int32_t enabled,
+    psm_paint_tool tool,
+    const psm_paint_options *options)
+{
+    if (v == nullptr)
+        return;
+    const bool valid =
+        enabled != 0 && options != nullptr &&
+        options->version == PSM_PAINT_OPTIONS_VERSION_1;
+    const bool changed =
+        v->paint_enabled != valid ||
+        (valid && (v->paint_tool != tool ||
+            std::memcmp(&v->paint_options, options,
+                        sizeof(psm_paint_options)) != 0));
+    v->paint_enabled = valid;
+    if (valid) {
+        v->paint_tool = tool;
+        v->paint_options = *options;
+    } else {
+        v->paint_hit_valid = false;
+        v->paint_cursor.destroy();
+    }
+    if (changed) {
+        v->paint_cursor_dirty = true;
+        v->dirty = true;
+    }
+}
+
+PSM_API int psm_viewport_active_paint_visualization(
+    psm_viewport *v,
+    psm_paint_visualization_info *out)
+{
+    if (v == nullptr || out == nullptr || ! v->paint_enabled)
+        return 0;
+    std::memset(out, 0, sizeof(*out));
+    out->cursor_visible = v->paint_cursor.vertex_count > 0 ? 1 : 0;
+    out->annotation_visible = v->paint_overlays.empty() ? 0 : 1;
+    out->mode = static_cast<int32_t>(v->paint_options.mode);
+    out->shape = static_cast<int32_t>(v->paint_options.shape);
+    out->radius_mm = v->paint_options.radius_mm;
+    out->annotation_facets = v->paint_annotation_facets;
+    return out->cursor_visible != 0 || out->annotation_visible != 0;
 }
 
 PSM_API int32_t psm_viewport_layer_count(psm_viewport *v)

@@ -13,7 +13,10 @@ final class PaintUITests: XCTestCase {
     override func setUp() {
         continueAfterFailure = false
         app = XCUIApplication()
-        app.launchArguments = ["-psm-preset-printer", "-psm-start-advanced", "-psm-load-cube"]
+        app.launchArguments = [
+            "-psm-preset-printer", "-psm-test-eight-extruders",
+            "-psm-start-advanced", "-psm-load-cube"
+        ]
         app.launch()
         XCTAssertTrue(app.otherElements["arbeitsbereich"].waitForExistence(timeout: 60))
         // Die Objektliste liegt hinter ihrem Reiter, wie auf Android.
@@ -42,10 +45,55 @@ final class PaintUITests: XCTestCase {
                       "Der Pinselregler fehlt")
         XCTAssertTrue(app.buttons["malen.zustand.2"].exists,
                       "Stuetzen sperren fehlt")
+        XCTAssertTrue(app.buttons["malen.modus.pinsel"].exists)
+        XCTAssertTrue(app.buttons["malen.modus.smart"].exists)
+        XCTAssertFalse(app.buttons["malen.modus.eimer"].exists,
+                       "Support darf keinen erfundenen Bucket Fill anbieten")
+        XCTAssertTrue(app.buttons["malen.form.kreis"].exists)
+        XCTAssertTrue(app.buttons["malen.form.kugel"].exists)
+        let scopeLabel = app.staticTexts["malen.scope"].label
+        XCTAssertTrue(
+            scopeLabel.contains("alle Kopien") || scopeLabel.contains("all copies"),
+            "Der volumebasierte Scope muss in der aktiven Sprache klar benannt sein: \(scopeLabel)"
+        )
+
+        app.buttons["malen.naht"].tap()
+        XCTAssertTrue(app.buttons["malen.modus.pinsel"].exists)
+        XCTAssertFalse(app.buttons["malen.modus.smart"].exists,
+                       "Naht folgt Prusa und hat keinen Smart Fill")
+        XCTAssertFalse(app.buttons["malen.modus.eimer"].exists)
+
+        app.buttons["malen.mmu"].tap()
+        XCTAssertTrue(app.buttons["malen.modus.smart"].exists)
+        XCTAssertTrue(app.buttons["malen.modus.eimer"].exists)
 
         app.buttons["malen.aus"].tap()
         XCTAssertFalse(app.sliders["malen.radius"].exists,
                        "Das Werkzeug laesst sich nicht abstellen")
+    }
+
+    func testSmartBucketCursorUndLoeschenSindSichtbarUndWirksam() {
+        app.buttons["malen.stuetzen"].tap()
+        app.buttons["malen.modus.smart"].tap()
+        XCTAssertTrue(app.sliders["malen.winkel"].waitForExistence(timeout: 5))
+        tippeViewport()
+        XCTAssertTrue(app.otherElements["viewport.malmarkierung"]
+            .waitForExistence(timeout: 5),
+            "Der echte Viewport-Pass muss als sichtbare Markierung gemeldet werden")
+        XCTAssertTrue(warte(bis: {
+            !self.app.staticTexts["malen.anzahl"].label.contains(" 0")
+        }), "Smart Fill markiert nichts")
+        app.buttons["malen.loeschen"].tap()
+        XCTAssertTrue(warte(bis: {
+            self.app.staticTexts["malen.anzahl"].label.contains("0")
+        }), "Clear entfernt Smart Fill nicht")
+
+        app.buttons["malen.mmu"].tap()
+        app.buttons["malen.modus.eimer"].tap()
+        tippeViewport()
+        XCTAssertTrue(warte(bis: {
+            !self.app.staticTexts["malen.anzahl"].label.contains(" 0")
+        }), "Bucket Fill markiert nichts")
     }
 
     func testEinStrichMarkiertUndLoeschenRaeumtAuf() {
@@ -55,8 +103,7 @@ final class PaintUITests: XCTestCase {
         XCTAssertTrue(vorher.contains("0"), "Am Anfang darf nichts markiert sein: " + vorher)
 
         // In die Mitte der Flaeche tippen - dort liegt der Wuerfel.
-        app.otherElements["viewport"].coordinate(
-            withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+        tippeViewport()
 
         let anzahl = app.staticTexts["malen.anzahl"]
         XCTAssertTrue(warte(bis: { !anzahl.label.contains(" 0") && anzahl.label != vorher }),
@@ -65,6 +112,11 @@ final class PaintUITests: XCTestCase {
         app.buttons["malen.loeschen"].tap()
         XCTAssertTrue(warte(bis: { anzahl.label.contains("0") }),
                       "Loeschen raeumt nicht auf: " + anzahl.label)
+    }
+
+    private func tippeViewport() {
+        app.otherElements["viewport"].coordinate(
+            withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
     }
 
     private func warte(bis bedingung: () -> Bool, timeout: TimeInterval = 15) -> Bool {

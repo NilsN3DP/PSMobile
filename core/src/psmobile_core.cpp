@@ -2622,6 +2622,198 @@ PSM_API psm_result psm_model_lay_on_facet_instance(
     PSM_GUARD_END(s)
 }
 
+static Slic3r::FacetsAnnotation *paint_annotation(
+    Slic3r::ModelVolume *volume,
+    psm_paint_tool tool)
+{
+    switch (tool) {
+        case PSM_PAINT_SUPPORT: return &volume->supported_facets;
+        case PSM_PAINT_SEAM:    return &volume->seam_facets;
+        case PSM_PAINT_FUZZY:   return &volume->fuzzy_skin_facets;
+        case PSM_PAINT_MMU:     return &volume->mm_segmentation_facets;
+    }
+    return nullptr;
+}
+
+static bool paint_state_is_valid(psm_paint_tool tool, int32_t state)
+{
+    switch (tool) {
+        case PSM_PAINT_SUPPORT:
+        case PSM_PAINT_SEAM:
+            return state >= 0 && state <= 2;
+        case PSM_PAINT_FUZZY:
+            return state >= 0 && state <= 1;
+        case PSM_PAINT_MMU:
+            return state >= 0 && state <= 254;
+    }
+    return false;
+}
+
+static bool paint_mode_is_valid(psm_paint_tool tool, psm_paint_mode mode)
+{
+    if (mode == PSM_PAINT_MODE_BRUSH)
+        return true;
+    if (mode == PSM_PAINT_MODE_SMART_FILL)
+        return tool == PSM_PAINT_SUPPORT || tool == PSM_PAINT_MMU;
+    if (mode == PSM_PAINT_MODE_BUCKET_FILL)
+        return tool == PSM_PAINT_MMU;
+    return false;
+}
+
+PSM_API psm_result psm_model_paint_apply(
+    psm_session *s,
+    psm_object_id id,
+    size_t instance_index,
+    size_t volume_index,
+    size_t facet_index,
+    psm_paint_tool tool,
+    int32_t state,
+    const psm_paint_options *options)
+{
+    PSM_GUARD_BEGIN(s)
+        if (options == nullptr ||
+            options->version != PSM_PAINT_OPTIONS_VERSION_1 ||
+            ! paint_state_is_valid(tool, state) ||
+            ! paint_mode_is_valid(tool, options->mode) ||
+            options->shape < PSM_PAINT_SHAPE_CIRCLE ||
+            options->shape > PSM_PAINT_SHAPE_SPHERE ||
+            ! std::isfinite(options->radius_mm) ||
+            options->radius_mm <= 0.f || options->radius_mm > 1000.f ||
+            ! std::isfinite(options->fill_angle_deg) ||
+            options->fill_angle_deg < 0.f ||
+            options->fill_angle_deg > 180.f ||
+            (options->split_triangles != 0 &&
+             options->split_triangles != 1) ||
+            (options->has_previous_position != 0 &&
+             options->has_previous_position != 1))
+            return PSM_ERR_INVALID_ARG;
+        for (float coordinate : options->hit_position)
+            if (! std::isfinite(coordinate))
+                return PSM_ERR_INVALID_ARG;
+        if (options->has_previous_position != 0)
+            for (float coordinate : options->previous_position)
+                if (! std::isfinite(coordinate))
+                    return PSM_ERR_INVALID_ARG;
+
+        std::lock_guard<std::recursive_mutex> data_lock(s->data_mtx);
+        Slic3r::ModelObject *object = find_object(s, id);
+        if (object == nullptr)
+            return PSM_ERR_NOT_FOUND;
+        if (instance_index >= object->instances.size() ||
+            volume_index >= object->volumes.size())
+            return PSM_ERR_INVALID_ARG;
+        Slic3r::ModelVolume *volume = object->volumes[volume_index];
+        const indexed_triangle_set &its = volume->mesh().its;
+        if (! volume->is_model_part() || facet_index >= its.indices.size())
+            return PSM_ERR_INVALID_ARG;
+        Slic3r::FacetsAnnotation *annotation =
+            paint_annotation(volume, tool);
+        if (annotation == nullptr)
+            return PSM_ERR_INVALID_ARG;
+
+        /*
+         * Der Treffer gehoert zu genau dieser Instanz. Die Rueckrechnung
+         * darf deshalb nie auf instances.front() fallen. Gespeichert wird
+         * danach trotzdem nur die volumebasierte FacetsAnnotation.
+         */
+        const Slic3r::Transform3d local_to_world =
+            object->instances[instance_index]->get_matrix() *
+            volume->get_matrix();
+        const Slic3r::Transform3d world_to_local =
+            local_to_world.inverse();
+        const Slic3r::Vec3d world_hit(
+            options->hit_position[0],
+            options->hit_position[1],
+            options->hit_position[2]);
+        const Slic3r::Vec3f mesh_hit =
+            (world_to_local * world_hit).cast<float>();
+
+        Slic3r::Transform3d trafo_no_translate =
+            Slic3r::Transform3d::Identity();
+        trafo_no_translate.linear() = local_to_world.linear();
+        Slic3r::TriangleSelector selector(volume->mesh());
+        selector.deserialize(annotation->get_data(), false);
+        const auto new_state =
+            static_cast<Slic3r::TriangleStateType>(state);
+        const Slic3r::TriangleSelector::ClippingPlane clipping_plane;
+        constexpr float fill_gap_area = 0.02f;
+
+        switch (options->mode) {
+            case PSM_PAINT_MODE_BRUSH: {
+                const Slic3r::Vec3i32 &face = its.indices[facet_index];
+                const Slic3r::Vec3f a = its.vertices[face(0)];
+                const Slic3r::Vec3f b = its.vertices[face(1)];
+                const Slic3r::Vec3f c = its.vertices[face(2)];
+                Slic3r::Vec3f normal = (b - a).cross(c - a);
+                if (normal.squaredNorm() < 1e-12f)
+                    return PSM_ERR_INVALID_ARG;
+                normal.normalize();
+                /*
+                 * Mobile Treffer liefern keine Desktop-Kamera. Fuer Circle
+                 * ist nur die Sichtseite relevant; ein Punkt entlang der
+                 * getroffenen Aussennormale liefert exakt diese Richtung.
+                 */
+                const Slic3r::Vec3f source =
+                    mesh_hit + normal *
+                        std::max(options->radius_mm * 4.f, 100.f);
+                const auto cursor_type =
+                    options->shape == PSM_PAINT_SHAPE_SPHERE
+                        ? Slic3r::TriangleSelector::CursorType::SPHERE
+                        : Slic3r::TriangleSelector::CursorType::CIRCLE;
+                std::unique_ptr<Slic3r::TriangleSelector::Cursor> cursor;
+                if (options->has_previous_position != 0) {
+                    const Slic3r::Vec3d previous_world(
+                        options->previous_position[0],
+                        options->previous_position[1],
+                        options->previous_position[2]);
+                    const Slic3r::Vec3f previous_mesh =
+                        (world_to_local * previous_world).cast<float>();
+                    cursor =
+                        Slic3r::TriangleSelector::DoublePointCursor::
+                            cursor_factory(
+                                previous_mesh, mesh_hit, source,
+                                options->radius_mm, cursor_type,
+                                local_to_world, clipping_plane);
+                } else {
+                    cursor =
+                        Slic3r::TriangleSelector::SinglePointCursor::
+                            cursor_factory(
+                                mesh_hit, source, options->radius_mm,
+                                cursor_type, local_to_world,
+                                clipping_plane);
+                }
+                selector.select_patch(
+                    static_cast<int>(facet_index), std::move(cursor),
+                    new_state, trafo_no_translate,
+                    options->split_triangles != 0);
+                break;
+            }
+            case PSM_PAINT_MODE_SMART_FILL:
+                selector.seed_fill_select_triangles(
+                    mesh_hit, static_cast<int>(facet_index),
+                    trafo_no_translate, clipping_plane,
+                    options->fill_angle_deg, fill_gap_area, 0.f,
+                    Slic3r::TriangleSelector::ForceReselection::YES);
+                selector.seed_fill_apply_on_triangles(new_state);
+                break;
+            case PSM_PAINT_MODE_BUCKET_FILL:
+                selector.bucket_fill_select_triangles(
+                    mesh_hit, static_cast<int>(facet_index),
+                    clipping_plane, options->fill_angle_deg,
+                    fill_gap_area,
+                    Slic3r::TriangleSelector::BucketFillPropagate::YES,
+                    Slic3r::TriangleSelector::ForceReselection::YES);
+                selector.seed_fill_apply_on_triangles(new_state);
+                break;
+        }
+
+        s->history_checkpoint("Flaeche bemalen");
+        annotation->set(selector);
+        s->mark_design_changed();
+        return PSM_OK;
+    PSM_GUARD_END(s)
+}
+
 PSM_API psm_result psm_model_paint_facet(psm_session *s,
                                          psm_object_id id,
                                          size_t volume_index,
@@ -2644,13 +2836,8 @@ PSM_API psm_result psm_model_paint_facet(psm_session *s,
             facet_index >= volume->mesh().its.indices.size())
             return PSM_ERR_INVALID_ARG;
 
-        Slic3r::FacetsAnnotation *annotation = nullptr;
-        switch (tool) {
-            case PSM_PAINT_SUPPORT: annotation = &volume->supported_facets; break;
-            case PSM_PAINT_SEAM:    annotation = &volume->seam_facets; break;
-            case PSM_PAINT_FUZZY:   annotation = &volume->fuzzy_skin_facets; break;
-            case PSM_PAINT_MMU:     annotation = &volume->mm_segmentation_facets; break;
-        }
+        Slic3r::FacetsAnnotation *annotation =
+            paint_annotation(volume, tool);
         if (annotation == nullptr)
             return PSM_ERR_INVALID_ARG;
 
@@ -2676,8 +2863,8 @@ PSM_API psm_result psm_model_paint_brush(psm_session *s,
                                          float radius_mm)
 {
     PSM_GUARD_BEGIN(s)
-        if (tool < PSM_PAINT_SUPPORT || tool > PSM_PAINT_MMU ||
-            state < 0 || state > 254 || ! std::isfinite(radius_mm) ||
+        if (! paint_state_is_valid(tool, state) ||
+            ! std::isfinite(radius_mm) ||
             radius_mm <= 0.f || radius_mm > 1000.f)
             return PSM_ERR_INVALID_ARG;
         std::lock_guard<std::recursive_mutex> data_lock(s->data_mtx);
@@ -2692,91 +2879,25 @@ PSM_API psm_result psm_model_paint_brush(psm_session *s,
         if (! volume->is_model_part() || facet_index >= its.indices.size())
             return PSM_ERR_INVALID_ARG;
 
-        Slic3r::FacetsAnnotation *annotation = nullptr;
-        switch (tool) {
-            case PSM_PAINT_SUPPORT: annotation = &volume->supported_facets; break;
-            case PSM_PAINT_SEAM:    annotation = &volume->seam_facets; break;
-            case PSM_PAINT_FUZZY:   annotation = &volume->fuzzy_skin_facets; break;
-            case PSM_PAINT_MMU:     annotation = &volume->mm_segmentation_facets; break;
-        }
-        if (annotation == nullptr)
-            return PSM_ERR_INVALID_ARG;
-
         const Slic3r::Transform3d local_to_world =
             object->instances.front()->get_matrix() * volume->get_matrix();
-        auto centroid = [&](size_t index) {
-            const auto &face = its.indices[index];
-            return local_to_world *
-                ((its.vertices[face(0)].cast<double>() +
-                  its.vertices[face(1)].cast<double>() +
-                  its.vertices[face(2)].cast<double>()) / 3.0);
-        };
-        auto normal = [&](size_t index) -> Slic3r::Vec3d {
-            const auto &face = its.indices[index];
-            const Slic3r::Vec3d a = its.vertices[face(0)].cast<double>();
-            const Slic3r::Vec3d b = its.vertices[face(1)].cast<double>();
-            const Slic3r::Vec3d c = its.vertices[face(2)].cast<double>();
-            Slic3r::Vec3d result = (b - a).cross(c - a);
-            if (result.squaredNorm() < 1e-18)
-                return Slic3r::Vec3d::Zero().eval();
-            return (local_to_world.linear().inverse().transpose() * result)
-                .normalized();
-        };
-
-        std::vector<std::vector<size_t>> neighbours(its.indices.size());
-        std::unordered_map<uint64_t, size_t> edge_owner;
-        edge_owner.reserve(its.indices.size() * 3);
-        for (size_t index = 0; index < its.indices.size(); ++index) {
-            const auto &face = its.indices[index];
-            for (int edge = 0; edge < 3; ++edge) {
-                const uint32_t a = static_cast<uint32_t>(face(edge));
-                const uint32_t b = static_cast<uint32_t>(face((edge + 1) % 3));
-                const uint32_t lo = std::min(a, b);
-                const uint32_t hi = std::max(a, b);
-                const uint64_t key =
-                    (static_cast<uint64_t>(lo) << 32U) | hi;
-                const auto found = edge_owner.find(key);
-                if (found == edge_owner.end()) {
-                    edge_owner.emplace(key, index);
-                } else {
-                    neighbours[index].push_back(found->second);
-                    neighbours[found->second].push_back(index);
-                }
-            }
-        }
-
-        const Slic3r::Vec3d origin = centroid(facet_index);
-        const Slic3r::Vec3d origin_normal = normal(facet_index);
-        const double radius_squared =
-            static_cast<double>(radius_mm) * static_cast<double>(radius_mm);
-        std::vector<uint8_t> seen(its.indices.size(), 0);
-        std::vector<size_t> queue{facet_index};
-        seen[facet_index] = 1;
-
-        Slic3r::TriangleSelector selector(volume->mesh());
-        selector.deserialize(annotation->get_data(), false);
-        for (size_t cursor = 0; cursor < queue.size(); ++cursor) {
-            const size_t index = queue[cursor];
-            selector.set_facet(
-                static_cast<int>(index),
-                static_cast<Slic3r::TriangleStateType>(state));
-            for (const size_t candidate : neighbours[index]) {
-                if (seen[candidate])
-                    continue;
-                seen[candidate] = 1;
-                const Slic3r::Vec3d candidate_normal = normal(candidate);
-                if ((centroid(candidate) - origin).squaredNorm() <=
-                        radius_squared &&
-                    (origin_normal.isZero() || candidate_normal.isZero() ||
-                     origin_normal.dot(candidate_normal) > 0.15))
-                    queue.push_back(candidate);
-            }
-        }
-
-        s->history_checkpoint("Flaeche mit Pinsel bemalen");
-        annotation->set(selector);
-        s->mark_design_changed();
-        return PSM_OK;
+        const Slic3r::Vec3i32 &face = its.indices[facet_index];
+        const Slic3r::Vec3d local_hit =
+            (its.vertices[face(0)].cast<double>() +
+             its.vertices[face(1)].cast<double>() +
+             its.vertices[face(2)].cast<double>()) / 3.0;
+        const Slic3r::Vec3d world_hit = local_to_world * local_hit;
+        psm_paint_options options{};
+        options.version = PSM_PAINT_OPTIONS_VERSION_1;
+        options.mode = PSM_PAINT_MODE_BRUSH;
+        options.shape = PSM_PAINT_SHAPE_SPHERE;
+        options.radius_mm = radius_mm;
+        options.fill_angle_deg = 30.f;
+        options.hit_position[0] = static_cast<float>(world_hit.x());
+        options.hit_position[1] = static_cast<float>(world_hit.y());
+        options.hit_position[2] = static_cast<float>(world_hit.z());
+        return psm_model_paint_apply(
+            s, id, 0, volume_index, facet_index, tool, state, &options);
     PSM_GUARD_END(s)
 }
 
