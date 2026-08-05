@@ -784,18 +784,26 @@ final class SlicerModel: ObservableObject {
     /// beide Seiten dieselbe Zahl nennen.
     static let maxBeds = 36
 
-    func arrange() {
-        // Ein gesperrtes Bett hat jemand von Hand angeordnet. Ein Tipp
-        // auf Anordnen darf diese Arbeit nicht wegwerfen.
-        let aktiv = beds.firstIndex(where: { $0.active }) ?? 0
-        if lockedBeds.contains(aktiv) {
-            projectNotice = SimpleModeState.shared.text(
-                english: "This bed is locked against arranging.",
-                german: "Dieses Bett ist gegen Anordnen gesperrt.")
-            return
+    /// Der Panel-Pfad braucht Erfolg und Fehler als echten Rückgabewert.
+    /// Ein `try?` würde gerade Locked/Full verschlucken.
+    func arrange(target: Int, gapMm: Float) throws -> PsmCore.ArrangeResult {
+        guard let core else {
+            throw PsmCore.PsmError.createFailed("Core nicht bereit")
         }
-        try? core?.arrange()
+        let ergebnis = try core.arrange(bed: target, gapMm: gapMm)
         refresh()
+        return ergebnis
+    }
+
+    /// Kompatibler Einstieg älterer Werkzeugknöpfe. Die gemeinsame
+    /// Arrange-Oberfläche verwendet immer die werfende Zielbett-Fassung.
+    func arrange() {
+        let aktiv = beds.first(where: { $0.active })?.index ?? 0
+        do {
+            _ = try arrange(target: aktiv, gapMm: 6)
+        } catch {
+            projectNotice = error.localizedDescription
+        }
     }
 
     func duplicate(_ ids: [Int32]) {
@@ -814,46 +822,38 @@ final class SlicerModel: ObservableObject {
         refresh()
     }
 
-    /// Namen und Sperren der Betten.
-    ///
-    /// Liegt in der App und nicht im Kern: ein Name ist eine Notiz des
-    /// Nutzers, keine Eigenschaft der Geometrie. Der Kern kennt Betten
-    /// als Nummern, und das ist richtig so.
-    @Published private(set) var bedNames: [Int: String] = {
-        (UserDefaults.standard.dictionary(forKey: "psm.bettnamen") as? [String: String])?
-            .reduce(into: [Int: String]()) { ergebnis, paar in
-                if let index = Int(paar.key) { ergebnis[index] = paar.value }
-            } ?? [:]
-    }()
-
-    @Published private(set) var lockedBeds: Set<Int> = {
-        Set((UserDefaults.standard.array(forKey: "psm.bettsperren") as? [Int]) ?? [])
-    }()
-
     /// Wie ein Bett heisst - der eigene Name, sonst die Nummer.
     func bedLabel(_ index: Int) -> String {
-        let name = bedNames[index]?.trimmingCharacters(in: .whitespaces) ?? ""
+        let name = beds.first(where: { $0.index == index })?
+            .name.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         return name.isEmpty
             ? SimpleModeState.shared.text(english: "Bed", german: "Bett") + " \(index + 1)"
             : name
     }
 
     func renameBed(_ index: Int, to name: String) {
-        let sauber = name.trimmingCharacters(in: .whitespaces)
-        if sauber.isEmpty { bedNames.removeValue(forKey: index) }
-        else { bedNames[index] = sauber }
-        UserDefaults.standard.set(
-            Dictionary(uniqueKeysWithValues: bedNames.map { (String($0.key), $0.value) }),
-            forKey: "psm.bettnamen")
+        guard let core, let bed = beds.first(where: { $0.index == index }) else { return }
+        do {
+            try core.setBedMetadata(bed, name: name)
+            refresh()
+        } catch {
+            projectNotice = error.localizedDescription
+        }
     }
 
-    func isBedLocked(_ index: Int) -> Bool { lockedBeds.contains(index) }
+    func isBedLocked(_ index: Int) -> Bool {
+        beds.first(where: { $0.index == index })?.locked ?? false
+    }
 
     /// Ein gesperrtes Bett wird von Anordnen nicht angefasst.
     func toggleBedLock(_ index: Int) {
-        if lockedBeds.contains(index) { lockedBeds.remove(index) }
-        else { lockedBeds.insert(index) }
-        UserDefaults.standard.set(Array(lockedBeds), forKey: "psm.bettsperren")
+        guard let core, let bed = beds.first(where: { $0.index == index }) else { return }
+        do {
+            try core.setBedMetadata(bed, locked: !bed.locked)
+            refresh()
+        } catch {
+            projectNotice = error.localizedDescription
+        }
     }
 
     /// Ein weiteres Bett. Es wird gleich das aktive - wer eines

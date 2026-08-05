@@ -55,9 +55,8 @@ struct AdvancedWorkspaceView: View {
     @State private var zeigeReparatur = false
     @State private var zeigeWandeln = false
     @State private var zeigeGcodeMarken = false
-    /// Welches Bett gerade umbenannt wird, und wie es heissen soll.
-    @State private var bettUmbenennen: Int?
-    @State private var bettName = ""
+    @State private var zeigeArrange = false
+    @State private var zeigeBettwahl = false
     @State private var reiter: InspektorReiter = .profile
     /// Welche Bereiche der Seitenleiste offen sind. Profile immer, der
     /// Rest auf Wunsch - sonst ist die Leiste beim Start eine Wand.
@@ -120,11 +119,20 @@ struct AdvancedWorkspaceView: View {
                                 kopiert: $kopiert,
                                 onEinfuegen: { zweck = .modell; zeigeImporter = true },
                                 onSettings: { onSettings("print") },
+                                onArrange: { zeigeArrange = true },
                                 onMalwerkzeug: { malwerkzeugUmschalten($0) })
                 Divider().overlay(PrusaColors.divider)
                 VStack(spacing: 0) {
                     werkzeugleiste
-                    bettleiste
+                    if schmal {
+                        // Der echte Selector liegt auf schmalen Fenstern
+                        // oberhalb der überlagernden Seitenleiste.
+                        Color.clear.frame(height: ps.touch(52))
+                    } else {
+                        BedSelector(model: model,
+                                    onArrange: { zeigeArrange = true },
+                                    onOpenSelection: { zeigeBettwahl = true })
+                    }
                     arbeitsflaeche
                     ansichtsleiste
                 }
@@ -181,11 +189,25 @@ struct AdvancedWorkspaceView: View {
                 }
             }
             if seiteOffen && schmal { schmaleSeite }
+            if schmal {
+                VStack {
+                    BedSelector(model: model,
+                                onArrange: { zeigeArrange = true },
+                                onOpenSelection: { zeigeBettwahl = true })
+                        .padding(.leading, ps.pt(74))
+                        .padding(.top, ps.pt(52))
+                    Spacer()
+                }
+                .zIndex(80)
+            }
             if model.progress != .idle {
                 SliceSheet(model: model) { model.dismissProgress() }
             }
             if !hinderungsgruende.isEmpty {
                 SliceBlockerSheet(gruende: hinderungsgruende) { hinderungsgruende = [] }
+            }
+            if zeigeBettwahl {
+                BedSelectionOverlay(model: model, isPresented: $zeigeBettwahl)
             }
             // Die Einstellungen schweben ueber der Platte statt sie zu
             // ersetzen: mit einem Rand ringsherum sieht man, dass es
@@ -249,18 +271,8 @@ struct AdvancedWorkspaceView: View {
                 ) { model.selectPreset(.filament, $0) }
             }
         }
-        .alert(st("Rename bed", "Bett umbenennen"),
-               isPresented: Binding(get: { bettUmbenennen != nil },
-                                    set: { if !$0 { bettUmbenennen = nil } })) {
-            TextField(st("Name", "Name"), text: $bettName)
-            Button(st("Cancel", "Abbrechen"), role: .cancel) { bettUmbenennen = nil }
-            Button(st("Apply", "Übernehmen")) {
-                if let index = bettUmbenennen { model.renameBed(index, to: bettName) }
-                bettUmbenennen = nil
-            }
-        } message: {
-            Text(st("An empty name goes back to the number.",
-                    "Ein leerer Name führt zurück zur Nummer."))
+        .sheet(isPresented: $zeigeArrange) {
+            ArrangePanel(model: model, isPresented: $zeigeArrange)
         }
         .sheet(isPresented: $zeigeGcodeMarken) {
             CustomGcodeView(model: model) { zeigeGcodeMarken = false }
@@ -432,92 +444,6 @@ struct AdvancedWorkspaceView: View {
             .padding(.vertical, ps.pt(4))
         }
         .background(PrusaColors.panel)
-    }
-
-    /// Die Betten des Projekts.
-    ///
-    /// PrusaSlicer am Desktop legt sie als grosse Landschaft
-    /// nebeneinander. Mit dem Finger waere das blindes Scrollen; hier
-    /// bleibt die Kamera auf einem Bett, und jeder Knopf springt
-    /// unmittelbar zum gewaehlten.
-    @ViewBuilder private var bettleiste: some View {
-        // Solange es ein Bett gibt und nichts darauf, gibt es nichts zu
-        // wechseln - dann ist die Leiste eine Zeile, die nur Platz
-        // kostet.
-        if model.beds.count > 1 || !model.objects.isEmpty {
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: ps.pt(4)) {
-                    ForEach(Array(model.beds.enumerated()), id: \.offset) { _, bett in
-                        Button { model.selectBed(bett.index) } label: {
-                            HStack(spacing: ps.pt(4)) {
-                                if model.isBedLocked(bett.index) {
-                                    Image(systemName: "lock.fill")
-                                        .font(.system(size: ps.font(9)))
-                                }
-                                Text(model.bedLabel(bett.index))
-                                    .font(.system(size: ps.font(12)))
-                                    .lineLimit(1)
-                                Text("\(bett.objectCount)")
-                                    .font(.system(size: ps.font(10)))
-                                    .foregroundStyle(PrusaColors.textMuted)
-                            }
-                            .foregroundStyle(bett.active
-                                             ? PrusaColors.background : PrusaColors.textPrimary)
-                            .padding(.horizontal, ps.pt(12))
-                            .frame(minHeight: ps.touch(38))
-                            .background(bett.active ? PrusaColors.orange : PrusaColors.panelRaised)
-                            .clipShape(RoundedRectangle(cornerRadius: ps.pt(4)))
-                            .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityIdentifier("bett.\(bett.index)")
-                        // Langes Druecken statt eines zweiten Knopfes je
-                        // Bett: umbenennen und sperren macht man selten,
-                        // und die Leiste ist schmal.
-                        .contextMenu {
-                            Button(st("Rename", "Umbenennen")) {
-                                bettUmbenennen = bett.index
-                                bettName = model.bedNames[bett.index] ?? ""
-                            }
-                            Button(model.isBedLocked(bett.index)
-                                   ? st("Unlock", "Entsperren")
-                                   : st("Lock against arranging", "Gegen Anordnen sperren")) {
-                                model.toggleBedLock(bett.index)
-                            }
-                        }
-                    }
-                    Button { model.addBed() } label: {
-                        Text("＋")
-                            .font(.system(size: ps.font(15)))
-                            .foregroundStyle(PrusaColors.orange)
-                            .frame(width: ps.touch(40), height: ps.touch(38))
-                            .background(PrusaColors.panelRaised)
-                            .clipShape(RoundedRectangle(cornerRadius: ps.pt(4)))
-                            .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityIdentifier("bett.neu")
-                    // Ein leeres Bett wieder loswerden. Ein volles nicht:
-                    // dann waere ein Fehltipp der Verlust einer Platte.
-                    if let aktiv = model.beds.first(where: { $0.active }),
-                       model.beds.count > 1, aktiv.objectCount == 0 {
-                        Button { model.removeBed(aktiv.index) } label: {
-                            Text("✖")
-                                .font(.system(size: ps.font(13)))
-                                .foregroundStyle(PrusaColors.textMuted)
-                                .frame(width: ps.touch(40), height: ps.touch(38))
-                                .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityIdentifier("bett.weg")
-                    }
-                    Spacer(minLength: 0)
-                }
-                .padding(.horizontal, ps.pt(8))
-                .padding(.vertical, ps.pt(3))
-            }
-            .background(PrusaColors.background)
-        }
     }
 
     /// Feste Blickrichtungen.

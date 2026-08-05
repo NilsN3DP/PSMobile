@@ -94,6 +94,7 @@ void psm_emit_log(psm_log_level lvl, const std::string &msg)
 psm_session::psm_session()
 {
     bed_models.emplace_back(std::make_unique<Slic3r::Model>());
+    bed_metadata.emplace_back();
 }
 
 void psm_session::teardown_print()
@@ -695,6 +696,7 @@ PSM_API psm_result psm_session_clear(psm_session *s)
         s->history_checkpoint("Neues Projekt");
         s->bed_models.clear();
         s->bed_models.emplace_back(std::make_unique<Slic3r::Model>());
+        s->bed_metadata.assign(1, psm_session::BedMetadata{});
         s->active_bed = 0;
         s->teardown_print();
         s->state = PSM_STATE_IDLE;
@@ -800,8 +802,10 @@ PSM_API psm_result psm_model_load(psm_session *s,
                 dst = nullptr;
                 if (bed + 1 >= PSM_MAX_BEDS)
                     break;             /* alle Betten voll */
-                if (bed + 1 >= s->bed_models.size())
+                if (bed + 1 >= s->bed_models.size()) {
                     s->bed_models.emplace_back(std::make_unique<Slic3r::Model>());
+                    s->bed_metadata.emplace_back();
+                }
                 ++bed;
                 ++spilled;
             }
@@ -950,6 +954,8 @@ PSM_API psm_result psm_project_load_3mf(psm_session *s,
             if (! object->instances.empty())
                 object->ensure_on_bed(true);
         s->bed_models = split_project_beds(std::move(loaded), s->config);
+        s->bed_metadata.assign(s->bed_models.size(),
+                               psm_session::BedMetadata{});
         s->active_bed = 0;
         size_t imported_objects = 0;
         for (const auto &bed : s->bed_models)
@@ -1111,10 +1117,11 @@ PSM_API psm_result psm_history_undo(psm_session *s)
             std::move(s->undo_history.back());
         s->undo_history.pop_back();
         s->redo_history.emplace_back(
-            s->bed_models, s->active_bed, target.label);
+            s->bed_models, s->bed_metadata, s->active_bed, target.label);
         while (s->redo_history.size() > psm_session::HISTORY_LIMIT)
             s->redo_history.pop_front();
         s->bed_models = std::move(target.beds);
+        s->bed_metadata = std::move(target.bed_metadata);
         s->active_bed = std::min(target.active_bed,
                                  s->bed_models.size() - 1);
         s->mark_design_changed();
@@ -1135,10 +1142,11 @@ PSM_API psm_result psm_history_redo(psm_session *s)
             std::move(s->redo_history.back());
         s->redo_history.pop_back();
         s->undo_history.emplace_back(
-            s->bed_models, s->active_bed, target.label);
+            s->bed_models, s->bed_metadata, s->active_bed, target.label);
         while (s->undo_history.size() > psm_session::HISTORY_LIMIT)
             s->undo_history.pop_front();
         s->bed_models = std::move(target.beds);
+        s->bed_metadata = std::move(target.bed_metadata);
         s->active_bed = std::min(target.active_bed,
                                  s->bed_models.size() - 1);
         s->mark_design_changed();
@@ -1202,6 +1210,7 @@ PSM_API psm_result psm_bed_add(psm_session *s, size_t *out_index)
         }
         s->history_checkpoint("Druckbett hinzufügen");
         s->bed_models.emplace_back(std::make_unique<Slic3r::Model>());
+        s->bed_metadata.emplace_back();
         s->active_bed = s->bed_models.size() - 1;
         if (out_index != nullptr)
             *out_index = s->active_bed;
@@ -1225,6 +1234,8 @@ PSM_API psm_result psm_bed_remove(psm_session *s, size_t index)
         s->history_checkpoint("Druckbett entfernen");
         s->bed_models.erase(s->bed_models.begin() +
                             static_cast<std::ptrdiff_t>(index));
+        s->bed_metadata.erase(s->bed_metadata.begin() +
+                              static_cast<std::ptrdiff_t>(index));
         if (s->active_bed > index)
             --s->active_bed;
         else if (s->active_bed == index)
@@ -1256,6 +1267,39 @@ PSM_API size_t psm_bed_object_count(psm_session *s, size_t index)
     std::lock_guard<std::recursive_mutex> data_lock(s->data_mtx);
     return index < s->bed_models.size()
         ? s->bed_models[index]->objects.size() : 0;
+}
+
+PSM_API psm_result psm_bed_metadata_get(psm_session *s, size_t index,
+                                        psm_bed_metadata *out)
+{
+    PSM_GUARD_BEGIN(s)
+        if (out == nullptr)
+            return PSM_ERR_INVALID_ARG;
+        std::lock_guard<std::recursive_mutex> data_lock(s->data_mtx);
+        if (index >= s->bed_metadata.size())
+            return PSM_ERR_NOT_FOUND;
+        *out = psm_bed_metadata{};
+        copy_str(out->name, sizeof(out->name), s->bed_metadata[index].name);
+        out->locked = s->bed_metadata[index].locked ? 1 : 0;
+        return PSM_OK;
+    PSM_GUARD_END(s)
+}
+
+PSM_API psm_result psm_bed_metadata_set(psm_session *s, size_t index,
+                                        const psm_bed_metadata *metadata)
+{
+    PSM_GUARD_BEGIN(s)
+        if (metadata == nullptr)
+            return PSM_ERR_INVALID_ARG;
+        std::lock_guard<std::recursive_mutex> data_lock(s->data_mtx);
+        if (index >= s->bed_metadata.size())
+            return PSM_ERR_NOT_FOUND;
+        const char *name_end = std::find(
+            metadata->name, metadata->name + sizeof(metadata->name), '\0');
+        s->bed_metadata[index].name.assign(metadata->name, name_end);
+        s->bed_metadata[index].locked = metadata->locked != 0;
+        return PSM_OK;
+    PSM_GUARD_END(s)
 }
 
 PSM_API psm_result psm_bed_move_object(psm_session *s,
@@ -1897,10 +1941,17 @@ PSM_API psm_result psm_model_duplicate(psm_session *s, psm_object_id id, psm_obj
  * anderer Betten und Sitzungen.
  */
 static psm_result arrange_local_bed(psm_session *s, Slic3r::Model &model,
-                                    float gap_mm)
+                                    float gap_mm, psm_arrange_info *out)
 {
-    if (model.objects.empty())
+    *out = psm_arrange_info{};
+    out->object_count = static_cast<int32_t>(model.objects.size());
+    for (const Slic3r::ModelObject *object : model.objects)
+        out->instance_count += static_cast<int32_t>(object->instances.size());
+
+    if (model.objects.empty()) {
+        out->status = PSM_ARRANGE_EMPTY;
         return PSM_OK;
+    }
 
     /* Bettform kommt aus der aktiven Konfiguration; ohne gewaehlten
      * Drucker ist das die Vorgabe aus FullPrintConfig. */
@@ -1922,25 +1973,56 @@ static psm_result arrange_local_bed(psm_session *s, Slic3r::Model &model,
     s->history_checkpoint("Objekte anordnen");
     Slic3r::arrange_objects(model, bed, cfg);
     s->mark_design_changed();
+
+    for (const Slic3r::ModelObject *object : model.objects) {
+        if (bed_state_of(s, object) != PSM_BED_INSIDE) {
+            out->status = PSM_ARRANGE_FULL;
+            s->set_error("Nicht alle Objekte passen auf das Zielbett");
+            return PSM_ERR_FULL;
+        }
+    }
+    out->status = PSM_ARRANGE_ARRANGED;
     return PSM_OK;
+}
+
+PSM_API psm_result psm_arrange_bed_ex(psm_session *s, size_t bed_index,
+                                      float gap_mm, psm_arrange_info *out)
+{
+    PSM_GUARD_BEGIN(s)
+        if (out == nullptr)
+            return PSM_ERR_INVALID_ARG;
+        std::lock_guard<std::recursive_mutex> data_lock(s->data_mtx);
+        if (bed_index >= s->bed_models.size())
+            return PSM_ERR_NOT_FOUND;
+        *out = psm_arrange_info{};
+        if (s->bed_metadata[bed_index].locked) {
+            out->status = PSM_ARRANGE_LOCKED;
+            out->object_count = static_cast<int32_t>(
+                s->bed_models[bed_index]->objects.size());
+            for (const Slic3r::ModelObject *object :
+                 s->bed_models[bed_index]->objects)
+                out->instance_count += static_cast<int32_t>(
+                    object->instances.size());
+            s->set_error("Das Zielbett ist gesperrt");
+            return PSM_ERR_LOCKED;
+        }
+        return arrange_local_bed(s, *s->bed_models[bed_index],
+                                 gap_mm, out);
+    PSM_GUARD_END(s)
 }
 
 PSM_API psm_result psm_arrange_bed(psm_session *s, size_t bed_index,
                                    float gap_mm)
 {
-    PSM_GUARD_BEGIN(s)
-        std::lock_guard<std::recursive_mutex> data_lock(s->data_mtx);
-        if (bed_index >= s->bed_models.size())
-            return PSM_ERR_NOT_FOUND;
-        return arrange_local_bed(s, *s->bed_models[bed_index], gap_mm);
-    PSM_GUARD_END(s)
+    psm_arrange_info ignored{};
+    return psm_arrange_bed_ex(s, bed_index, gap_mm, &ignored);
 }
 
 PSM_API psm_result psm_arrange(psm_session *s, float gap_mm)
 {
     PSM_GUARD_BEGIN(s)
-        std::lock_guard<std::recursive_mutex> data_lock(s->data_mtx);
-        return arrange_local_bed(s, s->model(), gap_mm);
+        psm_arrange_info ignored{};
+        return psm_arrange_bed_ex(s, psm_bed_active(s), gap_mm, &ignored);
     PSM_GUARD_END(s)
 }
 

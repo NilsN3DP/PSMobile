@@ -721,6 +721,75 @@ int main(int argc, char **argv)
     require(psm_history_undo_count(session) == 0 &&
             psm_history_redo_count(session) == 0,
             "opening a project starts a clean history");
+
+    /*
+     * Bettnamen und Sperren gehoeren zur Session. Sie duerfen weder aus
+     * UserDefaults noch aus einer anderen Core-Session wieder auftauchen.
+     */
+    psm_bed_metadata first_metadata{};
+    require(psm_bed_metadata_get(session, 0, &first_metadata) == PSM_OK,
+            "read initial first-bed metadata");
+    require(std::string(first_metadata.name).empty() &&
+            first_metadata.locked == 0,
+            "new project beds start unnamed and unlocked");
+
+    psm_bed_metadata named_locked{};
+    std::snprintf(named_locked.name, sizeof(named_locked.name), "%s",
+                  "Kundenplatte");
+    named_locked.locked = 1;
+    require(psm_bed_metadata_set(session, 0, &named_locked) == PSM_OK,
+            "store session-owned bed name and lock");
+
+    psm_bed_metadata stored_metadata{};
+    require(psm_bed_metadata_get(session, 0, &stored_metadata) == PSM_OK,
+            "read stored first-bed metadata");
+    require(std::string(stored_metadata.name) == "Kundenplatte" &&
+            stored_metadata.locked == 1,
+            "bed metadata round-trips through the core");
+
+    psm_arrange_info locked_arrange{};
+    require(psm_arrange_bed_ex(session, 0, 6.f, &locked_arrange) ==
+                PSM_ERR_LOCKED,
+            "locked bed rejects arrange in the core");
+    require(locked_arrange.status == PSM_ARRANGE_LOCKED,
+            "locked arrange has a machine-readable result");
+
+    psm_session *metadata_isolation = psm_session_create(argv[1], argv[2]);
+    require(metadata_isolation != nullptr,
+            "create second session for metadata isolation");
+    psm_bed_metadata isolated_metadata{};
+    require(psm_bed_metadata_get(metadata_isolation, 0,
+                                 &isolated_metadata) == PSM_OK,
+            "read metadata from second session");
+    require(std::string(isolated_metadata.name).empty() &&
+            isolated_metadata.locked == 0,
+            "bed metadata does not leak between sessions");
+
+    /*
+     * Ein zu grosses Objekt ist kein generischer Fehler. Das Panel muss
+     * erklaeren koennen, dass das Zielbett voll beziehungsweise zu klein
+     * ist, statt nur "Anordnen fehlgeschlagen" zu zeigen.
+     */
+    psm_object_id oversized = PSM_INVALID_ID;
+    size_t oversized_count = 0;
+    require(psm_model_load(metadata_isolation, argv[3], &oversized, 1,
+                           &oversized_count) == PSM_OK &&
+            oversized_count == 1,
+            "load isolated object for full-bed result");
+    require(psm_model_set_scale(metadata_isolation, oversized,
+                                30.f, 30.f, 30.f) == PSM_OK,
+            "make isolated object larger than the configured bed");
+    psm_arrange_info full_arrange{};
+    require(psm_arrange_bed_ex(metadata_isolation, 0, 6.f,
+                               &full_arrange) == PSM_ERR_FULL,
+            "oversized target has a dedicated full-bed error");
+    require(full_arrange.status == PSM_ARRANGE_FULL,
+            "full arrange has a machine-readable result");
+    psm_session_destroy(metadata_isolation);
+
+    named_locked.locked = 0;
+    require(psm_bed_metadata_set(session, 0, &named_locked) == PSM_OK,
+            "unlock first bed for remaining project tests");
     /*
      * Arrange auf dem aktiven Bett 2 darf weder den Inhalt von Bett 1
      * noch Prusas prozessglobalen Mehrbettzustand anfassen.
@@ -756,9 +825,14 @@ int main(int argc, char **argv)
     const auto global_beds_before =
         Slic3r::s_multiple_beds.get_inst_map();
 #endif
-    require(psm_arrange(session, 0.f) == PSM_OK,
-            std::string("arrange active second bed: ") +
+    psm_arrange_info arrange_info{};
+    require(psm_arrange_bed_ex(session, 1, 0.f, &arrange_info) == PSM_OK,
+            std::string("arrange explicit second bed: ") +
                 psm_last_error(session));
+    require(arrange_info.status == PSM_ARRANGE_ARRANGED &&
+            arrange_info.object_count == 1 &&
+            arrange_info.instance_count == 12,
+            "arrange reports the explicit target result");
     require(psm_bed_active(session) == 1,
             "arrange keeps the active second bed selected");
 #if defined(PSM_TEST_MULTIPLE_BEDS_STATE)
@@ -782,6 +856,7 @@ int main(int argc, char **argv)
     require(psm_model_info(session, arrange_ids[0], &arranged_info) == PSM_OK &&
             arranged_info.instance_count == 12,
             "arrange preserves all second-bed instances");
+
 #if defined(PSM_TEST_MULTIPLE_BEDS_STATE)
     /*
      * instance_count allein wuerde auch einen No-op bestehen lassen.

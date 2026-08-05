@@ -37,7 +37,7 @@ extern "C" {
 /* Version                                                             */
 /* ------------------------------------------------------------------ */
 
-#define PSM_ABI_VERSION 4
+#define PSM_ABI_VERSION 5
 
 /** Gibt die ABI-Version zurueck. Die App prueft sie beim Start gegen
  *  PSM_ABI_VERSION und verweigert den Dienst bei Abweichung. */
@@ -63,7 +63,9 @@ typedef enum {
     PSM_ERR_OUT_OF_MEMORY  = -8,
     PSM_ERR_SLICING        = -9,   /* Slicer meldet fachlichen Fehler    */
     PSM_ERR_UNSUPPORTED    = -10,
-    PSM_ERR_STALE_RESULT   = -11   /* Ergebnis passt nicht mehr zum Projekt */
+    PSM_ERR_STALE_RESULT   = -11,  /* Ergebnis passt nicht mehr zum Projekt */
+    PSM_ERR_LOCKED         = -12,  /* Zielbett ist gegen Anordnen gesperrt */
+    PSM_ERR_FULL           = -13   /* Objekt(e) passen nicht aufs Zielbett */
 } psm_result;
 
 /** Letzte Fehlermeldung dieser Session im Klartext, UTF-8.
@@ -198,6 +200,19 @@ PSM_API psm_result psm_history_clear(psm_session *s);
 /* ------------------------------------------------------------------ */
 
 #define PSM_MAX_BEDS 36
+#define PSM_BED_NAME_CAP 128
+
+/**
+ * Sitzungsdaten eines mobilen Betts.
+ *
+ * Name und Sperre leben absichtlich neben dem Model im Kern. So sehen
+ * alle Oberflaechen denselben Stand, und eine neue Session erbt keine
+ * Namen oder Sperren aus einem vorherigen Projekt.
+ */
+typedef struct {
+    char    name[PSM_BED_NAME_CAP];
+    int32_t locked;
+} psm_bed_metadata;
 
 /** Zahl der Betten im aktuellen Projekt. Mindestens eins. */
 PSM_API size_t psm_bed_count(psm_session *s);
@@ -222,6 +237,12 @@ PSM_API psm_result psm_bed_clear(psm_session *s);
 
 /** Zahl der Objekte auf einem Bett. */
 PSM_API size_t psm_bed_object_count(psm_session *s, size_t index);
+
+/** Liest beziehungsweise ersetzt Name und Sperre eines Betts. */
+PSM_API psm_result psm_bed_metadata_get(psm_session *s, size_t index,
+                                        psm_bed_metadata *out);
+PSM_API psm_result psm_bed_metadata_set(psm_session *s, size_t index,
+                                        const psm_bed_metadata *metadata);
 
 /** Verschiebt ein Objekt vom aktiven Bett auf ein anderes Bett. */
 PSM_API psm_result psm_bed_move_object(psm_session *s,
@@ -357,12 +378,35 @@ PSM_API psm_result psm_model_duplicate(psm_session *s, psm_object_id id, psm_obj
 
 /** Auto-Arrange ueber libnest2d. Blockierend, aber typisch unter 1 s. */
 PSM_API psm_result psm_arrange(psm_session *s, float gap_mm);
+
+typedef enum {
+    PSM_ARRANGE_ARRANGED = 0,
+    PSM_ARRANGE_EMPTY    = 1,
+    PSM_ARRANGE_LOCKED   = 2,
+    PSM_ARRANGE_FULL     = 3
+} psm_arrange_status;
+
+typedef struct {
+    psm_arrange_status status;
+    int32_t            object_count;
+    int32_t            instance_count;
+} psm_arrange_info;
+
 /**
  * Ordnet ein bestimmtes mobiles Bett an, ohne die sichtbare Bettauswahl
  * zu wechseln. Jedes mobile Bett bleibt dabei ein eigenes lokales Modell.
  */
 PSM_API psm_result psm_arrange_bed(psm_session *s, size_t bed_index,
                                    float gap_mm);
+
+/**
+ * Auskunftsreiche Fassung fuer Bedienoberflaechen.
+ *
+ * Gesperrt und voll liefern zusaetzlich PSM_ERR_LOCKED beziehungsweise
+ * PSM_ERR_FULL. out wird auch in diesen beiden Fehlerfaellen gefuellt.
+ */
+PSM_API psm_result psm_arrange_bed_ex(psm_session *s, size_t bed_index,
+                                      float gap_mm, psm_arrange_info *out);
 
 /* ------------------------------------------------------------------ */
 /* Erweiterte Modellwerkzeuge                                         */

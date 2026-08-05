@@ -34,16 +34,24 @@ void psm_emit_log(psm_log_level lvl, const std::string &msg);
 
 struct psm_session
 {
+    struct BedMetadata {
+        std::string name;
+        bool        locked = false;
+    };
+
     struct HistorySnapshot {
         std::vector<std::unique_ptr<Slic3r::Model>> beds;
+        std::vector<BedMetadata>                    bed_metadata;
         size_t                                      active_bed = 0;
         std::string                                 label;
 
         HistorySnapshot(
             const std::vector<std::unique_ptr<Slic3r::Model>> &source,
+            const std::vector<BedMetadata> &metadata,
             size_t active,
             std::string action)
-            : active_bed(active), label(std::move(action))
+            : bed_metadata(metadata), active_bed(active),
+              label(std::move(action))
         {
             beds.reserve(source.size());
             for (const auto &bed : source)
@@ -66,6 +74,7 @@ struct psm_session
      * Desktop-Bettlandschaft zu scrollen.
      */
     std::vector<std::unique_ptr<Slic3r::Model>> bed_models;
+    std::vector<BedMetadata>                    bed_metadata;
     size_t                                 active_bed = 0;
     Slic3r::DynamicPrintConfig             config;
     std::unique_ptr<Slic3r::PresetBundle>  presets;
@@ -207,6 +216,7 @@ struct psm_session
             return;
         undo_history.emplace_back(
             bed_models,
+            bed_metadata,
             active_bed,
             history_depth > 0 && ! history_label.empty() ? history_label : label);
         while (undo_history.size() > HISTORY_LIMIT)

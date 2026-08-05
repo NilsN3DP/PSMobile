@@ -26,6 +26,7 @@ struct WerkzeugSchiene: View {
     @Binding var kopiert: Int32?
     var onEinfuegen: () -> Void
     var onSettings: () -> Void
+    var onArrange: () -> Void = {}
     /// Einen Pinsel an- oder ausschalten. Liegt beim Aufrufer, weil dort
     /// auch der Zustand des Werkzeugs sitzt.
     var onMalwerkzeug: (PsmCore.PaintTool) -> Void = { _ in }
@@ -143,7 +144,7 @@ struct WerkzeugSchiene: View {
         // an dem eine Mehrfachauswahl etwas bringt.
         case "delete":    model.removeObjects(Array(model.selectedIds))
         case "deleteall": model.newProject()
-        case "arrange":   model.arrange()
+        case "arrange":   onArrange()
         case "copy":      kopiert = auswahl
         case "paste":     if let id = kopiert { model.duplicate([id]) }
         case "more":

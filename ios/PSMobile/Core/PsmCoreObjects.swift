@@ -18,6 +18,19 @@ extension PsmCore {
         let index: Int
         let objectCount: Int
         let active: Bool
+        let name: String
+        let locked: Bool
+    }
+
+    enum ArrangeStatus {
+        case arranged
+        case empty
+    }
+
+    struct ArrangeResult {
+        let status: ArrangeStatus
+        let objectCount: Int
+        let instanceCount: Int
     }
 
     /// Die Betten des Projekts. Mindestens eines - ein Projekt ohne
@@ -27,10 +40,34 @@ extension PsmCore {
         guard anzahl > 0 else { return [] }
         let aktiv = psm_bed_active(raw)
         return (0..<anzahl).map { i in
-            Bed(index: Int(i),
-                objectCount: Int(psm_bed_object_count(raw, i)),
-                active: i == aktiv)
+            var metadata = psm_bed_metadata()
+            let hatMetadaten = psm_bed_metadata_get(raw, i, &metadata) == PSM_OK
+            let name = hatMetadaten
+                ? withUnsafeBytes(of: &metadata.name) { puffer -> String in
+                    let zeichen = puffer.bindMemory(to: CChar.self)
+                    return String(cString: zeichen.baseAddress!)
+                }
+                : ""
+            return Bed(index: Int(i),
+                       objectCount: Int(psm_bed_object_count(raw, i)),
+                       active: i == aktiv,
+                       name: name,
+                       locked: hatMetadaten && metadata.locked != 0)
         }
+    }
+
+    func setBedMetadata(_ bed: Bed, name: String? = nil,
+                        locked: Bool? = nil) throws {
+        var metadata = psm_bed_metadata()
+        let sauber = (name ?? bed.name).trimmingCharacters(in: .whitespacesAndNewlines)
+        withUnsafeMutableBytes(of: &metadata.name) { puffer in
+            puffer.initializeMemory(as: UInt8.self, repeating: 0)
+            let bytes = Array(sauber.utf8.prefix(puffer.count - 1))
+            puffer.copyBytes(from: bytes)
+        }
+        metadata.locked = (locked ?? bed.locked) ? 1 : 0
+        try check(psm_bed_metadata_set(raw, size_t(bed.index), &metadata),
+                  "Bett-Metadaten setzen")
     }
 
     func selectBed(_ index: Int) throws {
@@ -64,11 +101,23 @@ extension PsmCore {
 
     // MARK: - Objektwerkzeuge
 
-    /// Ordnet alles auf dem Bett neu an. Blockierend, aber typisch unter
-    /// einer Sekunde - ein Fortschrittsbalken dafuer waere laenger zu
-    /// sehen als der Vorgang dauert.
+    /// Ordnet genau das angegebene Bett an und reicht fachliche Fehler
+    /// (gesperrt, voll) unverändert aus dem Kern weiter.
+    func arrange(bed index: Int, gapMm: Float = 6) throws -> ArrangeResult {
+        var info = psm_arrange_info()
+        let code = psm_arrange_bed_ex(raw, size_t(index), gapMm, &info)
+        try check(code, "Anordnen")
+        let status: ArrangeStatus =
+            info.status == PSM_ARRANGE_EMPTY ? .empty : .arranged
+        return ArrangeResult(status: status,
+                             objectCount: Int(info.object_count),
+                             instanceCount: Int(info.instance_count))
+    }
+
+    /// Bestehende Diagnosepfade ordnen weiterhin das aktive Bett an.
+    /// Die sichtbare Oberfläche verwendet die explizite Zielbett-Fassung.
     func arrange(gapMm: Float = 6) throws {
-        try check(psm_arrange(raw, gapMm), "Anordnen")
+        _ = try arrange(bed: Int(psm_bed_active(raw)), gapMm: gapMm)
     }
 
     @discardableResult

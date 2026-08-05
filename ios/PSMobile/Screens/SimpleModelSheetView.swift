@@ -15,6 +15,7 @@ struct SimpleModelSheetView: View {
 
     @ObservedObject var model: SlicerModel
     var onPickFile: () -> Void
+    var onArrange: () -> Void = {}
     /// Die Vorschau laesst sich abschalten - sie kostet Platz, und auf
     /// einem schmalen Geraet ist die Zeile ohnehin eng.
     @StateObject private var einstellungen = AppSettingsStore()
@@ -87,7 +88,7 @@ struct SimpleModelSheetView: View {
                        aktion: onPickFile)
                 aktion("▤", st("Arrange", "Anordnen"),
                        an: enthalten(.arrange), kennung: "blatt.anordnen") {
-                    model.arrange()
+                    onArrange()
                 }
             } else {
                 aktion("✕", st("Cancel", "Abbrechen"), an: true, kennung: "blatt.abbrechen") {
@@ -95,7 +96,7 @@ struct SimpleModelSheetView: View {
                 }
                 aktion("▤", st("Arrange", "Anordnen"),
                        an: enthalten(.arrange), kennung: "blatt.anordnen") {
-                    model.arrange()
+                    onArrange()
                 }
                 aktion("➜", st("Move to", "Ziehen zu"),
                        an: enthalten(.moveToBed), kennung: "blatt.bett") {

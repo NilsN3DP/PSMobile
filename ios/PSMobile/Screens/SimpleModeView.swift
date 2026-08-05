@@ -44,6 +44,8 @@ struct SimpleModeView: View {
     @State private var panel: SimplePanel = .workspace
     @State private var zeigeImporter = false
     @State private var zeigeColorMix = false
+    @State private var zeigeArrange = false
+    @State private var zeigeBettwahl = false
     @State private var hinderungsgruende: [String] = []
 
     /// Wofuer der Dateiwaehler offen ist. Eine 3MF kann beides sein -
@@ -81,6 +83,9 @@ struct SimpleModeView: View {
             VStack(spacing: 0) {
                 kopfzeile
                 werkzeugleiste
+                BedSelector(model: model,
+                            onArrange: { zeigeArrange = true },
+                            onOpenSelection: { zeigeBettwahl = true })
                 Spacer()
             }
             if panel == .workspace,
@@ -113,6 +118,9 @@ struct SimpleModeView: View {
             if !hinderungsgruende.isEmpty {
                 SliceBlockerSheet(gruende: hinderungsgruende) { hinderungsgruende = [] }
             }
+            if zeigeBettwahl {
+                BedSelectionOverlay(model: model, isPresented: $zeigeBettwahl)
+            }
             PSMarke(name: "simple.arbeitsbereich")
         }
         // Wer auf "Vorschau" tippt und dafuer warten musste, will
@@ -142,6 +150,9 @@ struct SimpleModeView: View {
         .sheet(isPresented: $zeigeColorMix) {
             ColorMixView { zeigeColorMix = false }
                 .environmentObject(model)
+        }
+        .sheet(isPresented: $zeigeArrange) {
+            ArrangePanel(model: model, isPresented: $zeigeArrange)
         }
     }
 
@@ -385,7 +396,10 @@ struct SimpleModeView: View {
                     .buttonStyle(.plain)
                     .accessibilityIdentifier("simple.modell")
                 } else {
-                    SimpleModelSheetView(model: model) { zeigeImporter = true }
+                    SimpleModelSheetView(
+                        model: model,
+                        onPickFile: { zeigeImporter = true },
+                        onArrange: { zeigeArrange = true })
                 }
             }
         }
