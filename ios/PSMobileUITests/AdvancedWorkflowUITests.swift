@@ -77,6 +77,34 @@ final class AdvancedWorkflowUITests: XCTestCase {
                       "Der Griff zum Skalieren ist mit Auswahl nicht bedienbar")
     }
 
+    func testObjektauswahlFuehrtInDenSichtbarenBearbeitenbereich() {
+        let objekteReiter = app.buttons["inspektor.objekte"]
+        XCTAssertTrue(objekteReiter.waitForExistence(timeout: 10),
+                      "Der Bereich Objekte fehlt")
+        objekteReiter.tap()
+
+        let objektzeile = app.buttons.matching(
+            NSPredicate(format: "identifier BEGINSWITH 'advanced.objekt.'")).firstMatch
+        XCTAssertTrue(objektzeile.waitForExistence(timeout: 10),
+                      "Die Auswahlzeile fehlt")
+        objektzeile.tap()
+
+        // Die Auswahl bleibt im aufklappbaren Objektbereich erhalten.
+        // Gleichzeitig muss der Tap direkt zu den Zahlen führen, ohne
+        // dass man den Bearbeitenbereich erst suchen und öffnen muss.
+        XCTAssertTrue(objektzeile.exists, "Die Auswahlzeile ist verschwunden")
+        let prozent = app.textFields["advanced.scale.prozent"]
+        XCTAssertTrue(prozent.waitForExistence(timeout: 5),
+                      "Der Bearbeitenbereich wurde nicht geöffnet")
+        XCTAssertTrue(prozent.isHittable, "Das Größenfeld ist nicht treffbar")
+        XCTAssertTrue(app.textFields["advanced.rotate.Z"].isHittable,
+                      "Das Drehfeld ist nicht treffbar")
+        XCTAssertTrue(app.buttons["advanced.einpassen"].isHittable,
+                      "Einpassen ist nicht treffbar")
+        XCTAssertTrue(app.buttons["advanced.schichten"].isHittable,
+                      "Der Einstieg für Schichthöhen ist nicht treffbar")
+    }
+
     func testEineVierteldrehungKommtAmModellAn() {
         // Die Objektliste liegt hinter ihrem Reiter, wie auf Android.
         let objekteReiter = app.buttons["inspektor.objekte"]

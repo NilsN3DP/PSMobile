@@ -52,6 +52,9 @@ struct AdvancedWorkspaceView: View {
     /// Welche Bereiche der Seitenleiste offen sind. Profile immer, der
     /// Rest auf Wunsch - sonst ist die Leiste beim Start eine Wand.
     @State private var offeneBereiche: Set<String> = ["profile"]
+    /// Ein Ziel wird erst nach dem Öffnen angesprungen, damit SwiftUI
+    /// dessen tatsächliche Höhe für den sichtbaren Ausschnitt kennt.
+    @State private var seitenleistenZiel: String?
     /// Welche Einstellungsseite als schwebendes Fenster offen ist.
     @State private var einstellungenTab: String?
     @State private var objektSuche = ""
@@ -776,24 +779,37 @@ struct AdvancedWorkspaceView: View {
 
     private var seitenleiste: some View {
         VStack(spacing: 0) {
-            ScrollView {
-                VStack(alignment: .leading, spacing: ps.pt(6)) {
-                    // Die drei Einstellungsseiten stehen oben im Band:
-                    // sie wirken auf das Profil, und das Profil steht
-                    // rechts. Oben in der Werkzeugleiste gehoert hin,
-                    // was auf den Viewport wirkt.
-                    einstellungsbereiche
-                    Divider().overlay(PrusaColors.divider)
-                    // Untereinander statt hinter Reitern: vier Reiter
-                    // heissen, dass drei Viertel des Gesuchten unsichtbar
-                    // sind. So sieht man alle Ueberschriften und klappt
-                    // auf, was man braucht.
-                    ForEach(Array(InspektorReiter.allCases.enumerated()),
-                            id: \.offset) { _, r in
-                        bereich(r)
+            ScrollViewReader { proxy in
+                ScrollView {
+                    VStack(alignment: .leading, spacing: ps.pt(6)) {
+                        // Die drei Einstellungsseiten stehen oben im Band:
+                        // sie wirken auf das Profil, und das Profil steht
+                        // rechts. Oben in der Werkzeugleiste gehoert hin,
+                        // was auf den Viewport wirkt.
+                        einstellungsbereiche
+                        Divider().overlay(PrusaColors.divider)
+                        // Untereinander statt hinter Reitern: vier Reiter
+                        // heissen, dass drei Viertel des Gesuchten unsichtbar
+                        // sind. So sieht man alle Ueberschriften und klappt
+                        // auf, was man braucht.
+                        ForEach(Array(InspektorReiter.allCases.enumerated()),
+                                id: \.offset) { _, r in
+                            bereich(r)
+                                .id(kennung(r))
+                        }
+                    }
+                    .padding(ps.pt(12))
+                }
+                .onChange(of: seitenleistenZiel) { ziel in
+                    guard let ziel else { return }
+                    // Öffnen und Scrollen sind zwei Layoutschritte.
+                    // Erst im nächsten Durchlauf hat der Inspector seine
+                    // Höhe und landet zuverlässig am oberen Rand.
+                    DispatchQueue.main.async {
+                        proxy.scrollTo(ziel, anchor: .top)
+                        seitenleistenZiel = nil
                     }
                 }
-                .padding(ps.pt(12))
             }
             // Ausserhalb der Reiter: was ein Schnitt ergeben hat, ist
             // keine Frage des gerade offenen Reiters.
@@ -1294,8 +1310,10 @@ struct AdvancedWorkspaceView: View {
             ForEach(sichtbar, id: \.id) { objekt in
                 Button {
                     model.select(objekt.id)
-                    // Wer ein Objekt antippt, will damit etwas tun.
-                    reiter = .bearbeiten
+                    // Wer ein Objekt antippt, will damit etwas tun. Der
+                    // frühere Reiterzustand öffnete im Akkordeon nichts.
+                    offeneBereiche.insert(kennung(.bearbeiten))
+                    seitenleistenZiel = kennung(.bearbeiten)
                 } label: {
                     HStack {
                         // Das Kästchen nimmt hinzu oder heraus, die Zeile
