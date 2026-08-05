@@ -417,3 +417,44 @@ noch einen Weg hat oder stillschweigend auf Bett 1 festliegt.
 Reihenfolge fuer die naechste Sitzung, weil beides zusammenhaengt:
 zuerst die Leiste aus dem Easy Mode nehmen, dann die Karten im Advanced
 Mode auf eine Breite bringen, in der ihr Text steht.
+
+## Nachtsitzung 6. August, direkt vom Geraet gemeldet
+
+Vier Punkte, keiner davon umgesetzt - nur die ersten drei oben (Bettleiste,
+Bettkarten, Arrange-Geste) sind diese Sitzung schon gefixt und committet
+(`04b2c3d`).
+
+### Filamente werden in der Filament-Uebersicht nicht uebernommen
+Gemeldet, noch nicht untersucht. Verdacht: `MaterialAuswahlView` waehlt
+ueber `model.selectPreset(.filament, name)` - zu pruefen ist, ob die
+Auswahl pro Werkzeug (T1-T8) tatsaechlich im Kern ankommt oder nur der
+zuletzt aktive Slot uebernommen wird. `standardwerteSetzen()` in
+`SlicerModel.swift` setzt beim Druckerwechsel ohnehin auf Prusament PLA
+zurueck - das koennte der Effekt sein, den der Nutzer als "nicht
+uebernommen" sieht, wenn er vorher ein anderes Profil je Werkzeug
+gewaehlt hatte.
+
+### Keine Profilsuche in den Einstellungen
+Weiterhin offen, siehe Abschnitt "Profilauswahl in die Einstellungsseiten"
+weiter oben - unveraendert seit der letzten Uebergabe. Bausteine sind da:
+`model.presetNames(_:)`, `model.selectPreset(_:_:)`,
+`MaterialAuswahlView` als Vorlage fuer Suche und Filter.
+
+### Hochkant skaliert falsch
+Foto vom iPhone in Portrait: die Oberflaeche wirkt wie fuer Querformat
+gebaut und nicht neu einsortiert - Werkzeugleisten und Panels liegen
+verschoben. `ResponsiveLayoutUITests.swift` (aus dieser Sitzung von
+Codex) deckt das offenbar nicht ab, obwohl es Punkt "Kleineres" nahesteht.
+Zu pruefen: `ps.windowSize` / `psScale` bei Rotation, und ob die
+Bildschirme case-basiert auf `schmal`/`kompakt` reagieren oder auf eine
+angenommene Seitenlage.
+
+### Der Viewer friert nach "On face" ein
+Nutzer meldet: nach dem Werkzeug "On face" (Objekt an eine angetippte
+Flaeche ausrichten, `psm_model_align_to_face` o.ae.) reagiert der
+Viewport nicht mehr - der Rest der App bleibt bedienbar, es ist also kein
+App-Absturz, sondern der Viewport-Thread oder ein GL-Zustand haengt.
+Zeitlich nah an `386f317 fix: richte getroffene Instanz auf Flaeche aus`
+aus dieser Sitzung - dort ansetzen. Noch nicht reproduziert, keine
+Codestelle bestaetigt.
+
