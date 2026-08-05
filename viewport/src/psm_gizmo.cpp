@@ -34,6 +34,9 @@ namespace {
 
 /* Laenge der Griffe in Bildpunkten - so gross wie ein Fingerziel. */
 constexpr float HANDLE_PX = 110.f;
+/* Unter dieser Halbbreite wird ein sichtbarer Griff mit dem Finger
+ * unzuverlaessig. Der Wert gilt in Renderpixeln, nicht in Welt-mm. */
+constexpr float MIN_PICK_RADIUS_PX = 12.f;
 constexpr float TWO_PI    = 6.28318530718f;
 
 } // namespace
@@ -238,14 +241,26 @@ std::vector<Anchor> gizmo_anchors(psm_gizmo_mode mode, const Vec3 &origin,
 
     switch (mode) {
         case PSM_GIZMO_MOVE:
-        case PSM_GIZMO_SCALE:
-            /* Der Griff sitzt am Ende der Achse. */
+            /*
+             * Beim Verschieben ist die ganze sichtbare Achse bedienbar.
+             * Nur die Pfeilspitze zu treffen waere besonders bei
+             * schraeger Kamera unnötig schwer.
+             */
             for (int a = 0; a < 3; ++a)
-                out.push_back({ a, origin + axis_vector(a) * len });
-            if (mode == PSM_GIZMO_SCALE) {
-                /* Gleichmaessig: der Griff auf der Winkelhalbierenden. */
+                out.push_back({ a, origin, origin + axis_vector(a) * len });
+            break;
+
+        case PSM_GIZMO_SCALE:
+            /* Skalieren greift weiterhin die sichtbaren Endwuerfel. */
+            for (int a = 0; a < 3; ++a) {
+                const Vec3 end = origin + axis_vector(a) * len;
+                out.push_back({ a, end, end });
+            }
+            /* Gleichmaessig: der Griff auf der Winkelhalbierenden. */
+            {
                 const Vec3 d = Vec3(1.f, 1.f, 1.f).normalized();
-                out.push_back({ 3, origin + d * (len * 0.75f) });
+                const Vec3 end = origin + d * (len * 0.75f);
+                out.push_back({ 3, end, end });
             }
             break;
 
@@ -263,8 +278,10 @@ std::vector<Anchor> gizmo_anchors(psm_gizmo_mode mode, const Vec3 &origin,
                 const Vec3 e2 = n.cross(e1).normalized();
                 for (int k = 0; k < 4; ++k) {
                     const float ang = TWO_PI * static_cast<float>(k) / 4.f;
-                    out.push_back({ a, origin + e1 * (std::cos(ang) * len)
-                                             + e2 * (std::sin(ang) * len) });
+                    const Vec3 point =
+                        origin + e1 * (std::cos(ang) * len)
+                               + e2 * (std::sin(ang) * len);
+                    out.push_back({ a, point, point });
                 }
             }
             break;
@@ -279,13 +296,26 @@ int pick_anchor(const std::vector<Anchor> &anchors, const Mat4 &view_proj,
                 int w, int h, float x, float y, float radius_px)
 {
     int   best = -1;
-    float best_d = radius_px;
+    float best_d = std::max(radius_px, MIN_PICK_RADIUS_PX);
+    const Vec2 touch(x, y);
 
     for (const Anchor &a : anchors) {
-        Vec2 s;
-        if (! project_point(view_proj, a.world, w, h, s))
+        Vec2 from, to;
+        if (! project_point(view_proj, a.from, w, h, from) ||
+            ! project_point(view_proj, a.to, w, h, to))
             continue;
-        const float d = std::hypot(s.x() - x, s.y() - y);
+
+        /*
+         * Erst projizieren, dann den Abstand messen. So bleibt die Huelle
+         * beim Zoomen gleich breit und eine Move-Achse ist auf ihrer
+         * ganzen sichtbaren Laenge treffbar.
+         */
+        const Vec2 segment = to - from;
+        const float length2 = segment.squaredNorm();
+        const float along = length2 > 0.001f
+            ? std::clamp((touch - from).dot(segment) / length2, 0.f, 1.f)
+            : 0.f;
+        const float d = (touch - (from + segment * along)).norm();
         if (d < best_d) {
             best_d = d;
             best   = a.axis;

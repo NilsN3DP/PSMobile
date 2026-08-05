@@ -225,4 +225,17 @@ if (PSM_BUILD_TESTS)
     target_include_directories(psm_contract_tests PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/core/include)
     target_compile_features(psm_contract_tests PRIVATE cxx_std_17)
+
+    # Die Griff-Treffererkennung braucht weder GL-Kontext noch Modell.
+    # Als eigener Test bleibt ihr Pixelvertrag deshalb auch auf dem Host
+    # messbar, obwohl der eigentliche Viewport nur mobil gebaut wird.
+    add_executable(psm_gizmo_tests
+        viewport/test/psm_gizmo_tests.cpp
+        viewport/src/psm_gizmo.cpp)
+    target_link_libraries(psm_gizmo_tests PRIVATE libslic3r)
+    target_include_directories(psm_gizmo_tests PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/core/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/viewport/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/viewport/src)
+    target_compile_features(psm_gizmo_tests PRIVATE cxx_std_17)
 endif ()

@@ -1444,7 +1444,7 @@ void build_gizmo(psm_viewport *v)
                 for (const psm::Anchor &an :
                          psm::gizmo_anchors(PSM_GIZMO_ROTATE, origin, mm))
                     if (an.axis == a)
-                        psm::build_ball(geo, an.world, ball);
+                        psm::build_ball(geo, an.to, ball);
                 upload_psm(v->gizmo_solid[a], geo);
             }
             v->gizmo_axis_count = 3;

@@ -380,11 +380,16 @@ final class PSMGLView: UIView {
             ? vp.gizmoPick(x: x, y: y, radius: PSMGLView.handleRadiusPx)
             : -1
 
-        // Frueher schob ein Zug auf dem Objekt es ueber das Bett. Das
-        // war zu leicht ausgeloest: dieselbe Geste dreht ueberall sonst
-        // die Kamera, und wer nur hinsehen wollte, hatte schon
-        // verschoben. Verschoben wird an den Pfeilen.
-        dragObject = false
+        /*
+         * Das Move-Gizmo ist absichtlich streng: entweder wurde seine
+         * viewportseitig gemessene Achse getroffen, oder die Geste bleibt
+         * Orbit. Ohne Move-Gizmo darf dagegen das Objekt selbst direkt
+         * gezogen werden; freie Flaeche bleibt weiterhin Orbit.
+         */
+        dragObject = vp.gizmo != .move
+            && vp.mode == .editor
+            && selectedId >= 0
+            && vp.pick(x: x, y: y) == selectedId
     }
 
     override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent?) {

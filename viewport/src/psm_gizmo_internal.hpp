@@ -26,10 +26,11 @@ using Mat4 = Eigen::Matrix4f;
 /* Muss zum Eckpunkttyp in psm_viewport.cpp passen. */
 struct Vertex { float px, py, pz, nx, ny, nz; };
 
-/** Ein Punkt, an dem ein Griff angefasst werden kann. */
+/** Eine in Weltkoordinaten beschriebene Griff-Trefferzone. */
 struct Anchor {
     int  axis;     /* 0 = X, 1 = Y, 2 = Z, 3 = gleichmaessig */
-    Vec3 world;
+    Vec3 from;
+    Vec3 to;
 };
 
 /** Weltpunkt auf Bildschirmkoordinaten. False, wenn hinter der Kamera. */

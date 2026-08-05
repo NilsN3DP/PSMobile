@@ -357,6 +357,12 @@ PSM_API psm_result psm_model_duplicate(psm_session *s, psm_object_id id, psm_obj
 
 /** Auto-Arrange ueber libnest2d. Blockierend, aber typisch unter 1 s. */
 PSM_API psm_result psm_arrange(psm_session *s, float gap_mm);
+/**
+ * Ordnet ein bestimmtes mobiles Bett an, ohne die sichtbare Bettauswahl
+ * zu wechseln. Jedes mobile Bett bleibt dabei ein eigenes lokales Modell.
+ */
+PSM_API psm_result psm_arrange_bed(psm_session *s, size_t bed_index,
+                                   float gap_mm);
 
 /* ------------------------------------------------------------------ */
 /* Erweiterte Modellwerkzeuge                                         */

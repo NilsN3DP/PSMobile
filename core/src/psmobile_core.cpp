@@ -1888,50 +1888,59 @@ PSM_API psm_result psm_model_duplicate(psm_session *s, psm_object_id id, psm_obj
     PSM_GUARD_END(s)
 }
 
+/*
+ * Ordnet genau ein lokales Bett an. Der Aufrufer haelt data_mtx.
+ *
+ * PrusaSlicers globale MultipleBeds-Landschaft darf hier nicht
+ * beschrieben werden: Mobile-Betten sind getrennte Models, und eine
+ * Zuordnung ihrer Instanzen zu Desktop-Bett 0 zerstoert den Zustand
+ * anderer Betten und Sitzungen.
+ */
+static psm_result arrange_local_bed(psm_session *s, Slic3r::Model &model,
+                                    float gap_mm)
+{
+    if (model.objects.empty())
+        return PSM_OK;
+
+    /* Bettform kommt aus der aktiven Konfiguration; ohne gewaehlten
+     * Drucker ist das die Vorgabe aus FullPrintConfig. */
+    const Slic3r::Points bedpts = Slic3r::get_bed_shape(s->config);
+    if (bedpts.empty()) {
+        s->set_error("Druckbett ist nicht definiert");
+        return PSM_ERR_GENERIC;
+    }
+
+    const Slic3r::Vec2crd gap{ 0, 0 };
+    Slic3r::arr2::ArrangeBed bed = Slic3r::arr2::to_arrange_bed(bedpts, gap);
+
+    Slic3r::arr2::ArrangeSettings cfg;
+    const double dist = (gap_mm > 0.f)
+        ? static_cast<double>(gap_mm)
+        : Slic3r::min_object_distance(s->config);
+    cfg.set_distance_from_objects(dist);
+
+    s->history_checkpoint("Objekte anordnen");
+    Slic3r::arrange_objects(model, bed, cfg);
+    s->mark_design_changed();
+    return PSM_OK;
+}
+
+PSM_API psm_result psm_arrange_bed(psm_session *s, size_t bed_index,
+                                   float gap_mm)
+{
+    PSM_GUARD_BEGIN(s)
+        std::lock_guard<std::recursive_mutex> data_lock(s->data_mtx);
+        if (bed_index >= s->bed_models.size())
+            return PSM_ERR_NOT_FOUND;
+        return arrange_local_bed(s, *s->bed_models[bed_index], gap_mm);
+    PSM_GUARD_END(s)
+}
+
 PSM_API psm_result psm_arrange(psm_session *s, float gap_mm)
 {
     PSM_GUARD_BEGIN(s)
         std::lock_guard<std::recursive_mutex> data_lock(s->data_mtx);
-        if (s->model().objects.empty())
-            return PSM_OK;
-
-        /* Bettform kommt aus der aktiven Konfiguration; ohne gewaehlten
-         * Drucker ist das die Vorgabe aus FullPrintConfig. */
-        const Slic3r::Points bedpts = Slic3r::get_bed_shape(s->config);
-        if (bedpts.empty()) {
-            s->set_error("Druckbett ist nicht definiert");
-            return PSM_ERR_GENERIC;
-        }
-
-        const Slic3r::Vec2crd gap{ 0, 0 };
-        Slic3r::arr2::ArrangeBed bed = Slic3r::arr2::to_arrange_bed(bedpts, gap);
-
-        Slic3r::arr2::ArrangeSettings cfg;
-        const double dist = (gap_mm > 0.f)
-            ? static_cast<double>(gap_mm)
-            : Slic3r::min_object_distance(s->config);
-        cfg.set_distance_from_objects(dist);
-
-        /* Die mobile Ebene ist immer ein lokales Einzelbett. Nach dem
-         * Öffnen eines Mehrbett-3MF kennt MultipleBeds noch die frühere
-         * Desktop-Landschaft; neue Instanzen besitzen dort folglich keinen
-         * gültigen Bettindex (-1). arrange_objects konsultiert diese globale
-         * Zuordnung trotz des lokalen Model-Arguments. Deshalb jede lokale
-         * Instanz vor dem Arrange explizit auf Bett 0 abbilden. */
-        Slic3r::s_multiple_beds.clear_inst_map();
-        for (Slic3r::ModelObject *object : s->model().objects) {
-            for (Slic3r::ModelInstance *instance : object->instances) {
-                Slic3r::s_multiple_beds.set_instance_bed(
-                    instance->id(), instance->printable, 0);
-            }
-        }
-        Slic3r::s_multiple_beds.inst_map_updated();
-        Slic3r::s_multiple_beds.set_active_bed(0);
-
-        s->history_checkpoint("Objekte anordnen");
-        Slic3r::arrange_objects(s->model(), bed, cfg);
-        s->mark_design_changed();
-        return PSM_OK;
+        return arrange_local_bed(s, s->model(), gap_mm);
     PSM_GUARD_END(s)
 }
 

@@ -559,25 +559,52 @@ int main(int argc, char **argv)
     require(psm_history_undo_count(session) == 0 &&
             psm_history_redo_count(session) == 0,
             "opening a project starts a clean history");
-    /* Mobile keeps each virtual desktop bed in its own local Model. The
-     * global MultipleBeds map must therefore be re-established before
-     * arranging newly added instances on one local bed. */
+    /*
+     * Arrange auf Bett 2 darf weder den Inhalt von Bett 1 noch die
+     * sichtbare Bettauswahl anfassen. Ein explizites Ziel macht diesen
+     * Vertrag auch fuer Aufrufer testbar, ohne vorher das UI-Bett
+     * umzuschalten.
+     */
     require(psm_bed_select(session, 0) == PSM_OK,
-            "select first local bed for arrange regression");
+            "keep first local bed active for arrange regression");
+    psm_object_id first_bed_ids[4]{};
+    size_t first_bed_count = 0;
+    require(psm_model_list(session, first_bed_ids, 4, &first_bed_count) == PSM_OK &&
+            first_bed_count == 1,
+            "one object available on untouched first bed");
+    psm_object_info first_before{};
+    require(psm_model_info(session, first_bed_ids[0], &first_before) == PSM_OK,
+            "capture first bed object before arranging second bed");
+
+    require(psm_bed_select(session, 1) == PSM_OK,
+            "inspect second local bed for arrange regression");
     psm_object_id arrange_ids[4]{};
     size_t arrange_count = 0;
     require(psm_model_list(session, arrange_ids, 4, &arrange_count) == PSM_OK &&
             arrange_count == 1,
-            "one local object available for arrange regression");
+            "one object available on second bed");
     require(psm_model_set_instances(session, arrange_ids[0], 12) == PSM_OK,
-            "create twelve local instances for arrange regression");
-    require(psm_arrange(session, 0.f) == PSM_OK,
-            std::string("arrange local multibed instances: ") +
+            "create twelve instances on second bed");
+    require(psm_bed_select(session, 0) == PSM_OK,
+            "restore first bed before targeted arrange");
+    require(psm_arrange_bed(session, 1, 0.f) == PSM_OK,
+            std::string("arrange only second bed: ") +
                 psm_last_error(session));
+    require(psm_bed_active(session) == 0,
+            "targeted arrange does not switch the active bed");
+    psm_object_info first_after{};
+    require(psm_model_info(session, first_bed_ids[0], &first_after) == PSM_OK,
+            "first bed object remains visible after arranging second bed");
+    for (int axis = 0; axis < 3; ++axis) {
+        require(close_to(first_after.position[axis], first_before.position[axis]),
+                "arranging second bed does not move first bed");
+    }
+    require(psm_bed_select(session, 1) == PSM_OK,
+            "inspect arranged second bed");
     psm_object_info arranged_info{};
     require(psm_model_info(session, arrange_ids[0], &arranged_info) == PSM_OK &&
             arranged_info.instance_count == 12,
-            "arrange preserves all local instances");
+            "targeted arrange preserves all second-bed instances");
 
     /*
      * Der vorherige Projektfall deckt bewusst den Fallback auf ein
