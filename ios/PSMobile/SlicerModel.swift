@@ -806,6 +806,15 @@ final class SlicerModel: ObservableObject {
         }
     }
 
+    /// Alle nicht gesperrten Betten in einem Rutsch anordnen - der
+    /// kurze Tipp auf den Arrange-Knopf. Wer nur ein Bett anordnen
+    /// will, haelt den Knopf gedrueckt und waehlt es im Panel.
+    func arrangeAll(gapMm: Float = 6) {
+        for bett in beds where !bett.locked {
+            _ = try? arrange(target: bett.index, gapMm: gapMm)
+        }
+    }
+
     func duplicate(_ ids: [Int32]) {
         for id in ids { try? core?.duplicate(id) }
         refresh()

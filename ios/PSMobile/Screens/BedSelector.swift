@@ -114,14 +114,22 @@ struct BedSelector: View {
         .padding(.vertical, ps.pt(4))
     }
 
+    /// Kurzer Tipp ordnet alle Betten sofort an - das ist der haeufige
+    /// Fall. Das Panel mit Zielbett und Abstand oeffnet sich erst beim
+    /// Halten, damit der Alltagsgriff nicht durch ein Blatt fuehrt.
     private var arrangeKnopf: some View {
-        Button(action: onArrange) {
+        Button(action: { model.arrangeAll() }) {
             Label(PsUiCatalog.tr("Arrange"), systemImage: "square.grid.2x2")
                 .frame(minHeight: ps.touch())
         }
         .buttonStyle(.borderedProminent)
         .tint(PrusaColors.orange)
         .accessibilityIdentifier("arrange.open")
+        .simultaneousGesture(
+            LongPressGesture(minimumDuration: 0.5).onEnded { _ in
+                onArrange()
+            }
+        )
     }
 
     private func bettKarte(_ bett: PsmCore.Bed) -> some View {
@@ -137,14 +145,18 @@ struct BedSelector: View {
                         Text(model.bedLabel(bett.index))
                             .font(.system(size: ps.font(13), weight: .semibold))
                             .lineLimit(1)
-                        Text(st("\(bett.objectCount) objects",
-                                "\(bett.objectCount) Objekte"))
+                            .minimumScaleFactor(0.75)
+                        // Die Einheit steht schon in der Ueberschrift "Beds" -
+                        // auf der Karte reicht die Zahl, sonst bricht der Text um.
+                        Text("\(bett.objectCount)")
                             .font(.system(size: ps.font(10)))
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.75)
                             .foregroundStyle(bett.active
                                              ? PrusaColors.background.opacity(0.75)
                                              : PrusaColors.textMuted)
                     }
-                    Spacer(minLength: ps.pt(82))
+                    Spacer(minLength: ps.pt(40))
                 }
                 .foregroundStyle(bett.active
                                  ? PrusaColors.background : PrusaColors.textPrimary)
