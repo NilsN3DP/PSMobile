@@ -20,14 +20,25 @@ struct FinalPreviewOverlay: View {
     var body: some View {
         ZStack(alignment: isPad ? .trailing : .bottom) {
             Color.clear
-            panel
-                .frame(width: isPad
-                       ? min(ps.pt(330), ps.windowSize.width * 0.36)
-                       : nil)
-                .frame(maxHeight: isPad
-                       ? ps.windowSize.height * 0.72
-                       : ps.pt(360))
-                .padding(isPad ? ps.pt(14) : 0)
+            Group {
+                // Auf dem iPhone ist die feste Bogenhoehe zu knapp fuer
+                // Kopf, Statistik, beide Schichtregler, Farbmodus und die
+                // Rollen-Chips zusammen - der untere Regler fiel dadurch
+                // aus dem sichtbaren Bereich. Ein Scrollcontainer haelt
+                // ihn erreichbar, statt ihn abzuschneiden.
+                if isPad {
+                    panel
+                } else {
+                    ScrollView(showsIndicators: false) { panel }
+                }
+            }
+            .frame(width: isPad
+                   ? min(ps.pt(330), ps.windowSize.width * 0.36)
+                   : nil)
+            .frame(maxHeight: isPad
+                   ? ps.windowSize.height * 0.72
+                   : ps.pt(360))
+            .padding(isPad ? ps.pt(14) : 0)
             PSMarke(name: "vorschau.panel")
             PSMarke(name: isPad
                     ? "vorschau.seitenkarte"
