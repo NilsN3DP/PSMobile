@@ -60,10 +60,12 @@ struct WerkzeugSchiene: View {
                      label: st("+ copy", "+ Kopie")),
             Werkzeug(name: "fewer", symbol: "minus.square",
                      label: st("− copy", "− Kopie")),
-            Werkzeug(name: "splitobjects", symbol: "square.split.2x1",
-                     label: st("Objects", "Objekte")),
-            Werkzeug(name: "splitvolumes", symbol: "square.split.1x2",
-                     label: st("Volumes", "Volumen")),
+            // Ein Knopf statt zwei: am Desktop ist das ein Rechtsklick-
+            // Menue mit "Split to objects" / "Split to parts", keine
+            // zwei getrennten Befehle. "Volumes" hiess hier vorher
+            // "Objekte"-Zwilling und war fuer sich kaum verstaendlich.
+            Werkzeug(name: "split", symbol: "square.split.2x1",
+                     label: st("Separate", "Trennen")),
             // Die Pinsel gehoeren zu den Gizmos, nicht in einen Reiter
             // am rechten Rand: beide bestimmen, was ein Finger auf dem
             // Modell tut. Am Desktop stehen sie aus demselben Grund in
@@ -80,7 +82,7 @@ struct WerkzeugSchiene: View {
     /// Welche Werkzeuge ohne Auswahl sinnlos sind — entspricht den
     /// enabling_callbacks im Original.
     private static let brauchtAuswahl: Set<String> = [
-        "delete", "copy", "more", "fewer", "splitobjects", "splitvolumes",
+        "delete", "copy", "more", "fewer", "split",
         // Ein Pinsel ohne Objekt hat nichts zu bemalen.
         "paintsupport", "paintseam", "paintmmu",
     ]
@@ -99,28 +101,65 @@ struct WerkzeugSchiene: View {
         .background(PrusaColors.panel)
     }
 
+    @ViewBuilder
     private func knopf(_ w: Werkzeug) -> some View {
         let an = erlaubt(w.name)
-        return Button { ausfuehren(w.name) } label: {
-            VStack(spacing: ps.pt(3)) {
-                Image(systemName: w.symbol)
-                    .font(.system(size: ps.font(19)))
-                Text(w.label)
-                    .font(.system(size: ps.font(9)))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.7)
+        if w.name == "arrange" {
+            // Wie zuvor in der Bettleiste, die diesen Knopf jetzt nicht
+            // mehr doppelt zeigt: Tipp ordnet alle ungesperrten Betten
+            // sofort an, Halten oeffnet das Panel mit Zielbett/Abstand.
+            Button { model.arrangeAll() } label: {
+                knopfInhalt(w, an: an)
             }
-            .foregroundStyle(an ? PrusaColors.textPrimary : PrusaColors.textMuted.opacity(0.35))
-            .frame(maxWidth: .infinity)
-            .frame(height: ps.touch(58))
-            .background(an ? PrusaColors.panelRaised : Color.clear)
-            .clipShape(RoundedRectangle(cornerRadius: ps.pt(8)))
-            .contentShape(Rectangle())
+            .buttonStyle(.plain)
+            .disabled(!an)
+            .accessibilityIdentifier("schiene." + w.name)
+            .accessibilityLabel(w.label)
+            .simultaneousGesture(
+                LongPressGesture(minimumDuration: 0.5).onEnded { _ in
+                    onArrange()
+                }
+            )
+        } else if w.name == "split" {
+            Menu {
+                Button(st("Split to objects", "Zu Objekten trennen")) {
+                    ausfuehren("splitobjects")
+                }
+                Button(st("Split to parts", "Zu Volumen trennen")) {
+                    ausfuehren("splitvolumes")
+                }
+            } label: {
+                knopfInhalt(w, an: an)
+            }
+            .disabled(!an)
+            .accessibilityIdentifier("schiene." + w.name)
+            .accessibilityLabel(w.label)
+        } else {
+            Button { ausfuehren(w.name) } label: {
+                knopfInhalt(w, an: an)
+            }
+            .buttonStyle(.plain)
+            .disabled(!an)
+            .accessibilityIdentifier("schiene." + w.name)
+            .accessibilityLabel(w.label)
         }
-        .buttonStyle(.plain)
-        .disabled(!an)
-        .accessibilityIdentifier("schiene." + w.name)
-        .accessibilityLabel(w.label)
+    }
+
+    private func knopfInhalt(_ w: Werkzeug, an: Bool) -> some View {
+        VStack(spacing: ps.pt(3)) {
+            Image(systemName: w.symbol)
+                .font(.system(size: ps.font(19)))
+            Text(w.label)
+                .font(.system(size: ps.font(9)))
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+        }
+        .foregroundStyle(an ? PrusaColors.textPrimary : PrusaColors.textMuted.opacity(0.35))
+        .frame(maxWidth: .infinity)
+        .frame(height: ps.touch(58))
+        .background(an ? PrusaColors.panelRaised : Color.clear)
+        .clipShape(RoundedRectangle(cornerRadius: ps.pt(8)))
+        .contentShape(Rectangle())
     }
 
     private func erlaubt(_ name: String) -> Bool {
@@ -144,7 +183,9 @@ struct WerkzeugSchiene: View {
         // an dem eine Mehrfachauswahl etwas bringt.
         case "delete":    model.removeObjects(Array(model.selectedIds))
         case "deleteall": model.newProject()
-        case "arrange":   onArrange()
+        // "arrange" hat einen eigenen Zweig in knopf(_:) - Tipp und
+        // Halten unterscheiden sich, das passt nicht in ein einzelnes
+        // ausfuehren(_:).
         case "copy":      kopiert = auswahl
         case "paste":     if let id = kopiert { model.duplicate([id]) }
         case "more":

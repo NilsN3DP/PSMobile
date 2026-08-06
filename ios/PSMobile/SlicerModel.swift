@@ -183,6 +183,12 @@ final class SlicerModel: ObservableObject {
                     let anzahl = argumente.contains("-psm-test-many-cubes") ? 12 : 1
                     for _ in 0..<anzahl { ladeTestWuerfel() }
                 }
+                // Nur fuer die Untersuchung der G-Code-Vorschau: ein
+                // Koerper mit vielen Schichten und einer gekruemmten
+                // Kontur statt des flachen Wuerfels.
+                if argumente.contains("-psm-load-kegel") {
+                    ladeTestKegel()
+                }
             }
         } catch {
             progress = .failed(error.localizedDescription)
@@ -199,6 +205,16 @@ final class SlicerModel: ObservableObject {
             _ = try core?.loadModel(path: datei.path)
         } catch {
             NSLog("Testwuerfel liess sich nicht laden: %@", String(describing: error))
+        }
+        refresh()
+    }
+
+    private func ladeTestKegel() {
+        do {
+            let datei = try Testkoerper.kegelDatei()
+            _ = try core?.loadModel(path: datei.path)
+        } catch {
+            NSLog("Testkegel liess sich nicht laden: %@", String(describing: error))
         }
         refresh()
     }

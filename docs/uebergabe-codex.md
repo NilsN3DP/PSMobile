@@ -586,3 +586,57 @@ aber ohne Oberflaeche:
 Keines davon wurde diese Nacht angefasst - Risiko/Zeit-Abwaegung bei einer
 Deadline, nicht vergessen.
 
+## G-Code-Vorschau zeigt nie den G-Code (untersucht, nicht gefixt)
+
+Mit einem eigens gerechneten Kegel (viele Facetten, 299 Schichten,
+`Testkoerper.kegel`, nur fuer diese Untersuchung, Debug-Start
+`-psm-load-kegel`) im Simulator nachvollzogen: nach dem Schneiden und
+Oeffnen der Vorschau zeigt der Viewport weiterhin das massive Modell,
+nie die Werkzeugwege - bei jedem Schichtregler-Stand und aus jedem
+Blickwinkel (Screenshots liegen der Nachricht an den Nutzer bei). Die
+rechte Karte selbst ist korrekt: Statistik, Schichtbereich, Merkmal-
+und Extruder-Chips stimmen mit dem echten Schnittergebnis ueberein -
+nur der 3D-Viewport dahinter zeichnet nicht um.
+
+Eingegrenzt, nicht behoben:
+
+* Die Kette Swift -> Kern ist auf den ersten Blick korrekt:
+  `AdvancedWorkspaceView` setzt `viewportMode: vorschau ? .preview :
+  .editor`, `ViewportView.updateUIView` ruft bei `vorschauBetreten`
+  `vp.loadPreview()` und danach `vp.mode = .preview`.
+  `psm_viewport_load_preview` (`psm_viewport.cpp:2029`) laedt das
+  Ergebnis, setzt `gcode_loaded = true` und gibt `true` zurueck -
+  nichts davon schlaegt sichtbar fehl (kein Eintrag in `PsmLog`).
+* `psm_viewport_render` (Zeile 1236) prueft `mode == PSM_VIEW_PREVIEW
+  && gcode_loaded` und zeichnet dann `gcode_viewer.render(...)` statt
+  der Meshes. Ein testweise eingebauter Log-Zaehler in genau dieser
+  Zeile zeigte ueber den gesamten Testlauf (Schneiden, Vorschau
+  oeffnen, Schichtregler auf 1-299 ziehen, Ansicht "Top") nur **einen
+  einzigen Render-Aufruf insgesamt**, und der noch mit `mode=0
+  gcode_loaded=0` - also aus der Editor-Phase, vor dem Umschalten.
+  Nach dem Wechsel in die Vorschau feuerte der Renderaufruf nie wieder.
+* `PSMGLView.requestRender()` markiert nur `brauchtBild = true`; ein
+  laufender `CADisplayLink` soll das naechste Bild zeichnen
+  (`ViewportView.swift:323-338`). Ob der Display-Link im
+  XCUITest-Simulator zuverlaessig weiterlaeuft, nachdem die
+  Automation-Session die App als "idle" einstuft, ist die
+  wahrscheinlichste Erklaerung - und genau der Punkt, an dem eine
+  Ferndiagnose ohne echtes Geraet unsicher wird. Es ist offen, ob das
+  ein reines Simulator-/XCUITest-Artefakt ist oder auch auf einem
+  echten iPad auftritt.
+
+**Naechster Schritt, mit einem Geraet statt dem Simulator**: denselben
+Kegel-Testkoerper laden (Debug-Argument bleibt drin,
+`-psm-load-kegel`), schneiden, Vorschau oeffnen, direkt beobachten ob
+der Viewport ueberhaupt neu zeichnet. Zeichnet er auf dem Geraet auch
+nicht um, liegt es nicht am CADisplayLink/Simulator, sondern tiefer -
+dann als naechstes pruefen, ob `vp.mode` tatsaechlich `.preview`
+erreicht (z. B. testweise `psm_viewport_get_mode` direkt nach dem
+Setzen abfragen) oder ob dort schon der Rueckstand entsteht.
+
+Bewusst nicht blind angefasst: derselbe Codebereich (Viewport-Rendering
+nach einem Gizmo-Wechsel) steht schon unter Verdacht fuer den separat
+gemeldeten Freeze nach "On face" - zwei ungetestete Aenderungen an
+derselben heiklen Stelle in einer Nacht waeren nicht mehr auseinander-
+zuhalten, wenn etwas schiefgeht.
+

@@ -75,8 +75,6 @@ struct BedSelector: View {
             }
             .buttonStyle(.plain)
             .accessibilityIdentifier("bed.selector.active")
-
-            arrangeKnopf
         }
         .padding(.horizontal, ps.pt(8))
         .padding(.vertical, ps.pt(4))
@@ -107,28 +105,9 @@ struct BedSelector: View {
                 }
             }
             Spacer(minLength: 0)
-            arrangeKnopf
         }
         .padding(.horizontal, ps.pt(8))
         .padding(.vertical, ps.pt(4))
-    }
-
-    /// Kurzer Tipp ordnet alle Betten sofort an - das ist der haeufige
-    /// Fall. Das Panel mit Zielbett und Abstand oeffnet sich erst beim
-    /// Halten, damit der Alltagsgriff nicht durch ein Blatt fuehrt.
-    private var arrangeKnopf: some View {
-        Button(action: { model.arrangeAll() }) {
-            Label(PsUiCatalog.tr("Arrange"), systemImage: "square.grid.2x2")
-                .frame(minHeight: ps.touch())
-        }
-        .buttonStyle(.borderedProminent)
-        .tint(PrusaColors.orange)
-        .accessibilityIdentifier("arrange.open")
-        .simultaneousGesture(
-            LongPressGesture(minimumDuration: 0.5).onEnded { _ in
-                onArrange()
-            }
-        )
     }
 
     /// Name, Objektzahl und Schlossknopf in einer Kapsel. Umbenennen und
@@ -136,24 +115,26 @@ struct BedSelector: View {
     /// Druck) statt als eigene, immer sichtbare Knoepfe - die haben zuvor
     /// die Karte breiter gemacht, als der Name Platz hatte.
     private func bettKapsel(_ bett: PsmCore.Bed) -> some View {
+        // Dezenter als das volle Orange der uebrigen Aktionsknoepfe: das
+        // aktive Bett ist ein Zustand, den man staendig im Blick hat,
+        // kein Befehl, den man antippt - er soll nicht um Aufmerksamkeit
+        // mit Arrange und den Werkzeugen konkurrieren.
         HStack(spacing: ps.pt(2)) {
             Button {
                 model.selectBed(bett.index)
             } label: {
-                HStack(spacing: ps.pt(5)) {
+                HStack(spacing: ps.pt(4)) {
                     Text(model.bedLabel(bett.index))
-                        .font(.system(size: ps.font(12), weight: .semibold))
+                        .font(.system(size: ps.font(11), weight: .medium))
                         .lineLimit(1)
                     Text("\(bett.objectCount)")
-                        .font(.system(size: ps.font(10)))
-                        .foregroundStyle(bett.active
-                                         ? PrusaColors.background.opacity(0.75)
-                                         : PrusaColors.textMuted)
+                        .font(.system(size: ps.font(9)))
+                        .foregroundStyle(PrusaColors.textMuted)
                 }
                 .foregroundStyle(bett.active
-                                 ? PrusaColors.background : PrusaColors.textPrimary)
-                .padding(.leading, ps.pt(12))
-                .frame(minHeight: ps.touch(38))
+                                 ? PrusaColors.orange : PrusaColors.textPrimary)
+                .padding(.leading, ps.pt(10))
+                .frame(minHeight: ps.touch(32))
             }
             .buttonStyle(.plain)
             .accessibilityIdentifier("bed.card.\(bett.index)")
@@ -162,17 +143,21 @@ struct BedSelector: View {
                 model.toggleBedLock(bett.index)
             } label: {
                 Image(systemName: bett.locked ? "lock.fill" : "lock.open")
-                    .font(.system(size: ps.font(10)))
-                    .foregroundStyle(bett.active
-                                     ? PrusaColors.background : PrusaColors.textPrimary)
-                    .frame(width: ps.touch(30), height: ps.touch(38))
+                    .font(.system(size: ps.font(9)))
+                    .foregroundStyle(PrusaColors.textMuted)
+                    .frame(width: ps.touch(26), height: ps.touch(32))
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .padding(.trailing, ps.pt(4))
+            .padding(.trailing, ps.pt(3))
             .accessibilityIdentifier("bed.lock.\(bett.index)")
         }
-        .background(bett.active ? PrusaColors.orange : PrusaColors.panelRaised)
+        .background(PrusaColors.panelRaised)
+        .overlay(
+            RoundedRectangle(cornerRadius: ps.pt(6))
+                .stroke(bett.active ? PrusaColors.orange.opacity(0.6) : Color.clear,
+                        lineWidth: 1)
+        )
         .clipShape(RoundedRectangle(cornerRadius: ps.pt(6)))
         .contextMenu {
             Button {

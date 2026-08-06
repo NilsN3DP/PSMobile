@@ -58,4 +58,53 @@ enum Testkoerper {
         try wuerfel(kante: kante).write(to: url)
         return url
     }
+
+    /// Ein Kegel mit vielen Facetten, gerechnet wie der Wuerfel.
+    ///
+    /// Fuer die Untersuchung der G-Code-Vorschau in dieser Nachtsitzung:
+    /// ein einzelner Wuerfel hat nur wenige, kurze Perimeter und keine
+    /// Ueberhaenge - er stellt weder Stuetzen noch viele Schichten noch
+    /// gekruemmte Konturen auf die Probe. Ein hoher, feinfacettierter
+    /// Kegel schon.
+    static func kegel(radius r: Float = 30, hoehe h: Float = 60,
+                       seiten n: Int = 64) -> Data {
+        var ecken: [SIMD3<Float>] = []
+        for i in 0..<n {
+            let winkel = Float(i) / Float(n) * 2 * .pi
+            ecken.append([r * cos(winkel), r * sin(winkel), 0])
+        }
+        let spitze = SIMD3<Float>(0, 0, h)
+        let mitte = SIMD3<Float>(0, 0, 0)
+
+        var daten = Data(count: 80)
+        func zahl(_ wert: Float) {
+            var f = wert
+            withUnsafeBytes(of: &f) { daten.append(contentsOf: $0) }
+        }
+        func dreieck(_ a: SIMD3<Float>, _ b: SIMD3<Float>, _ c: SIMD3<Float>) {
+            zahl(0); zahl(0); zahl(0)
+            for ecke in [a, b, c] {
+                zahl(ecke.x); zahl(ecke.y); zahl(ecke.z)
+            }
+            var attribut = UInt16(0)
+            withUnsafeBytes(of: &attribut) { daten.append(contentsOf: $0) }
+        }
+
+        let anzahlDreiecke = UInt32(n * 2)
+        var anzahl = anzahlDreiecke
+        withUnsafeBytes(of: &anzahl) { daten.append(contentsOf: $0) }
+
+        for i in 0..<n {
+            let j = (i + 1) % n
+            dreieck(mitte, ecken[j], ecken[i])       // Boden
+            dreieck(ecken[i], ecken[j], spitze)      // Mantel
+        }
+        return daten
+    }
+
+    static func kegelDatei(name: String = "psm-testkegel.stl") throws -> URL {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent(name)
+        try kegel().write(to: url)
+        return url
+    }
 }

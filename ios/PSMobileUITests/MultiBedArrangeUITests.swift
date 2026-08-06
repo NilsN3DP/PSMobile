@@ -76,7 +76,7 @@ final class MultiBedArrangeUITests: XCTestCase {
         }
         // Seit der Umstellung auf Tipp = alle anordnen / Halten = Panel
         // oeffnet nur noch ein langer Druck das Panel.
-        app.buttons["arrange.open"].press(forDuration: 0.6)
+        app.buttons["schiene.arrange"].press(forDuration: 0.6)
         XCTAssertTrue(app.otherElements["arrange.panel"].waitForExistence(timeout: 5))
         app.buttons["arrange.run"].tap()
 
@@ -97,7 +97,7 @@ final class MultiBedArrangeUITests: XCTestCase {
         }
         // Seit der Umstellung auf Tipp = alle anordnen / Halten = Panel
         // oeffnet nur noch ein langer Druck das Panel.
-        app.buttons["arrange.open"].press(forDuration: 0.6)
+        app.buttons["schiene.arrange"].press(forDuration: 0.6)
         XCTAssertTrue(app.otherElements["arrange.panel"].waitForExistence(timeout: 5))
 
         let ziel = app.buttons["arrange.target.0"]
