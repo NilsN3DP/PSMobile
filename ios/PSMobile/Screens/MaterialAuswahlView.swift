@@ -28,20 +28,37 @@ struct MaterialAuswahlView: View {
     @State private var suche = ""
     @State private var typ = ""
     @State private var farbe = ""
+    /// Aus wegen Unuebersichtlichkeit bei vielen Herstellern: die
+    /// Warnung war nie zu uebersehen, wenn die meisten Karten eine
+    /// trugen. Ein Umschalter zeigt sie nur auf Wunsch.
+    @State private var zeigeInkompatible = false
+
+    private func st(_ english: String, _ german: String) -> String {
+        SimpleModeState.shared.text(english: english, german: german)
+    }
 
     private var alle: [FilamentCatalog.Entry] { model.filamentCatalog() }
-    private var treffer: [FilamentCatalog.Entry] {
-        FilamentCatalog.shared.filter(entries: alle, query: suche, type: typ, colorHex: farbe)
-    }
     /// Einmal pro Aufruf gelesen statt je Karte: bei vierhundert
     /// Profilen waeren das sonst vierhundert Kernaufrufe je Redraw.
     private var kompatibel: Set<String> { model.compatibleFilamentNames() }
+    private var gefiltert: [FilamentCatalog.Entry] {
+        FilamentCatalog.shared.filter(entries: alle, query: suche, type: typ, colorHex: farbe)
+    }
+    private var treffer: [FilamentCatalog.Entry] {
+        guard !zeigeInkompatible, !kompatibel.isEmpty else { return gefiltert }
+        return gefiltert.filter { kompatibel.contains($0.rawPreset) }
+    }
+    private var inkompatibleAnzahl: Int {
+        guard !kompatibel.isEmpty else { return 0 }
+        return gefiltert.filter { !kompatibel.contains($0.rawPreset) }.count
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: ps.pt(10)) {
             suchfeld
             typknoepfe
             farbpunkte
+            if inkompatibleAnzahl > 0 { inkompatibelUmschalter }
             if treffer.isEmpty {
                 Text(FilamentCatalog.shared.emptyMessage().text)
                     .font(.system(size: ps.font(12)))
@@ -141,6 +158,31 @@ struct MaterialAuswahlView: View {
             }
             .padding(.vertical, ps.pt(2))
         }
+    }
+
+    /// Zeigt oder versteckt Profile, die der Kern als unpassend zum
+    /// eingerichteten Drucker meldet - siehe SlicerModel.
+    /// compatibleFilamentNames. Versteckt ist die Vorgabe, damit die
+    /// Liste bei vielen Herstellern nicht vollgemuellt wirkt.
+    private var inkompatibelUmschalter: some View {
+        Button { zeigeInkompatible.toggle() } label: {
+            HStack(spacing: ps.pt(5)) {
+                Image(systemName: zeigeInkompatible ? "eye.fill" : "eye.slash")
+                Text(zeigeInkompatible
+                     ? st("Hide \(inkompatibleAnzahl) incompatible",
+                          "\(inkompatibleAnzahl) inkompatible ausblenden")
+                     : st("Show \(inkompatibleAnzahl) incompatible",
+                          "\(inkompatibleAnzahl) inkompatible anzeigen"))
+            }
+            .font(.system(size: ps.font(11)))
+            .foregroundStyle(zeigeInkompatible ? PrusaColors.background : PrusaColors.textMuted)
+            .padding(.horizontal, ps.pt(10))
+            .frame(height: ps.touch(30))
+            .background(zeigeInkompatible ? PrusaColors.orange : PrusaColors.panelRaised)
+            .clipShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("material.inkompatibel.umschalten")
     }
 
     // MARK: - Die Karten

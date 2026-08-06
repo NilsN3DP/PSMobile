@@ -93,6 +93,7 @@ set(PSM_CORE_SOURCES
     core/src/psmobile_core.cpp
     core/src/psmobile_presets.cpp
     core/src/psmobile_extruders.cpp
+    core/src/psmobile_zip.cpp
     core/src/psmobile_toggles.cpp
     core/src/psmobile_toggles_generated.cpp
     # GL-unabhaengig: Vertragstest und Renderer muessen dieselben aus dem

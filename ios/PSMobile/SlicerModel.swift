@@ -241,6 +241,41 @@ final class SlicerModel: ObservableObject {
         }
     }
 
+    /// Nach dem Teilen einer ZIP: entpackt alle Modelldateien darin und
+    /// fuegt sie wie einzelne Importe hinzu. nil heisst Fehler beim
+    /// Entpacken, 0 heisst eine ZIP ohne erkennbares Modell - beides
+    /// zeigt der Aufrufer an, statt es zu verschlucken.
+    func loadZip(url: URL) -> Int? {
+        guard let core else { return nil }
+        let scoped = url.startAccessingSecurityScopedResource()
+        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+
+        do {
+            let lokal = FileManager.default.temporaryDirectory
+                .appendingPathComponent(url.lastPathComponent)
+            try? FileManager.default.removeItem(at: lokal)
+            try FileManager.default.copyItem(at: url, to: lokal)
+
+            let zielOrdner = FileManager.default.temporaryDirectory
+                .appendingPathComponent("psm-zip-" + UUID().uuidString)
+            let anzahl = try PsmCore.extractZipModels(
+                zipPath: lokal.path, into: zielOrdner.path)
+            guard anzahl > 0 else { return 0 }
+
+            let dateien = (try? FileManager.default.contentsOfDirectory(
+                at: zielOrdner, includingPropertiesForKeys: nil)) ?? []
+            for datei in dateien {
+                try? core.loadModel(path: datei.path)
+            }
+            refresh()
+            checkMemory()
+            return dateien.count
+        } catch {
+            progress = .failed(error.localizedDescription)
+            return nil
+        }
+    }
+
     func select(_ id: Int32?) {
         selectedId = id
         selectedIds = id.map { [$0] } ?? []

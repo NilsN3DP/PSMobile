@@ -29,6 +29,9 @@ struct PSMobileApp: App {
     /// fuer Druck, Filament und Drucker je einen eigenen Einstieg -
     /// dreimal derselbe Bildschirm waere die schlechtere Loesung.
     @State private var einstellungsReiter = "print"
+    /// Wie viele Modelle aus einer geteilten ZIP entpackt wurden - > 0
+    /// haelt die Nachfrage Easy/Advanced offen, bis eine Wahl faellt.
+    @State private var zipAnzahl: Int?
 
     var body: some Scene {
         WindowGroup {
@@ -77,12 +80,32 @@ struct PSMobileApp: App {
                             .opacity(0.01)
                     }
                 }
+                .overlay {
+                    // Eine ZIP kennt keinen Modus - erst entpacken und
+                    // laden (loadZip), dann fragen, wo es weitergeht.
+                    if let anzahl = zipAnzahl {
+                        ZipModusDialog(
+                            anzahl: anzahl,
+                            onSimple: { zipAnzahl = nil; route = .simple },
+                            onAdvanced: { zipAnzahl = nil; route = .advanced })
+                    }
+                }
                 .onAppear {
                     model.start()
                     route = startRoute()
                 }
-                // Modelle, die aus anderen Apps geteilt werden
-                .onOpenURL { model.load(url: $0) }
+                // Modelle, die aus anderen Apps geteilt werden. Eine
+                // ZIP - meist von Printables, mit STL und Beiwerk - wird
+                // erst entpackt statt wie eine einzelne Datei geladen.
+                .onOpenURL { url in
+                    if url.pathExtension.lowercased() == "zip" {
+                        if let anzahl = model.loadZip(url: url), anzahl > 0 {
+                            zipAnzahl = anzahl
+                        }
+                    } else {
+                        model.load(url: url)
+                    }
+                }
         }
     }
 

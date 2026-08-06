@@ -141,6 +141,18 @@ extension PsmCore {
         try check(psm_stl_repair(raw, input, output), "STL reparieren")
     }
 
+    /// Entpackt Modelldateien aus einer ZIP - fuer den Teilen-Import,
+    /// bevor ueberhaupt eine Sitzung existiert. Deshalb statisch und
+    /// ohne die session-gebundene Fehlerauskunft der Instanzmethoden.
+    static func extractZipModels(zipPath: String, into destDir: String) throws -> Int {
+        var anzahl: size_t = 0
+        let code = psm_zip_extract_models(zipPath, destDir, &anzahl)
+        guard code == PSM_OK else {
+            throw PsmError.call("ZIP entpacken", code.rawValue, "")
+        }
+        return Int(anzahl)
+    }
+
     /// Wandelt G-Code zwischen ASCII und Prusas binaerem BGCode.
     ///
     /// Neuere Drucker lesen binaer, aeltere nur ASCII. Wer eine Datei

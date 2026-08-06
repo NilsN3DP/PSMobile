@@ -379,6 +379,17 @@ PSM_API psm_result psm_model_duplicate(psm_session *s, psm_object_id id, psm_obj
 /** Auto-Arrange ueber libnest2d. Blockierend, aber typisch unter 1 s. */
 PSM_API psm_result psm_arrange(psm_session *s, float gap_mm);
 
+/**
+ * Entpackt Modelldateien (STL/OBJ/3MF/AMF) aus einer ZIP-Datei in ein
+ * Zielverzeichnis, flach ohne Unterordner. Fuer den Teilen-Import von
+ * iOS: eine geteilte ZIP kommt nur als Datei an, nie schon entpackt.
+ * Braucht keine Sitzung - reine Dateioperation, laeuft vor
+ * psm_session_create.
+ */
+PSM_API psm_result psm_zip_extract_models(const char *zip_path,
+                                          const char *dest_dir,
+                                          size_t *out_count);
+
 typedef enum {
     PSM_ARRANGE_ARRANGED = 0,
     PSM_ARRANGE_EMPTY    = 1,
