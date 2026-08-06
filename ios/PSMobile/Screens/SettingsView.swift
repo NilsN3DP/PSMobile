@@ -22,6 +22,7 @@ struct SettingsView: View {
 
     @Environment(\.psScale) private var ps
     @State private var zeigeZuruecksetzen = false
+    @State private var zeigeProfilsuche = false
     @State private var tab = "print"
     @State private var pageIndex = 0
     /// Welcher Sonderbearbeiter offen ist, wenn ueberhaupt.
@@ -55,6 +56,13 @@ struct SettingsView: View {
             } else {
                 WipingVolumesEditor(model: model) { bearbeiter = nil }
             }
+        }
+        .sheet(isPresented: $zeigeProfilsuche) {
+            ProfileSearchSheet(model: model, tab: tab,
+                                titel: PsUiCatalog.tr(tab == "print" ? "Print settings"
+                                                       : tab == "filament" ? "Filament"
+                                                       : "Printer"),
+                                isPresented: $zeigeProfilsuche)
         }
         .onAppear {
             // Nur beim Erscheinen: waehrend jemand blaettert, soll der
@@ -90,12 +98,25 @@ struct SettingsView: View {
             Spacer()
 
             // Das gewaehlte Profil gehoert in den Kopf: ohne es weiss
-            // niemand, was hier gerade geaendert wird.
+            // niemand, was hier gerade geaendert wird. Antippen oeffnet
+            // die Profilsuche - vorher fuehrte von hier kein Weg zum
+            // Wechseln, man musste den Bildschirm verlassen.
             if let profil = model.selectedPreset(for: tab) {
-                Text(profil)
-                    .font(.system(size: ps.font(13)))
-                    .foregroundStyle(PrusaColors.textMuted)
-                    .lineLimit(1)
+                Button { zeigeProfilsuche = true } label: {
+                    HStack(spacing: ps.pt(3)) {
+                        Text(profil)
+                            .font(.system(size: ps.font(13)))
+                            .foregroundStyle(PrusaColors.textMuted)
+                            .lineLimit(1)
+                        Image(systemName: "magnifyingglass")
+                            .font(.system(size: ps.font(11)))
+                            .foregroundStyle(PrusaColors.textMuted)
+                    }
+                    .frame(minHeight: ps.touch(36))
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("einstellungen.profilsuche.oeffnen")
             }
 
             // Zuruecksetzen gehoert hierher und nicht nur in den Dialog
