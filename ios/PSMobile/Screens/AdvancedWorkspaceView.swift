@@ -41,6 +41,12 @@ struct AdvancedWorkspaceView: View {
     @State private var seiteOffen = true
     @State private var zeigeDrucker = false
     @State private var zeigeMaterial = false
+    /// Welcher Kopf die Materialauswahl geoeffnet hat - nil heisst die
+    /// allgemeine Filamentzeile. Ohne das landete jede Auswahl aus der
+    /// Extruderbank immer im allgemeinen Preset statt am angetippten
+    /// Werkzeug, und die Filamentuebersicht zeigte nie, was man fuer
+    /// T2-T8 gewaehlt hatte.
+    @State private var materialZiel: Int?
     @State private var zweck: Zweck = .modell
     /// Die Zwischenablage der Schiene. Sie gehoert hierher und nicht in
     /// die Schiene selbst: kopiert wird einmal und eingefuegt spaeter,
@@ -266,8 +272,15 @@ struct AdvancedWorkspaceView: View {
             auswahlblatt(titel: PsUiCatalog.tr("Filament")) {
                 MaterialAuswahlView(
                     model: model,
-                    gewaehlt: model.selectedPreset(for: "filament") ?? ""
-                ) { model.selectPreset(.filament, $0) }
+                    gewaehlt: materialZiel.map { model.extruderFilament($0) }
+                        ?? model.selectedPreset(for: "filament") ?? ""
+                ) { name in
+                    if let index = materialZiel {
+                        model.setExtruderFilament(index, name)
+                    } else {
+                        model.selectPreset(.filament, name)
+                    }
+                }
             }
         }
         .sheet(isPresented: $zeigeArrange) {
@@ -321,6 +334,7 @@ struct AdvancedWorkspaceView: View {
                 Button(st("Done", "Fertig")) {
                     zeigeDrucker = false
                     zeigeMaterial = false
+                    materialZiel = nil
                 }
                 .foregroundStyle(PrusaColors.orange)
                 .frame(minHeight: ps.touch(44))
@@ -423,9 +437,10 @@ struct AdvancedWorkspaceView: View {
                 werkzeug("square.and.arrow.down", st("Save", "Sichern"), kennung: "projekt.sichern") {
                     model.saveProject()
                 }
-                werkzeug("cube", st("View", "Ansicht"), kennung: "advanced.ansicht") {
-                    ansichtZuruecksetzen += 1
-                }
+                // "View" (Kamera zuruecksetzen) ist hier entfernt worden - die
+                // untere ansichtsleiste hat mit "3D" denselben Knopf, und zwei
+                // Wege zum selben Ergebnis waren nur ein zweiter Punkt, an dem
+                // man nachdenken musste.
                 werkzeug(vorschau ? "cube.fill" : "square.stack.3d.up",
                          vorschau ? st("Bed", "Bett") : st("Preview", "Vorschau"),
                          kennung: "werkzeug.vorschau") { vorschauZeigen() }
@@ -1158,7 +1173,10 @@ struct AdvancedWorkspaceView: View {
             profilzeile(titel: PsUiCatalog.tr("Printer"), reiter: "printer",
                         kennung: "advanced.wahl.printer") { zeigeDrucker = true }
             profilzeile(titel: PsUiCatalog.tr("Filament"), reiter: "filament",
-                        kennung: "advanced.wahl.filament") { zeigeMaterial = true }
+                        kennung: "advanced.wahl.filament") {
+                            materialZiel = nil
+                            zeigeMaterial = true
+                        }
             // Druckprofile sind eine Handvoll und tragen ihre Auskunft
             // im Namen - dafuer genuegt ein Menue.
             profilwahl(titel: PsUiCatalog.tr("Print settings"),
@@ -1167,7 +1185,10 @@ struct AdvancedWorkspaceView: View {
             // sondern eine je Position.
             if model.extruderCount > 1 {
                 Divider().overlay(PrusaColors.divider)
-                ExtruderBank(model: model) { _ in zeigeMaterial = true }
+                ExtruderBank(model: model) { kopf in
+                    materialZiel = kopf
+                    zeigeMaterial = true
+                }
             }
         }
     }

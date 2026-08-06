@@ -269,6 +269,30 @@ final class SlicerModel: ObservableObject {
         }
     }
 
+    /// Die Profilnamen eines Bereichs - "print", "filament", "printer".
+    /// Gegenstueck zu `selectedPreset(for:)`, fuer die Profilsuche in den
+    /// Einstellungen.
+    func presetNames(for tab: String) -> [String] {
+        switch tab {
+        case "print":    return presetNames(.print)
+        case "filament": return presetNames(.filament)
+        case "printer":  return presetNames(.printer)
+        default:         return []
+        }
+    }
+
+    /// Ein Profil eines Bereichs waehlen, ueber denselben String wie
+    /// `selectedPreset(for:)` statt ueber den Aufrufer selbst den Typ
+    /// zuordnen zu lassen.
+    func selectPreset(for tab: String, _ name: String) {
+        switch tab {
+        case "print":    selectPreset(.print, name)
+        case "filament": selectPreset(.filament, name)
+        case "printer":  selectPreset(.printer, name)
+        default:         break
+        }
+    }
+
     func setConfig(_ key: String, _ value: String) {
         try? core?.setConfig(key, value)
         // Eine Aenderung an den Einstellungen macht ein vorhandenes
@@ -913,6 +937,16 @@ final class SlicerModel: ObservableObject {
 
     func split(_ id: Int32) {
         _ = try? core?.splitObject(id)
+        selectedId = nil
+        refresh()
+    }
+
+    /// Ein Objekt in seine Volumen teilen - anders als `split(_:)`, das
+    /// es in eigenstaendige Objekte teilt. Bisher rief die Werkzeugschiene
+    /// fuer beide Knoepfe dieselbe Funktion auf; "Volumes" tat nichts
+    /// Eigenes.
+    func splitVolumes(_ id: Int32) {
+        _ = try? core?.splitVolumes(id)
         selectedId = nil
         refresh()
     }
