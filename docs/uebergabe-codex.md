@@ -547,3 +547,42 @@ vorhandene Referenz in `docs/superpowers/specs/
    Hinlegen, adaptive + variable Schichthoehe, Pinseloptionen,
    Mehrbett-Ansicht im Viewport, Profilsuche, Vorschau-Farben)
 
+## Nachtsitzung 6. August, umgesetzt und geprüft
+
+Diese Commits sind auf `main`, mit dem vollen Testlauf gegengeprueft
+(einzeln beschrieben, keine Sammel-Uebersicht noetig - siehe `git log`):
+
+* SLA-Vendor-Buendel raus (kaputtes Preset, ausser Scope, `f57627f`)
+* Bettleiste als Kapselreihe wie vor dem Umbau, Sperren im Kontextmenue (`c4402bb`)
+* Arrange: Tipp = alle Betten, Halten = Panel (bereits in der vorigen Runde, `04b2c3d`)
+* iPhone-Vorschau scrollbar, unterer Schichtregler nicht mehr abgeschnitten (`12f5b52`)
+* Extruderbank: Materialwahl landet jetzt am angetippten Werkzeug T1-T8, nicht mehr immer im allgemeinen Preset (`6df838b`)
+* Werkzeugschiene "Volumes" ruft jetzt wirklich splitVolumes auf statt split zu wiederholen (`2eb3d87`)
+* Profilsuche in den Einstellungen, mit Suchfeld (`2aa9dff`)
+* Fremdherstellerprofile aktiviert (PSM_VENDORS=all fuer die naechste IPA)
+* "View"-Knopf aus der Werkzeugleiste entfernt (redundant zu "3D" in der ansichtsleiste)
+
+## Funktionsaudit: was im Core-Wrapper existiert, aber nirgends aufgerufen wird
+
+Auf Bitte durchsucht (`grep` ueber alle `.swift`-Aufrufe ausserhalb von
+`ios/PSMobile/Core/`). Kein TODO/FIXME/Platzhalter-Kommentar im ganzen
+iOS- und Kern-Baum gefunden - der einzige echte Treffer war der
+Volumes-Bug oben. Diese drei Funktionen sind vorhanden und funktionsfaehig,
+aber ohne Oberflaeche:
+
+* **`filamentVendors()` / `setFilamentVendors(_:)`** (`PsmCoreSetup.swift`):
+  ein Herstellerfilter fuer die Filamentliste liegt fertig im Kern, seit
+  heute Nacht mit 34 statt einem Hersteller besonders relevant - ohne
+  Filter wird `MaterialAuswahlView` mit sehr vielen Eintraegen unhandlich.
+  Naechster Schritt: eine Kapselreihe wie `typknoepfe`/`farbpunkte` in
+  `MaterialAuswahlView.swift`.
+* **`presetCompatible(_:at:)` / `showsIncompatiblePresets`**
+  (`PsmCoreSetup.swift`): keine Liste (Drucker-, Filament-, Print-Settings-
+  Auswahl) filtert nach Kompatibilitaet mit dem aktiven Drucker. Man kann
+  heute ein Filament waehlen, das der Drucker gar nicht unterstuetzt.
+* **`clearCustomGcode()`** (`PsmCoreProject.swift`): `CustomGcodeView`
+  kann Marken nur hinzufuegen, es gibt keinen "alle leeren"-Knopf.
+
+Keines davon wurde diese Nacht angefasst - Risiko/Zeit-Abwaegung bei einer
+Deadline, nicht vergessen.
+
