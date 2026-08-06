@@ -155,8 +155,10 @@ struct WerkzeugSchiene: View {
             if let id = auswahl, let o = model.objects.first(where: { $0.id == id }) {
                 model.setInstances(id, count: Int32(max(o.instances - 1, 1)))
             }
-        case "splitobjects", "splitvolumes":
+        case "splitobjects":
             if let id = auswahl { model.split(id) }
+        case "splitvolumes":
+            if let id = auswahl { model.splitVolumes(id) }
         case "paintsupport": onMalwerkzeug(.support)
         case "paintseam":    onMalwerkzeug(.seam)
         case "paintmmu":     onMalwerkzeug(.mmu)
