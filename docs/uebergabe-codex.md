@@ -640,3 +640,32 @@ gemeldeten Freeze nach "On face" - zwei ungetestete Aenderungen an
 derselben heiklen Stelle in einer Nacht waeren nicht mehr auseinander-
 zuhalten, wenn etwas schiefgeht.
 
+## Herstellerfilter versucht, wieder verworfen
+
+Aus dem Funktionsaudit oben: `filamentVendors()`/`setFilamentVendors(_:)`
+lagen fertig im Wrapper. Eine Kapselreihe wie `typknoepfe`/`farbpunkte`
+in `MaterialAuswahlView.swift` gebaut, per Screenshot geprueft - blieb
+leer, obwohl die Filamentkarten selbst klar mehr als zehn Hersteller
+zeigten (3D-Fuel, 3DJAKE, AmazonBasics, Buddy3D, ...).
+
+Ursache gefunden: `vendor_rows(s)` in
+`core/src/psmobile_extruders.cpp:105` filtert zusaetzlich auf
+`ef.filament(i).is_compatible` - Kompatibilitaet mit dem aktiven
+Drucker/Duesen-Profil. Die Filamentkarten selbst (`SlicerModel.
+filamentCatalog()`) tun das nicht, sie zeigen `presetNames(.filament)`
+ungefiltert. Mit dem Testdrucker (Original Prusa MK4S 0.4 nozzle)
+meldete `vendor_rows` fuer keinen oder nur einen Hersteller
+Kompatibilitaet - vermutlich, weil die Drittanbieter-Profile ihre
+`compatible_printers`-Bedingung anders setzen, als diese Funktion
+erwartet.
+
+Damit zeigt sich derselbe Riss wie beim schon dokumentierten Fund
+"keine Liste filtert nach Kompatibilitaet" - nur andersherum: hier
+filtert eine Funktion zu viel, wo die UI gar keine Filterung erwartet.
+Aenderung verworfen (nicht committet), bevor ich blind an der
+Kompatibilitaetslogik im Kern herumgeschraubt haette. Fuer einen
+spaeteren Anlauf: entweder `vendor_rows` von der Kompatibilitaetspruefung
+loesen (einfach alle Hersteller zeigen, wie die Filamentkarten es schon
+tun), oder bewusst so lassen und stattdessen in der UI klarmachen, dass
+nur kompatible Hersteller zaehlen.
+
