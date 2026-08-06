@@ -1,5 +1,6 @@
 import SwiftUI
 import UniformTypeIdentifiers
+import UIKit
 import PSMShared
 
 /// Die tatsächlich sichtbare Fläche des scrollbaren Seitenleistenteils.
@@ -112,7 +113,14 @@ struct AdvancedWorkspaceView: View {
 
     /// Auf schmalen Fenstern liegt der Inspektor ueber dem Bett statt
     /// daneben - nebeneinander bliebe fuer beides zu wenig.
-    private var schmal: Bool { ps.windowSize.width < 760 }
+    /// Ein iPad bekommt nie die schmale, ueberlagernde Behandlung -
+    /// auch nicht hochkant, wo die Breite (z. B. 744pt beim iPad mini)
+    /// unter die reine Breitengrenze faellt. Die Seitenleiste hat dort
+    /// genug Platz und soll nicht wegen einer Zahl verschwinden, die
+    /// fuers iPhone gedacht war.
+    private var schmal: Bool {
+        UIDevice.current.userInterfaceIdiom != .pad && ps.windowSize.width < 760
+    }
 
     /// Die Seitenleiste beansprucht auf breiten Geraeten diesen Teil der
     /// ZStack. Schwebende Elemente muessen denselben freien Rest nutzen.

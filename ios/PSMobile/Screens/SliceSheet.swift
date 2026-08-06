@@ -79,7 +79,7 @@ struct SliceSheet: View {
                 // Nutzer damit vorhat: in Dateien sichern, per AirDrop
                 // an den Rechner, in eine Druckerapp geben.
                 ShareLink(item: url) {
-                    Text(st("Save G-Code", "G-Code sichern"))
+                    Text(st("Export G-Code", "G-Code exportieren"))
                         .font(.system(size: ps.font(14)))
                         .foregroundStyle(.white)
                         .frame(maxWidth: .infinity, minHeight: ps.touch(50))

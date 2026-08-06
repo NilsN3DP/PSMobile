@@ -394,6 +394,22 @@ final class SlicerModel: ObservableObject {
         core?.presetNames(type) ?? []
     }
 
+    /// Welche Filamentprofile zum eingerichteten Drucker passen - der
+    /// Kern kennzeichnet nur, versteckt nichts (siehe presetCompatible),
+    /// das hatte bisher keine Oberflaeche. Name statt Index nach aussen,
+    /// weil die Karten mit dem Namen arbeiten und die Reihenfolge sich
+    /// beim Filtern/Suchen sonst verschieben wuerde.
+    func compatibleFilamentNames() -> Set<String> {
+        guard let core else { return [] }
+        let namen = core.presetNames(.filament)
+        var ergebnis = Set<String>()
+        for (index, name) in namen.enumerated()
+        where core.presetCompatible(.filament, at: index) {
+            ergebnis.insert(name)
+        }
+        return ergebnis
+    }
+
     /// Alle Filamentprofile mit Typ und Farbe.
     ///
     /// Gemerkt, solange sich die Profile nicht aendern: bei

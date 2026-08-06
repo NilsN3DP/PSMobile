@@ -33,6 +33,9 @@ struct MaterialAuswahlView: View {
     private var treffer: [FilamentCatalog.Entry] {
         FilamentCatalog.shared.filter(entries: alle, query: suche, type: typ, colorHex: farbe)
     }
+    /// Einmal pro Aufruf gelesen statt je Karte: bei vierhundert
+    /// Profilen waeren das sonst vierhundert Kernaufrufe je Redraw.
+    private var kompatibel: Set<String> { model.compatibleFilamentNames() }
 
     var body: some View {
         VStack(alignment: .leading, spacing: ps.pt(10)) {
@@ -158,11 +161,21 @@ struct MaterialAuswahlView: View {
 
     private func karte(_ eintrag: FilamentCatalog.Entry) -> some View {
         let aktiv = eintrag.rawPreset == gewaehlt
+        let passt = kompatibel.isEmpty || kompatibel.contains(eintrag.rawPreset)
         return VStack(spacing: ps.pt(4)) {
-            Text(eintrag.vendor)
-                .font(.system(size: ps.font(14), weight: .semibold))
-                .foregroundStyle(PrusaColors.textPrimary)
-                .lineLimit(1)
+            HStack(spacing: ps.pt(4)) {
+                Text(eintrag.vendor)
+                    .font(.system(size: ps.font(14), weight: .semibold))
+                    .foregroundStyle(PrusaColors.textPrimary)
+                    .lineLimit(1)
+                if !passt {
+                    // Nicht versteckt, nur gekennzeichnet - siehe
+                    // SlicerModel.compatibleFilamentNames.
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.system(size: ps.font(10)))
+                        .foregroundStyle(PrusaColors.orange)
+                }
+            }
             Text(eintrag.type.isEmpty ? " " : eintrag.type)
                 .font(.system(size: ps.font(12)))
                 .foregroundStyle(PrusaColors.textMuted)
@@ -171,10 +184,19 @@ struct MaterialAuswahlView: View {
                 .font(.system(size: ps.font(9)))
                 .foregroundStyle(PrusaColors.textMuted)
                 .lineLimit(1)
+            if !passt {
+                Text(SimpleModeState.shared.text(
+                    english: "Not compatible with this printer",
+                    german: "Passt nicht zu diesem Drucker"))
+                    .font(.system(size: ps.font(8)))
+                    .foregroundStyle(PrusaColors.orange)
+                    .multilineTextAlignment(.center)
+            }
         }
         .padding(ps.pt(10))
         .frame(maxWidth: .infinity, minHeight: ps.touch(132))
         .background(aktiv ? PrusaColors.panelRaised : PrusaColors.panel)
+        .opacity(passt ? 1 : 0.6)
         .overlay(
             RoundedRectangle(cornerRadius: ps.pt(6))
                 .stroke(aktiv ? PrusaColors.orange : PrusaColors.divider, lineWidth: aktiv ? 2 : 1)
