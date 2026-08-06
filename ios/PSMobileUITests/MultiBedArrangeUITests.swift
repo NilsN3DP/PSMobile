@@ -28,8 +28,13 @@ final class MultiBedArrangeUITests: XCTestCase {
         app.launch()
         let marke = modus == "advanced" ? "arbeitsbereich" : "simple.arbeitsbereich"
         XCTAssertTrue(app.otherElements[marke].waitForExistence(timeout: 60))
-        XCTAssertTrue(app.otherElements["bed.selector"].waitForExistence(timeout: 15),
-                      "Die gemeinsame Bettauswahl fehlt in \(modus)")
+        // Der Easy Mode arbeitet bewusst auf einem Bett - die Bettauswahl
+        // gehoert seit dieser Sitzung nur noch zum Advanced Mode, sie
+        // blockierte dort vorher die Oberflaeche ohne Nutzen.
+        if modus == "advanced" {
+            XCTAssertTrue(app.otherElements["bed.selector"].waitForExistence(timeout: 15),
+                          "Die Bettauswahl fehlt im Advanced Mode")
+        }
     }
 
     private func oeffneAuswahlWennNoetig() {
@@ -46,26 +51,16 @@ final class MultiBedArrangeUITests: XCTestCase {
         }
     }
 
-    func testSelectorBleibtImSimpleModeAufLeeremBettWechselbar() {
+    /// Der Easy Mode zeigt seit dieser Sitzung keine Bettauswahl mehr -
+    /// Mehrbett ist bewusst ein Werkzeug des Advanced Mode. Dasselbe
+    /// Verhalten (neues leeres Bett bleibt als Karte wechselbar) prueft
+    /// testArrangePanelOrdnetDasExpliziteZielbett bereits fuer Advanced.
+    func testBettauswahlFehltImSimpleMode() {
         starte("simple")
-        oeffneAuswahlWennNoetig()
-
-        let neu = app.buttons["bed.add"]
-        XCTAssertTrue(neu.waitForExistence(timeout: 5), "Neues Bett fehlt")
-        neu.tap()
-
-        if istSchmal {
-            XCTAssertTrue(app.buttons["bed.selector.active"]
-                .waitForExistence(timeout: 5),
-                "Die Auswahl verschwindet auf dem leeren neuen Bett")
-            app.buttons["bed.selector.active"].tap()
-            XCTAssertTrue(app.buttons["bed.card.0"].waitForExistence(timeout: 5),
-                          "Vom leeren Bett fuehrt kein Weg zu Bett 1")
-        } else {
-            XCTAssertTrue(app.buttons["bed.card.0"].isHittable)
-            XCTAssertTrue(app.buttons["bed.card.1"].isHittable,
-                          "Das leere Bett bleibt nicht als Karte wechselbar")
-        }
+        XCTAssertFalse(app.otherElements["bed.selector"].exists,
+                       "Der Easy Mode zeigt weiterhin eine Bettauswahl")
+        XCTAssertFalse(app.buttons["bed.add"].exists,
+                       "Der Easy Mode erlaubt weiterhin, ein Bett hinzuzufuegen")
     }
 
     func testLockKommtAusDemKernUndBlockiertArrange() {
@@ -79,7 +74,9 @@ final class MultiBedArrangeUITests: XCTestCase {
         if istSchmal {
             app.buttons["bed.selector.close"].tap()
         }
-        app.buttons["arrange.open"].tap()
+        // Seit der Umstellung auf Tipp = alle anordnen / Halten = Panel
+        // oeffnet nur noch ein langer Druck das Panel.
+        app.buttons["arrange.open"].press(forDuration: 0.6)
         XCTAssertTrue(app.otherElements["arrange.panel"].waitForExistence(timeout: 5))
         app.buttons["arrange.run"].tap()
 
@@ -98,7 +95,9 @@ final class MultiBedArrangeUITests: XCTestCase {
         if istSchmal {
             XCTAssertTrue(app.buttons["bed.selector.active"].waitForExistence(timeout: 5))
         }
-        app.buttons["arrange.open"].tap()
+        // Seit der Umstellung auf Tipp = alle anordnen / Halten = Panel
+        // oeffnet nur noch ein langer Druck das Panel.
+        app.buttons["arrange.open"].press(forDuration: 0.6)
         XCTAssertTrue(app.otherElements["arrange.panel"].waitForExistence(timeout: 5))
 
         let ziel = app.buttons["arrange.target.0"]

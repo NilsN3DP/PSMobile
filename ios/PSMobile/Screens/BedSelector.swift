@@ -82,33 +82,32 @@ struct BedSelector: View {
         .padding(.vertical, ps.pt(4))
     }
 
+    /// Eine waagerecht scrollende Reihe schmaler Kapseln, wie vor dem
+    /// Umbau auf das Kartenraster. Das Raster nahm eine eigene Zeile mit
+    /// Ueberschrift und 64pt hohen Karten - hier reicht eine Zeile in
+    /// Werkzeugleistenhoehe, und bei einem Bett faellt sie ganz weg.
     private var rasterAuswahl: some View {
-        VStack(spacing: ps.pt(4)) {
-            HStack {
-                Text(st("Beds", "Betten"))
-                    .font(.system(size: ps.font(12), weight: .semibold))
-                    .foregroundStyle(PrusaColors.textMuted)
-                Spacer()
-                arrangeKnopf
-                Button { model.addBed() } label: {
-                    Label(st("Add bed", "Bett hinzufügen"), systemImage: "plus")
-                        .frame(minHeight: ps.touch())
-                }
-                .buttonStyle(.bordered)
-                .tint(PrusaColors.orange)
-                .accessibilityIdentifier("bed.add")
-            }
-
-            ScrollView(.vertical, showsIndicators: model.beds.count > 4) {
-                LazyVGrid(columns: [
-                    GridItem(.adaptive(minimum: ps.pt(170)), spacing: ps.pt(8))
-                ], spacing: ps.pt(8)) {
+        HStack(spacing: ps.pt(6)) {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: ps.pt(6)) {
                     ForEach(model.beds, id: \.index) { bett in
-                        bettKarte(bett)
+                        bettKapsel(bett)
                     }
+                    Button { model.addBed() } label: {
+                        Image(systemName: "plus")
+                            .font(.system(size: ps.font(14), weight: .semibold))
+                            .foregroundStyle(PrusaColors.orange)
+                            .frame(width: ps.touch(40), height: ps.touch(38))
+                            .background(PrusaColors.panelRaised)
+                            .clipShape(RoundedRectangle(cornerRadius: ps.pt(6)))
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("bed.add")
                 }
             }
-            .frame(maxHeight: ps.pt(132))
+            Spacer(minLength: 0)
+            arrangeKnopf
         }
         .padding(.horizontal, ps.pt(8))
         .padding(.vertical, ps.pt(4))
@@ -132,75 +131,64 @@ struct BedSelector: View {
         )
     }
 
-    private func bettKarte(_ bett: PsmCore.Bed) -> some View {
-        ZStack(alignment: .bottomTrailing) {
+    /// Name, Objektzahl und Schlossknopf in einer Kapsel. Umbenennen und
+    /// Entfernen sind selten und liegen deshalb im Kontextmenue (langer
+    /// Druck) statt als eigene, immer sichtbare Knoepfe - die haben zuvor
+    /// die Karte breiter gemacht, als der Name Platz hatte.
+    private func bettKapsel(_ bett: PsmCore.Bed) -> some View {
+        HStack(spacing: ps.pt(2)) {
             Button {
                 model.selectBed(bett.index)
             } label: {
-                HStack(spacing: ps.pt(10)) {
-                    Image(systemName: bett.locked ? "lock.fill" : "square.stack.3d.up")
+                HStack(spacing: ps.pt(5)) {
+                    Text(model.bedLabel(bett.index))
+                        .font(.system(size: ps.font(12), weight: .semibold))
+                        .lineLimit(1)
+                    Text("\(bett.objectCount)")
+                        .font(.system(size: ps.font(10)))
                         .foregroundStyle(bett.active
-                                         ? PrusaColors.background : PrusaColors.orange)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(model.bedLabel(bett.index))
-                            .font(.system(size: ps.font(13), weight: .semibold))
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.75)
-                        // Die Einheit steht schon in der Ueberschrift "Beds" -
-                        // auf der Karte reicht die Zahl, sonst bricht der Text um.
-                        Text("\(bett.objectCount)")
-                            .font(.system(size: ps.font(10)))
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.75)
-                            .foregroundStyle(bett.active
-                                             ? PrusaColors.background.opacity(0.75)
-                                             : PrusaColors.textMuted)
-                    }
-                    Spacer(minLength: ps.pt(40))
+                                         ? PrusaColors.background.opacity(0.75)
+                                         : PrusaColors.textMuted)
                 }
                 .foregroundStyle(bett.active
                                  ? PrusaColors.background : PrusaColors.textPrimary)
-                .padding(.horizontal, ps.pt(12))
-                .frame(maxWidth: .infinity, minHeight: ps.touch(64),
-                       alignment: .leading)
-                .background(bett.active ? PrusaColors.orange : PrusaColors.panelRaised)
-                .clipShape(RoundedRectangle(cornerRadius: ps.pt(8)))
-                .contentShape(Rectangle())
+                .padding(.leading, ps.pt(12))
+                .frame(minHeight: ps.touch(38))
             }
             .buttonStyle(.plain)
             .accessibilityIdentifier("bed.card.\(bett.index)")
 
-            HStack(spacing: 0) {
-                miniKnopf("pencil", id: "bed.rename.\(bett.index)") {
-                    name = bett.name
-                    umzubenennen = bett.index
-                }
-                miniKnopf(bett.locked ? "lock.open" : "lock",
-                          id: "bed.lock.\(bett.index)") {
-                    model.toggleBedLock(bett.index)
-                }
-                if model.beds.count > 1 && bett.objectCount == 0 {
-                    miniKnopf("trash", id: "bed.remove.\(bett.index)") {
-                        model.removeBed(bett.index)
-                    }
+            Button {
+                model.toggleBedLock(bett.index)
+            } label: {
+                Image(systemName: bett.locked ? "lock.fill" : "lock.open")
+                    .font(.system(size: ps.font(10)))
+                    .foregroundStyle(bett.active
+                                     ? PrusaColors.background : PrusaColors.textPrimary)
+                    .frame(width: ps.touch(30), height: ps.touch(38))
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .padding(.trailing, ps.pt(4))
+            .accessibilityIdentifier("bed.lock.\(bett.index)")
+        }
+        .background(bett.active ? PrusaColors.orange : PrusaColors.panelRaised)
+        .clipShape(RoundedRectangle(cornerRadius: ps.pt(6)))
+        .contextMenu {
+            Button {
+                name = bett.name
+                umzubenennen = bett.index
+            } label: {
+                Label(st("Rename", "Umbenennen"), systemImage: "pencil")
+            }
+            if model.beds.count > 1 && bett.objectCount == 0 {
+                Button(role: .destructive) {
+                    model.removeBed(bett.index)
+                } label: {
+                    Label(st("Remove", "Entfernen"), systemImage: "trash")
                 }
             }
-            .padding(.trailing, ps.pt(4))
-            .padding(.bottom, ps.pt(4))
         }
-    }
-
-    private func miniKnopf(_ symbol: String, id: String,
-                           aktion: @escaping () -> Void) -> some View {
-        Button(action: aktion) {
-            Image(systemName: symbol)
-                .font(.system(size: ps.font(11)))
-                .frame(width: ps.touch(34), height: ps.touch(34))
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .foregroundStyle(PrusaColors.textPrimary)
-        .accessibilityIdentifier(id)
     }
 
     private func st(_ english: String, _ german: String) -> String {
