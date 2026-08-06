@@ -161,7 +161,7 @@ struct SimpleModeView: View {
                 vorschauSchliessen()
             }
         }
-        .sheet(isPresented: $zeigeArrange) {
+        .popover(isPresented: $zeigeArrange) {
             ArrangePanel(model: model, isPresented: $zeigeArrange)
         }
     }

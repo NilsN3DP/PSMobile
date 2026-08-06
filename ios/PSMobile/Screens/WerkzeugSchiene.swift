@@ -39,6 +39,9 @@ struct WerkzeugSchiene: View {
     var onAppSettings: () -> Void = {}
 
     @Environment(\.psScale) private var ps
+    /// Nur fuer das Arrange-Popover - die anderen Werkzeuge oeffnen
+    /// nichts Eigenes, das lohnt keinen eigenen Zustand je Knopf.
+    @State private var zeigeArrangePanel = false
 
     /// Ein Werkzeug: Kennung wie in toolbar.json, Zeichen, kurzer Text.
     private struct Werkzeug {
@@ -154,7 +157,9 @@ struct WerkzeugSchiene: View {
         if w.name == "arrange" {
             // Wie zuvor in der Bettleiste, die diesen Knopf jetzt nicht
             // mehr doppelt zeigt: Tipp ordnet alle ungesperrten Betten
-            // sofort an, Halten oeffnet das Panel mit Zielbett/Abstand.
+            // sofort an, Halten oeffnet ein Popover direkt am Knopf mit
+            // Zielbett/Abstand - kein Vollbild-Sheet, das ist zu viel
+            // Weg fuer eine schnelle Randentscheidung.
             Button { model.arrangeAll() } label: {
                 knopfInhalt(w, an: an)
             }
@@ -164,9 +169,12 @@ struct WerkzeugSchiene: View {
             .accessibilityLabel(w.label)
             .simultaneousGesture(
                 LongPressGesture(minimumDuration: 0.5).onEnded { _ in
-                    onArrange()
+                    zeigeArrangePanel = true
                 }
             )
+            .popover(isPresented: $zeigeArrangePanel) {
+                ArrangePanel(model: model, isPresented: $zeigeArrangePanel)
+            }
         } else if w.name == "split" {
             Menu {
                 Button(st("Split to objects", "Zu Objekten trennen")) {

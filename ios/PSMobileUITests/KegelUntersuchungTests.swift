@@ -4,6 +4,19 @@ import XCTest
 /// Vertragstest, kein Anspruch auf Vollstaendigkeit.
 final class KegelUntersuchungTests: XCTestCase {
 
+    func testArrangePanelAnsehen() throws {
+        let app = XCUIApplication()
+        app.launchArguments = ["-psm-preset-printer", "-psm-start-advanced", "-psm-load-cube"]
+        app.launch()
+        XCTAssertTrue(app.otherElements["arbeitsbereich"].waitForExistence(timeout: 60))
+        app.buttons["bed.add"].tap()
+        sleep(1)
+        app.buttons["schiene.arrange"].press(forDuration: 0.6)
+        sleep(2)
+        halte(app, "arrange-panel")
+    }
+
+
     func testKegelVorschau() throws {
         let app = XCUIApplication()
         app.launchArguments = ["-psm-preset-printer", "-psm-start-advanced", "-psm-load-kegel"]

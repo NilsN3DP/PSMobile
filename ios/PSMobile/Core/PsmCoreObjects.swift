@@ -103,9 +103,11 @@ extension PsmCore {
 
     /// Ordnet genau das angegebene Bett an und reicht fachliche Fehler
     /// (gesperrt, voll) unverändert aus dem Kern weiter.
-    func arrange(bed index: Int, gapMm: Float = 6) throws -> ArrangeResult {
+    func arrange(bed index: Int, gapMm: Float = 6,
+                allowRotation: Bool = false) throws -> ArrangeResult {
         var info = psm_arrange_info()
-        let code = psm_arrange_bed_ex(raw, size_t(index), gapMm, &info)
+        let code = psm_arrange_bed_ex(raw, size_t(index), gapMm,
+                                      allowRotation ? 1 : 0, &info)
         try check(code, "Anordnen")
         let status: ArrangeStatus =
             info.status == PSM_ARRANGE_EMPTY ? .empty : .arranged
@@ -211,6 +213,25 @@ extension PsmCore {
         }
         try check(psm_model_layer_profile_set(raw, id, werte, size_t(points.count)),
                   "Schichtprofil setzen")
+    }
+
+    /// Berechnet Stuetzstellen aus der Objektgeometrie, PrusaSlicers
+    /// eigener SlicingAdaptive-Algorithmus. Setzt noch nichts - der
+    /// Aufrufer zeigt das Ergebnis erst in der Vorschau, wie beim
+    /// manuellen Profil auch.
+    func layerProfileAdaptive(_ id: Int32,
+                              qualityFactor: Float) throws -> [(z: Double, height: Double)] {
+        var anzahl: size_t = 0
+        try check(psm_model_layer_profile_adaptive(raw, id, qualityFactor, nil, 0, &anzahl),
+                  "Adaptives Schichtprofil berechnen")
+        guard anzahl > 0 else { return [] }
+        var werte = [Double](repeating: 0, count: Int(anzahl) * 2)
+        try werte.withUnsafeMutableBufferPointer { puffer in
+            try check(psm_model_layer_profile_adaptive(
+                raw, id, qualityFactor, puffer.baseAddress, anzahl, &anzahl),
+                "Adaptives Schichtprofil lesen")
+        }
+        return stride(from: 0, to: werte.count, by: 2).map { (werte[$0], werte[$0 + 1]) }
     }
 
     // MARK: - Mehrere Aufrufe, ein Schritt

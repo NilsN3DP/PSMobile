@@ -404,9 +404,14 @@ PSM_API psm_result psm_arrange_bed(psm_session *s, size_t bed_index,
  *
  * Gesperrt und voll liefern zusaetzlich PSM_ERR_LOCKED beziehungsweise
  * PSM_ERR_FULL. out wird auch in diesen beiden Fehlerfaellen gefuellt.
+ *
+ * allow_rotation entspricht ArrangeSettingsDb::set_rotation_enabled im
+ * Desktop-Assistenten - 0 laesst Objekte in ihrer Ausrichtung, ungleich
+ * 0 erlaubt dem Anordnen, sie zu drehen.
  */
 PSM_API psm_result psm_arrange_bed_ex(psm_session *s, size_t bed_index,
-                                      float gap_mm, psm_arrange_info *out);
+                                      float gap_mm, int32_t allow_rotation,
+                                      psm_arrange_info *out);
 
 /* ------------------------------------------------------------------ */
 /* Erweiterte Modellwerkzeuge                                         */
@@ -623,6 +628,26 @@ PSM_API psm_result psm_model_layer_profile_at(psm_session *s,
                                                size_t index,
                                                double *out_z,
                                                double *out_height);
+
+/**
+ * Berechnet ein Schichthoehenprofil aus der Objektgeometrie -
+ * PrusaSlicers eigener SlicingAdaptive-Algorithmus (Waserfall-Formel).
+ * Setzt noch nichts, liefert nur die Paare - dieselbe Form wie
+ * psm_model_layer_profile_set, damit sie ohne Umweg dort landen koennen.
+ *
+ * quality_factor 0..1: 0 = duennste, glatteste Schichten (max_layer_height
+ * ignoriert flache Bereiche kaum), 1 = groebste, schnellste. 0.5 ist die
+ * vom Desktop vorgeschlagene Mitte.
+ *
+ * out_pairs darf null sein, um zuerst nur die Paarzahl zu erfragen -
+ * derselbe Zweischritt wie beim manuellen Profil.
+ */
+PSM_API psm_result psm_model_layer_profile_adaptive(psm_session *s,
+                                                     psm_object_id id,
+                                                     float quality_factor,
+                                                     double *out_pairs,
+                                                     size_t out_cap,
+                                                     size_t *out_pair_count);
 
 /** Objektfarbe und Purge-Optionen aus dem Desktop-Objektbaum. */
 PSM_API psm_result psm_model_colour_get(psm_session *s, psm_object_id id,

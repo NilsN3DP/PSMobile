@@ -345,16 +345,48 @@ struct ArrangePanel: View {
     @State private var ziel = 0
     @State private var abstand = 6.0
     @State private var ergebnis = ""
+    /// Alle Betten statt eines einzelnen Zielbetts - der haeufige
+    /// Wunsch bei mehreren bestueckten Platten, bisher nur ueber den
+    /// Tipp/Halten-Umweg am Arrange-Knopf erreichbar (der ordnet immer
+    /// alle an, ohne Wahl). Hier laesst sich beides gezielt waehlen.
+    @State private var alleBetten = false
+    /// Entspricht ArrangeSettings::set_rotation_enabled im Kern -
+    /// Vorgabe aus, wie am Desktop.
+    @State private var drehenErlauben = false
 
+    /// Ein kleines, am Knopf verankertes Popover statt eines
+    /// Vollbild-Sheets - "Arrange" ist eine schnelle Randentscheidung,
+    /// kein eigener Bildschirm. Eigene Kapseln statt Picker/Toggle:
+    /// die System-Steuerelemente rechneten hier mit hellem Aussehen und
+    /// waren auf dem dunklen Grund kaum zu lesen.
     var body: some View {
-        NavigationStack {
-            VStack(alignment: .leading, spacing: ps.pt(14)) {
+        VStack(alignment: .leading, spacing: ps.pt(12)) {
+            HStack {
+                Text(PsUiCatalog.tr("Arrange"))
+                    .font(.system(size: ps.font(15), weight: .semibold))
+                    .foregroundStyle(PrusaColors.textPrimary)
+                Spacer()
+                Button(st("Done", "Fertig")) { isPresented = false }
+                    .font(.system(size: ps.font(13)))
+                    .foregroundStyle(PrusaColors.orange)
+                    .accessibilityIdentifier("arrange.close")
+            }
+
+            HStack(spacing: ps.pt(6)) {
+                zielKapsel(st("Current bed", "Aktuelles Bett"), aktiv: !alleBetten,
+                          kennung: "arrange.zielmodus.aktuell") { alleBetten = false }
+                zielKapsel(st("All beds", "Alle Betten"), aktiv: alleBetten,
+                          kennung: "arrange.zielmodus.alle") { alleBetten = true }
+            }
+            .accessibilityElement(children: .contain)
+            .accessibilityIdentifier("arrange.zielmodus")
+
+            if !alleBetten {
                 Text(st("Target bed", "Zielbett"))
-                    .font(.system(size: ps.font(13), weight: .semibold))
+                    .font(.system(size: ps.font(11)))
+                    .foregroundStyle(PrusaColors.textMuted)
                 ScrollView {
-                    LazyVGrid(columns: [
-                        GridItem(.adaptive(minimum: ps.pt(130)), spacing: ps.pt(8))
-                    ], spacing: ps.pt(8)) {
+                    VStack(spacing: ps.pt(6)) {
                         ForEach(model.beds, id: \.index) { bett in
                             Button {
                                 ziel = bett.index
@@ -367,67 +399,100 @@ struct ArrangePanel: View {
                                     Text("\(bett.objectCount)")
                                 }
                                 .padding(.horizontal, ps.pt(10))
-                                .frame(maxWidth: .infinity, minHeight: ps.touch())
+                                .frame(maxWidth: .infinity, minHeight: ps.touch(38))
                                 .background(ziel == bett.index
                                             ? PrusaColors.orange : PrusaColors.panelRaised)
                                 .foregroundStyle(ziel == bett.index
                                                  ? PrusaColors.background
                                                  : PrusaColors.textPrimary)
-                                .clipShape(RoundedRectangle(cornerRadius: ps.pt(7)))
+                                .clipShape(RoundedRectangle(cornerRadius: ps.pt(6)))
                             }
                             .buttonStyle(.plain)
                             .accessibilityIdentifier("arrange.target.\(bett.index)")
                         }
                     }
                 }
-                .frame(maxHeight: ps.pt(180))
+                .frame(maxHeight: ps.pt(140))
+            }
 
-                Stepper(value: $abstand, in: 0...50, step: 0.5) {
-                    HStack {
-                        Text(st("Spacing", "Abstand"))
-                        Spacer()
-                        Text(abstand.formatted(.number.precision(.fractionLength(1))) + " mm")
-                            .monospacedDigit()
-                    }
-                }
-                .accessibilityIdentifier("arrange.gap")
-
-                if !ergebnis.isEmpty {
-                    Text(ergebnis)
-                        .font(.system(size: ps.font(13)))
+            Stepper(value: $abstand, in: 0...50, step: 0.5) {
+                HStack {
+                    Text(st("Spacing", "Abstand"))
                         .foregroundStyle(PrusaColors.textPrimary)
-                        .accessibilityIdentifier("arrange.result")
+                    Spacer()
+                    Text(abstand.formatted(.number.precision(.fractionLength(1))) + " mm")
+                        .monospacedDigit()
+                        .foregroundStyle(PrusaColors.textPrimary)
                 }
+            }
+            .accessibilityIdentifier("arrange.gap")
 
-                Button(action: anordnen) {
-                    Label(PsUiCatalog.tr("Arrange"), systemImage: "square.grid.2x2")
-                        .frame(maxWidth: .infinity)
-                        .frame(minHeight: ps.touch(50))
+            Button {
+                drehenErlauben.toggle()
+            } label: {
+                HStack {
+                    Text(st("Allow rotation", "Drehen erlauben"))
+                        .foregroundStyle(PrusaColors.textPrimary)
+                    Spacer()
+                    Image(systemName: drehenErlauben ? "checkmark.square.fill" : "square")
+                        .foregroundStyle(drehenErlauben
+                                         ? PrusaColors.orange : PrusaColors.textMuted)
                 }
-                .buttonStyle(.borderedProminent)
-                .tint(PrusaColors.orange)
-                .accessibilityIdentifier("arrange.run")
+                .frame(minHeight: ps.touch(32))
+                .contentShape(Rectangle())
             }
-            .padding()
-            .background(PrusaColors.background)
-            .navigationTitle(PsUiCatalog.tr("Arrange"))
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button(st("Done", "Fertig")) { isPresented = false }
-                        .accessibilityIdentifier("arrange.close")
-                }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("arrange.drehen")
+
+            if !ergebnis.isEmpty {
+                Text(ergebnis)
+                    .font(.system(size: ps.font(12)))
+                    .foregroundStyle(PrusaColors.textPrimary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityIdentifier("arrange.result")
             }
-            .overlay { PSMarke(name: "arrange.panel") }
+
+            Button(action: anordnen) {
+                Label(PsUiCatalog.tr("Arrange"), systemImage: "square.grid.2x2")
+                    .frame(maxWidth: .infinity)
+                    .frame(minHeight: ps.touch(44))
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(PrusaColors.orange)
+            .accessibilityIdentifier("arrange.run")
         }
-        .presentationDetents([.medium, .large])
+        .padding(ps.pt(16))
+        .frame(width: ps.pt(300))
+        .background(PrusaColors.background)
+        .overlay { PSMarke(name: "arrange.panel") }
         .onAppear {
             ziel = model.beds.first(where: \.active)?.index ?? 0
         }
     }
 
+    private func zielKapsel(_ label: String, aktiv: Bool, kennung: String,
+                            aktion: @escaping () -> Void) -> some View {
+        Button(action: aktion) {
+            Text(label)
+                .font(.system(size: ps.font(12), weight: aktiv ? .semibold : .regular))
+                .foregroundStyle(aktiv ? PrusaColors.background : PrusaColors.textPrimary)
+                .frame(maxWidth: .infinity, minHeight: ps.touch(34))
+                .background(aktiv ? PrusaColors.orange : PrusaColors.panelRaised)
+                .clipShape(RoundedRectangle(cornerRadius: ps.pt(6)))
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier(kennung)
+    }
+
     private func anordnen() {
+        if alleBetten {
+            model.arrangeAll(gapMm: Float(abstand), allowRotation: drehenErlauben)
+            ergebnis = st("All beds arranged.", "Alle Betten angeordnet.")
+            return
+        }
         do {
-            let info = try model.arrange(target: ziel, gapMm: Float(abstand))
+            let info = try model.arrange(target: ziel, gapMm: Float(abstand),
+                                         allowRotation: drehenErlauben)
             switch info.status {
             case .empty:
                 ergebnis = st(

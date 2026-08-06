@@ -20,6 +20,9 @@ struct LayerProfileView: View {
 
     @Environment(\.psScale) private var ps
     @State private var zeilen: [LayerProfile.Row] = []
+    /// 0 = fein und glatt, 1 = grob und schnell - dieselbe Skala wie am
+    /// Desktop, 0.5 ist dessen Vorschlag.
+    @State private var qualitaet: Double = 0.5
 
     private var hoehe: Double { Double(objekt.sizeMm.z) }
     private var anwendbar: Bool { LayerProfile.shared.canApply(rows: zeilen) }
@@ -42,6 +45,8 @@ struct LayerProfileView: View {
                 vorschau
                 stellen
             }
+
+            adaptiv
 
             HStack(spacing: ps.pt(12)) {
                 Button(st("Reset", "Zurücksetzen")) {
@@ -178,6 +183,37 @@ struct LayerProfileView: View {
         .frame(width: ps.pt(104), height: ps.touch(44))
         .background(PrusaColors.panelRaised)
         .clipShape(RoundedRectangle(cornerRadius: ps.pt(4)))
+    }
+
+    /// Aus der Geometrie berechnen statt von Hand Stuetzstellen zu
+    /// setzen - fuellt nur die Vorschau, angewendet wird erst mit dem
+    /// bestehenden "Uebernehmen"-Knopf, wie beim manuellen Profil auch.
+    private var adaptiv: some View {
+        VStack(alignment: .leading, spacing: ps.pt(4)) {
+            HStack(spacing: ps.pt(8)) {
+                Text(st("Adaptive", "Adaptiv"))
+                    .font(.system(size: ps.font(12)))
+                    .foregroundStyle(PrusaColors.textMuted)
+                    .frame(width: ps.pt(56), alignment: .leading)
+                Slider(value: $qualitaet, in: 0...1)
+                    .tint(PrusaColors.orange)
+                    .accessibilityIdentifier("schichten.adaptiv.qualitaet")
+                Button(st("Compute", "Berechnen")) {
+                    let berechnet = model.layerProfileAdaptive(
+                        objekt.id, qualityFactor: Float(qualitaet))
+                    if !berechnet.isEmpty {
+                        zeilen = LayerProfile.shared.fromPoints(
+                            objectHeight: hoehe, points: berechnet)
+                    }
+                }
+                .foregroundStyle(PrusaColors.orange)
+                .accessibilityIdentifier("schichten.adaptiv.berechnen")
+            }
+            Text(st("Fine and smooth on the left, coarse and fast on the right.",
+                    "Links fein und glatt, rechts grob und schnell."))
+                .font(.system(size: ps.font(10)))
+                .foregroundStyle(PrusaColors.textMuted)
+        }
     }
 
     private func laden() {

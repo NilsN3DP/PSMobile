@@ -1005,7 +1005,7 @@ int main(int argc, char **argv)
             "bed metadata round-trips through the core");
 
     psm_arrange_info locked_arrange{};
-    require(psm_arrange_bed_ex(session, 0, 6.f, &locked_arrange) ==
+    require(psm_arrange_bed_ex(session, 0, 6.f, 0, &locked_arrange) ==
                 PSM_ERR_LOCKED,
             "locked bed rejects arrange in the core");
     require(locked_arrange.status == PSM_ARRANGE_LOCKED,
@@ -1037,7 +1037,7 @@ int main(int argc, char **argv)
                                 30.f, 30.f, 30.f) == PSM_OK,
             "make isolated object larger than the configured bed");
     psm_arrange_info full_arrange{};
-    require(psm_arrange_bed_ex(metadata_isolation, 0, 6.f,
+    require(psm_arrange_bed_ex(metadata_isolation, 0, 6.f, 0,
                                &full_arrange) == PSM_ERR_FULL,
             "oversized target has a dedicated full-bed error");
     require(full_arrange.status == PSM_ARRANGE_FULL,
@@ -1083,7 +1083,7 @@ int main(int argc, char **argv)
         Slic3r::s_multiple_beds.get_inst_map();
 #endif
     psm_arrange_info arrange_info{};
-    require(psm_arrange_bed_ex(session, 1, 0.f, &arrange_info) == PSM_OK,
+    require(psm_arrange_bed_ex(session, 1, 0.f, 0, &arrange_info) == PSM_OK,
             std::string("arrange explicit second bed: ") +
                 psm_last_error(session));
     require(arrange_info.status == PSM_ARRANGE_ARRANGED &&

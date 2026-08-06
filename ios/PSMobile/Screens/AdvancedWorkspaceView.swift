@@ -305,7 +305,7 @@ struct AdvancedWorkspaceView: View {
                 }
             }
         }
-        .sheet(isPresented: $zeigeArrange) {
+        .popover(isPresented: $zeigeArrange) {
             ArrangePanel(model: model, isPresented: $zeigeArrange)
         }
         .sheet(isPresented: $zeigeGcodeMarken) {

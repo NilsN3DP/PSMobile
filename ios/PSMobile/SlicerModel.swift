@@ -826,11 +826,13 @@ final class SlicerModel: ObservableObject {
 
     /// Der Panel-Pfad braucht Erfolg und Fehler als echten Rückgabewert.
     /// Ein `try?` würde gerade Locked/Full verschlucken.
-    func arrange(target: Int, gapMm: Float) throws -> PsmCore.ArrangeResult {
+    func arrange(target: Int, gapMm: Float,
+                allowRotation: Bool = false) throws -> PsmCore.ArrangeResult {
         guard let core else {
             throw PsmCore.PsmError.createFailed("Core nicht bereit")
         }
-        let ergebnis = try core.arrange(bed: target, gapMm: gapMm)
+        let ergebnis = try core.arrange(bed: target, gapMm: gapMm,
+                                        allowRotation: allowRotation)
         refresh()
         return ergebnis
     }
@@ -849,9 +851,10 @@ final class SlicerModel: ObservableObject {
     /// Alle nicht gesperrten Betten in einem Rutsch anordnen - der
     /// kurze Tipp auf den Arrange-Knopf. Wer nur ein Bett anordnen
     /// will, haelt den Knopf gedrueckt und waehlt es im Panel.
-    func arrangeAll(gapMm: Float = 6) {
+    func arrangeAll(gapMm: Float = 6, allowRotation: Bool = false) {
         for bett in beds where !bett.locked {
-            _ = try? arrange(target: bett.index, gapMm: gapMm)
+            _ = try? arrange(target: bett.index, gapMm: gapMm,
+                             allowRotation: allowRotation)
         }
     }
 
@@ -1045,6 +1048,19 @@ final class SlicerModel: ObservableObject {
     func clearLayerProfile(_ id: Int32) {
         try? core?.setLayerProfile(id, points: [])
         refresh()
+    }
+
+    /// Berechnet Stuetzstellen aus der Objektgeometrie statt sie von
+    /// Hand zu setzen - PrusaSlicers eigener Algorithmus. Setzt noch
+    /// nichts: der Aufrufer zeigt das Ergebnis erst in der Vorschau.
+    func layerProfileAdaptive(_ id: Int32, qualityFactor: Float) -> [LayerProfile.Point] {
+        do {
+            return try (core?.layerProfileAdaptive(id, qualityFactor: qualityFactor) ?? [])
+                .map { LayerProfile.Point(z: $0.z, height: $0.height) }
+        } catch {
+            projectNotice = error.localizedDescription
+            return []
+        }
     }
 
     /// Legt das Objekt auf seine groesste ebene Flaeche.

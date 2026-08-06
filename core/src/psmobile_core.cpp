@@ -11,6 +11,8 @@
 #include "psmobile_core.h"
 #include "psmobile_session.hpp"
 
+#include "libslic3r/Slicing.hpp"
+
 #include <algorithm>
 #include <cmath>
 #include <chrono>
@@ -2170,7 +2172,8 @@ PSM_API psm_result psm_model_duplicate(psm_session *s, psm_object_id id, psm_obj
  * anderer Betten und Sitzungen.
  */
 static psm_result arrange_local_bed(psm_session *s, Slic3r::Model &model,
-                                    float gap_mm, psm_arrange_info *out)
+                                    float gap_mm, bool allow_rotation,
+                                    psm_arrange_info *out)
 {
     *out = psm_arrange_info{};
     out->object_count = static_cast<int32_t>(model.objects.size());
@@ -2198,6 +2201,7 @@ static psm_result arrange_local_bed(psm_session *s, Slic3r::Model &model,
         ? static_cast<double>(gap_mm)
         : Slic3r::min_object_distance(s->config);
     cfg.set_distance_from_objects(dist);
+    cfg.set_rotation_enabled(allow_rotation);
 
     s->history_checkpoint("Objekte anordnen");
     Slic3r::arrange_objects(model, bed, cfg);
@@ -2215,7 +2219,8 @@ static psm_result arrange_local_bed(psm_session *s, Slic3r::Model &model,
 }
 
 PSM_API psm_result psm_arrange_bed_ex(psm_session *s, size_t bed_index,
-                                      float gap_mm, psm_arrange_info *out)
+                                      float gap_mm, int32_t allow_rotation,
+                                      psm_arrange_info *out)
 {
     PSM_GUARD_BEGIN(s)
         if (out == nullptr)
@@ -2236,7 +2241,7 @@ PSM_API psm_result psm_arrange_bed_ex(psm_session *s, size_t bed_index,
             return PSM_ERR_LOCKED;
         }
         return arrange_local_bed(s, *s->bed_models[bed_index],
-                                 gap_mm, out);
+                                 gap_mm, allow_rotation != 0, out);
     PSM_GUARD_END(s)
 }
 
@@ -2244,14 +2249,14 @@ PSM_API psm_result psm_arrange_bed(psm_session *s, size_t bed_index,
                                    float gap_mm)
 {
     psm_arrange_info ignored{};
-    return psm_arrange_bed_ex(s, bed_index, gap_mm, &ignored);
+    return psm_arrange_bed_ex(s, bed_index, gap_mm, 0, &ignored);
 }
 
 PSM_API psm_result psm_arrange(psm_session *s, float gap_mm)
 {
     PSM_GUARD_BEGIN(s)
         psm_arrange_info ignored{};
-        return psm_arrange_bed_ex(s, psm_bed_active(s), gap_mm, &ignored);
+        return psm_arrange_bed_ex(s, psm_bed_active(s), gap_mm, 0, &ignored);
     PSM_GUARD_END(s)
 }
 
@@ -3260,6 +3265,54 @@ PSM_API psm_result psm_model_layer_profile_at(psm_session *s,
             return PSM_ERR_INVALID_ARG;
         if (out_z)      *out_z      = profile[index * 2];
         if (out_height) *out_height = profile[index * 2 + 1];
+        return PSM_OK;
+    PSM_GUARD_END(s)
+}
+
+PSM_API psm_result psm_model_layer_profile_adaptive(psm_session *s,
+                                                     psm_object_id id,
+                                                     float quality_factor,
+                                                     double *out_pairs,
+                                                     size_t out_cap,
+                                                     size_t *out_pair_count)
+{
+    PSM_GUARD_BEGIN(s)
+        if (out_pair_count == nullptr)
+            return PSM_ERR_INVALID_ARG;
+        std::lock_guard<std::recursive_mutex> data_lock(s->data_mtx);
+        Slic3r::ModelObject *object = find_object(s, id);
+        if (object == nullptr)
+            return PSM_ERR_NOT_FOUND;
+        if (object->instances.empty())
+            return PSM_ERR_GENERIC;
+
+        const Slic3r::BoundingBoxf3 bb = object->instance_bounding_box(0, false);
+        const float object_max_z = static_cast<float>(bb.max.z());
+        if (! (object_max_z > 0.f)) {
+            s->set_error("Objekt hat keine Hoehe");
+            return PSM_ERR_GENERIC;
+        }
+
+        /* Keine Schwindungskompensation - dieselbe Annahme wie am
+         * manuellen Profil, das ebenfalls unkompensierte Millimeter
+         * verwendet. */
+        const Slic3r::SlicingParameters params =
+            Slic3r::PrintObject::slicing_parameters(
+                s->config, *object, object_max_z, Slic3r::Vec3d(1., 1., 1.));
+
+        const std::vector<double> profile =
+            Slic3r::layer_height_profile_adaptive(
+                params, *object,
+                std::clamp(quality_factor, 0.f, 1.f));
+
+        *out_pair_count = profile.size() / 2;
+        if (out_pairs != nullptr) {
+            const size_t n = std::min(*out_pair_count, out_cap);
+            for (size_t i = 0; i < n; ++i) {
+                out_pairs[i * 2]     = profile[i * 2];
+                out_pairs[i * 2 + 1] = profile[i * 2 + 1];
+            }
+        }
         return PSM_OK;
     PSM_GUARD_END(s)
 }
