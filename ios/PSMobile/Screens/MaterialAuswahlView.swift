@@ -187,20 +187,28 @@ struct MaterialAuswahlView: View {
     ///
     /// In EasyPrint steht auf jeder Karte ein Foto der Spule. Ein Foto
     /// je Filament hätten wir nicht, aber die Form allein trägt schon
-    /// die Auskunft: das hier ist eine Rolle in dieser Farbe.
+    /// die Auskunft: das hier ist eine Rolle in dieser Farbe - von vorn
+    /// gesehen wie eine echte Spule, nicht nur eine gefärbte Kapsel:
+    /// äußerer Flansch, aufgewickeltes Filament als Ring, Nabe und
+    /// Kernloch.
     private func spule(_ hex: String) -> some View {
         let farbe = Color(hexString: hex) ?? PrusaColors.panelRaised
         return ZStack {
-            Capsule()
+            Circle()
+                .fill(PrusaColors.panelRaised)
+                .frame(width: ps.pt(44), height: ps.pt(44))
+                .overlay(Circle().stroke(PrusaColors.divider, lineWidth: 1))
+            Circle()
                 .fill(farbe)
-                .frame(width: ps.pt(56), height: ps.pt(22))
-            Capsule()
+                .frame(width: ps.pt(34), height: ps.pt(34))
+            Circle()
                 .fill(PrusaColors.background)
-                .frame(width: ps.pt(18), height: ps.pt(22))
-            Capsule()
-                .stroke(PrusaColors.divider, lineWidth: 1)
-                .frame(width: ps.pt(56), height: ps.pt(22))
+                .frame(width: ps.pt(18), height: ps.pt(18))
+                .overlay(Circle().stroke(PrusaColors.divider, lineWidth: 1))
+            Circle()
+                .fill(PrusaColors.panel)
+                .frame(width: ps.pt(7), height: ps.pt(7))
         }
-        .frame(height: ps.pt(28))
+        .frame(height: ps.pt(44))
     }
 }
