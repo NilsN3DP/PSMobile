@@ -669,3 +669,51 @@ loesen (einfach alle Hersteller zeigen, wie die Filamentkarten es schon
 tun), oder bewusst so lassen und stattdessen in der UI klarmachen, dass
 nur kompatible Hersteller zaehlen.
 
+## Nachpruefung der alten Bug-Liste (6. August, tagsueber)
+
+Der Nutzer hat zu Recht angemerkt, dass die Liste offener Punkte weiter
+oben nicht mehr aktuell war - sie wurde ueber mehrere Uebergaben
+unveraendert weitergetragen, ohne gegen den tatsaechlichen Code zu
+pruefen. Nachgeprueft, mit Fundstelle:
+
+**Erledigt, faelschlich noch als offen gefuehrt** (vermutlich schon
+waehrend Codex' eigener Sitzung erledigt, Punkt 5 seiner Auftragsliste
+"Fingerziehen, Pfeile, Trefferzone messen" - Stunden vor der
+Nachtsitzung, nie aus der Liste gestrichen):
+
+* Objekte ohne Griff direkt mit dem Finger schieben - `dragObject =
+  vp.gizmo == .none` in `ViewportView.swift:573`, dazu der gruen
+  laufende Test `testDirekterFingerzugVerschiebtDasObjektOhneMoveGizmo`.
+* Move-Gizmo-Trefferzone in Millimetern statt Pixeln - rechnet bereits
+  in Bildschirmpixeln (`radius_px`, `psm::screen_scale(...)`,
+  `psm_viewport.cpp:2233`).
+* Bettnamen/Bettsperre nur fuer die Sitzung - laeuft nicht mehr ueber
+  App-Einstellungen, sondern projektgebunden ueber
+  `core.setBedMetadata(...)` im Kern.
+* "Objects" steht doppelt in der Advanced-Seitenleiste - die
+  beschriebene innere Ueberschrift in `objektliste` existiert im
+  aktuellen Code nicht mehr.
+
+**Nach Codepruefung weiterhin plausibel offen:**
+
+* G-Code-Viewer zeichnet nie um - diese Nacht selbst am
+  Kegel-Testkoerper nachvollzogen.
+* iPhone-Vorschauregler-Test - lief diese Nacht mehrfach rot.
+* Objektliste zeigt nur das aktive Bett - `refresh()` liest weiterhin
+  nur `core.listObjects()` des aktiven Betts.
+
+**Ohne Geraet nicht code-pruefbar, Status unklar:**
+
+* Arrange "tut nichts" - der Fehlerpfad existiert noch
+  (`psmobile_core.cpp:656`), aber die Arrange-Tests laufen unter
+  normalen Bedingungen durchgehend gruen. Moeglicherweise ein
+  Sonderfall vor der Ersteinrichtung.
+* Viewer friert nach "On face" ein - reine Interaktionsfrage.
+* Hochkant/Rotation auf dem iPad - `ResponsiveLayoutUITests` laeuft
+  gruen, unklar ob dieselbe Situation wie gemeldet.
+
+**Lehre daraus**: die Liste offener Punkte braucht bei jeder neuen
+Uebergabe einen kurzen Gegencheck gegen den Code, bevor sie
+weitergereicht wird - sonst sammeln sich erledigte Punkte an, die
+niemand mehr glaubt pruefen zu muessen.
+
