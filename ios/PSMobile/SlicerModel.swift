@@ -941,16 +941,6 @@ final class SlicerModel: ObservableObject {
         refresh()
     }
 
-    /// Ein Objekt in seine Volumen teilen - anders als `split(_:)`, das
-    /// es in eigenstaendige Objekte teilt. Bisher rief die Werkzeugschiene
-    /// fuer beide Knoepfe dieselbe Funktion auf; "Volumes" tat nichts
-    /// Eigenes.
-    func splitVolumes(_ id: Int32) {
-        _ = try? core?.splitVolumes(id)
-        selectedId = nil
-        refresh()
-    }
-
     func cut(_ id: Int32, zMm: Float) {
         _ = try? core?.cut(id, zMm: zMm)
         selectedId = nil

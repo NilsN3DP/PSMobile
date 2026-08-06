@@ -158,6 +158,8 @@ struct WerkzeugSchiene: View {
         case "splitobjects":
             if let id = auswahl { model.split(id) }
         case "splitvolumes":
+            // Der schon vorhandene Wrapper aus dem Objekt-Inspektor -
+            // hierher fehlte nur der Aufruf, nicht die Funktion selbst.
             if let id = auswahl { model.splitVolumes(id) }
         case "paintsupport": onMalwerkzeug(.support)
         case "paintseam":    onMalwerkzeug(.seam)
