@@ -30,6 +30,10 @@ struct AdvancedWorkspaceView: View {
     var onOpenSimple: () -> Void = {}
     var onAppSettings: () -> Void = {}
     var onPrinters: () -> Void = {}
+    /// Fehlte bisher hier komplett: nach dem Schneiden gab es im
+    /// Advanced Mode nur "G-Code sichern", nie den direkten Weg zu
+    /// PrusaLink, den der Simple Mode schon hatte.
+    var onSendToPrinter: (URL) -> Void = { _ in }
     /// Zurueck in die Ersteinrichtung - der Weg zu einem weiteren Drucker.
     var onPrinterSetup: () -> Void = {}
     var onSettings: (String) -> Void = { _ in }
@@ -127,7 +131,9 @@ struct AdvancedWorkspaceView: View {
                                 onEinfuegen: { zweck = .modell; zeigeImporter = true },
                                 onSettings: { onSettings("print") },
                                 onArrange: { zeigeArrange = true },
-                                onMalwerkzeug: { malwerkzeugUmschalten($0) })
+                                onMalwerkzeug: { malwerkzeugUmschalten($0) },
+                                onPrinters: onPrinters,
+                                onAppSettings: onAppSettings)
                 Divider().overlay(PrusaColors.divider)
                 VStack(spacing: 0) {
                     werkzeugleiste
@@ -188,6 +194,21 @@ struct AdvancedWorkspaceView: View {
                     Spacer()
                 }
             }
+            // Verschoben aus der permanenten oberen Leiste: die Griffe
+            // sind ein Objektwerkzeug, kein Projektbefehl, und brauchten
+            // dort staendig Platz, auch ohne Auswahl. Bleiben bewusst
+            // immer vorhanden (nur deaktiviert ohne Auswahl) statt ganz
+            // zu verschwinden - dieselbe Kennung, dasselbe Verhalten,
+            // nur kleiner und naeher am Bett als an der Kopfzeile.
+            VStack {
+                HStack {
+                    kompakteGriffe
+                    Spacer(minLength: 0)
+                }
+                .padding(.leading, ps.pt(schmal ? 82 : 8))
+                .padding(.top, ps.pt(schmal ? 96 : 118))
+                Spacer()
+            }
             if seiteOffen && schmal { schmaleSeite }
             if schmal {
                 VStack {
@@ -201,7 +222,8 @@ struct AdvancedWorkspaceView: View {
                 .zIndex(80)
             }
             if model.progress != .idle {
-                SliceSheet(model: model) { model.dismissProgress() }
+                SliceSheet(model: model,
+                           onSendToPrinter: onSendToPrinter) { model.dismissProgress() }
             }
             if !hinderungsgruende.isEmpty {
                 SliceBlockerSheet(gruende: hinderungsgruende) { hinderungsgruende = [] }
@@ -357,15 +379,21 @@ struct AdvancedWorkspaceView: View {
     ///
     /// Ohne Auswahl ausgegraut - ein Griff ohne Objekt ist keine
     /// Einstellung, sondern eine Enttaeuschung.
-    @ViewBuilder private var griffe: some View {
+    private var kompakteGriffe: some View {
         let hatAuswahl = model.selectedId != nil
-        griffKnopf("arrow.up.and.down.and.arrow.left.and.right",
-                   PsUiCatalog.tr("Move"), .move, hatAuswahl)
-        griffKnopf("arrow.triangle.2.circlepath",
-                   PsUiCatalog.tr("Rotate"), .rotate, hatAuswahl)
-        griffKnopf("arrow.up.left.and.arrow.down.right",
-                   PsUiCatalog.tr("Scale"), .scale, hatAuswahl)
-        griffKnopf("hand.point.up.left", PsUiCatalog.tr("None"), PsmViewport.Gizmo.none, hatAuswahl)
+        return HStack(spacing: ps.pt(2)) {
+            griffKnopf("arrow.up.and.down.and.arrow.left.and.right", PsUiCatalog.tr("Move"), .move, hatAuswahl)
+            griffKnopf("arrow.triangle.2.circlepath", PsUiCatalog.tr("Rotate"), .rotate, hatAuswahl)
+            griffKnopf("arrow.up.left.and.arrow.down.right", PsUiCatalog.tr("Scale"), .scale, hatAuswahl)
+            griffKnopf("hand.point.up.left", PsUiCatalog.tr("None"), PsmViewport.Gizmo.none, hatAuswahl)
+        }
+        .padding(ps.pt(3))
+        .background(PrusaColors.panel.opacity(0.95))
+        .clipShape(RoundedRectangle(cornerRadius: ps.pt(6)))
+        .overlay(
+            RoundedRectangle(cornerRadius: ps.pt(6))
+                .stroke(PrusaColors.divider, lineWidth: 1)
+        )
     }
 
     private func griffKnopf(_ symbol: String,
@@ -376,23 +404,19 @@ struct AdvancedWorkspaceView: View {
         return Button {
             gizmo = wert
         } label: {
-            VStack(spacing: ps.pt(2)) {
-                Image(systemName: symbol)
-                    .font(.system(size: ps.font(17)))
-                Text(name)
-                    .font(.system(size: ps.font(9)))
-                    .lineLimit(1)
-            }
-            .foregroundStyle(!moeglich ? PrusaColors.textMuted.opacity(0.4)
-                             : an ? PrusaColors.orange : PrusaColors.textPrimary)
-            .frame(width: ps.touch(56), height: ps.touch(52))
-            .background(an ? PrusaColors.panelRaised : Color.clear)
-            .clipShape(RoundedRectangle(cornerRadius: ps.pt(4)))
-            .contentShape(Rectangle())
+            Image(systemName: symbol)
+                .font(.system(size: ps.font(14)))
+                .foregroundStyle(!moeglich ? PrusaColors.textMuted.opacity(0.4)
+                                 : an ? PrusaColors.orange : PrusaColors.textPrimary)
+                .frame(width: ps.touch(34), height: ps.touch(34))
+                .background(an ? PrusaColors.panelRaised : Color.clear)
+                .clipShape(RoundedRectangle(cornerRadius: ps.pt(4)))
+                .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .disabled(!moeglich)
         .accessibilityIdentifier("advanced.gizmo." + kennungFuer(wert))
+        .accessibilityLabel(name)
     }
 
     private func kennungFuer(_ wert: PsmViewport.Gizmo) -> String {
@@ -445,12 +469,9 @@ struct AdvancedWorkspaceView: View {
                          vorschau ? st("Bed", "Bett") : st("Preview", "Vorschau"),
                          kennung: "werkzeug.vorschau") { vorschauZeigen() }
                 trenner
-                griffe
-                trenner
-                werkzeug("paperplane", st("Printers", "Drucker"), kennung: "drucker.oeffnen",
-                         aktion: onPrinters)
-                werkzeug("gearshape", st("App", "App"), kennung: "appeinstellungen.oeffnen",
-                         aktion: onAppSettings)
+                // Printers und App Settings stehen jetzt unten links in
+                // der Werkzeugschiene, siehe dort - hier blieb nur, was
+                // sich nicht sinnvoll dorthin verschieben liess.
                 werkzeug("square.righthalf.filled", "Simple", kennung: "simple.oeffnen", aktion: onOpenSimple)
                 Spacer(minLength: 0)
                 werkzeug(seiteOffen ? "sidebar.right" : "sidebar.left", st("Panel", "Leiste"),

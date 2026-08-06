@@ -152,6 +152,10 @@ struct PSMobileApp: App {
                 },
                 onAppSettings: { zurueckVon = .advanced; self.route = .appEinstellungen },
                 onPrinters: { zurueckVon = .advanced; self.route = .drucker(nil) },
+                onSendToPrinter: { datei in
+                    zurueckVon = .advanced
+                    self.route = .drucker(datei)
+                },
                 onPrinterSetup: { model.reopenSetup() },
                 onSettings: { reiter in
                     einstellungsReiter = reiter

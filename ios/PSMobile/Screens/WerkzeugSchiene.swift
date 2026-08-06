@@ -30,6 +30,13 @@ struct WerkzeugSchiene: View {
     /// Einen Pinsel an- oder ausschalten. Liegt beim Aufrufer, weil dort
     /// auch der Zustand des Werkzeugs sitzt.
     var onMalwerkzeug: (PsmCore.PaintTool) -> Void = { _ in }
+    /// Drucker und App-Einstellungen - standen bisher oben in der
+    /// waagerechten Werkzeugleiste, zusammen mit "Print Settings" dort
+    /// aber doppelt gemoppelt. Unten in dieser Spalte sind sie weiterhin
+    /// immer erreichbar, konkurrieren aber nicht mehr mit den
+    /// Objektwerkzeugen um den obersten Platz.
+    var onPrinters: () -> Void = {}
+    var onAppSettings: () -> Void = {}
 
     @Environment(\.psScale) private var ps
 
@@ -88,17 +95,57 @@ struct WerkzeugSchiene: View {
     ]
 
     var body: some View {
-        ScrollView(showsIndicators: false) {
-            VStack(spacing: ps.pt(6)) {
-                ForEach(werkzeuge, id: \.name) { w in
-                    knopf(w)
+        VStack(spacing: 0) {
+            ScrollView(showsIndicators: false) {
+                VStack(spacing: ps.pt(6)) {
+                    ForEach(werkzeuge, id: \.name) { w in
+                        knopf(w)
+                    }
                 }
+                .padding(.vertical, ps.pt(10))
+                .padding(.horizontal, ps.pt(6))
             }
-            .padding(.vertical, ps.pt(10))
-            .padding(.horizontal, ps.pt(6))
+            Spacer(minLength: 0)
+            fusszeile
         }
         .frame(width: ps.pt(74))
         .background(PrusaColors.panel)
+    }
+
+    /// Drucker und App-Einstellungen, unten links - siehe onPrinters.
+    private var fusszeile: some View {
+        VStack(spacing: ps.pt(6)) {
+            Divider().overlay(PrusaColors.divider)
+                .padding(.horizontal, ps.pt(8))
+            fusszeilenKnopf("paperplane", st("Printers", "Drucker"),
+                            kennung: "drucker.oeffnen", aktion: onPrinters)
+            fusszeilenKnopf("gearshape", st("App", "App"),
+                            kennung: "appeinstellungen.oeffnen", aktion: onAppSettings)
+        }
+        .padding(.vertical, ps.pt(8))
+        .padding(.horizontal, ps.pt(6))
+    }
+
+    private func fusszeilenKnopf(_ symbol: String, _ label: String,
+                                 kennung: String,
+                                 aktion: @escaping () -> Void) -> some View {
+        Button(action: aktion) {
+            VStack(spacing: ps.pt(3)) {
+                Image(systemName: symbol)
+                    .font(.system(size: ps.font(17)))
+                Text(label)
+                    .font(.system(size: ps.font(9)))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+            }
+            .foregroundStyle(PrusaColors.textMuted)
+            .frame(maxWidth: .infinity)
+            .frame(height: ps.touch(50))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier(kennung)
+        .accessibilityLabel(label)
     }
 
     @ViewBuilder
