@@ -44,6 +44,9 @@ xcuserdata/
 *.swp
 android/shared/build/
 
+# Isolierte lokale Arbeitsbaeume fuer agentische Side-Build-Laeufe.
+/.worktrees/
+
 # Erzeugte iOS-Ausgaben.
 #
 # Beides entsteht aus Quellen, die im Baum liegen: das Xcode-Projekt aus
