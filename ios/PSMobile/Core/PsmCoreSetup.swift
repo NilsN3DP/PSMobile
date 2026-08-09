@@ -265,6 +265,18 @@ extension PsmCore {
         try check(psm_extruder_color_set(raw, Int32(extruder), hex), "Farbe setzen")
     }
 
+    /// Position und Drehung des Reinigungsturms - nur bei mehreren
+    /// Extrudern von Belang, siehe ExtruderBank.
+    func wipeTower() -> (x: Float, y: Float, rotationDeg: Float)? {
+        var x: Float = 0, y: Float = 0, rot: Float = 0
+        guard psm_wipe_tower_get(raw, &x, &y, &rot) == PSM_OK else { return nil }
+        return (x, y, rot)
+    }
+
+    func setWipeTower(x: Float, y: Float, rotationDeg: Float) throws {
+        try check(psm_wipe_tower_set(raw, x, y, rotationDeg), "Reinigungsturm setzen")
+    }
+
     struct FilamentVendor {
         let name: String
         let filamentCount: Int

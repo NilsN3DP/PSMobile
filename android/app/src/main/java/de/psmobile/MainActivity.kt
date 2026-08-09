@@ -23,6 +23,7 @@ import de.psmobile.shared.rules.AppSettings
 import de.psmobile.ui.AppSettingsScreen
 import de.psmobile.ui.PsUi
 import de.psmobile.shared.rules.RemovableStorage
+import de.psmobile.ui.SceneController
 import de.psmobile.ui.SetupScreen
 import androidx.lifecycle.lifecycleScope
 import de.psmobile.slicing.SlicerService
@@ -56,6 +57,23 @@ internal fun importDisplayName(value: String): String =
         .replace(Regex("^\\d+-"), "")
         .ifBlank { "Projektprofil" }
 
+/**
+ * Android kennt fuer ".stl" keinen festen MIME-Typ - je nachdem, wie die
+ * Datei ins Geraet kam, meldet der MediaProvider "model/stl",
+ * "application/sla" ODER "application/vnd.ms-pki.stl" (so vergeben vom
+ * Standard-MediaProvider fuer per adb/Download-Ordner abgelegte Dateien -
+ * an dieser Falle ist eine Verifizierung in dieser Sitzung zuerst
+ * gescheitert, siehe android-parity-plan.md). Ohne den dritten Typ zeigt
+ * der Systemdateiwaehler manche echten STL-Dateien ausgegraut an.
+ */
+internal val MODEL_MIME_TYPES = arrayOf(
+    "model/3mf",
+    "model/stl",
+    "application/sla",
+    "application/vnd.ms-pki.stl",
+    "application/octet-stream",
+)
+
 class MainActivity : ComponentActivity() {
 
     private var service by mutableStateOf<SlicerService?>(null)
@@ -70,6 +88,13 @@ class MainActivity : ComponentActivity() {
     private var applyProfileUpdateWhenProjectSaved = false
     private var appMode by mutableStateOf<AppMode?>(null)
     private var showAppSettings by mutableStateOf(false)
+    private var showRemoteSlice by mutableStateOf(false)
+    // Fuer die Momentaufnahmen der "Zuletzt"-Kacheln - siehe
+    // merkeAlsZuletzt(). Reine Plain-Felder statt mutableStateOf: eine
+    // neue Ansicht traegt sich per LaunchedEffect selbst ein, niemand
+    // liest das aus der Composition zurueck.
+    private var simpleSceneController: SceneController? = null
+    private var advancedSceneController: SceneController? = null
 
     private val appPrefs by lazy {
         getSharedPreferences("psmobile", Context.MODE_PRIVATE)
@@ -275,6 +300,11 @@ class MainActivity : ComponentActivity() {
                         onToggleChanged = { key, on -> applyAppSetting(key, on) },
                         onClose = { showAppSettings = false },
                     )
+                } else if (showRemoteSlice && svc != null) {
+                    de.psmobile.ui.RemoteSliceScreen(
+                        service = svc,
+                        onHome = { showRemoteSlice = false },
+                    )
                 } else if (appMode == null) {
                     WorkflowStartScreen(
                         onSimple = { appMode = AppMode.SIMPLE },
@@ -285,6 +315,8 @@ class MainActivity : ComponentActivity() {
                         },
                         onAppSettings = { showAppSettings = true },
                         onLanguageChange = { svc?.uiLanguage = it },
+                        onRemote = { showRemoteSlice = true },
+                        onOpenRecent = { uri, advanced -> openRecentProject(uri, advanced) },
                     )
                 } else if (appMode == AppMode.SIMPLE && svc == null) {
                     // Bei festem Startmodus zeichnet Simple schon im ersten
@@ -298,16 +330,21 @@ class MainActivity : ComponentActivity() {
                     SimpleModeScreen(
                         service = svc!!,
                         window = this@MainActivity.window,
-                        onPickFile = { modelPicker.launch(arrayOf("model/3mf", "model/stl", "application/octet-stream")) },
+                        onPickFile = { modelPicker.launch(MODEL_MIME_TYPES) },
+                        onHome = { appMode = null },
                         onOpenAdvanced = { appMode = AppMode.ADVANCED },
                         onOpenPrinterSetup = { svc.reopenSetup() },
                         onAppSettings = { showAppSettings = true },
                         onStartSlice = { svc.startSlice() },
+                        onSaveProject = { saveProject(saveAs = false) },
+                        onRemoteSettings = { showRemoteSlice = true },
+                        onControllerReady = { simpleSceneController = it },
                     )
                 } else {
                     SlicerScreen(
                         service = svc,
                         onOpenSimple = { appMode = AppMode.SIMPLE },
+                        onHome = { appMode = null },
                         onAppSettings = { showAppSettings = true },
                         onPickFile = { uris -> importUris(uris) },
                         onShare = { uri -> shareGcode(uri) },
@@ -331,13 +368,7 @@ class MainActivity : ComponentActivity() {
                         onReloadProject = ::reloadCurrentProject,
                         onExportPlate = { exportPlate(it) },
                         onRepairStl = {
-                            repairStlPicker.launch(
-                                arrayOf(
-                                    "model/stl",
-                                    "application/sla",
-                                    "application/octet-stream",
-                                )
-                            )
+                            repairStlPicker.launch(MODEL_MIME_TYPES)
                         },
                         onConvertGcode = {
                             convertGcodePicker.launch(
@@ -353,6 +384,7 @@ class MainActivity : ComponentActivity() {
                                 arrayOf("image/svg+xml", "text/xml")
                             )
                         },
+                        onControllerReady = { advancedSceneController = it },
                     )
                 }
 
@@ -661,6 +693,9 @@ class MainActivity : ComponentActivity() {
                         }
                         noticeTitle = "Projekt importiert"
                         currentProjectUri = sourceUri
+                        if (sourceUri != null) {
+                            merkeAlsZuletzt(sourceUri, queryDisplayName(sourceUri) ?: file.nameWithoutExtension)
+                        }
                     }
                 }
         }
@@ -735,7 +770,85 @@ class MainActivity : ComponentActivity() {
                         applyProfileUpdateWhenProjectSaved = false
                         svc.applyStagedProfileUpdate()
                     }
+                    merkeAlsZuletzt(uri, name)
                 }
+        }
+    }
+
+    /**
+     * Fuer die Startseite ("Zuletzt", Gegenstueck zu iOS'
+     * recentProjects()) - siehe RecentProjectsStore.kt fuer die
+     * Begruendung, warum das auf Android eine explizite Liste braucht
+     * statt eines Verzeichnis-Listings. Die dauerhafte Leseberechtigung
+     * ist noetig, weil eine SAF-Zugriffsgewaehrung sonst spaetestens
+     * beim naechsten App-Start wieder erlischt.
+     */
+    private fun merkeAlsZuletzt(uri: Uri, name: String) {
+        runCatching {
+            contentResolver.takePersistableUriPermission(
+                uri,
+                Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
+            )
+        }
+        de.psmobile.net.RecentProjectsStore.hinzufuegen(this, uri.toString(), name)
+        erzeugeKachelBild(uri)
+    }
+
+    /**
+     * Momentaufnahme des Bettinhalts fuer die "Zuletzt"-Kachel - vom
+     * gerade sichtbaren Viewport (Simple oder Advanced, je nachdem, wo
+     * gesichert wurde), nicht neu gerendert. Laeuft nach dem Eintragen
+     * selbst nach: das Rendern braucht einen GL-Umlauf und soll den
+     * "Projekt gespeichert"-Erfolg nicht aufhalten.
+     */
+    private fun erzeugeKachelBild(uri: Uri) {
+        val controller = if (appMode == AppMode.ADVANCED) advancedSceneController else simpleSceneController
+        controller?.captureThumbnail { bitmap ->
+            if (bitmap == null) return@captureThumbnail
+            lifecycleScope.launch(Dispatchers.IO) {
+                runCatching {
+                    val seite = minOf(bitmap.width, bitmap.height)
+                    val quadrat = android.graphics.Bitmap.createBitmap(
+                        bitmap, (bitmap.width - seite) / 2, (bitmap.height - seite) / 2, seite, seite,
+                    )
+                    val klein = android.graphics.Bitmap.createScaledBitmap(quadrat, 240, 240, true)
+                    val ordner = File(cacheDir, "recent-thumbs").apply { mkdirs() }
+                    val datei = File(ordner, "${uri.toString().hashCode()}.png")
+                    datei.outputStream().use { out ->
+                        klein.compress(android.graphics.Bitmap.CompressFormat.PNG, 90, out)
+                    }
+                    de.psmobile.net.RecentProjectsStore.setzeThumbnail(
+                        this@MainActivity, uri.toString(), datei.absolutePath,
+                    )
+                }
+            }
+        }
+    }
+
+    /** Ein Eintrag aus der "Zuletzt"-Liste auf der Startseite antippen. */
+    private fun openRecentProject(uriString: String, alsAdvanced: Boolean) {
+        val svc = service ?: return
+        val uri = Uri.parse(uriString)
+        lifecycleScope.launch {
+            val result = withContext(Dispatchers.IO) {
+                runCatching {
+                    val source = copyDocumentToCache(uri, "project-recent")
+                    svc.loadModel(source.absolutePath, SlicerService.ImportMode.PROJECT)
+                }
+            }
+            result.onFailure {
+                // Nicht mehr lesbar (geloescht, Berechtigung entzogen,
+                // externer Speicher getrennt) - dann gehoert der Eintrag
+                // auch nicht mehr in die Liste. Selbstheilend statt bei
+                // jedem Start erneut zu scheitern.
+                svc.reportImportError(it)
+                de.psmobile.net.RecentProjectsStore.entfernen(this@MainActivity, uriString)
+            }.onSuccess {
+                currentProjectUri = uri
+                svc.setProjectKey(uriString)
+                merkeAlsZuletzt(uri, queryDisplayName(uri) ?: "Projekt")
+                appMode = if (alsAdvanced) AppMode.ADVANCED else AppMode.SIMPLE
+            }
         }
     }
 

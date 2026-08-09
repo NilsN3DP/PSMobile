@@ -23,11 +23,16 @@ import de.psmobile.slicing.profileupdate.ProfileVersion
 import de.psmobile.slicing.profileupdate.HttpUrlConnectionProfileUpdateHttp
 import de.psmobile.shared.rules.ColorMixCodec
 import de.psmobile.shared.rules.ColorMixRecipe
+import de.psmobile.shared.rules.SimpleModeState
+import de.psmobile.net.DiagnosticsReporter
+import de.psmobile.net.RemoteSliceClient
+import de.psmobile.net.SecretStore
 import de.psmobile.ui.BedLockPolicy
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -58,6 +63,12 @@ class SlicerService : Service() {
         const val ACTION_START_SLICE = "de.psmobile.action.START_SLICE"
         const val ACTION_CANCEL_SLICE = "de.psmobile.action.CANCEL_SLICE"
 
+        // Dieselben Schluesselnamen wie iOS (SlicerModel.remoteSliceHostKey/
+        // remoteSliceEnabledKey) - erleichtert den Plattformvergleich.
+        const val KEY_REMOTE_SLICE_HOST = "remote.slice.host"
+        const val KEY_REMOTE_SLICE_ENABLED = "remote.slice.enabled"
+        private const val REMOTE_TOKEN_REF = "remote-slice-token"
+
         // Feste Stufen statt freier Eingabe - siehe QuickKey.
         val LAYER_HEIGHTS = listOf("0.1" to "0,1", "0.15" to "0,15", "0.2" to "0,2", "0.3" to "0,3")
         val FILL_DENSITIES = listOf("0%" to "0 %", "10%" to "10 %", "15%" to "15 %", "25%" to "25 %", "50%" to "50 %")
@@ -83,6 +94,26 @@ class SlicerService : Service() {
 
     private val _progress = MutableStateFlow<Progress>(Progress.Idle)
     val progress: StateFlow<Progress> = _progress.asStateFlow()
+
+    // --- Remote Slicing (siehe docs/remote-slicing.md) --------------------
+
+    private fun remotePrefs() = getSharedPreferences("psmobile", Context.MODE_PRIVATE)
+
+    var remoteSliceHost: String
+        get() = remotePrefs().getString(KEY_REMOTE_SLICE_HOST, "") ?: ""
+        set(value) { remotePrefs().edit().putString(KEY_REMOTE_SLICE_HOST, value).apply() }
+
+    var remoteSliceEnabled: Boolean
+        get() = remotePrefs().getBoolean(KEY_REMOTE_SLICE_ENABLED, false)
+        set(value) { remotePrefs().edit().putBoolean(KEY_REMOTE_SLICE_ENABLED, value).apply() }
+
+    /** Nie in SharedPreferences - liegt verschluesselt im Android Keystore. */
+    var remoteSliceToken: String?
+        get() = SecretStore.get(this, REMOTE_TOKEN_REF)
+        set(value) {
+            if (value.isNullOrEmpty()) SecretStore.remove(this, REMOTE_TOKEN_REF)
+            else SecretStore.put(this, REMOTE_TOKEN_REF, value)
+        }
 
     private val _profileUpdates = MutableStateFlow<ProfileUpdateState>(ProfileUpdateState.Idle)
     val profileUpdates: StateFlow<ProfileUpdateState> = _profileUpdates.asStateFlow()
@@ -315,7 +346,7 @@ class SlicerService : Service() {
                     NOTIFICATION_ID,
                     buildNotification(0, getString(R.string.slice_starting)),
                 )
-                runSlice(startId)
+                if (remoteSliceEnabled) runSliceRemote(startId) else runSlice(startId)
             }
             ACTION_CANCEL_SLICE -> {
                 cancelRequestedByCommand = true
@@ -794,6 +825,17 @@ class SlicerService : Service() {
     private fun bumpScene() { _sceneRevision.value = _sceneRevision.value + 1 }
 
     /**
+     * Zuletzt gesicherte bzw. geladene Revision - siehe newProject(),
+     * saveProjectFile() und loadModel(..., ImportMode.PROJECT).
+     *
+     * Ein zweites Tippen auf einen Modus oder "Startseite" wuerde sonst
+     * stillschweigend ein unfertiges Projekt verwerfen.
+     */
+    private var savedRevision = 0
+    val hasUnsavedChanges: Boolean
+        get() = _objects.value.isNotEmpty() && _sceneRevision.value != savedRevision
+
+    /**
      * Steigt bei jeder Aenderung an der Konfiguration - Profilwechsel,
      * Neuinstallation, Einzelwert.
      *
@@ -880,6 +922,7 @@ class SlicerService : Service() {
                 refreshObjects()
                 invalidateSliceResult()
                 showBed()
+                savedRevision = _sceneRevision.value
             }
     }
 
@@ -890,6 +933,7 @@ class SlicerService : Service() {
         val file = File(dir, "project-${System.nanoTime()}.3mf")
         c.saveProject(file.absolutePath)
         dir.listFiles()?.forEach { if (it != file) it.delete() }
+        savedRevision = _sceneRevision.value
         return file
     }
 
@@ -1464,6 +1508,7 @@ class SlicerService : Service() {
             refreshPresets()
             refreshQuickSettings()
             bumpConfig()
+            savedRevision = _sceneRevision.value
         }
         invalidateSliceResult()
         // Nach einem Import gehoert die Aufmerksamkeit aufs Bett - sonst
@@ -1520,21 +1565,153 @@ class SlicerService : Service() {
                         lastGcode = out
                         val secs = (System.nanoTime() - t0) / 1_000_000_000.0
                         _progress.value = Progress.Done(c.sliceStats(), secs)
+                        meldeDiagnose(erfolgreich = true, sekunden = secs, weg = "local", fehler = null)
                     }
                     PsmCore.SliceState.CANCELLED -> _progress.value = Progress.Cancelled
                     PsmCore.SliceState.STALE -> {
                         lastGcode = null
                         _progress.value = Progress.Stale
                     }
-                    else -> _progress.value = Progress.Failed(c.lastError())
+                    else -> {
+                        val fehler = c.lastError()
+                        _progress.value = Progress.Failed(fehler)
+                        meldeDiagnose(
+                            erfolgreich = false,
+                            sekunden = (System.nanoTime() - t0) / 1_000_000_000.0,
+                            weg = "local", fehler = fehler,
+                        )
+                    }
                 }
             } catch (t: Throwable) {
-                _progress.value = Progress.Failed(t.message ?: "unbekannter Fehler")
+                val fehler = t.message ?: "unbekannter Fehler"
+                _progress.value = Progress.Failed(fehler)
+                meldeDiagnose(
+                    erfolgreich = false,
+                    sekunden = (System.nanoTime() - t0) / 1_000_000_000.0,
+                    weg = "local", fehler = fehler,
+                )
             } finally {
                 sliceCommandActive = false
                 stopForeground(STOP_FOREGROUND_REMOVE)
                 stopSelfResult(latestCommandStartId.coerceAtLeast(startId))
             }
+        }
+    }
+
+    /**
+     * Freiwilliger Testbericht - siehe DiagnosticsReporter.kt. Kein
+     * Screenshot von hier aus (der Service hat kein Window/View; siehe
+     * android-parity-plan.md fuer den offenen Punkt, das ueber die
+     * Activity nachzuruesten).
+     */
+    private fun meldeDiagnose(erfolgreich: Boolean, sekunden: Double, weg: String, fehler: String?) {
+        DiagnosticsReporter.nachSlice(
+            context = this,
+            ergebnis = DiagnosticsReporter.Ergebnis(
+                erfolgreich = erfolgreich,
+                sekunden = sekunden,
+                dreiecke = _objects.value.sumOf { it.triangles },
+                weg = weg,
+                fehler = fehler,
+            ),
+            projektname = _objects.value.firstOrNull()?.name,
+            screenshotPngBase64 = null,
+        )
+    }
+
+    /**
+     * Wie runSlice(), aber ueber den eigenen Server statt lokal - siehe
+     * docs/remote-slicing.md und RemoteSliceClient.swift (iOS-Aequivalent).
+     * Projekt exportieren, hochladen, Fortschritt abfragen, G-Code
+     * herunterladen. Fuellt dieselben [Progress]-Zustaende wie runSlice(),
+     * damit die Oberflaeche keinen zweiten Zustand kennen muss.
+     */
+    private fun runSliceRemote(startId: Int) {
+        val baseUrl = RemoteSliceClient.normalizedBaseURL(remoteSliceHost)
+        if (baseUrl == null) {
+            _progress.value = Progress.Failed(SimpleModeState.text(
+                "No remote server configured.", "Kein Remote-Server eingerichtet."))
+            sliceCommandActive = false
+            stopForeground(STOP_FOREGROUND_REMOVE)
+            stopSelfResult(startId)
+            return
+        }
+        val token = remoteSliceToken
+        invalidateSliceResult()
+        _progress.value = Progress.Running(0, SimpleModeState.text("uploading", "wird hochgeladen"))
+        val t0 = System.nanoTime()
+
+        scope.launch {
+            try {
+                val projectFile = withContext(Dispatchers.IO) { saveProjectFile() }
+                val jobId = withContext(Dispatchers.IO) {
+                    RemoteSliceClient.submitJob(projectFile, baseUrl, token)
+                }
+                pollRemoteJob(jobId, baseUrl, token, t0)
+            } catch (t: Throwable) {
+                val fehler = t.message ?: "unbekannter Fehler"
+                _progress.value = Progress.Failed(fehler)
+                meldeDiagnose(
+                    erfolgreich = false,
+                    sekunden = (System.nanoTime() - t0) / 1_000_000_000.0,
+                    weg = "remote", fehler = fehler,
+                )
+            } finally {
+                sliceCommandActive = false
+                stopForeground(STOP_FOREGROUND_REMOVE)
+                stopSelfResult(latestCommandStartId.coerceAtLeast(startId))
+            }
+        }
+    }
+
+    private suspend fun pollRemoteJob(jobId: String, baseUrl: String, token: String?, t0: Long) {
+        while (true) {
+            if (cancelRequestedByCommand) {
+                _progress.value = Progress.Cancelled
+                return
+            }
+            val state = withContext(Dispatchers.IO) {
+                RemoteSliceClient.fetchStatus(jobId, baseUrl, token)
+            }
+            when (state.status) {
+                "queued" -> _progress.value = Progress.Running(0, SimpleModeState.text(
+                    "waiting in queue", "wartet in der Warteschlange"))
+                "running" -> _progress.value = Progress.Running(state.percent ?: 0, state.stage ?: "")
+                "done" -> {
+                    val out = File(filesDir, "last.gcode")
+                    withContext(Dispatchers.IO) {
+                        RemoteSliceClient.downloadGcode(jobId, baseUrl, token, out)
+                    }
+                    lastGcode = out
+                    val secs = (System.nanoTime() - t0) / 1_000_000_000.0
+                    val stats = state.stats?.let {
+                        PsmCore.SliceStats(
+                            printTimeSeconds = it.printTimeSeconds ?: 0.0,
+                            filamentMm = it.filamentMm ?: 0.0,
+                            filamentGrams = it.filamentG ?: 0.0,
+                            cost = 0.0,
+                            layers = it.layerCount ?: 0,
+                            objects = state.objectCount ?: _objects.value.size,
+                        )
+                    }
+                    _progress.value = Progress.Done(stats, secs)
+                    meldeDiagnose(erfolgreich = true, sekunden = secs, weg = "remote", fehler = null)
+                    return
+                }
+                "failed" -> {
+                    val fehler = state.error ?: SimpleModeState.text(
+                        "Remote slicing failed.", "Remote-Schnitt fehlgeschlagen.")
+                    _progress.value = Progress.Failed(fehler)
+                    meldeDiagnose(
+                        erfolgreich = false,
+                        sekunden = (System.nanoTime() - t0) / 1_000_000_000.0,
+                        weg = "remote", fehler = fehler,
+                    )
+                    return
+                }
+                else -> { /* unbekannter Status - weiter pollen */ }
+            }
+            delay(1000)
         }
     }
 

@@ -473,7 +473,7 @@ private fun SettingsPageRail(
 }
 
 @Composable
-private fun SettingRow(
+internal fun SettingRow(
     core: PsmCore,
     meta: PsmCore.ConfigMeta,
     configRevision: Int,

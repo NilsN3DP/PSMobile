@@ -3865,6 +3865,62 @@ PSM_API psm_result psm_slice_wait(psm_session *s, int timeout_ms)
     PSM_GUARD_END(s)
 }
 
+PSM_API psm_result psm_slice_load_gcode_for_preview(psm_session *s, const char *path)
+{
+    if (s == nullptr)
+        return PSM_ERR_INVALID_ARG;
+    return psm_slice_accept_remote_gcode(
+        s, path, s->design_revision.load(std::memory_order_acquire));
+}
+
+PSM_API uint64_t psm_design_revision(psm_session *s)
+{
+    if (s == nullptr)
+        return 0;
+    return s->design_revision.load(std::memory_order_acquire);
+}
+
+PSM_API psm_result psm_slice_accept_remote_gcode(psm_session *s, const char *path,
+                                                  uint64_t request_revision)
+{
+    PSM_GUARD_BEGIN(s)
+        if (path == nullptr || path[0] == '\0' || request_revision == 0)
+            return PSM_ERR_INVALID_ARG;
+        if (s->design_revision.load(std::memory_order_acquire) != request_revision)
+            return PSM_ERR_STALE_RESULT;
+
+        /*
+         * Derselbe GCodeProcessor, den PrusaSlicer Desktop fuer
+         * "G-Code oeffnen" nutzt (Plater::load_gcode) - er schneidet
+         * nicht, er liest nur die fertige Datei fuer die Vorschau.
+         */
+        Slic3r::GCodeProcessor processor;
+        processor.process_file(path);
+        auto processor_result = std::make_shared<Slic3r::GCodeProcessorResult>(
+            processor.extract_result());
+        FinalPreviewData preview = final_preview_data(*processor_result);
+
+        std::lock_guard<std::recursive_mutex> data_lock(s->data_mtx);
+        if (s->design_revision.load(std::memory_order_acquire) != request_revision)
+            return PSM_ERR_STALE_RESULT;
+        {
+            std::lock_guard<std::mutex> result_lock(s->result_mtx);
+            /* gcode_tmp_path bleibt unberuehrt: die Datei gehoert der
+             * App-Seite (Downloadziel des Remote-Slice), nicht dem Kern -
+             * der raeumt gcode_tmp_path bei der naechsten Aenderung weg,
+             * das darf die heruntergeladene Datei nicht treffen. */
+            s->preview_result = std::move(processor_result);
+            s->preview_snapshot = preview.snapshot;
+            s->preview_layers = std::move(preview.layers);
+            s->preview_extruders = std::move(preview.extruders);
+            s->preview_roles = std::move(preview.roles);
+        }
+        s->result_revision.store(request_revision, std::memory_order_release);
+        s->state.store(PSM_STATE_DONE, std::memory_order_release);
+        return PSM_OK;
+    PSM_GUARD_END(s)
+}
+
 PSM_API psm_result psm_slice_stats_get(psm_session *s, psm_slice_stats *out)
 {
     PSM_GUARD_BEGIN(s)

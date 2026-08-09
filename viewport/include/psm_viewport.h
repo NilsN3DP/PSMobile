@@ -51,6 +51,39 @@ PSM_API void psm_viewport_reset_view(psm_viewport *v);
 /** Feste Blickrichtung: 0 iso, 1 oben, 2 vorne, 3 hinten, 4 links, 5 rechts. */
 PSM_API void psm_viewport_view_preset(psm_viewport *v, int which);
 
+/* --- Mehrbett -------------------------------------------------------
+ *
+ * Aus: nur das aktive Bett steht im sichtbaren Raum, wie bisher. Der
+ * Kern kennt die Versaetze aller Betten laengst (siehe psm_bed_*), nur
+ * der Viewport hat sie nie gezeichnet.
+ *
+ * An: alle Betten liegen raeumlich versetzt in derselben Szene, wie
+ * PrusaSlicers Mehrplatten-Ansicht. Kostet mehr Geometrie und
+ * Strahltests pro Bild - deshalb ein eigener Schalter statt
+ * Standardverhalten. Auf schwacher Hardware bleibt Aus die guenstigere
+ * Wahl. Ein Tipp auf ein Objekt eines anderen Betts macht dieses Bett
+ * aktiv, wie ein Wechsel ueber den Bettwaehler. */
+PSM_API void psm_viewport_set_multi_bed_render(psm_viewport *v, int32_t enabled);
+
+/**
+ * Schwenkt die Kamera zum Mittelpunkt des angegebenen Betts und zoomt
+ * so, dass genau dieses Bett das Bild fuellt - derselbe enge Fit wie
+ * beim allerersten Kamerastand. Bei ausgeschaltetem Mehrbett-Modus
+ * liegt jedes Bett ohnehin am selben Ursprung; dort bewegt sich nichts.
+ */
+PSM_API void psm_viewport_focus_bed(psm_viewport *v, int32_t bed_index);
+
+/**
+ * Bildschirmposition fuer ein Namensschild am jeweiligen Bett in der
+ * raeumlichen Mehrbett-Darstellung - eine Ecke der Druckflaeche, leicht
+ * nach innen versetzt. `position` ist dieselbe Schleifenposition wie
+ * beim Zeichnen (0 .. Bettanzahl), nicht zwingend der echte Bettindex.
+ * @return 0 wenn kein Mehrbett-Modus aktiv ist oder das Bett hinter der
+ *         Kamera liegt, sonst 1.
+ */
+PSM_API int psm_viewport_bed_label_anchor(
+    psm_viewport *v, int32_t position, float *out_x, float *out_y);
+
 /* --- Auswahl ------------------------------------------------------ */
 
 /** Strahltest an Bildschirmposition. Liefert die Objekt-ID oder PSM_INVALID_ID. */
@@ -270,8 +303,24 @@ PSM_API int psm_viewport_load_preview(psm_viewport *v);
 
 PSM_API int32_t psm_viewport_layer_count(psm_viewport *v);
 
-/** Sichtbaren Layerbereich setzen, wie der Slider im Desktop. */
+/** Sichtbaren Layerbereich setzen, wie der linke Regler im Desktop. */
 PSM_API void psm_viewport_set_layer_range(psm_viewport *v, int32_t first, int32_t last);
+
+/**
+ * Die Grenzen des Werkzeugweg-Bereichs innerhalb der gerade sichtbaren
+ * Schicht(en) - wie der untere "Moves"-Regler im Desktop, der durch
+ * eine einzelne Schicht scrubt statt zwischen Schichten zu wechseln.
+ * Aendert sich der Layerbereich (psm_viewport_set_layer_range), aendern
+ * sich auch diese Grenzen - deshalb vor jedem Aufbau des unteren
+ * Reglers neu abfragen.
+ *
+ * @return 0 wenn kein G-Code geladen ist, sonst 1.
+ */
+PSM_API int psm_viewport_move_range_bounds(
+    psm_viewport *v, int32_t *out_min, int32_t *out_max);
+
+/** Sichtbaren Werkzeugweg-Bereich setzen, wie der untere Regler im Desktop. */
+PSM_API void psm_viewport_set_move_range(psm_viewport *v, int32_t first, int32_t last);
 
 /** Farbsicht und Touch-Filter der finalen Werkzeugwege. */
 PSM_API void psm_viewport_set_preview_view(psm_viewport *v,

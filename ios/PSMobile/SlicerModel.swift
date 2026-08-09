@@ -40,10 +40,36 @@ final class SlicerModel: ObservableObject {
     /// die Datei muss erst existieren, bevor das Teilen-Blatt sie
     /// weiterreichen kann.
     @Published private(set) var gcodeURL: URL?
+    /// Ob das gerade angezeigte Ergebnis von einem Remote-Slice stammt.
+    /// core?.sliceResultIsCurrent ist eine rein lokale Pruefung - beim
+    /// Remote-Slicing lief nie ein lokaler psm_slice_start, also ist sie
+    /// danach IMMER false. Ohne dieses Flag faellt die Advanced-
+    /// Oberflaeche nach jedem erfolgreichen Remote-Slice zurueck auf
+    /// den Slice-Knopf, obwohl die Datei laengst fertig ist - genau der
+    /// Feldbericht ("sieht aus, als wuerde er am Ende abbrechen").
+    @Published private(set) var lastSliceWasRemote = false
+    /// Bei "Alle Betten schneiden": eine Datei je Bett mit Objekten.
+    /// Bei einem einzelnen Schnitt enthaelt sie nur gcodeURL.
+    @Published private(set) var gcodeURLs: [URL] = []
+    /// Waehrend "Alle Betten schneiden" laeuft: welches Bett gerade dran
+    /// ist, von wie vielen insgesamt.
+    @Published private(set) var sliceAllProgress: (bed: Int, total: Int)?
+    /// Steigt bei jedem Bettwechsel - der Viewport schwenkt dann dorthin,
+    /// auch im Mehrbett-Modus. Ein reiner Zaehler wie resetViewKey, weil
+    /// SwiftUI ein Ereignis sonst nicht ausdruecken kann.
+    @Published private(set) var focusBedKey: Int = 0
 
     /// Das gesicherte Projekt als Datei - dieselbe Ueberlegung wie beim
     /// G-Code: erst schreiben, dann teilen.
     @Published private(set) var projectURL: URL?
+    /// sceneRevision beim letzten Sichern (oder beim letzten Laden/
+    /// Neuanlegen) - der Vergleich mit dem aktuellen sceneRevision
+    /// entscheidet, ob "Speichern?" beim Verlassen noetig ist.
+    private var savedRevision: Int = 0
+    /// Ob es etwas zu verlieren gibt, wenn man jetzt verlaesst - kein
+    /// Betteltrick, sondern derselbe sceneRevision-Zaehler, der auch
+    /// den Viewport ueber Aenderungen informiert.
+    var hasUnsavedChanges: Bool { !objects.isEmpty && sceneRevision != savedRevision }
     /// Alle ausgewaehlten Objekte. `selectedId` ist das Hauptobjekt
     /// darin - an ihm haengen die Griffe, und auf es beziehen sich die
     /// Zahlen im Inspektor.
@@ -64,6 +90,7 @@ final class SlicerModel: ObservableObject {
 
     /// Siehe filamentCatalog() - einmal holen reicht.
     private var filamentCache: [FilamentCatalog.Entry]?
+    private var compatibleFilamentCache: Set<String>?
 
     /// Was beim Oeffnen eines Projekts anders lief als darin stand.
     /// Bleibt stehen, bis der Nutzer es weggeklickt hat.
@@ -107,6 +134,19 @@ final class SlicerModel: ObservableObject {
     private(set) var core: PsmCore?
     private var sliceTask: Task<Void, Never>?
     private var backgroundTask: UIBackgroundTaskIdentifier = .invalid
+
+    /// Ob "Slice now" auf den eigenen Server statt lokal zielt - siehe
+    /// docs/remote-slicing.md. Persistiert wie jede andere Werkzeugwahl.
+    @Published var remoteSliceEnabled: Bool =
+        UserDefaults.standard.bool(forKey: SlicerModel.remoteSliceEnabledKey) {
+        didSet {
+            UserDefaults.standard.set(remoteSliceEnabled, forKey: Self.remoteSliceEnabledKey)
+        }
+    }
+    static let remoteSliceEnabledKey = "remote.slice.enabled"
+    static let remoteSliceHostKey = "remote.slice.host"
+
+    private let remoteClient = RemoteSliceClient()
     @Published private(set) var credentialSelfTestResult: String?
 
     func start() {
@@ -372,6 +412,15 @@ final class SlicerModel: ObservableObject {
         core?.extruderColor(index) ?? ""
     }
 
+    func wipeTower() -> (x: Float, y: Float, rotationDeg: Float)? {
+        core?.wipeTower()
+    }
+
+    func setWipeTower(x: Float, y: Float, rotationDeg: Float) {
+        try? core?.setWipeTower(x: x, y: y, rotationDeg: rotationDeg)
+        sceneRevision += 1
+    }
+
     func setExtruderColor(_ index: Int, _ hex: String) {
         try? core?.setExtruderColor(index, hex)
         sceneRevision += 1
@@ -435,6 +484,12 @@ final class SlicerModel: ObservableObject {
     /// weil die Karten mit dem Namen arbeiten und die Reihenfolge sich
     /// beim Filtern/Suchen sonst verschieben wuerde.
     func compatibleFilamentNames() -> Set<String> {
+        // Gemerkt wie filamentCache direkt darunter: sonst ein
+        // Kernaufruf je Profil bei jedem Tastendruck im Suchfeld - bei
+        // vierhundert Profilen war das Filament-Blatt spuerbar traege.
+        // Ungueltig wird der Cache dort, wo auch filamentCache es wird
+        // (selectPreset bei .printer) - andere Duese, andere Kompatibilitaet.
+        if let gemerkt = compatibleFilamentCache { return gemerkt }
         guard let core else { return [] }
         let namen = core.presetNames(.filament)
         var ergebnis = Set<String>()
@@ -442,6 +497,7 @@ final class SlicerModel: ObservableObject {
         where core.presetCompatible(.filament, at: index) {
             ergebnis.insert(name)
         }
+        compatibleFilamentCache = ergebnis
         return ergebnis
     }
 
@@ -542,11 +598,36 @@ final class SlicerModel: ObservableObject {
     }
 
     func selectPreset(_ type: PsmCore.PresetType, _ name: String) {
+        if type == .filament {
+            // NICHT psm_preset_select fuer Filament: das setzt nur die
+            // "Editor"-Auswahl der flachen Sammlung. PrusaSlicer haelt
+            // die tatsaechlich wirksame Filamentwahl separat je Extruder
+            // (extruders_filaments) und gleicht sie beim naechsten
+            // update_compatible() wieder an DIESEN Zustand an - eine
+            // ueber selectPreset() gesetzte Wahl wird dabei lautlos
+            // rueckgaengig gemacht, sobald sie zum Drucker "unpassend"
+            // markiert ist (gefunden ueber den Selbsttest: auf einem
+            // Prusa XL landete "Prusament PLA" nie, sondern immer ein
+            // unbeteiligtes Ersatzfilament).
+            //
+            // psm_extruder_filament_set (hier: Extruder 0, derselbe wie
+            // die "editierte" Sammlung) macht es wie PrusaSlicers eigenes
+            // GUI_App::select_filament_preset: erst das Preset sichtbar
+            // machen, dann ueber extruders_filaments[0] auswaehlen. Das
+            // ist der richtige Weg fuer JEDEN Drucker, nicht nur fuer
+            // mehrere Extruder - beim MK4S faellt der Unterschied nur
+            // nie auf, weil dort ohnehin nur ein Extruder existiert.
+            try? core?.setExtruderFilament(0, name)
+            sceneRevision += 1
+            refresh()
+            return
+        }
         try? core?.selectPreset(type, name)
         // Ein anderer Drucker heisst andere passende Filamente - der
         // gemerkte Katalog gilt dann nicht mehr.
         if type == .printer {
             filamentCache = nil
+            compatibleFilamentCache = nil
             // Und die bisherige Filamentwahl passt womoeglich nicht mehr.
             // Also unsere Standardwerte erneut anwenden - sie kennen die
             // neue Liste.
@@ -579,6 +660,19 @@ final class SlicerModel: ObservableObject {
             do {
                 try core.installPrinters(keys)
                 await MainActor.run {
+                    // Nach dem Installieren steht noch kein Drucker als
+                    // "aktuell" fest - das entscheidet PrusaSlicers eigene
+                    // update_compatible()-Logik intern, nicht zwingend
+                    // einer der gerade gewaehlten. Die Filament-Vorauswahl
+                    // gleich danach fragt aber genau nach dessen
+                    // kompatiblen Filamenten - ohne diese Zeile war das
+                    // Ergebnis (welches Filament als "kompatibel" gilt)
+                    // vom internen Zufall abhaengig, nicht vom Setup.
+                    if let druckername = self.core?.presetNames(.printer).first(where: {
+                        self.core?.presetOption(.printer, $0, "printer_technology") != "SLA"
+                    }) ?? self.core?.presetNames(.printer).first {
+                        try? self.core?.selectPreset(.printer, druckername)
+                    }
                     self.standardwerteSetzen()
                     // Erst merken, dann als erledigt melden - sonst steht
                     // beim naechsten Start wieder die Einrichtung da.
@@ -685,6 +779,7 @@ final class SlicerModel: ObservableObject {
             let info = try core.loadProject(path: ziel.path)
             projectNotice = Self.hinweis(zu: info)
             refresh()
+            savedRevision = sceneRevision
         } catch {
             progress = .failed(error.localizedDescription)
         }
@@ -727,6 +822,14 @@ final class SlicerModel: ObservableObject {
             .map { $0 }
     }
 
+    /// Ein gesichertes Projekt von der Platte entfernen - fuer "alte
+    /// Projekte aufraeumen" in der Liste. Betrifft nur die Datei, nicht
+    /// den gerade offenen Stand: wer sein aktuelles Projekt loescht,
+    /// arbeitet unbeeindruckt weiter, bis er selbst neu sichert.
+    func deleteProject(_ url: URL) {
+        try? FileManager.default.removeItem(at: url)
+    }
+
     /// Leeres Bett. Der vorherige Stand bleibt zuruecknehmbar - ein
     /// versehentliches "Neu" darf keine Stunde Arbeit kosten.
     func newProject() {
@@ -736,6 +839,7 @@ final class SlicerModel: ObservableObject {
         projectNotice = nil
         select(nil)
         refresh()
+        savedRevision = sceneRevision
     }
 
     /// Was auf welcher Hoehe passiert - Farbwechsel, Pause, eigener Code.
@@ -836,6 +940,7 @@ final class SlicerModel: ObservableObject {
         do {
             try core.saveProject(path: url.path)
             projectURL = url
+            savedRevision = sceneRevision
         } catch {
             projectURL = nil
             // Der Kern nennt nur die Tat, PrusaSlicer den Grund. Beides
@@ -978,12 +1083,22 @@ final class SlicerModel: ObservableObject {
         refresh()
     }
 
+    /// Bett des Projekts, das gerade aktiv ist - 0, solange keins als
+    /// aktiv gemeldet ist (kann bei leerem Projekt kurz vorkommen).
+    var activeBedIndex: Int32 {
+        Int32(beds.first(where: \.active)?.index ?? 0)
+    }
+
     func selectBed(_ index: Int) {
         try? core?.selectBed(index)
         // Ein anderes Bett heisst andere Objekte und eine andere
         // Ansicht - die Auswahl von vorhin gibt es dort nicht.
         selectedId = nil
         sceneRevision += 1
+        // Der Viewport soll dorthin schauen, wohin man gerade gewechselt
+        // hat - sonst bleibt die Kamera im Mehrbett-Modus immer auf dem
+        // ersten Bett stehen, egal welches man antippt.
+        focusBedKey += 1
         refresh()
     }
 
@@ -1235,11 +1350,15 @@ final class SlicerModel: ObservableObject {
     /// Keine zwischengespeicherte Swift-Kopie: so kann eine neue
     /// Designrevision nie versehentlich den alten Preview-Wert zeigen.
     func previewSnapshot() -> PsmCore.PreviewSnapshot? {
-        guard sliceResultIsCurrent else { return nil }
+        guard sliceResultIsCurrent || lastSliceWasRemote else { return nil }
         return core?.previewSnapshot()
     }
 
     func slice() {
+        if remoteSliceEnabled {
+            sliceRemote()
+            return
+        }
         guard let core, sliceTask == nil else { return }
 
         // Ohne diesen Antrag beendet iOS die Rechenarbeit, sobald die App
@@ -1255,6 +1374,7 @@ final class SlicerModel: ObservableObject {
         // teilt eine Datei, die zu dem, was auf dem Bett liegt, nicht
         // mehr passt.
         gcodeURL = nil
+        let requestRevision = core?.designRevision() ?? 0
         let t0 = Date()
 
         sliceTask = Task.detached(priority: .userInitiated) { [weak self] in
@@ -1279,8 +1399,20 @@ final class SlicerModel: ObservableObject {
                             printMinutes: Int((st?.printTimeSeconds ?? 0) / 60),
                             grams: st?.filamentGrams ?? 0
                         )
+                        self?.lastSliceWasRemote = false
+                        DiagnosticsReporter.nachSlice(.init(
+                            erfolgreich: true, sekunden: secs,
+                            dreiecke: self?.objects.reduce(0) { $0 + $1.triangles } ?? 0,
+                            weg: "local", fehler: nil),
+                            projektname: self?.objects.first?.name)
                     case .cancelled: self?.progress = .cancelled
-                    default:         self?.progress = .failed(core.lastError)
+                    default:
+                        self?.progress = .failed(core.lastError)
+                        DiagnosticsReporter.nachSlice(.init(
+                            erfolgreich: false, sekunden: secs,
+                            dreiecke: self?.objects.reduce(0) { $0 + $1.triangles } ?? 0,
+                            weg: "local", fehler: core.lastError),
+                            projektname: self?.objects.first?.name)
                     }
                     self?.finishSlice()
                 }
@@ -1293,8 +1425,264 @@ final class SlicerModel: ObservableObject {
         }
     }
 
+    /// Wie slice(), aber ueber den eigenen Server statt lokal - siehe
+    /// docs/remote-slicing.md. Projekt sichern (dieselbe Funktion wie
+    /// "Projekt sichern" im Menue), hochladen, Fortschritt abfragen,
+    /// G-Code herunterladen. Fuellt dieselben veroeffentlichten Felder
+    /// wie der lokale Weg (progress/stats/gcodeURL), damit die
+    /// Oberflaeche keinen zweiten Zustand kennen muss.
+    private func sliceRemote() {
+        guard sliceTask == nil else { return }
+        guard let basis = RemoteSliceClient.normalizedBaseURL(
+            from: UserDefaults.standard.string(forKey: Self.remoteSliceHostKey) ?? "")
+        else {
+            progress = .failed(SimpleModeState.shared.text(
+                english: "No remote server configured.",
+                german: "Kein Remote-Server eingerichtet."))
+            return
+        }
+        let token = try? RemoteSliceCredentialStore().load()
+
+        backgroundTask = UIApplication.shared.beginBackgroundTask(
+            withName: "psm-slice-remote") { [weak self] in
+            self?.cancel()
+        }
+        progress = .running(percent: 0, stage: SimpleModeState.shared.text(
+            english: "uploading", german: "wird hochgeladen"))
+        stats = nil
+        gcodeURL = nil
+
+        saveProject()
+        guard let projektURL = projectURL else {
+            progress = .failed(SimpleModeState.shared.text(
+                english: "Could not export the project.",
+                german: "Projekt ließ sich nicht exportieren."))
+            finishSlice()
+            return
+        }
+
+        let t0 = Date()
+        sliceTask = Task.detached(priority: .userInitiated) { [weak self] in
+            guard let self else { return }
+            do {
+                let jobId = try await self.remoteClient.submitJob(
+                    projectFileURL: projektURL, baseURL: basis, token: token)
+                try await self.remotePollLoop(
+                    jobId: jobId, baseURL: basis, token: token, t0: t0,
+                    requestRevision: requestRevision)
+            } catch {
+                await MainActor.run {
+                    self.progress = Task.isCancelled
+                        ? .cancelled : .failed(error.localizedDescription)
+                    self.finishSlice()
+                }
+            }
+        }
+    }
+
+    private func remotePollLoop(
+        jobId: String, baseURL: URL, token: String?, t0: Date,
+        requestRevision: UInt64
+    ) async throws {
+        while !Task.isCancelled {
+            let stand = try await remoteClient.fetchStatus(
+                jobId: jobId, baseURL: baseURL, token: token)
+            switch stand.status {
+            case "queued":
+                await MainActor.run {
+                    self.progress = .running(percent: 0, stage: SimpleModeState.shared.text(
+                        english: "waiting in queue", german: "wartet in der Warteschlange"))
+                }
+            case "running":
+                await MainActor.run {
+                    self.progress = .running(
+                        percent: stand.percent ?? 0, stage: stand.stage ?? "")
+                }
+            case "done":
+                // suggestedGcodeName() fragt den lokalen Kern nach dem
+                // letzten LOKALEN Slice-Ergebnis - beim Remote-Schneiden
+                // gab es nie eines, der Kern meldet dann "veraltet"
+                // (sichtbar im Protokoll). Deshalb hier direkt ueber
+                // SliceSummary benennen, ohne den Kern zu fragen. Der
+                // Zugriff auf `objects` gehoert ausserdem auf den
+                // Hauptthread - remotePollLoop laeuft ohne @MainActor im
+                // Hintergrund-Task von sliceRemote().
+                let name = await MainActor.run {
+                    SliceSummary.shared.fileName(project: self.objects.first?.name ?? "")
+                }
+                let ziel = FileManager.default.temporaryDirectory
+                    .appendingPathComponent(name)
+                try? FileManager.default.removeItem(at: ziel)
+                try await remoteClient.downloadGcode(
+                    jobId: jobId, baseURL: baseURL, token: token, to: ziel)
+                let secs = Date().timeIntervalSince(t0)
+                await MainActor.run {
+                    self.gcodeURL = ziel
+                    // Speist die heruntergeladene Datei in dieselbe
+                    // Vorschau wie ein lokaler Schnitt ein. Schlaegt das
+                    // fehl (kaputte Datei, o.ae.), bleibt die Vorschau
+                    // leer statt die restliche Anzeige zu blockieren -
+                    // Export und Senden haengen nicht daran.
+                    try? self.core?.acceptRemoteGcode(
+                        path: ziel.path, requestRevision: requestRevision)
+                    self.progress = .done(
+                        seconds: secs,
+                        printMinutes: Int((stand.stats?.printTimeSeconds ?? 0) / 60),
+                        grams: stand.stats?.filamentG ?? 0)
+                    self.lastSliceWasRemote = true
+                    // Der Server liefert Zeit/Gewicht direkt mit - anders als
+                    // beim lokalen Schnitt setzt hier aber nie
+                    // psm_slice_wait self.stats, darum blieb die
+                    // Seitenleisten-Zusammenfassung (abschluss) nach jedem
+                    // Remote-Schnitt leer. Kosten kennt nur der lokale Kern
+                    // (aus dem Filamentpreis-Profil) - hier nur fuer den
+                    // ersten Extruder genaehert, mehrfarbige Projekte
+                    // koennen leicht daneben liegen.
+                    let kostenProKg = Double(
+                        self.core?["filament_cost"]?
+                            .split(separator: ",").first.map(String.init) ?? "0") ?? 0
+                    let gramm = stand.stats?.filamentG ?? 0
+                    self.stats = PsmCore.SliceStats(
+                        printTimeSeconds: stand.stats?.printTimeSeconds ?? 0,
+                        filamentMm: stand.stats?.filamentMm ?? 0,
+                        filamentGrams: gramm,
+                        cost: kostenProKg * gramm / 1000,
+                        objects: self.objects.count)
+                    DiagnosticsReporter.nachSlice(.init(
+                        erfolgreich: true, sekunden: secs,
+                        dreiecke: self.objects.reduce(0) { $0 + $1.triangles },
+                        weg: "remote", fehler: nil),
+                        projektname: self.objects.first?.name)
+                    self.finishSlice()
+                }
+                return
+            case "failed":
+                await MainActor.run {
+                    self.progress = .failed(stand.error ?? SimpleModeState.shared.text(
+                        english: "Slicing failed on the server.",
+                        german: "Slicen ist auf dem Server fehlgeschlagen."))
+                    DiagnosticsReporter.nachSlice(.init(
+                        erfolgreich: false, sekunden: Date().timeIntervalSince(t0),
+                        dreiecke: self.objects.reduce(0) { $0 + $1.triangles },
+                        weg: "remote", fehler: stand.error),
+                        projektname: self.objects.first?.name)
+                    self.finishSlice()
+                }
+                return
+            default:
+                break
+            }
+            try await Task.sleep(nanoseconds: 800_000_000)
+        }
+        // Schleife nur wegen Abbruch verlassen - kein Zweig im switch
+        // oben hat sonst zurueckgekehrt.
+        await MainActor.run {
+            self.progress = .cancelled
+            self.finishSlice()
+        }
+    }
+
+    /// Schneidet nacheinander jedes Bett mit Objekten und legt je eine
+    /// G-Code-Datei an. Die Ansicht bleibt am Ende wieder beim Bett, von
+    /// dem aus aufgerufen wurde - wer "alle Betten" tippt, will nicht
+    /// nebenbei auch noch woanders landen.
+    func sliceAll() {
+        guard let core, sliceTask == nil else { return }
+        let ziele = beds.filter { $0.objectCount > 0 }.map(\.index)
+        guard !ziele.isEmpty else { return }
+        let ausgangsbett = Int(activeBedIndex)
+
+        backgroundTask = UIApplication.shared.beginBackgroundTask(withName: "psm-slice-all") { [weak self] in
+            self?.cancel()
+        }
+        progress = .running(percent: 0, stage: "wird vorbereitet")
+        stats = nil
+        gcodeURL = nil
+        gcodeURLs = []
+        sliceAllProgress = (0, ziele.count)
+
+        sliceTask = Task.detached(priority: .userInitiated) { [weak self] in
+            guard let self else { return }
+            var dateien: [URL] = []
+            var summeSekunden = 0.0
+            var summeGramm = 0.0
+
+            for (i, bettIndex) in ziele.enumerated() {
+                await MainActor.run {
+                    self.selectBed(bettIndex)
+                    self.sliceAllProgress = (i + 1, ziele.count)
+                    self.progress = .running(
+                        percent: 0,
+                        stage: "Bett \(i + 1)/\(ziele.count)")
+                }
+                do {
+                    try core.startSlice { percent, stage in
+                        Task { @MainActor in
+                            self.progress = .running(
+                                percent: percent,
+                                stage: "Bett \(i + 1)/\(ziele.count): \(stage)")
+                        }
+                        return false
+                    }
+                    let zustand = core.awaitSlice()
+                    switch zustand {
+                    case .done:
+                        let st = core.sliceStats()
+                        summeSekunden += st?.printTimeSeconds ?? 0
+                        summeGramm += st?.filamentGrams ?? 0
+                        if let url = await MainActor.run(body: {
+                            self.writeGcodeAside(bettIndex: bettIndex)
+                        }) {
+                            dateien.append(url)
+                        }
+                    case .cancelled:
+                        await MainActor.run {
+                            self.progress = .cancelled
+                            self.selectBed(ausgangsbett)
+                            self.sliceAllProgress = nil
+                            self.finishSlice()
+                        }
+                        return
+                    default:
+                        await MainActor.run {
+                            self.progress = .failed(core.lastError)
+                            self.selectBed(ausgangsbett)
+                            self.sliceAllProgress = nil
+                            self.finishSlice()
+                        }
+                        return
+                    }
+                } catch {
+                    await MainActor.run {
+                        self.progress = .failed(error.localizedDescription)
+                        self.selectBed(ausgangsbett)
+                        self.sliceAllProgress = nil
+                        self.finishSlice()
+                    }
+                    return
+                }
+            }
+
+            await MainActor.run {
+                self.selectBed(ausgangsbett)
+                self.gcodeURLs = dateien
+                self.gcodeURL = dateien.first
+                self.sliceAllProgress = nil
+                self.progress = .done(
+                    seconds: summeSekunden,
+                    printMinutes: Int(summeSekunden / 60),
+                    grams: summeGramm)
+                self.finishSlice()
+            }
+        }
+    }
+
     func cancel() {
         core?.cancelSlice()
+        // Wirkt nur beim entfernten Weg (die lokale Schleife wartet auf
+        // core.cancelSlice(), nicht auf die Task-Abbruchpruefung) - dort
+        // ist es die einzige Bremse, siehe remotePollLoop().
+        sliceTask?.cancel()
     }
 
     func exportGcode(to url: URL) throws {
@@ -1320,6 +1708,28 @@ final class SlicerModel: ObservableObject {
             gcodeURL = url
         } catch {
             gcodeURL = nil
+        }
+    }
+
+    /// Wie writeGcode(), aber fuer "Alle Betten schneiden": der
+    /// Bettname steht im Dateinamen, damit man am Drucker noch weiss,
+    /// welche Datei zu welchem Bett gehoert - und nichts wird
+    /// ueberschrieben, waehrend die Schleife laeuft.
+    private func writeGcodeAside(bettIndex: Int) -> URL? {
+        guard let core else { return nil }
+        let basis = Self.dateiname(suggestedGcodeName())
+            ?? SliceSummary.shared.fileName(project: objects.first?.name ?? "")
+        let endung = (basis as NSString).pathExtension
+        let stamm = (basis as NSString).deletingPathExtension
+        let bettname = bedLabel(bettIndex).replacingOccurrences(of: " ", with: "-")
+        let name = "\(stamm)-\(bettname).\(endung)"
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent(name)
+        try? FileManager.default.removeItem(at: url)
+        do {
+            try core.exportGcode(to: url.path)
+            return url
+        } catch {
+            return nil
         }
     }
 

@@ -1,0 +1,6 @@
+source_worktree=//localunraid/n3dp/KI Projekte/PSMobile
+source_base_commit=61c1b47
+sidebuild_base_commit=016b1d8
+manifest=docs/qa/sidebuild-baseline-manifest.txt
+content_hashes=docs/qa/sidebuild-baseline-source.sha256
+credential_policy=redacted_before_commit

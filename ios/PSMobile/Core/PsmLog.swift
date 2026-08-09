@@ -33,6 +33,18 @@ enum PsmLog {
         return puffer
     }
 
+    /// Wie `aufnehmen`, aber fuer Swift-eigenen Code statt fuer den
+    /// Kern-Callback - Netzwerk-Code (RemoteSliceClient,
+    /// DiagnosticsReporter) soll denselben Weg nutzen wie der Kern,
+    /// nicht `print()`. Ein stillschweigend verschlucktes `try?` war
+    /// heute Nacht der Grund, warum ein 401 beim Diagnose-Upload
+    /// unsichtbar blieb - mit `notiz()` an derselben Stelle waere das
+    /// sofort im Protokoll-Export und im naechsten Diagnose-Bericht
+    /// aufgetaucht, ganz ohne eigens eingebaute Debug-Zeilen.
+    static func notiz(_ stufe: psm_log_level, _ text: String) {
+        aufnehmen(stufe, text)
+    }
+
     static func clear() {
         sperre.lock(); puffer.removeAll(); sperre.unlock()
     }
@@ -49,5 +61,10 @@ enum PsmLog {
         puffer.append(text)
         if puffer.count > 40 { puffer.removeFirst(puffer.count - 40) }
         sperre.unlock()
+        // Auch auf die Platte - der Ringpuffer stirbt mit dem Prozess,
+        // die Absturzfrage beim naechsten Start braucht aber genau das,
+        // was der vorige Prozess zuletzt gesehen hat.
+        let vorsilbe = stufe == PSM_LOG_ERROR ? "FEHLER" : "WARN"
+        LogExport.append("[\(vorsilbe)] \(text)")
     }
 }

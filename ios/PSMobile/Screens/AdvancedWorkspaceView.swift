@@ -38,11 +38,21 @@ struct AdvancedWorkspaceView: View {
     /// Zurueck in die Ersteinrichtung - der Weg zu einem weiteren Drucker.
     var onPrinterSetup: () -> Void = {}
     var onSettings: (String) -> Void = { _ in }
+    /// Erklaerung/Einrichtung von Remote Slicing - siehe
+    /// docs/remote-slicing.md und den Umschalter in schneidenKnopf.
+    var onRemoteSettings: () -> Void = {}
 
     @Environment(\.psScale) private var ps
     @State private var zeigeImporter = false
     @State private var hinderungsgruende: [String] = []
     @State private var gizmo: PsmViewport.Gizmo = .move
+    /// @AppStorage statt der eigenen AppSettingsStore-Instanz: das
+    /// erzwingt zuverlaessig ein Redraw dieser Ansicht, sobald sich der
+    /// Wert in UserDefaults aendert - auch wenn diese Ansicht waehrend
+    /// des Besuchs der App-Einstellungen weiter im Hintergrund lebt und
+    /// aus eigenem Antrieb sonst nicht neu zeichnet.
+    @AppStorage(AppSettings.shared.KEY_MULTI_BED_RENDER)
+    private var multiBedRenderGespeichert: Bool = true
     @State private var seiteOffen = true
     @State private var zeigeDrucker = false
     @State private var zeigeMaterial = false
@@ -95,6 +105,14 @@ struct AdvancedWorkspaceView: View {
     @State private var aufFlaeche = false
     @State private var finalPreview: PsmCore.PreviewSnapshot?
     @State private var previewRange = PreviewRange(layerCount: 0)
+    /// Grenzen des Werkzeugweg-Bereichs der aktuell sichtbaren
+    /// Schicht(en) - kommt vom Kern (`onMoveRangeBounds`), nicht vom
+    /// Nutzer gesetzt. Aendert sich mit jeder Aenderung des
+    /// Schichtbereichs, weil dann eine andere Anzahl Werkzeugwege
+    /// sichtbar ist.
+    @State private var moveRangeGrenzen: ClosedRange<Int32>?
+    @State private var moveRangeUnten: Int32 = 0
+    @State private var moveRangeOben: Int32 = 0
     @State private var previewView: PsmViewport.PreviewView = .feature
     @State private var hiddenPreviewRoles:
         Set<PsmCore.PreviewFeatureRole> = []
@@ -106,6 +124,21 @@ struct AdvancedWorkspaceView: View {
 
     /// Wofuer der Dateiwaehler gerade offen ist.
     private enum Zweck { case modell, projekt }
+    @State private var zeigeAlleProjekte = false
+    @State private var zeigeSpeichernName = false
+    @State private var speichernName = ""
+    @State private var zeigeVerlassenNachfrage = false
+
+    /// Vor dem Verlassen fragen, wenn es etwas zu verlieren gibt - ein
+    /// zweites Tippen auf "Advanced" von der Startseite legt sonst
+    /// stillschweigend ein neues, leeres Projekt an.
+    private func nachHauseGehen() {
+        if model.hasUnsavedChanges {
+            zeigeVerlassenNachfrage = true
+        } else {
+            onHome()
+        }
+    }
     @State private var ansichtZuruecksetzen = 0
 
     /// Dieselben Optionen steuern Bedienung, Kern und Viewport.
@@ -120,6 +153,24 @@ struct AdvancedWorkspaceView: View {
     /// fuers iPhone gedacht war.
     private var schmal: Bool {
         UIDevice.current.userInterfaceIdiom != .pad && ps.windowSize.width < 760
+    }
+
+    /// Experimentelles Layout (siehe App-Einstellungen, Gruppe
+    /// "Experimentell"): im Hochformat die Leiste unten andocken statt
+    /// rechts, damit das Bett die volle Breite behaelt. Nur im
+    /// Hochformat wirksam - im Querformat bleibt die rechte Leiste, dort
+    /// gibt es die Enge nicht, die diesen Umbau motiviert.
+    @AppStorage(AppSettings.shared.KEY_PLUGIN_REMOTE_SLICE)
+    private var remoteSlicePluginAn = true
+
+    @AppStorage(AppSettings.shared.KEY_PORTRAIT_BOTTOM_BAR)
+    private var leisteUntenExperimentell: Bool = false
+    // War auf "!schmal" beschraenkt - also nie auf einem iPhone, das
+    // fast immer schmal ist. Der Schalter in den Einstellungen wirkte
+    // dort dann ueberhaupt nicht, obwohl er aktiviert war. Aufs Hochformat
+    // (Bett-UI wichtiger als Breite) kommt es an, nicht auf schmal/breit.
+    private var leisteUnten: Bool {
+        leisteUntenExperimentell && ps.windowSize.height > ps.windowSize.width
     }
 
     /// Die Seitenleiste beansprucht auf breiten Geraeten diesen Teil der
@@ -157,7 +208,7 @@ struct AdvancedWorkspaceView: View {
                     arbeitsflaeche
                     ansichtsleiste
                 }
-                if seiteOffen && !schmal {
+                if seiteOffen && !schmal && !leisteUnten {
                     Divider().overlay(PrusaColors.divider)
                     // Hoechstens zwei Fuenftel der Breite: darunter
                     // bleibt vom Bett nichts uebrig, und darum geht es
@@ -165,59 +216,8 @@ struct AdvancedWorkspaceView: View {
                     seitenleiste.frame(width: seitenleistenbreite)
                 }
             }
-            if vorschau, let snapshot = finalPreview {
-                FinalPreviewOverlay(
-                    snapshot: snapshot,
-                    range: $previewRange,
-                    view: $previewView,
-                    hiddenRoles: $hiddenPreviewRoles,
-                    hiddenExtruders: $hiddenPreviewExtruders,
-                    onEditor: vorschauSchliessen)
-            }
-            // Dieselbe schwebende Leiste wie im Einfachen Modus: was man
-            // am ausgewaehlten Objekt am haeufigsten tut, gehoert an das
-            // Objekt und nicht in eine Spalte am Rand. Im Advanced Mode
-            // fehlte sie - dort war jeder Handgriff ein Weg nach rechts.
-            if let id = model.selectedId,
-               let objekt = model.objects.first(where: { $0.id == id }),
-               !vorschau {
-                VStack {
-                    // Die Leiste gehoert zum freien Viewport, nicht zur
-                    // gesamten ZStack: sonst liegt ihre rechte Haelfte
-                    // ueber der offenen Seitenleiste.
-                    HStack {
-                        Spacer(minLength: 0)
-                        SimpleObjectBarView(
-                            model: model,
-                            objekt: objekt,
-                            zeigtZurueck: false,
-                            onClearSelection: { model.select(nil) },
-                            onFlaechenwahl: { aufFlaeche = $0 })
-                            .fixedSize(horizontal: true, vertical: false)
-                        Spacer(minLength: 0)
-                    }
-                    .padding(.trailing, seiteOffen && !schmal
-                             ? seitenleistenbreite : 0)
-                    .padding(.top, ps.pt(schmal ? 96 : 118))
-                    Spacer()
-                }
-            }
-            // Verschoben aus der permanenten oberen Leiste: die Griffe
-            // sind ein Objektwerkzeug, kein Projektbefehl, und brauchten
-            // dort staendig Platz, auch ohne Auswahl. Bleiben bewusst
-            // immer vorhanden (nur deaktiviert ohne Auswahl) statt ganz
-            // zu verschwinden - dieselbe Kennung, dasselbe Verhalten,
-            // nur kleiner und naeher am Bett als an der Kopfzeile.
-            VStack {
-                HStack {
-                    kompakteGriffe
-                    Spacer(minLength: 0)
-                }
-                .padding(.leading, ps.pt(schmal ? 82 : 8))
-                .padding(.top, ps.pt(schmal ? 96 : 118))
-                Spacer()
-            }
-            if seiteOffen && schmal { schmaleSeite }
+            if seiteOffen && schmal && !leisteUnten { schmaleSeite }
+            if seiteOffen && leisteUnten { unteneSeite }
             if schmal {
                 VStack {
                     BedSelector(model: model,
@@ -228,10 +228,6 @@ struct AdvancedWorkspaceView: View {
                     Spacer()
                 }
                 .zIndex(80)
-            }
-            if model.progress != .idle {
-                SliceSheet(model: model,
-                           onSendToPrinter: onSendToPrinter) { model.dismissProgress() }
             }
             if !hinderungsgruende.isEmpty {
                 SliceBlockerSheet(gruende: hinderungsgruende) { hinderungsgruende = [] }
@@ -339,10 +335,47 @@ struct AdvancedWorkspaceView: View {
                       allowedContentTypes: [.item],
                       allowsMultipleSelection: true) { ergebnis in
             guard case .success(let urls) = ergebnis else { return }
-            switch zweck {
-            case .modell:  urls.forEach { model.load(url: $0) }
-            case .projekt: if let erste = urls.first { model.loadProject(url: erste) }
+            for url in urls {
+                // ZIPs (meist von Printables, mit STL und Beiwerk) sind
+                // in beiden Zwecken willkommen - eine ZIP ist nie
+                // selbst ein Projekt, immer eine Modellquelle.
+                if url.pathExtension.lowercased() == "zip" {
+                    _ = model.loadZip(url: url)
+                    continue
+                }
+                switch zweck {
+                case .modell:  model.load(url: url)
+                case .projekt: model.loadProject(url: url)
+                }
             }
+        }
+        .sheet(isPresented: $zeigeAlleProjekte) {
+            AllProjectsSheet(onOpen: { url in
+                zeigeAlleProjekte = false
+                model.loadProject(url: url)
+            }, onClose: { zeigeAlleProjekte = false })
+        }
+        .alert(st("Save project", "Projekt sichern"), isPresented: $zeigeSpeichernName) {
+            TextField(st("Name", "Name"), text: $speichernName)
+            Button(st("Cancel", "Abbrechen"), role: .cancel) {}
+            Button(st("Save", "Sichern")) {
+                let name = speichernName.trimmingCharacters(in: .whitespacesAndNewlines)
+                model.saveProject(name: name.isEmpty ? "PSMobile" : name)
+            }
+        }
+        .alert(st("Unsaved changes", "Ungesicherte Änderungen"),
+               isPresented: $zeigeVerlassenNachfrage) {
+            Button(st("Cancel", "Abbrechen"), role: .cancel) {}
+            Button(st("Discard", "Verwerfen"), role: .destructive) { onHome() }
+            Button(st("Save", "Sichern")) {
+                speichernName = model.projectURL?.deletingPathExtension().lastPathComponent
+                    ?? model.objects.first?.name ?? "PSMobile"
+                model.saveProject(name: speichernName)
+                onHome()
+            }
+        } message: {
+            Text(st("A second tap on Advanced would discard this project.",
+                     "Ein erneutes Tippen auf Advanced würde dieses Projekt verwerfen."))
         }
     }
 
@@ -379,63 +412,6 @@ struct AdvancedWorkspaceView: View {
 
     // MARK: - Werkzeuge
 
-    /// Welche Griffe der Finger im Viewport bedient.
-    ///
-    /// Hier oben und nicht mehr rechts im Inspektor: die Wahl gehoert
-    /// zum Viewport, nicht zu den Zahlen, und man trifft sie oft
-    /// hintereinander.
-    ///
-    /// Ohne Auswahl ausgegraut - ein Griff ohne Objekt ist keine
-    /// Einstellung, sondern eine Enttaeuschung.
-    private var kompakteGriffe: some View {
-        let hatAuswahl = model.selectedId != nil
-        return HStack(spacing: ps.pt(2)) {
-            griffKnopf("arrow.up.and.down.and.arrow.left.and.right", PsUiCatalog.tr("Move"), .move, hatAuswahl)
-            griffKnopf("arrow.triangle.2.circlepath", PsUiCatalog.tr("Rotate"), .rotate, hatAuswahl)
-            griffKnopf("arrow.up.left.and.arrow.down.right", PsUiCatalog.tr("Scale"), .scale, hatAuswahl)
-            griffKnopf("hand.point.up.left", PsUiCatalog.tr("None"), PsmViewport.Gizmo.none, hatAuswahl)
-        }
-        .padding(ps.pt(3))
-        .background(PrusaColors.panel.opacity(0.95))
-        .clipShape(RoundedRectangle(cornerRadius: ps.pt(6)))
-        .overlay(
-            RoundedRectangle(cornerRadius: ps.pt(6))
-                .stroke(PrusaColors.divider, lineWidth: 1)
-        )
-    }
-
-    private func griffKnopf(_ symbol: String,
-                            _ name: String,
-                            _ wert: PsmViewport.Gizmo,
-                            _ moeglich: Bool) -> some View {
-        let an = gizmo == wert && moeglich
-        return Button {
-            gizmo = wert
-        } label: {
-            Image(systemName: symbol)
-                .font(.system(size: ps.font(14)))
-                .foregroundStyle(!moeglich ? PrusaColors.textMuted.opacity(0.4)
-                                 : an ? PrusaColors.orange : PrusaColors.textPrimary)
-                .frame(width: ps.touch(34), height: ps.touch(34))
-                .background(an ? PrusaColors.panelRaised : Color.clear)
-                .clipShape(RoundedRectangle(cornerRadius: ps.pt(4)))
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .disabled(!moeglich)
-        .accessibilityIdentifier("advanced.gizmo." + kennungFuer(wert))
-        .accessibilityLabel(name)
-    }
-
-    private func kennungFuer(_ wert: PsmViewport.Gizmo) -> String {
-        switch wert {
-        case .move:   return "move"
-        case .rotate: return "rotate"
-        case .scale:  return "scale"
-        default:      return "none"
-        }
-    }
-
     /// Einen Pinsel an- oder ausschalten.
     ///
     /// Dasselbe Werkzeug noch einmal antippen heisst aus - wie bei den
@@ -457,7 +433,7 @@ struct AdvancedWorkspaceView: View {
     private var werkzeugleiste: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: ps.pt(4)) {
-                werkzeug("house", st("Start", "Start"), kennung: "kopf.start", aktion: onHome)
+                werkzeug("house", st("Start", "Start"), kennung: "kopf.start", aktion: nachHauseGehen)
                 trenner
                 werkzeug("doc", st("New", "Neu"), kennung: "projekt.neu") {
                     model.newProject()
@@ -466,8 +442,13 @@ struct AdvancedWorkspaceView: View {
                     zweck = .projekt
                     zeigeImporter = true
                 }
+                werkzeug("clock", st("Projects", "Projekte"), kennung: "projekt.alle") {
+                    zeigeAlleProjekte = true
+                }
                 werkzeug("square.and.arrow.down", st("Save", "Sichern"), kennung: "projekt.sichern") {
-                    model.saveProject()
+                    speichernName = model.projectURL?.deletingPathExtension().lastPathComponent
+                        ?? model.objects.first?.name ?? "PSMobile"
+                    zeigeSpeichernName = true
                 }
                 // "View" (Kamera zuruecksetzen) ist hier entfernt worden - die
                 // untere ansichtsleiste hat mit "3D" denselben Knopf, und zwei
@@ -642,8 +623,18 @@ struct AdvancedWorkspaceView: View {
                     paintOptions:
                         maloptionen.tool == nil ? nil : maloptionen,
                     viewportMode: vorschau ? .preview : .editor,
+                    multiBedRender: multiBedRenderGespeichert,
+                    focusBedIndex: model.activeBedIndex,
+                    focusBedKey: model.focusBedKey,
+                    bedNamen: multiBedRenderGespeichert
+                        ? model.beds.sorted(by: { $0.index < $1.index })
+                            .map { model.bedLabel($0.index) }
+                        : [],
                     layerRange: vorschau && !previewRange.isEmpty
                         ? (Int32(previewRange.lower) ... Int32(previewRange.upper))
+                        : nil,
+                    moveRange: vorschau && moveRangeGrenzen != nil
+                        ? (moveRangeUnten...moveRangeOben)
                         : nil,
                     previewView: previewView,
                     previewRoles:
@@ -661,6 +652,20 @@ struct AdvancedWorkspaceView: View {
                               anzahl > 0 else {
                             vorschauSchliessen()
                             return
+                        }
+                    },
+                    onMoveRangeBounds: { grenzen in
+                        guard let grenzen else {
+                            moveRangeGrenzen = nil
+                            return
+                        }
+                        // Nur bei tatsaechlich neuen Grenzen zuruecksetzen -
+                        // sonst ueberschreibt jeder Bildaufbau (mehrmals
+                        // pro Sekunde) eine laufende Ziehgeste.
+                        if moveRangeGrenzen != grenzen {
+                            moveRangeGrenzen = grenzen
+                            moveRangeUnten = grenzen.lowerBound
+                            moveRangeOben = grenzen.upperBound
                         }
                     },
                     onSelect: { model.select($0 < 0 ? nil : $0) },
@@ -728,6 +733,76 @@ struct AdvancedWorkspaceView: View {
                         maxHeight: Double(grenzen.maxHeight))
                         .padding(ps.pt(12))
                 }
+
+                if vorschau, previewRange.layerCount > 1 {
+                    // Linker Rand: Schichtbereich, senkrecht - wie der
+                    // Desktop-Regler links vom Bett.
+                    HStack {
+                        DualHandleSlider(
+                            untererWert: previewSchichtUnten,
+                            obererWert: previewSchichtOben,
+                            bereich: 0...Int32(max(previewRange.layerCount - 1, 1)),
+                            achse: .senkrecht)
+                            .padding(.leading, ps.pt(8))
+                            .padding(.vertical, ps.pt(48))
+                        Spacer(minLength: 0)
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
+                if vorschau, let grenzen = moveRangeGrenzen, grenzen.lowerBound < grenzen.upperBound {
+                    // Unterer Rand: Werkzeugweg innerhalb der Schicht,
+                    // waagerecht - wie der Desktop-Regler unter dem Bett.
+                    VStack {
+                        Spacer(minLength: 0)
+                        DualHandleSlider(
+                            untererWert: $moveRangeUnten,
+                            obererWert: $moveRangeOben,
+                            bereich: grenzen,
+                            achse: .waagerecht)
+                            .padding(.horizontal, ps.pt(56))
+                            .padding(.bottom, ps.pt(14))
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
+
+                // Dieselbe schwebende Leiste wie im Einfachen Modus: was man
+                // am ausgewaehlten Objekt am haeufigsten tut, gehoert an das
+                // Objekt und nicht in eine Spalte am Rand. Im Advanced Mode
+                // fehlte sie - dort war jeder Handgriff ein Weg nach rechts.
+                //
+                // Sitzt bewusst HIER, innerhalb von arbeitsflaeche statt
+                // in der aeusseren ZStack (wo sie vorher stand): dieser
+                // ZStack ist bereits exakt der freie Viewport, ohne
+                // Werkzeugleiste und Bettwaehler darueber. Der vorige Code
+                // ratete stattdessen einen festen Abstand von 96/118pt von
+                // ganz oben, um die Werkzeugleiste zu ueberspringen - auf
+                // Nils' Geraet reichte das nicht (die Leiste ragte in die
+                // Menuezeile hinein). Hier drin braucht es dafuer nur noch
+                // einen kleinen Rand, kein Raten mehr. Aus demselben Grund
+                // faellt auch die maxBreite-Berechnung fuer die Seitenleiste
+                // weg: dieser ZStack endet schon vor der Seitenleiste.
+                if let id = model.selectedId,
+                   let objekt = model.objects.first(where: { $0.id == id }),
+                   !vorschau {
+                    VStack {
+                        HStack {
+                            Spacer(minLength: 0)
+                            SimpleObjectBarView(
+                                model: model,
+                                objekt: objekt,
+                                zeigtZurueck: false,
+                                onClearSelection: { model.select(nil) },
+                                onFlaechenwahl: { aufFlaeche = $0 },
+                                gizmo: $gizmo,
+                                maxBreite: nil)
+                                .fixedSize(horizontal: true, vertical: false)
+                            Spacer(minLength: 0)
+                        }
+                        .padding(.top, ps.pt(10))
+                        Spacer()
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
             }
         } else {
             PrusaColors.background.frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -783,10 +858,24 @@ struct AdvancedWorkspaceView: View {
         }
     }
 
+    /// PreviewRange rechnet in Int, der Kern-Regler in Int32 - hier nur
+    /// die Bruecke dazwischen, mit demselben Clamping wie PreviewRange
+    /// selbst (setLower/setUpper).
+    private var previewSchichtUnten: Binding<Int32> {
+        Binding(
+            get: { Int32(previewRange.lower) },
+            set: { previewRange.setLower(Int($0)) })
+    }
+    private var previewSchichtOben: Binding<Int32> {
+        Binding(
+            get: { Int32(previewRange.upper) },
+            set: { previewRange.setUpper(Int($0)) })
+    }
+
     /// Vorschau oeffnen - und nur dann rechnen, wenn es sein muss.
     private func vorschauZeigen() {
         if vorschau { vorschauSchliessen(); return }
-        if model.sliceResultIsCurrent {
+        if model.sliceResultIsCurrent || model.lastSliceWasRemote {
             vorschauUmschalten()
             return
         }
@@ -821,11 +910,20 @@ struct AdvancedWorkspaceView: View {
         vorschau = false
         finalPreview = nil
         previewRange = PreviewRange(layerCount: 0)
+        moveRangeGrenzen = nil
     }
 
     private func schneiden() {
         let gruende = model.sliceBlockers
         if gruende.isEmpty { model.slice() } else { hinderungsgruende = gruende }
+    }
+
+    /// Dieselben Hinderungsgruende wie beim einzelnen Schnitt - nur ohne
+    /// Bett auf dem Bett ist "alle Betten schneiden" derselbe leere
+    /// Auftrag.
+    private func alleBettenSchneiden() {
+        let gruende = model.sliceBlockers
+        if gruende.isEmpty { model.sliceAll() } else { hinderungsgruende = gruende }
     }
 
     // MARK: - Seitenleiste
@@ -879,6 +977,180 @@ struct AdvancedWorkspaceView: View {
         .background(PrusaColors.background)
     }
 
+    /// Statistik und Legende der laufenden Vorschau - an derselben
+    /// Stelle, an der vorher die schwebende "Final G-code"-Karte lag.
+    /// Die beiden Schichtregler stehen jetzt am Viewport-Rand, nicht
+    /// mehr hier drin.
+    @ViewBuilder private var vorschauInhalt: some View {
+        if vorschau, let snapshot = finalPreview {
+            VStack(alignment: .leading, spacing: ps.pt(9)) {
+                PSMarke(name: "vorschau.panel")
+                HStack {
+                    Text(st("G-code preview", "G-Code-Vorschau"))
+                        .font(.system(size: ps.font(13), weight: .semibold))
+                    Spacer()
+                    Button(action: vorschauSchliessen) {
+                        Label(st("Editor", "Editor"), systemImage: "cube")
+                            .font(.system(size: ps.font(11), weight: .semibold))
+                    }
+                    .buttonStyle(.bordered)
+                    .accessibilityIdentifier("vorschau.editor")
+                }
+                PreviewStatsRow(range: previewRange, snapshot: snapshot)
+                PreviewLegendPicker(
+                    snapshot: snapshot,
+                    view: $previewView,
+                    hiddenRoles: $hiddenPreviewRoles,
+                    hiddenExtruders: $hiddenPreviewExtruders)
+            }
+            .padding(.bottom, ps.pt(4))
+        }
+    }
+
+    /// Ersetzt den Knopfbereich je nach Stand des letzten Schnitts.
+    ///
+    /// Frueher oeffnete "Slice now" ein Blatt, das erst wieder
+    /// weggetippt werden musste, bevor man exportieren oder senden
+    /// konnte - ein Zwischenschritt, der bei jedem einzelnen Schnitt
+    /// im Weg stand. Jetzt steht an genau der Stelle, an der vorher
+    /// "Slice now" war, nach einem gueltigen Ergebnis direkt Export
+    /// und Senden - und sobald sich das Projekt aendert (sliceResultIsCurrent
+    /// wird falsch), steht dort wieder "Slice now".
+    @ViewBuilder private var schneidenBereich: some View {
+        switch model.progress {
+        case .running(let prozent, let phase):
+            VStack(spacing: ps.pt(6)) {
+                HStack {
+                    Text("\(prozent) %")
+                        .font(.system(size: ps.font(13), weight: .semibold))
+                        .foregroundStyle(PrusaColors.textPrimary)
+                    Text(phase)
+                        .font(.system(size: ps.font(11)))
+                        .foregroundStyle(PrusaColors.textMuted)
+                        .lineLimit(1)
+                    Spacer()
+                }
+                ProgressView(value: Double(prozent), total: 100)
+                    .tint(PrusaColors.orange)
+                Button { model.cancel() } label: {
+                    Text(st("Cancel", "Abbrechen"))
+                        .font(.system(size: ps.font(13)))
+                        .foregroundStyle(PrusaColors.textMuted)
+                        .frame(maxWidth: .infinity, minHeight: ps.touch(40))
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("slice.abbrechen")
+            }
+            .accessibilityIdentifier("slicen")
+
+        case .done(_, _, _) where model.sliceResultIsCurrent || model.lastSliceWasRemote:
+            VStack(spacing: ps.pt(8)) {
+                if model.gcodeURLs.count > 1 {
+                    ShareLink(items: model.gcodeURLs) {
+                        exportKnopf(st("Export all", "Alle exportieren"))
+                    }
+                    .accessibilityIdentifier("slice.sichern")
+                } else if let url = model.gcodeURL {
+                    ShareLink(item: url) {
+                        exportKnopf(st("Export G-Code", "G-Code exportieren"))
+                    }
+                    .accessibilityIdentifier("slice.sichern")
+                    Button { onSendToPrinter(url) } label: {
+                            Text(st("Send to printer", "An Drucker senden"))
+                                .font(.system(size: ps.font(13), weight: .medium))
+                                .foregroundStyle(PrusaColors.orange)
+                                .frame(maxWidth: .infinity, minHeight: ps.touch(40))
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityIdentifier("slice.andrucker")
+                }
+            }
+
+        case .failed(let meldung):
+            VStack(alignment: .leading, spacing: ps.pt(6)) {
+                Text(meldung)
+                    .font(.system(size: ps.font(12)))
+                    .foregroundStyle(PrusaColors.danger)
+                    .fixedSize(horizontal: false, vertical: true)
+                schneidenKnopf
+            }
+
+        default:
+            schneidenKnopf
+        }
+    }
+
+    private func exportKnopf(_ text: String) -> some View {
+        Text(text)
+            .font(.system(size: ps.font(15), weight: .semibold))
+            .foregroundStyle(.white)
+            .frame(maxWidth: .infinity)
+            .frame(height: ps.touch(52))
+            .background(PrusaColors.orange)
+            .clipShape(RoundedRectangle(cornerRadius: ps.pt(4)))
+            .contentShape(Rectangle())
+    }
+
+    private var schneidenKnopf: some View {
+        HStack(spacing: ps.pt(8)) {
+            Button { schneiden() } label: {
+                Text(model.remoteSliceEnabled
+                     ? st("Slice on server", "Auf Server slicen")
+                     : (model.beds.count > 1
+                        ? st("Slice current bed", "Aktuelles Bett slicen")
+                        : PsUiCatalog.tr("Slice now")))
+                    .font(.system(size: ps.font(15), weight: .semibold))
+                    .foregroundStyle(.white)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: ps.touch(52))
+                    .background(PrusaColors.orange)
+                    .clipShape(RoundedRectangle(cornerRadius: ps.pt(4)))
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("slicen")
+
+            if remoteSlicePluginAn {
+                fernSchnittUmschalter
+            }
+        }
+    }
+
+    /// Lokal/entfernt umschalten - siehe docs/remote-slicing.md. Ohne
+    /// eingerichteten Server fuehrt das Tippen erst zur Einrichtung statt
+    /// stumm auf einen leeren Host umzuschalten. Schmal und neben dem
+    /// Knopf statt darueber - der Schnitt-Knopf bleibt der groesste,
+    /// meistgetroffene Ziel, der Umschalter ein Nebenknopf daneben.
+    private var fernSchnittUmschalter: some View {
+        Button {
+            let host = UserDefaults.standard.string(
+                forKey: SlicerModel.remoteSliceHostKey) ?? ""
+            if host.isEmpty {
+                onRemoteSettings()
+            } else {
+                model.remoteSliceEnabled.toggle()
+            }
+        } label: {
+            Image(systemName: model.remoteSliceEnabled ? "cloud.fill" : "cloud")
+                .font(.system(size: ps.font(18)))
+                .foregroundStyle(model.remoteSliceEnabled
+                                 ? PrusaColors.orange : PrusaColors.textMuted)
+                .frame(width: ps.touch(52), height: ps.touch(52))
+                .background(PrusaColors.panelRaised)
+                .clipShape(RoundedRectangle(cornerRadius: ps.pt(4)))
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("slicen.fern.umschalten")
+        .accessibilityLabel(model.remoteSliceEnabled
+                            ? st("Remote slicing on", "Remote Slicing an")
+                            : st("Remote slicing off", "Remote Slicing aus"))
+    }
+
     /// Das untere Ende der Seitenleiste: was der letzte Schnitt ergeben
     /// hat, und der Knopf für den nächsten.
     ///
@@ -888,7 +1160,7 @@ struct AdvancedWorkspaceView: View {
     private var abschluss: some View {
         VStack(alignment: .leading, spacing: ps.pt(8)) {
             Divider().overlay(PrusaColors.divider)
-            if let s = model.stats, model.sliceResultIsCurrent {
+            if let s = model.stats, model.sliceResultIsCurrent || model.lastSliceWasRemote {
                 let zeilen = SliceSummary.shared.rows(
                     seconds: s.printTimeSeconds,
                     grams: s.filamentGrams,
@@ -911,7 +1183,7 @@ struct AdvancedWorkspaceView: View {
                 .accessibilityIdentifier("seite.zusammenfassung")
                 verbrauchJeExtruder
             } else {
-                Text(st("Not sliced yet", "Noch nicht geschnitten"))
+                Text(st("Not sliced yet", "Noch nicht gesliced"))
                     .font(.system(size: ps.font(11)))
                     .foregroundStyle(PrusaColors.textMuted)
             }
@@ -921,18 +1193,31 @@ struct AdvancedWorkspaceView: View {
                     .foregroundStyle(PrusaColors.orange)
                     .fixedSize(horizontal: false, vertical: true)
             }
-            Button { schneiden() } label: {
-                Text(PsUiCatalog.tr("Slice now"))
-                    .font(.system(size: ps.font(15), weight: .semibold))
-                    .foregroundStyle(.white)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: ps.touch(52))
-                    .background(PrusaColors.orange)
-                    .clipShape(RoundedRectangle(cornerRadius: ps.pt(4)))
-                    .contentShape(Rectangle())
+            vorschauInhalt
+            schneidenBereich
+
+            // Nur sinnvoll, wenn es ueberhaupt etwas zu verteilen gibt.
+            if model.beds.count > 1 {
+                Button { alleBettenSchneiden() } label: {
+                    if let fortschritt = model.sliceAllProgress {
+                        Text(st("Bed \(fortschritt.bed)/\(fortschritt.total)",
+                                "Bett \(fortschritt.bed)/\(fortschritt.total)"))
+                            .font(.system(size: ps.font(13), weight: .medium))
+                            .foregroundStyle(PrusaColors.orange)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: ps.touch(40))
+                    } else {
+                        Text(st("Slice all beds", "Alle Betten slicen"))
+                            .font(.system(size: ps.font(13), weight: .medium))
+                            .foregroundStyle(PrusaColors.orange)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: ps.touch(40))
+                    }
+                }
+                .buttonStyle(.plain)
+                .disabled(model.sliceAllProgress != nil)
+                .accessibilityIdentifier("slicen.alle")
             }
-            .buttonStyle(.plain)
-            .accessibilityIdentifier("slicen")
         }
         .padding(ps.pt(12))
         .background(PrusaColors.panel)
@@ -1189,6 +1474,29 @@ struct AdvancedWorkspaceView: View {
             seitenleiste.frame(width: ps.pt(320))
         }
         .ignoresSafeArea(edges: .bottom)
+    }
+
+    /// Experimentelles Hochformat-Layout: dieselbe Seitenleiste, von
+    /// unten angedockt statt von rechts - siehe leisteUntenExperimentell.
+    ///
+    /// Die linke Werkzeugschiene bleibt ausgespart (Breite wie dort:
+    /// ps.pt(74)) - sonst liegt der Abdunklungs-Scrim ueber "Drucker"
+    /// und "App" in deren Fusszeile, und ein Finger dort schliesst nur
+    /// die Seite statt den Knopf zu treffen. Ohne diese beiden kommt
+    /// man aus der offenen Seitenleiste nicht mehr zu Druckern oder den
+    /// App-Einstellungen.
+    private var unteneSeite: some View {
+        HStack(spacing: 0) {
+            Color.clear.frame(width: ps.pt(74))
+            VStack(spacing: 0) {
+                PrusaColors.background.opacity(0.6)
+                    .contentShape(Rectangle())
+                    .onTapGesture { seiteOffen = false }
+                seitenleiste.frame(height: min(ps.pt(420), ps.windowSize.height * 0.5))
+            }
+        }
+        .ignoresSafeArea(edges: .bottom)
+        .accessibilityIdentifier("advanced.leiste.unten")
     }
 
     /// Drucker, Filament, Druckprofil - die drei Angaben, mit denen

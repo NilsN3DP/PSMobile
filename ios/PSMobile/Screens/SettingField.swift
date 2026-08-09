@@ -14,10 +14,26 @@ struct SettingField: View {
     let kompakt: Bool
 
     @Environment(\.psScale) private var ps
+    @AppStorage(AppSettings.shared.KEY_UNITS_IMPERIAL) private var zollEinheiten = false
     @State private var wert: String = ""
     @State private var meta: PsmCore.ConfigMeta?
     @State private var auswahl: [PsmCore.EnumValue] = []
     @State private var gesperrt: (enabled: Bool, reason: String) = (true, "")
+
+    /// Nur echte Laengen (Einheit "mm") werden umgerechnet - eine
+    /// Prozentzahl oder ein Grad-Wert hat mit Zoll nichts zu tun, und
+    /// eine falsche Umrechnung dort waere schlimmer als keine Anzeige.
+    private var istLaenge: Bool { meta?.unit == "mm" }
+
+    private static func formatiert(_ wert: Double) -> String {
+        // Bis zu vier Nachkommastellen, ueberfluessige Nullen weg -
+        // 0.4 mm werden sonst zu "0.0157480000..." Zoll.
+        let s = String(format: "%.4f", wert)
+        var t = s
+        while t.hasSuffix("0") { t.removeLast() }
+        if t.hasSuffix(".") { t.removeLast() }
+        return t
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: ps.pt(4)) {
@@ -28,7 +44,7 @@ struct SettingField: View {
                         .foregroundStyle(gesperrt.enabled
                                          ? PrusaColors.textPrimary : PrusaColors.textMuted)
                     if !meta.unit.isEmpty {
-                        Text(meta.unit)
+                        Text(istLaenge && zollEinheiten ? "in" : meta.unit)
                             .font(.system(size: ps.font(11)))
                             .foregroundStyle(PrusaColors.textMuted)
                     }
@@ -128,6 +144,11 @@ struct SettingField: View {
         guard let core = model.core else { return }
         meta = core.configMeta(for: option.key)
         wert = core.config(option.key) ?? ""
+        // Der Kern liefert immer mm - fuers Anzeigen in Zoll umrechnen,
+        // ohne den gespeicherten Wert anzufassen.
+        if zollEinheiten, meta?.unit == "mm", let mm = Double(wert) {
+            wert = Self.formatiert(mm / 25.4)
+        }
         gesperrt = core.configEnabled(option.key)
         if let m = meta, m.type == .enumeration, m.enumCount > 0 {
             auswahl = core.configEnumValues(option.key, count: m.enumCount)
@@ -136,7 +157,13 @@ struct SettingField: View {
 
     private func schreiben(_ neu: String) {
         wert = neu
-        model.setConfig(option.key, neu)
+        // Umgekehrt beim Schreiben: was auf dem Bildschirm Zoll ist,
+        // geht als mm an den Kern - der kennt keine Zoll-Einstellung.
+        if zollEinheiten, istLaenge, let zoll = Double(neu) {
+            model.setConfig(option.key, Self.formatiert(zoll * 25.4))
+        } else {
+            model.setConfig(option.key, neu)
+        }
         // Ein geaenderter Wert kann andere Felder sperren oder freigeben -
         // deshalb gleich neu befragen, statt es dem Zufall zu ueberlassen.
         if let core = model.core {

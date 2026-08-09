@@ -15,7 +15,7 @@ struct PSMobileApp: App {
     /// denen fuenf sinnvoll sind - und irgendwann steht man in einem der
     /// anderen elf.
     enum Route {
-        case start, simple, advanced, druckEinstellungen, appEinstellungen
+        case start, simple, advanced, druckEinstellungen, appEinstellungen, remote
         /// Drucker einrichten - oder, mit einer Datei, den G-Code
         /// hinschicken. Derselbe Bildschirm, zwei Anlaesse.
         case drucker(URL?)
@@ -32,6 +32,18 @@ struct PSMobileApp: App {
     /// Wie viele Modelle aus einer geteilten ZIP entpackt wurden - > 0
     /// haelt die Nachfrage Easy/Advanced offen, bis eine Wahl faellt.
     @State private var zipAnzahl: Int?
+
+    @Environment(\.scenePhase) private var scenePhase
+    /// Ob die letzte Sitzung nicht sauber beendet wurde - siehe
+    /// CrashHeuristic. Erst nach dem ersten Aufbau gesetzt, damit die
+    /// Frage nicht schon vor dem ersten Bild aufploppt.
+    @State private var zeigeAbsturzfrage = false
+    /// Nur fuer -psm-selbsttest-auto (siehe onAppear unten) - haelt den
+    /// Selbsttest am Leben, waehrend sein Task.detached im Hintergrund
+    /// laeuft. Ohne diese Referenz waere er sofort wieder weg und der
+    /// [weak self] darin liefe ins Leere.
+    @State private var autoSelbsttest: Selbsttest?
+    @State private var zeigeAbsturzTeilen = false
 
     var body: some Scene {
         WindowGroup {
@@ -91,8 +103,48 @@ struct PSMobileApp: App {
                     }
                 }
                 .onAppear {
+                    zeigeAbsturzfrage = CrashHeuristic.letzteSitzungUnsauberBeendet
+                    CrashHeuristic.sitzungBeginnt()
+                    RemoteSliceDefaults.seedIfNeeded()
                     model.start()
                     route = startRoute()
+                    // Headless-Selbsttest fuer die Fehlersuche ohne
+                    // Geraet - per `xcrun simctl launch ... -psm-selbsttest-auto`
+                    // gestartet, schreibt seinen Bericht wie gewohnt
+                    // nach Documents/Selbsttest.
+                    if ProcessInfo.processInfo.arguments.contains("-psm-selbsttest-auto") {
+                        let test = Selbsttest()
+                        autoSelbsttest = test
+                        test.starten()
+                    }
+                }
+                .onChange(of: scenePhase) { phase in
+                    // Sauberes Beenden heisst hier: normal in den
+                    // Hintergrund gewechselt, nicht abgestuerzt oder hart
+                    // per Wischgeste beendet. Beides faellt unter dieselbe
+                    // Frage beim naechsten Start - schadet in keinem der
+                    // beiden Faelle.
+                    if phase == .background { CrashHeuristic.sitzungSauberBeendet() }
+                }
+                .alert(
+                    SimpleModeState.shared.text(
+                        english: "The app didn't close normally last time",
+                        german: "Die App wurde beim letzten Mal nicht sauber beendet"),
+                    isPresented: $zeigeAbsturzfrage
+                ) {
+                    Button(SimpleModeState.shared.text(
+                        english: "Send log", german: "Protokoll senden")) {
+                        zeigeAbsturzTeilen = true
+                    }
+                    Button(SimpleModeState.shared.text(
+                        english: "Not now", german: "Jetzt nicht"), role: .cancel) {}
+                } message: {
+                    Text(SimpleModeState.shared.text(
+                        english: "Sending the log (no personal data, just recent warnings and errors) helps find what happened.",
+                        german: "Das Senden des Protokolls (keine persönlichen Daten, nur die letzten Warnungen und Fehler) hilft, die Ursache zu finden."))
+                }
+                .sheet(isPresented: $zeigeAbsturzTeilen) {
+                    AbsturzProtokollSheet()
                 }
                 // Modelle, die aus anderen Apps geteilt werden. Eine
                 // ZIP - meist von Printables, mit STL und Beiwerk - wird
@@ -146,14 +198,16 @@ struct PSMobileApp: App {
                 onSimple: { self.route = .simple },
                 onAdvanced: { self.route = .advanced },
                 onAppSettings: {},
-                onPrinterSetup: { model.reopenSetup() }
+                onPrinterSetup: { model.reopenSetup() },
+                onRemote: { self.route = .remote }
             )
         case .start:
             WorkflowStartView(
                 onSimple: { self.route = .simple },
                 onAdvanced: { self.route = .advanced },
                 onAppSettings: { zurueckVon = .start; self.route = .appEinstellungen },
-                onPrinterSetup: { model.reopenSetup() }
+                onPrinterSetup: { model.reopenSetup() },
+                onRemote: { self.route = .remote }
             )
         case .simple:
             SimpleModeView(
@@ -161,6 +215,7 @@ struct PSMobileApp: App {
                 onOpenAdvanced: { self.route = .advanced },
                 onOpenPrinterSetup: { model.reopenSetup() },
                 onAppSettings: { zurueckVon = .simple; self.route = .appEinstellungen },
+                onRemoteSettings: { zurueckVon = .simple; self.route = .remote },
                 onSendToPrinter: { datei in
                     zurueckVon = .simple
                     self.route = .drucker(datei)
@@ -183,15 +238,19 @@ struct PSMobileApp: App {
                 onSettings: { reiter in
                     einstellungsReiter = reiter
                     self.route = .druckEinstellungen
-                }
+                },
+                onRemoteSettings: { zurueckVon = .advanced; self.route = .remote }
             )
         case .druckEinstellungen:
             SettingsView(model: model, startTab: einstellungsReiter) { self.route = .advanced }
+        case .remote:
+            RemoteSliceView(onHome: { self.route = zurueckVon })
         case .drucker(let datei):
             PrintersView(
                 store: drucker,
                 senden: datei,
-                dateiname: datei?.lastPathComponent ?? "psmobile.gcode"
+                dateiname: datei?.lastPathComponent ?? "psmobile.gcode",
+                passendesProfil: model.selectedPreset(for: "printer")
             ) { self.route = zurueckVon }
         }
     }

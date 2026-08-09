@@ -106,7 +106,8 @@ int main(int argc, char **argv)
     require(argc == 6,
             "usage: psm_contract_tests DATADIR RESDIR MODEL PROJECT3MF "
             "INSTALLED_PROFILE_PROJECT3MF");
-    require(psm_abi_version() == PSM_ABI_VERSION, "ABI version");
+    require(PSM_ABI_VERSION == 7, "header ABI version is bumped for completed exports");
+    require(psm_abi_version() == 7, "runtime ABI version is bumped for completed exports");
 
     std::filesystem::create_directories(argv[1]);
     psm_session *session = psm_session_create(argv[1], argv[2]);
@@ -804,6 +805,25 @@ int main(int argc, char **argv)
             "current stats are available");
     require(slice_stats.object_count == 1, "slice contains one object");
 
+    /* Ein Remote-Ergebnis gehört zur Revision beim Upload. Ist die Szene
+     * vorher geändert worden, darf der Kern die Datei nicht einmal mehr
+     * einlesen und dadurch versehentlich als aktuell markieren. */
+    const uint64_t remote_request_revision = psm_design_revision(session);
+    require(psm_model_info(session, id, &info) == PSM_OK,
+            "object info before remote stale mutation");
+    require(psm_model_set_position(session, id,
+                                   info.position[0] + 0.25f,
+                                   info.position[1], info.position[2]) == PSM_OK,
+            "mutate after remote request revision");
+    require(psm_slice_accept_remote_gcode(
+                session, "remote-result-must-not-be-read.gcode",
+                remote_request_revision) == PSM_ERR_STALE_RESULT,
+            "stale remote G-code is rejected before processing");
+    require(psm_slice_start(session, nullptr, nullptr) == PSM_OK,
+            "rebuild current preview after stale remote result");
+    require(psm_slice_wait(session, -1) == PSM_OK,
+            "current preview is restored after stale remote result");
+
     /*
      * Dieser Vertrag muss an der finalen G-Code-Verarbeitung hängen.
      * Ein Print-Schnappschuss vor dem Export kennt weder finale Moves noch
@@ -1175,6 +1195,13 @@ int main(int argc, char **argv)
     require(std::string(installed_project.selected_print) ==
                 "0.20mm SPEED @COREONE 0.4",
             "installed compatible print profile selected");
+    require(psm_history_clear(installed_session) == PSM_OK,
+            "clear history before printer selection");
+    require(psm_preset_select(installed_session, PSM_PRESET_PRINTER,
+                              "Prusa CORE One 0.4 nozzle") == PSM_OK,
+            "select installed printer preset");
+    require(psm_history_undo_count(installed_session) == 1,
+            "printer selection creates exactly one undo checkpoint");
     psm_session_destroy(installed_session);
 
     /*

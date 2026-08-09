@@ -184,6 +184,131 @@ final class Selbsttest: ObservableObject {
             return (.ok, "\(drucker) Drucker · \(druck) Druckprofile · \(filament) Filamente")
         }
 
+        // Nils meldete: nach der Ersteinrichtung steht kein sinnvolles
+        // Standardfilament, stattdessen ein x-beliebiger Fremdhersteller
+        // (3D-Fuel) - seit alle 36 Hersteller mitgeliefert werden, statt
+        // nur Prusa/Voron/Templates. Prueft die Auswahl DIREKT nach der
+        // Einrichtung, vor jeder eigenen Wahl - genau die Stelle, die
+        // "MK4S: Filament waehlen" oben nicht abdeckt, weil der Schritt
+        // selbst schon aktiv waehlt.
+        await schritt("Standardfilament nach Einrichtung") {
+            guard let k = kern else { throw Fehler.text("Kein Kern") }
+            let aktuell = k.selectedPreset(.filament) ?? ""
+            guard !aktuell.isEmpty else {
+                throw Fehler.text("Kein Filament vorausgewaehlt")
+            }
+            guard aktuell.contains("Prusament") else {
+                throw Fehler.text("Vorausgewaehlt: \"\(aktuell)\" - kein Prusa-eigenes Filament")
+            }
+            return (.ok, aktuell)
+        }
+
+        // Reproduziert gezielt eine aus dem Feld gemeldete Meldung
+        // ("Preset nicht waehlbar: Original Prusa MK4S HF0.4 nozzle") -
+        // derselbe Name, wie ihn presetNames(.printer) nach der
+        // Einrichtung tatsaechlich liefert, nicht geraten.
+        await schritt("Drucker auswaehlen") {
+            guard let k = kern else { throw Fehler.text("Kein Kern") }
+            let namen = k.presetNames(.printer)
+            guard let name = namen.first(where: { $0.contains("MK4S") }) ?? namen.first else {
+                throw Fehler.text("Keine Druckerprofile in der Liste")
+            }
+            try k.selectPreset(.printer, name)
+            let aktuell = k.selectedPreset(.printer) ?? ""
+            guard aktuell == name else {
+                throw Fehler.text("Ausgewaehlt \"\(aktuell)\" statt \"\(name)\"")
+            }
+            return (.ok, name)
+        }
+
+        // Derselbe Weg wie beim XL weiter unten, hier fuer den
+        // Standard-Einzelextruder-Drucker - der Fix routet JEDE
+        // Filamentauswahl ueber setExtruderFilament(0, ...), nicht nur
+        // fuer Drucker mit mehreren Toolheads. Das hier zeigt, dass der
+        // Normalfall (MK4S) dabei nicht kaputtgegangen ist.
+        await schritt("MK4S: Filament waehlen") {
+            guard let k = kern else { throw Fehler.text("Kein Kern") }
+            let namen = k.presetNames(.filament)
+            guard !namen.isEmpty else {
+                throw Fehler.text("Keine Filamentprofile fuer MK4S sichtbar")
+            }
+            let ziel = namen.first(where: { $0.contains("Prusament PLA") }) ?? namen[0]
+            try k.setExtruderFilament(0, ziel)
+            let aktuell = k.selectedPreset(.filament) ?? ""
+            guard aktuell == ziel else {
+                throw Fehler.text("Ausgewaehlt \"\(aktuell)\" statt \"\(ziel)\"")
+            }
+            // Und noch ein zweites, damit ein Wechsel (nicht nur die
+            // erste Auswahl nach dem Start) auch geht.
+            if let zweites = namen.first(where: { $0 != ziel }) {
+                try k.setExtruderFilament(0, zweites)
+                let aktuell2 = k.selectedPreset(.filament) ?? ""
+                guard aktuell2 == zweites else {
+                    throw Fehler.text("Zweite Auswahl: \"\(aktuell2)\" statt \"\(zweites)\"")
+                }
+            }
+            return (.ok, "\(namen.count) Filamente, zuletzt gewaehlt passt")
+        }
+
+        // Nils meldet vom echten iPad: auf einem Prusa XL laesst sich
+        // gar kein Filament waehlen (weder Prusament PLA noch sonst
+        // eins), und Ultrafuse PET bleibt stehen statt Prusament PLA.
+        // Eigener Kern statt derselben MK4S-Sitzung, weil genau der
+        // Drucker (XL, mehrere Toolheads) der gemeldete Fall ist -
+        // eine andere Druckerklasse koennte eine andere
+        // Kompatibilitaetsberechnung durchlaufen.
+        var xlKern: PsmCore?
+        await schritt("XL: Drucker einrichten") {
+            let ordner = FileManager.default.temporaryDirectory
+                .appendingPathComponent("psm-selbsttest-xl", isDirectory: true)
+            try? FileManager.default.removeItem(at: ordner)
+            try FileManager.default.createDirectory(at: ordner, withIntermediateDirectories: true)
+            guard let res = Bundle.main.resourceURL?.appendingPathComponent("psresources") else {
+                throw Fehler.text("Ressourcen fehlen im App-Bundle")
+            }
+            let k = try PsmCore(dataDir: ordner.path, resourceDir: res.path)
+            xlKern = k
+            try k.installPrinters(["PrusaResearch:XL:0.4"])
+            let namen = k.presetNames(.printer)
+            guard let name = namen.first else {
+                throw Fehler.text("Keine XL-Druckerprofile installiert")
+            }
+            try k.selectPreset(.printer, name)
+            return (.ok, name)
+        }
+
+        await schritt("XL: Filament waehlen") {
+            guard let k = xlKern else { throw Fehler.text("Kein XL-Kern") }
+            let namen = k.presetNames(.filament)
+            guard !namen.isEmpty else {
+                throw Fehler.text("Keine Filamentprofile fuer XL sichtbar (0 in der Liste)")
+            }
+            // Nicht selectPreset(.filament, ...) - das ist der Weg, den
+            // die App jetzt NICHT mehr geht (siehe SlicerModel.
+            // selectPreset). setExtruderFilament(0, ...) ist derselbe
+            // Weg wie PrusaSlicers eigenes GUI_App::select_filament_preset
+            // und der, den die App jetzt tatsaechlich nutzt.
+            let ziel = namen.first(where: { $0.contains("Prusament PLA") }) ?? namen[0]
+            try k.setExtruderFilament(0, ziel)
+            let aktuell = k.selectedPreset(.filament) ?? ""
+            guard aktuell == ziel else {
+                throw Fehler.text("Ausgewaehlt \"\(aktuell)\" statt \"\(ziel)\" - "
+                                  + "\(namen.count) Filamente in der Liste")
+            }
+            // Ein zweites, anderes Filament direkt danach - genau der
+            // Feldbericht ("kann kein Filament waehlen") klingt nach
+            // mehr als einem einzelnen missglueckten Versuch.
+            if let zweites = namen.first(where: { $0 != ziel }) {
+                try k.setExtruderFilament(0, zweites)
+                let aktuell2 = k.selectedPreset(.filament) ?? ""
+                guard aktuell2 == zweites else {
+                    throw Fehler.text("Zweite Auswahl: \"\(aktuell2)\" statt \"\(zweites)\"")
+                }
+            }
+            return (.ok, "\(namen.count) Filamente, Prusament PLA "
+                    + (ziel.contains("Prusament PLA") ? "gefunden" : "NICHT gefunden") + ": " + ziel)
+        }
+
         await schritt("Modell laden") {
             guard let k = kern else { throw Fehler.text("Kein Kern") }
             let datei = try Testkoerper.wuerfelDatei()
@@ -217,6 +342,97 @@ final class Selbsttest: ObservableObject {
             }
             return (.ok, String(format: "%.1f s · Druckzeit %.0f min · %.1f g",
                                 dauer, st.printTimeSeconds / 60, st.filamentGrams))
+        }
+
+        // Remote-Slice prüft nur eine lokal konfigurierte Testverbindung.
+        // Ohne Laufzeitinjektion bleibt der Selbsttest offline und sendet nie Daten.
+        await schritt("Remote Slice (optional)") {
+            guard let k = kern else { throw Fehler.text("Kern nicht bereit") }
+            let host = UserDefaults.standard.string(forKey: SlicerModel.remoteSliceHostKey) ?? ""
+            guard let basis = RemoteSliceClient.normalizedBaseURL(from: host) else {
+                return (.warnung, "übersprungen: kein Remote-Slice-Host konfiguriert")
+            }
+            guard let token = try? RemoteSliceCredentialStore().load(),
+                  let token, !token.isEmpty else {
+                return (.warnung, "übersprungen: kein Remote-Slice-Token konfiguriert")
+            }
+            let projektDatei = FileManager.default.temporaryDirectory
+                .appendingPathComponent("psmobile-selbsttest-remote.3mf")
+            try? FileManager.default.removeItem(at: projektDatei)
+            try k.saveProject(path: projektDatei.path)
+            let client = RemoteSliceClient()
+            guard await client.healthCheck(baseURL: basis, token: token) else {
+                throw Fehler.text("Remote-Slice-Gesundheitsprüfung fehlgeschlagen")
+            }
+            let t0 = Date()
+            let jobId = try await client.submitJob(projectFileURL: projektDatei, baseURL: basis, token: token)
+            var stand: RemoteSliceClient.JobState?
+            for _ in 0..<60 {
+                let s = try await client.fetchStatus(jobId: jobId, baseURL: basis, token: token)
+                if s.isDone || s.isFailed { stand = s; break }
+                try await Task.sleep(nanoseconds: 800_000_000)
+            }
+            guard let ergebnis = stand else { throw Fehler.text("Remote-Slice-Timeout") }
+            guard ergebnis.isDone else { throw Fehler.text("Remote-Slice fehlgeschlagen") }
+            let ziel = FileManager.default.temporaryDirectory
+                .appendingPathComponent("psmobile-selbsttest-remote.gcode")
+            try? FileManager.default.removeItem(at: ziel)
+            try await client.downloadGcode(jobId: jobId, baseURL: basis, token: token, to: ziel)
+            let bytes = (try? FileManager.default.attributesOfItem(atPath: ziel.path)[.size] as? Int) ?? 0
+            guard bytes > 0 else { throw Fehler.text("Remote-G-Code ist leer") }
+            let dauer = Date().timeIntervalSince(t0)
+            return (.ok, String(format: "%.1f s, %d Bytes", dauer, bytes))
+        }
+
+        // Nils' Bericht: die G-Code-Vorschau bleibt bei einem groesseren,
+        // echten Modell leer ("geht schon wieder nicht mit dem
+        // Anzeigen"), ein kleiner Testkoerper funktioniert. Testet mit
+        // genau der Datei, die er hochgeladen hat, statt mit einem
+        // 20-mm-Wuerfel - der Pfad existiert nur auf dieser Maschine
+        // waehrend der Fehlersuche, deshalb ohne die Datei ein Hinweis
+        // statt eines Fehlschlags.
+        let grossesModellPfad = "/tmp/psm-testdata/DDCDHipMain.stl"
+        var grossesModellKern: PsmCore?
+        if FileManager.default.fileExists(atPath: grossesModellPfad) {
+            await schritt("Grosses Modell: laden und schneiden") {
+                let ordner = FileManager.default.temporaryDirectory
+                    .appendingPathComponent("psm-selbsttest-gross", isDirectory: true)
+                try? FileManager.default.removeItem(at: ordner)
+                try FileManager.default.createDirectory(at: ordner, withIntermediateDirectories: true)
+                guard let res = Bundle.main.resourceURL?.appendingPathComponent("psresources") else {
+                    throw Fehler.text("Ressourcen fehlen im App-Bundle")
+                }
+                let k = try PsmCore(dataDir: ordner.path, resourceDir: res.path)
+                grossesModellKern = k
+                try k.installPrinters(["PrusaResearch:MK4S:0.4"])
+                let ids = try k.loadModel(path: grossesModellPfad)
+                guard let erste = ids.first else { throw Fehler.text("Kein Objekt entstanden") }
+                let info = k.objectInfo(erste)
+                let t0 = Date()
+                try k.startSlice { _, _ in false }
+                let stand = k.awaitSlice()
+                guard stand == .done else { throw Fehler.text("Ergebnis: \(stand) — " + k.lastError) }
+                let dauer = Date().timeIntervalSince(t0)
+                return (.ok, String(format: "%.0f Dreiecke · %.1f s Schnittzeit",
+                                    Double(info?.triangles ?? 0), dauer))
+            }
+
+            await schritt("Grosses Modell: Vorschau laden") {
+                guard let k = grossesModellKern else { throw Fehler.text("Kein Kern") }
+                guard let snap = k.previewSnapshot() else {
+                    throw Fehler.text("previewSnapshot() liefert nil - genau das leere "
+                                      + "Anzeigen aus dem Feldbericht")
+                }
+                guard !snap.layers.isEmpty else {
+                    throw Fehler.text("Vorschau ohne Schichten (0 Layer)")
+                }
+                return (.ok, "\(snap.layers.count) Schichten, "
+                        + "\(snap.extruders.first?.moveCount ?? 0) Zuege im ersten Extruder")
+            }
+        } else {
+            await schritt("Grosses Modell") {
+                (.angabe, "Testdatei nicht auf dieser Maschine (\(grossesModellPfad) fehlt) - uebersprungen")
+            }
         }
 
         await schritt("G-Code schreiben") {
@@ -289,7 +505,7 @@ final class Selbsttest: ObservableObject {
             return (.ok, "\(anzahl) Facetten markiert")
         }
 
-        await schritt("Mehrfarbig schneiden") {
+        await schritt("Mehrfarbig slicen") {
             guard let k = kern else { throw Fehler.text("Kein Kern") }
             // Fuenf Duesen wie bei der MMU, dann die halbe Oberflaeche
             // dem zweiten Extruder geben.
@@ -358,6 +574,16 @@ final class Selbsttest: ObservableObject {
             self.aktuell = ""
             self.laeuft = false
         }
+        // Nils meldete: ein fehlgeschlagener Selbsttest auf dem echten
+        // Geraet war fuer mich nicht einsehbar, weil nur Berichte NACH
+        // einem Slice hochgehen (DiagnosticsReporter.nachSlice) - ein
+        // reiner Selbsttest-Lauf ohne anschliessenden Schnitt blieb
+        // unsichtbar. Jetzt geht jeder Selbsttest-Lauf fuer sich hoch,
+        // unter denselben zwei Schaltern (KEY_DIAG_AUTO_UPLOAD /
+        // KEY_TELEMETRY_ANON) wie beim Slice-Bericht.
+        await DiagnosticsReporter.nachSelbsttest(bericht: bericht,
+                                                 fehlerZahl: fehlerZahl,
+                                                 warnungZahl: warnungZahl)
     }
 
     // MARK: - Bericht

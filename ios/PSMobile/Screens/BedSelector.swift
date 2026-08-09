@@ -149,8 +149,27 @@ struct BedSelector: View {
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .padding(.trailing, ps.pt(3))
             .accessibilityIdentifier("bed.lock.\(bett.index)")
+
+            // Direkt sichtbar statt nur im Kontextmenue (langer Druck) -
+            // auf dem iPad findet den kaum jemand von selbst. Nur bei
+            // einem leeren Bett: ein volles darf nicht so verschwinden.
+            if model.beds.count > 1 && bett.objectCount == 0 {
+                Button {
+                    model.removeBed(bett.index)
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: ps.font(8), weight: .semibold))
+                        .foregroundStyle(PrusaColors.textMuted)
+                        .frame(width: ps.touch(24), height: ps.touch(32))
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .padding(.trailing, ps.pt(3))
+                .accessibilityIdentifier("bed.remove.\(bett.index)")
+            } else {
+                Spacer().frame(width: ps.pt(3))
+            }
         }
         .background(PrusaColors.panelRaised)
         .overlay(

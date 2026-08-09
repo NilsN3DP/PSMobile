@@ -72,6 +72,11 @@
         <true/>
     </dict>
 
+    <!-- QR-Pairing fuer Remote Slicing: Serveradresse und Token per
+         Kamera einscannen statt abtippen - siehe RemoteSliceView.swift. -->
+    <key>NSCameraUsageDescription</key>
+    <string>Um den QR-Code deines Remote-Slice-Servers einzuscannen.</string>
+
     <key>UILaunchScreen</key>
     <dict/>
 

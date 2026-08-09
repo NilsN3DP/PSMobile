@@ -93,8 +93,9 @@ struct psm_session
     std::deque<HistorySnapshot>            redo_history;
     size_t                                 history_depth = 0;
     bool                                   history_checkpoint_taken = false;
+    bool                                   defer_design_change = false;
     std::string                            history_label;
-    static constexpr size_t                HISTORY_LIMIT = 20;
+    static constexpr size_t                HISTORY_LIMIT = 30;
 
     /*
      * Ob auch Profile aufgelistet werden, die zum gewaehlten Drucker

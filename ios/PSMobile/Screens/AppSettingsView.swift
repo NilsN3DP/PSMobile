@@ -17,6 +17,8 @@ struct AppSettingsView: View {
 
     @Environment(\.psScale) private var ps
     @State private var zeigeSelbsttest = false
+    @State private var protokollDatei: URL = LogExport.exportFile()
+        ?? FileManager.default.temporaryDirectory.appendingPathComponent("psmobile-protokoll.txt")
 
     var body: some View {
         SchwebenderDialog(kennung: "dialog.appeinstellungen", maximaleBreite: ps.pt(760)) {
@@ -142,7 +144,51 @@ struct AppSettingsView: View {
             .sheet(isPresented: $zeigeSelbsttest) {
                 SelbsttestView { zeigeSelbsttest = false }
             }
+
+            ShareLink(item: protokollDatei) {
+                HStack(spacing: ps.pt(12)) {
+                    VStack(alignment: .leading, spacing: ps.pt(2)) {
+                        Text(st("Export log", "Protokoll exportieren"))
+                            .font(.system(size: ps.font(14)))
+                            .foregroundStyle(PrusaColors.textPrimary)
+                        Text(st("The last warnings and errors from the core, as a text file to share.",
+                                "Die letzten Warnungen und Fehler aus dem Kern, als teilbare Textdatei."))
+                            .font(.system(size: ps.font(11)))
+                            .foregroundStyle(PrusaColors.textMuted)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    Spacer()
+                    Image(systemName: "square.and.arrow.up")
+                        .font(.system(size: ps.font(16)))
+                        .foregroundStyle(PrusaColors.orange)
+                }
+                .padding(.horizontal, ps.pt(14))
+                .padding(.vertical, ps.pt(10))
+                .frame(minHeight: ps.touch(56))
+                .background(PrusaColors.panelRaised)
+                .clipShape(RoundedRectangle(cornerRadius: ps.pt(10)))
+                .contentShape(Rectangle())
+            }
+            // Bei jedem Erscheinen frisch schreiben statt einmal beim
+            // ersten Aufbau der Ansicht - sonst zeigt der Export den
+            // Stand von vor dem Oeffnen der Einstellungen, nicht den
+            // aktuellen.
+            .onAppear { protokollDatei = LogExport.exportFile() ?? protokollDatei }
+            .accessibilityIdentifier("appeinstellungen.protokoll")
+
+            versionszeile
         }
+    }
+
+    private var versionszeile: some View {
+        let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?"
+        let build = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "?"
+        return Text("PSMobile \(version) (\(build))")
+            .font(.system(size: ps.font(11)))
+            .foregroundStyle(PrusaColors.textMuted)
+            .padding(.top, ps.pt(16))
+            .frame(maxWidth: .infinity, alignment: .center)
+            .accessibilityIdentifier("appeinstellungen.version")
     }
 
     private func schalterZeile(_ schalter: AppSettings.Toggle) -> some View {
@@ -284,5 +330,9 @@ final class AppSettingsStore: ObservableObject {
 
     var showIncompatible: Bool {
         bool(AppSettings.shared.KEY_SHOW_INCOMPATIBLE, standard: false)
+    }
+
+    var multiBedRender: Bool {
+        bool(AppSettings.shared.KEY_MULTI_BED_RENDER, standard: true)
     }
 }

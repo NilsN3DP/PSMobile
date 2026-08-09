@@ -17,7 +17,7 @@ class PsmCore private constructor(private var handle: Long) : Closeable {
 
     companion object {
         private const val TAG = "PsmCore"
-        const val ABI_VERSION = 4
+        const val ABI_VERSION = 6
 
         init {
             System.loadLibrary("psmobile_core")

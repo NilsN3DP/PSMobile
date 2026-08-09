@@ -14,6 +14,7 @@
 
 #include <algorithm>
 #include <cstring>
+#include <iterator>
 
 #include <boost/filesystem.hpp>
 #include <set>
@@ -89,9 +90,24 @@ std::vector<size_t> usable_filament_indices(psm_session *s, bool include_incompa
         return {};
 
     /* ExtruderFilaments hat kein size() - die Liste laeuft aber index-
-     * gleich zur Filament-Sammlung, so nutzt PrusaSlicer sie auch. */
+     * gleich zur Filament-Sammlung, so nutzt PrusaSlicer sie auch.
+     *
+     * ABER: ExtruderFilaments::filament(i) ist ungeprueftes
+     * std::deque::operator[] (siehe external/PrusaSlicer/src/libslic3r/
+     * Preset.hpp) - kein Ausnahmefehler, sondern ein harter
+     * Speicherzugriffsfehler, wenn die interne Liste kuerzer ist als
+     * die Filament-Sammlung. Das ist live auf Nils' iPad passiert: Absturz
+     * genau in dieser Funktion (SIGKILL/EXC_CRASH, "Data Abort" beim
+     * Lesen), ausgeloest waehrend des Hintergrundwechselns - die
+     * ExtruderFilaments-Instanz war zu diesem Zeitpunkt offenbar
+     * veraltet (z.B. Filamentliste seit dem letzten
+     * update_multi_material_filament_presets() gewachsen). Da es keine
+     * oeffentliche size() gibt, aber begin()/end() oeffentlich sind,
+     * daraus eine sichere obere Schranke bilden, statt den vendorten
+     * Header anzufassen. */
     const ExtruderFilaments &ef = s->presets->extruders_filaments.front();
-    for (size_t i = 0; i < fc.size(); ++i) {
+    const size_t ef_count = static_cast<size_t>(std::distance(ef.begin(), ef.end()));
+    for (size_t i = 0; i < fc.size() && i < ef_count; ++i) {
         const Preset &p = fc.preset(i);
         if (p.is_default && fc.size() > fc.num_default_presets())
             continue;
@@ -122,7 +138,13 @@ static bool preset_is_compatible(psm_session *s, psm_preset_type type, size_t in
     if (type == PSM_PRESET_FILAMENT) {
         if (s->presets->extruders_filaments.empty())
             return false;
-        return s->presets->extruders_filaments.front().filament(index).is_compatible;
+        const ExtruderFilaments &ef = s->presets->extruders_filaments.front();
+        /* Derselbe ungeprüfte operator[] wie in usable_filament_indices()
+         * oben - dieselbe Absturzgefahr bei einer veralteten Instanz,
+         * deshalb dieselbe begin()/end()-Schranke. */
+        if (index >= static_cast<size_t>(std::distance(ef.begin(), ef.end())))
+            return false;
+        return ef.filament(index).is_compatible;
     }
     PresetCollection *c = collection_for(s, type);
     return c != nullptr && c->preset(index).is_compatible;
@@ -387,6 +409,37 @@ PSM_API psm_result psm_presets_install(psm_session *s,
         s->presets->update_multi_material_filament_presets();
         s->presets->update_compatible(PresetSelectCompatibleType::Always);
 
+        /*
+         * load_presets() waehlt selbst ein Startfilament, aber nur nach
+         * "gerade noch kompatibel" - nicht nach "das hier ist der
+         * empfohlene Standard fuer diesen Drucker". Mit wenigen
+         * mitgelieferten Herstellern (nur Prusa/Voron/Templates) traf das
+         * zufaellig meistens einen Prusa-eigenen Filamentnamen, weil kaum
+         * Alternativen geladen waren. Sobald alle 36 Hersteller mitkommen,
+         * landet die erste "kompatible" Wahl ebenso zufaellig bei einem
+         * x-beliebigen Fremdhersteller (z. B. 3D-Fuel) - der Drucker
+         * selbst nennt seinen bevorzugten Namen aber schon in
+         * "default_filament_profile", das ist derselbe Wert, den
+         * PrusaSlicer Desktop im Assistenten vorschlaegt. Den hier
+         * explizit setzen, statt auf den Zufall der Ladereihenfolge zu
+         * vertrauen.
+         */
+        if (s->presets->printers.get_selected_idx() != size_t(-1)) {
+            const Preset &aktiver_drucker = s->presets->printers.get_selected_preset();
+            const auto *bevorzugt = aktiver_drucker.config.option<ConfigOptionStrings>(
+                "default_filament_profile");
+            if (bevorzugt != nullptr && ! bevorzugt->values.empty() &&
+                ! bevorzugt->values.front().empty()) {
+                psm_extruder_filament_set(s, 0, bevorzugt->values.front().c_str());
+                /* Fehlschlag hier ist kein harter Fehler - die Einrichtung
+                 * ist trotzdem erfolgreich, nur eben ohne den
+                 * Wunschstandard. psm_extruder_filament_set setzt in dem
+                 * Fall bereits eine erklaerende Fehlermeldung, die nach
+                 * dieser Funktion nicht ueberschrieben werden darf. */
+                s->last_error.clear();
+            }
+        }
+
         psm_emit_log(PSM_LOG_INFO,
                      std::to_string(bundles) + " Bundle(s), " + std::to_string(models) +
                      " Druckermodelle installiert");
@@ -516,20 +569,88 @@ PSM_API psm_result psm_preset_select(psm_session *s, psm_preset_type type, const
         PresetCollection *c = collection_for(s, type);
         if (c == nullptr)
             return PSM_ERR_NOT_FOUND;
-        /* Wer unpassende Profile bewusst einblendet, muss sie auch
-         * waehlen koennen - sonst listet die Oberflaeche Eintraege, die
-         * beim Antippen nichts tun. */
-        if (! c->select_preset_by_name(name, s->show_incompatible)) {
+        /* NICHT select_preset_by_name(): die faellt bei einem Namen,
+         * dessen Preset is_visible==false ist (unabhaengig von
+         * Kompatibilitaet - PrusaSlicer setzt das aus eigenen,
+         * vendorinternen Gruenden, z.B. fuer XL-Filamentvarianten),
+         * still auf "erstes sichtbares Preset" zurueck UND meldet mit
+         * force=true trotzdem Erfolg. Nachgestellt im Selbsttest: auf
+         * einem eingerichteten XL landete "Prusament PLA @XL" nie in
+         * der Auswahl, sondern lautlos "3D-Fuel Buzzed @Template" -
+         * kein Fehler, nur die falsche Auswahl. Genau der Feldbericht
+         * ("kein Filament laesst sich waehlen").
+         *
+         * Der Name kommt ohnehin aus unserer eigenen, schon gefilterten
+         * Liste (psm_preset_name_at nutzt dieselben usable_*_indices) -
+         * die Sichtbarkeitspruefung ist also bereits passiert, bevor
+         * der Nutzer ueberhaupt etwas antippen konnte. Ein zweites Mal
+         * pruefen bringt nur die Moeglichkeit mit, lautlos falsch zu
+         * waehlen. Deshalb hier direkt ueber denselben Rohindex, den
+         * auch die Anzeige benutzt, statt ueber PrusaSlicers eigene
+         * Namensauswahl mit ihrer Sichtbarkeits-Ausweichlogik. */
+        const std::vector<size_t> waehlbar = (type == PSM_PRESET_FILAMENT)
+            ? usable_filament_indices(s, s->show_incompatible)
+            : usable_indices(*c, s->show_incompatible);
+        auto treffer = std::find_if(waehlbar.begin(), waehlbar.end(),
+            [&](size_t i) { return c->preset(i).name == name; });
+        if (treffer == waehlbar.end()) {
             s->set_error(std::string("Preset nicht waehlbar: ") + name);
             return PSM_ERR_NOT_FOUND;
         }
+        s->history_checkpoint("Profil auswaehlen");
+        c->select_preset(*treffer);
 
         /* Ein neuer Drucker aendert, welche Druck- und Filamentprofile
-         * ueberhaupt passen. Ohne diesen Aufruf blieben die alten Flags
-         * stehen und die Listen zeigten Unpassendes. Always waehlt bei
-         * Bedarf gleich ein kompatibles Profil aus. */
+         * ueberhaupt passen - Always ist hier richtig, ein Wechsel des
+         * Druckers soll veraltete Filament-/Druckprofilwahl aufraeumen.
+         *
+         * Fuer Filament/Druckprofil selbst ist Always aber der zweite
+         * Bug: PrusaSlicer waehlt hier ausdruecklich gerade Gewaehltes
+         * SOFORT WIEDER AB, wenn es als "nicht kompatibel" markiert ist
+         * (is_compatible false) - selbst wenn genau DAS eben aktiv
+         * angetippt wurde. Der Selbsttest zeigte das exakt: "Prusament
+         * PLA @XL" wurde korrekt gefunden und ausgewaehlt (siehe oben),
+         * aber update_compatible(Always) hat die Auswahl im selben
+         * Aufruf wieder verworfen, weil sie zum Drucker als unpassend
+         * markiert war - danach stand ein voelliger fremder Ersatz da.
+         * Genau der Feldbericht. Never laesst eine bewusste Wahl stehen;
+         * die Oberflaeche zeigt "passt nicht" ohnehin schon als Hinweis,
+         * nicht als Verbot. */
         s->presets->update_multi_material_filament_presets();
-        s->presets->update_compatible(PresetSelectCompatibleType::Always);
+        s->presets->update_compatible(type == PSM_PRESET_PRINTER
+            ? PresetSelectCompatibleType::Always
+            : PresetSelectCompatibleType::Never);
+
+        /* update_compatible(Always) oben waehlt bei einem Druckerwechsel
+         * selbst ein neues, "gerade noch kompatibles" Filament - nach
+         * genau demselben Zufallsprinzip wie beim allerersten Laden in
+         * psm_presets_install (siehe dortiger Kommentar): mit 36
+         * mitgelieferten Herstellern landet das oft bei einem x-
+         * beliebigen Fremdhersteller (z. B. 3D-Fuel) statt beim
+         * Drucker-eigenen Wunschstandard. Der Effekt trat live auf,
+         * OBWOHL psm_presets_install den Standard beim Einrichten schon
+         * einmal richtig gesetzt hatte: die anschliessende explizite
+         * Druckerauswahl (dieser Aufruf, mit demselben Drucker) hat ihn
+         * durch update_compatible(Always) sofort wieder verworfen -
+         * derselbe Mechanismus, den der Kommentar oben schon fuer die
+         * Filament-Rueckwahl selbst beschreibt, hier eben fuer den
+         * Drucker-Wechsel-Fall. Deshalb hier, wie beim Erstladen, den
+         * Wunschstandard des NEU gewaehlten Druckers erneut explizit
+         * durchsetzen - das ist auch der Weg, den PrusaSlicer Desktop im
+         * eigenen Assistenten geht (nicht dem Zufall der Kompatibilitäts-
+         * pruefung ueberlassen). */
+        if (type == PSM_PRESET_PRINTER && s->presets->printers.get_selected_idx() != size_t(-1)) {
+            const Preset &aktiver_drucker = s->presets->printers.get_selected_preset();
+            const auto *bevorzugt = aktiver_drucker.config.option<ConfigOptionStrings>(
+                "default_filament_profile");
+            if (bevorzugt != nullptr && ! bevorzugt->values.empty() &&
+                ! bevorzugt->values.front().empty()) {
+                s->defer_design_change = true;
+                psm_extruder_filament_set(s, 0, bevorzugt->values.front().c_str());
+                s->defer_design_change = false;
+                s->last_error.clear();
+            }
+        }
 
         s->config = s->presets->full_config();
         ++s->config_revision;

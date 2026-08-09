@@ -30,13 +30,24 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.filled.GridView
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.InsertDriveFile
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.Layers
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.LockOpen
 import androidx.compose.material.icons.filled.OpenWith
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Rotate90DegreesCcw
+import androidx.compose.material.icons.filled.Save
+import androidx.compose.material.icons.filled.SaveAs
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.VerticalAlignBottom
 import androidx.compose.material.icons.filled.ZoomOutMap
@@ -51,6 +62,8 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -134,6 +147,7 @@ private data class PendingPresetSwitch(
 fun SlicerScreen(
     service: SlicerService?,
     onOpenSimple: () -> Unit,
+    onHome: () -> Unit,
     onAppSettings: () -> Unit,
     onPickFile: (List<android.net.Uri>) -> Unit,
     onShare: (android.net.Uri) -> Unit,
@@ -149,6 +163,7 @@ fun SlicerScreen(
     onRepairStl: () -> Unit,
     onConvertGcode: () -> Unit,
     onAddSvg: (Int, Float, PsmCore.VolumeType) -> Unit,
+    onControllerReady: (SceneController) -> Unit = {},
 ) {
     if (service == null) {
         Box(
@@ -160,6 +175,7 @@ fun SlicerScreen(
     SlicerContent(
         service = service,
         onOpenSimple = onOpenSimple,
+        onHome = onHome,
         onAppSettings = onAppSettings,
         onPickFile = onPickFile,
         onShare = onShare,
@@ -175,6 +191,7 @@ fun SlicerScreen(
         onRepairStl = onRepairStl,
         onConvertGcode = onConvertGcode,
         onAddSvg = onAddSvg,
+        onControllerReady = onControllerReady,
     )
 }
 
@@ -182,6 +199,7 @@ fun SlicerScreen(
 private fun SlicerContent(
     service: SlicerService,
     onOpenSimple: () -> Unit,
+    onHome: () -> Unit,
     onAppSettings: () -> Unit,
     onPickFile: (List<android.net.Uri>) -> Unit,
     onShare: (android.net.Uri) -> Unit,
@@ -197,6 +215,7 @@ private fun SlicerContent(
     onRepairStl: () -> Unit,
     onConvertGcode: () -> Unit,
     onAddSvg: (Int, Float, PsmCore.VolumeType) -> Unit,
+    onControllerReady: (SceneController) -> Unit = {},
 ) {
     // Mehrere Dateien auf einmal: eine Baugruppe besteht selten aus
     // genau einem Teil, und der Umweg ueber sechs einzelne Auswahlen
@@ -223,6 +242,7 @@ private fun SlicerContent(
     // Quell-ID und erzeugen beim Einfuegen eine echte Modellkopie.
     var copiedObjectId by remember { mutableStateOf<Int?>(null) }
     val sceneController = remember { SceneController() }
+    LaunchedEffect(sceneController) { onControllerReady(sceneController) }
     // Nach einem Zug am Griff oder einer Spreizgeste aendert der Viewport
     // das Modell direkt. Ohne diese Rueckmeldung zeigten Objektliste und
     // Zahlenfelder weiter die alten Werte.
@@ -242,6 +262,7 @@ private fun SlicerContent(
     var linkPrinters by remember { mutableStateOf(de.psmobile.net.PrinterStore.all(ctx)) }
     var confirmNewProject by remember { mutableStateOf(false) }
     var confirmReloadProject by remember { mutableStateOf(false) }
+    var confirmLeaveProject by remember { mutableStateOf(false) }
 
     if (showWizard) {
         AdvancedWizardScreen(service = service, onClose = service::showBed)
@@ -461,6 +482,9 @@ private fun SlicerContent(
                         { confirmReloadProject = true }
                     } else null,
                     onOpenSimple = onOpenSimple,
+                    onHome = {
+                        if (service.hasUnsavedChanges) confirmLeaveProject = true else onHome()
+                    },
         onAppSettings = onAppSettings,
                     actionsEnabled = progress !is SlicerService.Progress.Running,
                     showInspectorAction = !permanentInspector,
@@ -824,6 +848,42 @@ private fun SlicerContent(
             },
             dismissButton = {
                 TextButton(onClick = { confirmReloadProject = false }) { Text(advancedText("Cancel", "Abbrechen")) }
+            },
+        )
+    }
+
+    if (confirmLeaveProject) {
+        AlertDialog(
+            onDismissRequest = { confirmLeaveProject = false },
+            containerColor = PrusaColors.Panel,
+            titleContentColor = PrusaColors.TextPrimary,
+            textContentColor = PrusaColors.TextPrimary,
+            title = { Text(advancedText("Unsaved changes", "Ungesicherte Änderungen")) },
+            text = {
+                Text(
+                    advancedText(
+                        "A second tap on a mode would discard this project.",
+                        "Ein erneutes Tippen auf einen Modus würde dieses Projekt verwerfen.",
+                    )
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmLeaveProject = false
+                    onSaveProject()
+                    onHome()
+                }) { Text(advancedText("Save", "Sichern")) }
+            },
+            dismissButton = {
+                Row {
+                    TextButton(onClick = { confirmLeaveProject = false }) {
+                        Text(advancedText("Cancel", "Abbrechen"))
+                    }
+                    TextButton(onClick = {
+                        confirmLeaveProject = false
+                        onHome()
+                    }) { Text(advancedText("Discard", "Verwerfen"), color = PrusaColors.Danger) }
+                }
             },
         )
     }
@@ -1557,6 +1617,7 @@ private fun WorkspaceBar(
     onSaveAs: () -> Unit,
     onReload: (() -> Unit)?,
     onOpenSimple: () -> Unit,
+    onHome: () -> Unit,
     onAppSettings: () -> Unit,
     actionsEnabled: Boolean,
     showInspectorAction: Boolean,
@@ -1564,36 +1625,61 @@ private fun WorkspaceBar(
     onToggleInspector: () -> Unit,
     tight: Boolean = false,
 ) {
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .height(68.dp)
-            .background(PrusaColors.Panel)
-            .padding(horizontal = if (tight) 6.dp else 10.dp, vertical = 8.dp),
-        horizontalArrangement = Arrangement.spacedBy(if (tight) 6.dp else 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
+    // Flaches Icon-ueber-Beschriftung-Werkzeugband statt gefuellter
+    // Knopf-Kacheln - Gegenstueck zu `werkzeugleiste`/`werkzeug()` in
+    // AdvancedWorkspaceView.swift (iOS). Ein echtes iPad-Foto von Nils
+    // zeigte: iOS' Knoepfe haben ueberhaupt keinen Hintergrund, nur
+    // Symbol+kleine Beschriftung - Androids vorige Fassung fuellte
+    // jeden Knopf als eigene Kachel, was neben iOS "zu fett" wirkte
+    // (Nils' Feedback zum Startbildschirm-Redesign galt hier genauso).
+    // Die Bettauswahl steht dafuer jetzt in einer eigenen Zeile
+    // darunter, wie bei iOS (dort eigene Zeile, nicht in derselben
+    // Reihe wie die Werkzeuge).
+    Column(Modifier.fillMaxWidth().background(PrusaColors.Panel)) {
         Row(
             Modifier
-                .weight(1f)
-                .horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(if (tight) 6.dp else 10.dp),
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState())
+                .padding(horizontal = if (tight) 4.dp else 8.dp, vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            ProjectBar(
-                onNew = onNew,
-                onSave = onSave,
-                onSaveAs = onSaveAs,
-                onReload = onReload,
-                enabled = actionsEnabled,
-                tight = tight,
-            )
-            Box(
-                Modifier
-                    .width(1.dp)
-                    .height(36.dp)
-                    .background(PrusaColors.Divider),
-            )
+            // Bislang gab es aus dem Advanced Mode gar keinen Weg zurueck
+            // zur Startseite (anders als "Simple", das nur den Modus
+            // wechselt) - dieselbe Luecke wie bei Simple Mode vor dem
+            // Kopfzeilen-Fix.
+            WerkzeugKnopf(Icons.Default.Home, advancedText("Start", "Start"), enabled = actionsEnabled, onClick = onHome)
+            WerkzeugTrenner()
+            WerkzeugKnopf(Icons.Default.InsertDriveFile, advancedText("New", "Neu"), enabled = actionsEnabled, onClick = onNew)
+            WerkzeugKnopf(Icons.Default.Save, advancedText("Save", "Sichern"), enabled = actionsEnabled, onClick = onSave)
+            WerkzeugKnopf(Icons.Default.SaveAs, advancedText("Save as", "Sichern unter"), enabled = actionsEnabled, onClick = onSaveAs)
+            if (onReload != null) {
+                WerkzeugKnopf(Icons.Default.Refresh, advancedText("Reload", "Neu laden"), enabled = actionsEnabled, onClick = onReload)
+            }
+            WerkzeugTrenner()
+            WerkzeugKnopf(Icons.Default.Bolt, "Simple", enabled = actionsEnabled, onClick = onOpenSimple)
+            // Wer den Startmodus fest eingestellt hat, sieht die
+            // Startseite nie wieder - ohne diesen Weg waere die
+            // Einstellung nicht mehr erreichbar, die ihn dorthin
+            // gebracht hat.
+            WerkzeugKnopf(Icons.Default.Settings, advancedText("Settings", "Einstellungen"), enabled = actionsEnabled, onClick = onAppSettings)
+            Spacer(Modifier.weight(1f))
+            if (showInspectorAction) {
+                WerkzeugKnopf(
+                    Icons.Default.GridView,
+                    "Panel",
+                    enabled = true,
+                    active = inspectorOpen,
+                    onClick = onToggleInspector,
+                )
+            }
+        }
+        HorizontalDivider(color = PrusaColors.Divider)
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = if (tight) 6.dp else 10.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
             BedSelector(
                 beds = beds,
                 onSelect = onSelectBed,
@@ -1601,110 +1687,53 @@ private fun WorkspaceBar(
                 onRemove = onRemoveBed,
                 lockedBeds = lockedBeds,
                 onToggleLock = onToggleBedLock,
+                schmal = tight,
             )
-        }
-        ProjectAction("Simple", actionsEnabled, onOpenSimple, tight = tight)
-        // Wer den Startmodus fest eingestellt hat, sieht die Startseite nie
-        // wieder - ohne diesen Weg waere die Einstellung nicht mehr
-        // erreichbar, die ihn dorthin gebracht hat.
-        ProjectAction("⚙", actionsEnabled, onAppSettings, tight = tight)
-        if (showInspectorAction) {
-            // Im Hochformat schnitt die feste Beschriftung den Bettwaehler
-            // links ab. Das Rastersymbol allein traegt die Aussage, der
-            // Name steht nur, wenn Platz dafuer da ist.
-            Box(
-                Modifier
-                    .height(50.dp)
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(
-                        if (inspectorOpen) PrusaColors.Orange
-                        else PrusaColors.PanelRaised
-                    )
-                    .clickable(onClick = onToggleInspector)
-                    .padding(horizontal = if (tight) 12.dp else 16.dp),
-                contentAlignment = Alignment.Center,
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    Icon(
-                        Icons.Default.GridView,
-                        contentDescription = PsUi.appText("Panel", "Panel"),
-                        tint = if (inspectorOpen) Color.White else PrusaColors.TextPrimary,
-                        modifier = Modifier.size(22.dp),
-                    )
-                    if (!tight) {
-                        Text(
-                            "Panel",
-                            color = if (inspectorOpen) Color.White else PrusaColors.TextPrimary,
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.SemiBold,
-                        )
-                    }
-                }
-            }
         }
     }
 }
 
 /**
- * Projektaktionen bleiben sichtbar, statt hinter einem Desktop-Menü zu
- * verschwinden. Die Ziele sind bewusst groß genug für Fingerbedienung.
+ * Ein Werkzeugband-Knopf: Symbol ueber kleiner Beschriftung, kein
+ * eigener Hintergrund - Gegenstueck zu `werkzeug()` in
+ * AdvancedWorkspaceView.swift (iOS).
  */
 @Composable
-private fun ProjectBar(
-    onNew: () -> Unit,
-    onSave: () -> Unit,
-    onSaveAs: () -> Unit,
-    onReload: (() -> Unit)?,
+private fun WerkzeugKnopf(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
     enabled: Boolean,
-    modifier: Modifier = Modifier,
-    tight: Boolean = false,
+    active: Boolean = false,
+    onClick: () -> Unit,
 ) {
-    Row(
-        modifier
-            .clip(RoundedCornerShape(10.dp))
-            .background(PrusaColors.Background.copy(alpha = 0.55f))
-            .padding(3.dp),
-        horizontalArrangement = Arrangement.spacedBy(3.dp),
+    val farbe = when {
+        active -> PrusaColors.Orange
+        enabled -> PrusaColors.TextPrimary
+        else -> PrusaColors.TextMuted.copy(alpha = 0.4f)
+    }
+    Column(
+        Modifier
+            .width(56.dp)
+            .heightIn(min = 46.dp)
+            .clickable(enabled = enabled, onClick = onClick)
+            .padding(vertical = 4.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(2.dp),
     ) {
-        ProjectAction(advancedText("New", "Neu"), enabled, onNew, tight)
-        ProjectAction(advancedText("Save", "Speichern"), enabled, onSave, tight)
-        ProjectAction(advancedText("Save as", "Speichern unter"), enabled, onSaveAs, tight)
-        if (onReload != null) {
-            ProjectAction(advancedText("Reload", "Neu laden"), enabled, onReload, tight)
-        }
+        Icon(icon, contentDescription = null, tint = farbe, modifier = Modifier.size(18.dp))
+        Text(label, color = farbe, fontSize = 9.sp, maxLines = 1)
     }
 }
 
 @Composable
-private fun ProjectAction(
-    label: String,
-    enabled: Boolean,
-    onClick: () -> Unit,
-    tight: Boolean = false,
-) {
+private fun WerkzeugTrenner() {
     Box(
         Modifier
-            .height(50.dp)
-            .clip(RoundedCornerShape(8.dp))
-            .background(
-                if (enabled) PrusaColors.PanelRaised
-                else PrusaColors.PanelRaised.copy(alpha = 0.5f)
-            )
-            .clickable(enabled = enabled, onClick = onClick)
-            .padding(horizontal = if (tight) 10.dp else 16.dp),
-        contentAlignment = Alignment.Center,
-    ) {
-        Text(
-            label,
-            color = if (enabled) PrusaColors.TextPrimary else PrusaColors.TextMuted,
-            fontSize = 14.sp,
-            fontWeight = FontWeight.SemiBold,
-            maxLines = 1,
-        )
-    }
+            .width(1.dp)
+            .height(30.dp)
+            .padding(horizontal = 0.dp)
+            .background(PrusaColors.Divider),
+    )
 }
 
 /**
@@ -1716,7 +1745,7 @@ private fun ProjectAction(
  * und jeder Chip springt unmittelbar zum gewaehlten Bett.
  */
 @Composable
-@OptIn(ExperimentalFoundationApi::class)
+@OptIn(ExperimentalFoundationApi::class, androidx.compose.material3.ExperimentalMaterial3Api::class)
 private fun BedSelector(
     beds: List<PsmCore.Bed>,
     onSelect: (Int) -> Unit,
@@ -1724,10 +1753,119 @@ private fun BedSelector(
     onRemove: (Int) -> Unit,
     lockedBeds: Set<Int>,
     onToggleLock: (Int) -> Unit,
+    schmal: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     if (beds.isEmpty()) return
     val active = beds.firstOrNull { it.active } ?: beds.first()
+
+    if (schmal) {
+        var zeigeListe by remember { mutableStateOf(false) }
+        Row(
+            modifier
+                .clip(RoundedCornerShape(8.dp))
+                .background(PrusaColors.PanelRaised)
+                .clickable { zeigeListe = true }
+                .padding(horizontal = 12.dp, vertical = 8.dp)
+                .heightIn(min = 44.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(7.dp),
+        ) {
+            Icon(
+                if (active.index in lockedBeds) Icons.Default.Lock else Icons.Default.Layers,
+                contentDescription = null,
+                tint = PrusaColors.TextPrimary,
+                modifier = Modifier.size(16.dp),
+            )
+            Column {
+                Text(
+                    "${advancedText("Bed", "Bett")} ${active.index + 1}",
+                    color = PrusaColors.TextPrimary,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                Text(
+                    advancedText("${active.objectCount} objects", "${active.objectCount} Objekte"),
+                    color = PrusaColors.TextMuted,
+                    fontSize = 10.sp,
+                )
+            }
+            Spacer(Modifier.weight(1f, fill = false))
+            Icon(Icons.Default.KeyboardArrowDown, contentDescription = null, tint = PrusaColors.TextMuted, modifier = Modifier.size(18.dp))
+        }
+        if (zeigeListe) {
+            ModalBottomSheet(onDismissRequest = { zeigeListe = false }, containerColor = PrusaColors.Background) {
+                Column(
+                    Modifier.padding(horizontal = 16.dp).padding(bottom = 24.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    Text(
+                        advancedText("Beds", "Betten"),
+                        color = PrusaColors.TextPrimary,
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    beds.forEach { bett ->
+                        Row(
+                            Modifier
+                                .fillMaxWidth()
+                                .heightIn(min = 64.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(if (bett.active) PrusaColors.Orange else PrusaColors.PanelRaised)
+                                .clickable { onSelect(bett.index); zeigeListe = false }
+                                .padding(horizontal = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        ) {
+                            Icon(
+                                if (bett.index in lockedBeds) Icons.Default.Lock else Icons.Default.Layers,
+                                contentDescription = null,
+                                tint = if (bett.active) PrusaColors.Background else PrusaColors.TextPrimary,
+                            )
+                            Column(Modifier.weight(1f)) {
+                                Text(
+                                    "${advancedText("Bed", "Bett")} ${bett.index + 1}",
+                                    color = if (bett.active) PrusaColors.Background else PrusaColors.TextPrimary,
+                                    fontWeight = FontWeight.SemiBold,
+                                )
+                                Text(
+                                    advancedText("${bett.objectCount} objects", "${bett.objectCount} Objekte"),
+                                    color = if (bett.active) PrusaColors.Background.copy(alpha = 0.7f) else PrusaColors.TextMuted,
+                                    fontSize = 12.sp,
+                                )
+                            }
+                            IconButton(onClick = { onToggleLock(bett.index) }) {
+                                Icon(
+                                    if (bett.index in lockedBeds) Icons.Default.Lock else Icons.Default.LockOpen,
+                                    contentDescription = advancedText("Lock bed", "Bett sperren"),
+                                    tint = if (bett.active) PrusaColors.Background else PrusaColors.TextMuted,
+                                )
+                            }
+                            if (beds.size > 1 && bett.objectCount == 0) {
+                                IconButton(onClick = { onRemove(bett.index) }) {
+                                    Icon(
+                                        Icons.Default.Close,
+                                        contentDescription = advancedText("Remove bed", "Bett entfernen"),
+                                        tint = if (bett.active) PrusaColors.Background else PrusaColors.TextMuted,
+                                    )
+                                }
+                            }
+                        }
+                    }
+                    androidx.compose.material3.Button(
+                        onClick = { onAdd(); zeigeListe = false },
+                        colors = androidx.compose.material3.ButtonDefaults.buttonColors(containerColor = PrusaColors.Orange),
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 44.dp),
+                    ) {
+                        Icon(Icons.Default.Add, contentDescription = null)
+                        Spacer(Modifier.width(6.dp))
+                        Text(advancedText("Add bed", "Bett hinzufügen"))
+                    }
+                }
+            }
+        }
+        return
+    }
 
     Row(
         modifier
@@ -1853,11 +1991,23 @@ private fun Sidebar(
         }
     }
 
+    // Nils' Wunsch: rechts automatisch das Passende zeigen - bei
+    // ausgewaehltem Objekt die objektbezogenen Einstellungen (Edit),
+    // ohne Auswahl die plattenbezogenen (Profiles: Drucker/Filament/
+    // Druckprofil). iOS macht das noch nicht (dort bleibt der Reiter
+    // stehen, bis man selbst wechselt) - hier bewusst vorausgegangen,
+    // sollte fuer Gleichstand auch nach iOS uebernommen werden.
+    //
+    // TOOLS wird beim Auswaehlen nicht angetastet: wer gerade malt und
+    // ein anderes Objekt antippt, wird nicht aus dem Werkzeug gerissen.
     LaunchedEffect(selected?.id) {
-        if (selected == null &&
-            (section == InspectorSection.TRANSFORM ||
-                section == InspectorSection.TOOLS))
-            section = InspectorSection.OBJECTS
+        if (selected == null) {
+            if (section == InspectorSection.TRANSFORM || section == InspectorSection.TOOLS) {
+                section = InspectorSection.PROFILES
+            }
+        } else if (section == InspectorSection.PROFILES || section == InspectorSection.OBJECTS) {
+            section = InspectorSection.TRANSFORM
+        }
     }
 
     LaunchedEffect(filamentPickerIndex) {

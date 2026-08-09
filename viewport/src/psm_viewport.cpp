@@ -43,6 +43,8 @@
 #include "libslic3r/PrintConfig.hpp"
 #include "libslic3r/TriangleSelector.hpp"
 #include "libslic3r/TriangleMesh.hpp"
+#include "libslic3r/BuildVolume.hpp"
+#include "libslic3r/MultipleBeds.hpp"
 
 /* NanoSVG rastert die Bett-Textur - dieselbe Bibliothek, die
  * PrusaSlicer in GLTexture.cpp dafuer benutzt. */
@@ -226,6 +228,9 @@ struct Mesh {
     /* Einsbasiert wie in PrusaSlicer. 0 hiesse "vom Objekt geerbt" und
      * ist hier bereits aufgeloest. */
     int extruder = 1;
+    /* Welchem Bett dieses Netz in der Mehrbett-Darstellung gehoert -
+     * bei ausgeschaltetem Modus immer 0 (das aktive Bett). */
+    int bed_index = 0;
 
     void destroy()
     {
@@ -316,6 +321,8 @@ struct psm_viewport
     GLuint       bed_tex = 0;    /* gerasterte SVG des Druckbereichs */
     bool         has_bed_texture = false;
     std::string  last_error;
+    /* Siehe psm_viewport_set_multi_bed_render. */
+    bool         multi_bed_render = false;
 
     Program prog_lit;    // gouraud_light - Modelle
     Program prog_layer;  // variable_layer_height - gespeichertes Profil
@@ -419,6 +426,69 @@ void upload(Mesh &m, const std::vector<Vertex> &verts)
     m.vertex_count = static_cast<GLsizei>(verts.size());
 }
 
+/*
+ * Weltversatz eines Betts fuer die raeumliche Mehrbett-Darstellung -
+ * derselbe Aufruf, den auch der 3MF-Export in psmobile_core.cpp fuer
+ * denselben Zweck nutzt (siehe merge_project_beds). Bei ausgeschaltetem
+ * Modus oder nur einem Bett bleibt es bei Null: der bisherige, immer
+ * schon korrekte Fall.
+ */
+Slic3r::Vec3d bed_offset(const psm_viewport *v, size_t bed_index)
+{
+    if (! v->multi_bed_render || v->session->bed_models.size() <= 1)
+        return Slic3r::Vec3d::Zero();
+    return Slic3r::s_multiple_beds.get_bed_translation(
+        static_cast<int>(bed_index));
+}
+
+/** Wie viele Betten die raeumliche Darstellung tatsaechlich zeichnet. */
+size_t visible_bed_count(const psm_viewport *v)
+{
+    return (v->multi_bed_render && v->session->bed_models.size() > 1)
+        ? v->session->bed_models.size() : 1;
+}
+
+/*
+ * Ordnet einer Schleifenposition [0, visible_bed_count()) das
+ * tatsaechliche Bett zu. Bei eingeschaltetem Mehrbett-Modus ist das
+ * dieselbe Zahl - alle Betten werden gezeichnet. Sonst gibt es nur eine
+ * Position, und die muss das gerade aktive Bett sein, nicht immer
+ * Bett 0.
+ */
+size_t bed_at(const psm_viewport *v, size_t position)
+{
+    if (v->multi_bed_render && v->session->bed_models.size() > 1)
+        return position;
+    return v->session->active_bed;
+}
+
+/*
+ * get_bed_translation() rechnet gegen die zuletzt gemeldete
+ * Druckbettflaeche (m_build_volume_bb). Die setzt sonst nur der
+ * Export/Import - hier muss sie vor dem ersten Aufruf pro Neubau selbst
+ * gesetzt werden, sonst waeren alle Betten deckungsgleich bei Null.
+ */
+void update_multi_bed_metrics(const psm_viewport *v)
+{
+    if (! v->multi_bed_render || v->session->bed_models.size() <= 1)
+        return;
+    const auto *shape =
+        v->session->config.opt<Slic3r::ConfigOptionPoints>("bed_shape");
+    const auto *height =
+        v->session->config.opt<Slic3r::ConfigOptionFloat>("max_print_height");
+    if (shape == nullptr || shape->values.size() < 3 || height == nullptr)
+        return;
+    try {
+        Slic3r::BuildVolume volume(shape->values, height->value);
+        if (volume.valid())
+            Slic3r::s_multiple_beds.update_build_volume(
+                volume.bounding_volume2d());
+    } catch (...) {
+        /* Ohne gueltige Bettform bleiben alle Betten bei Null - besser
+         * uebereinander als eine willkuerliche Rechnung. */
+    }
+}
+
 /** Baut das Druckbett aus der aktiven Konfiguration - nicht geraten. */
 /*
  * Prusas eigenes Bettmodell laden.
@@ -475,16 +545,22 @@ bool build_bed_model(psm_viewport *v)
     }
     const float cz = -0.03f;
 
+    const size_t bed_count = visible_bed_count(v);
     std::vector<Vertex> verts;
-    verts.reserve(mesh.its.indices.size() * 3);
-    for (const Slic3r::Vec3i32 &tri : mesh.its.indices) {
-        const Slic3r::Vec3f &a = mesh.its.vertices[tri(0)];
-        const Slic3r::Vec3f &b = mesh.its.vertices[tri(1)];
-        const Slic3r::Vec3f &c = mesh.its.vertices[tri(2)];
-        const Slic3r::Vec3f n = (b - a).cross(c - a).normalized();
-        for (const Slic3r::Vec3f &p : { a, b, c })
-            verts.push_back({ p.x() + cx, p.y() + cy, p.z() + cz,
-                              n.x(), n.y(), n.z() });
+    verts.reserve(mesh.its.indices.size() * 3 * bed_count);
+    for (size_t bed_index = 0; bed_index < bed_count; ++bed_index) {
+        const Slic3r::Vec3d off = bed_offset(v, bed_index);
+        const float ox = cx + static_cast<float>(off.x());
+        const float oy = cy + static_cast<float>(off.y());
+        for (const Slic3r::Vec3i32 &tri : mesh.its.indices) {
+            const Slic3r::Vec3f &a = mesh.its.vertices[tri(0)];
+            const Slic3r::Vec3f &b = mesh.its.vertices[tri(1)];
+            const Slic3r::Vec3f &c = mesh.its.vertices[tri(2)];
+            const Slic3r::Vec3f n = (b - a).cross(c - a).normalized();
+            for (const Slic3r::Vec3f &p : { a, b, c })
+                verts.push_back({ p.x() + ox, p.y() + oy, p.z() + cz,
+                                  n.x(), n.y(), n.z() });
+        }
     }
 
     upload(v->bed_model, verts);
@@ -555,6 +631,10 @@ bool build_bed_texture(psm_viewport *v, const Slic3r::BoundingBoxf &bb)
 
 void build_bed(psm_viewport *v)
 {
+    /* Muss vor jedem Aufruf von bed_offset() in diesem Neubau stehen -
+     * die Uebersetzung rechnet gegen die hier gesetzte Bettflaeche. */
+    update_multi_bed_metrics(v);
+
     /* Erst das echte Modell, dann die texturierte Flaeche darueber. */
     v->bed_model.destroy();
     v->has_bed_model = build_bed_model(v);
@@ -609,30 +689,39 @@ void build_bed(psm_viewport *v)
      * der Tiefenpruefung - die sich mit dem Kameraabstand aendert. Die
      * Textur war deshalb mal da und mal nicht. */
     const float ebene = 0.1f;
-    std::vector<Vertex> fill;
-    for (size_t i = 1; i + 1 < poly.size(); ++i) {
-        for (const Eigen::Vector2f &p : { poly[0], poly[i], poly[i + 1] }) {
-            const Eigen::Vector2f t = uv(p);
-            fill.push_back({ p.x(), p.y(), ebene, t.x(), t.y(), 0.f });
-        }
-    }
-    upload(v->bed_fill, fill);
-
-    v->has_bed_texture = build_bed_texture(v, bb);
-
-    /* Raster im 10-mm-Abstand, wie im Slicer. */
-    std::vector<Vertex> grid;
     const auto minp = bb.min;
     const auto maxp = bb.max;
     const float z = 0.05f;   // minimal ueber dem Bett, sonst Z-Fighting
-    for (double x = std::ceil(minp.x() / 10.0) * 10.0; x <= maxp.x(); x += 10.0) {
-        grid.push_back({ (float) x, (float) minp.y(), z, 0.f, 0.f, 1.f });
-        grid.push_back({ (float) x, (float) maxp.y(), z, 0.f, 0.f, 1.f });
+    const size_t bed_count = visible_bed_count(v);
+
+    std::vector<Vertex> fill;
+    std::vector<Vertex> grid;
+    for (size_t bed_index = 0; bed_index < bed_count; ++bed_index) {
+        const Slic3r::Vec3d off = bed_offset(v, bed_index);
+        const float ox = static_cast<float>(off.x());
+        const float oy = static_cast<float>(off.y());
+
+        /* Dieselbe UV-Rechnung fuer jedes Bett: die Bettform ist immer
+         * dieselbe, nur die Lage im Raum wechselt. */
+        for (size_t i = 1; i + 1 < poly.size(); ++i) {
+            for (const Eigen::Vector2f &p : { poly[0], poly[i], poly[i + 1] }) {
+                const Eigen::Vector2f t = uv(p);
+                fill.push_back({ p.x() + ox, p.y() + oy, ebene, t.x(), t.y(), 0.f });
+            }
+        }
+
+        /* Raster im 10-mm-Abstand, wie im Slicer. */
+        for (double x = std::ceil(minp.x() / 10.0) * 10.0; x <= maxp.x(); x += 10.0) {
+            grid.push_back({ (float) x + ox, (float) minp.y() + oy, z, 0.f, 0.f, 1.f });
+            grid.push_back({ (float) x + ox, (float) maxp.y() + oy, z, 0.f, 0.f, 1.f });
+        }
+        for (double y = std::ceil(minp.y() / 10.0) * 10.0; y <= maxp.y(); y += 10.0) {
+            grid.push_back({ (float) minp.x() + ox, (float) y + oy, z, 0.f, 0.f, 1.f });
+            grid.push_back({ (float) maxp.x() + ox, (float) y + oy, z, 0.f, 0.f, 1.f });
+        }
     }
-    for (double y = std::ceil(minp.y() / 10.0) * 10.0; y <= maxp.y(); y += 10.0) {
-        grid.push_back({ (float) minp.x(), (float) y, z, 0.f, 0.f, 1.f });
-        grid.push_back({ (float) maxp.x(), (float) y, z, 0.f, 0.f, 1.f });
-    }
+    upload(v->bed_fill, fill);
+    v->has_bed_texture = build_bed_texture(v, bb);
     upload(v->bed_grid, grid);
 
     /* Nur beim ersten Mal und auf ausdruecklichen Wunsch. Sonst
@@ -640,15 +729,24 @@ void build_bed(psm_viewport *v)
      * Ansicht - er hat hineingezoomt, um etwas genau anzusehen, und
      * genau dann fasst er es an. */
     if (v->camera_unset) {
-        v->target = Vec3(static_cast<float>(bb.center().x()),
-                         static_cast<float>(bb.center().y()), 0.f);
+        /* Im Mehrbett-Modus soll die erste Ansicht alle sichtbaren
+         * Betten zeigen, nicht nur das erste - sonst haengen zwei
+         * Drittel der Szene ausserhalb des Bilds. */
+        Slic3r::BoundingBoxf gesamt = bb;
+        for (size_t bed_index = 1; bed_index < bed_count; ++bed_index) {
+            const Slic3r::Vec3d off = bed_offset(v, bed_index);
+            gesamt.merge(Slic3r::Vec2d(bb.min.x() + off.x(), bb.min.y() + off.y()));
+            gesamt.merge(Slic3r::Vec2d(bb.max.x() + off.x(), bb.max.y() + off.y()));
+        }
+        v->target = Vec3(static_cast<float>(gesamt.center().x()),
+                         static_cast<float>(gesamt.center().y()), 0.f);
         /* Die Diagonale, nicht die laengste Kante: das Bett steht
          * gedreht im Bild, und dann ist die Diagonale das, was quer
          * hineinpassen muss. Ein Fuenftel Zuschlag fuer das, was das
          * Bettmodell ueber den Druckbereich hinausragt - Griffe,
          * Halterungen, die Kanten der Platte. */
         const float halbe = 0.6f * static_cast<float>(
-            std::hypot(bb.size().x(), bb.size().y()));
+            std::hypot(gesamt.size().x(), gesamt.size().y()));
         const float seiten =
             v->height > 0 ? static_cast<float>(v->width) /
                             static_cast<float>(v->height)
@@ -675,7 +773,12 @@ void build_meshes(psm_viewport *v)
     v->layer_texture.destroy();
     v->scene_bbox = Slic3r::BoundingBoxf3();
 
-    for (const Slic3r::ModelObject *obj : v->session->model().objects) {
+    const size_t mesh_bed_count = visible_bed_count(v);
+    for (size_t bed_index = 0; bed_index < mesh_bed_count; ++bed_index) {
+        const size_t wirkliches_bett = bed_at(v, bed_index);
+        const Slic3r::Vec3d bed_shift = bed_offset(v, bed_index);
+        for (const Slic3r::ModelObject *obj :
+             v->session->bed_models[wirkliches_bett]->objects) {
         for (size_t inst = 0; inst < obj->instances.size(); ++inst) {
             const Slic3r::Transform3d inst_m = obj->instances[inst]->get_matrix();
 
@@ -696,7 +799,7 @@ void build_meshes(psm_viewport *v)
                 for (const Slic3r::Vec3i32 &tri : its.indices) {
                     Slic3r::Vec3d p[3];
                     for (int k = 0; k < 3; ++k)
-                        p[k] = m * its.vertices[tri[k]].cast<double>();
+                        p[k] = m * its.vertices[tri[k]].cast<double>() + bed_shift;
 
                     /* Flache Normale je Dreieck: das entspricht dem, was
                      * PrusaSlicer fuer unstrukturierte Meshes auch tut,
@@ -726,12 +829,14 @@ void build_meshes(psm_viewport *v)
 
                 Mesh mesh;
                 upload(mesh, verts);
-                mesh.owner    = static_cast<psm_object_id>(obj->id().id);
-                mesh.bbox     = bbox;
-                mesh.extruder = extruder;
+                mesh.owner     = static_cast<psm_object_id>(obj->id().id);
+                mesh.bed_index = static_cast<int>(wirkliches_bett);
+                mesh.bbox      = bbox;
+                mesh.extruder  = extruder;
                 v->meshes.push_back(mesh);
                 v->scene_bbox.merge(bbox);
             }
+        }
         }
     }
 
@@ -1118,6 +1223,71 @@ PSM_API void psm_viewport_invalidate(psm_viewport *v)
         v->dirty = true;
 }
 
+PSM_API void psm_viewport_set_multi_bed_render(psm_viewport *v, int32_t enabled)
+{
+    if (v == nullptr)
+        return;
+    const bool wert = enabled != 0;
+    if (v->multi_bed_render == wert)
+        return;
+    v->multi_bed_render = wert;
+    /* Camera-Fit nur beim Einschalten neu ausrichten - beim Ausschalten
+     * soll die Ansicht so stehen bleiben, wie der Nutzer sie zuletzt auf
+     * dem aktiven Bett hatte. */
+    if (wert)
+        v->camera_unset = true;
+    v->dirty = true;
+}
+
+PSM_API void psm_viewport_focus_bed(psm_viewport *v, int32_t bed_index)
+{
+    if (v == nullptr || v->session == nullptr)
+        return;
+    std::lock_guard<std::recursive_mutex> data_lock(v->session->data_mtx);
+
+    /* Dieselbe Bettflaeche wie beim Neubau - ohne sie waere die
+     * Uebersetzung fuer bed_index > 0 falsch. Ein Aufruf vor dem ersten
+     * Rendern (also bevor build_bed() je lief) ist unschaedlich: dann
+     * gilt einfach noch die Standard-Bettgroesse. */
+    update_multi_bed_metrics(v);
+
+    Slic3r::Points pts;
+    try {
+        pts = Slic3r::get_bed_shape(v->session->config);
+    } catch (...) {
+        pts.clear();
+    }
+    if (pts.size() < 3)
+        return;
+
+    Slic3r::BoundingBoxf bb;
+    for (const Slic3r::Point &p : pts)
+        bb.merge(Slic3r::Vec2d(Slic3r::unscale<double>(p.x()),
+                               Slic3r::unscale<double>(p.y())));
+
+    const size_t position = (v->multi_bed_render &&
+                              v->session->bed_models.size() > 1)
+        ? static_cast<size_t>(bed_index) : 0;
+    const Slic3r::Vec3d off = bed_offset(v, position);
+    v->target = Vec3(static_cast<float>(bb.center().x() + off.x()),
+                     static_cast<float>(bb.center().y() + off.y()), 0.f);
+
+    /* Genau dieses eine Bett fuellt das Bild - dieselbe Rechnung wie
+     * der erste Kamera-Fit in build_bed(), nur auf ein einzelnes Bett
+     * statt auf alle zusammen bezogen. Im Mehrbett-Modus zeigt ein
+     * Bettwechsel damit wieder das gewohnte enge Bild statt der
+     * Gesamtansicht, mit der die Szene beim Einschalten anfing. */
+    const float halbe = 0.6f * static_cast<float>(
+        std::hypot(bb.size().x(), bb.size().y()));
+    const float seiten =
+        v->height > 0 ? static_cast<float>(v->width) /
+                        static_cast<float>(v->height)
+                      : 1.f;
+    const float t = std::tan(45.f * PI_F / 180.f * 0.5f);
+    v->distance = std::max(halbe / t, halbe / (t * std::max(seiten, 0.2f)));
+    v->dirty = true;
+}
+
 PSM_API int psm_viewport_active_layer_visualization(
     psm_viewport *v,
     psm_layer_visualization_info *out)
@@ -1450,7 +1620,8 @@ PSM_API void psm_viewport_view_preset(psm_viewport *v, int which)
 
 /* Weiter unten definiert - die Auswahl braucht ihn schon hier. */
 static int raycast_model(psm_viewport *v, float x, float y,
-                         psm_object_id only_object, psm_surface_hit *out);
+                         psm_object_id only_object, psm_surface_hit *out,
+                         size_t *out_bed_index);
 
 PSM_API psm_object_id psm_viewport_pick(psm_viewport *v, float x, float y)
 {
@@ -1463,8 +1634,19 @@ PSM_API psm_object_id psm_viewport_pick(psm_viewport *v, float x, float y)
      * es stattdessen wieder aus.
      */
     psm_surface_hit treffer{};
-    if (! raycast_model(v, x, y, PSM_INVALID_ID, &treffer))
+    size_t hit_bed = 0;
+    if (! raycast_model(v, x, y, PSM_INVALID_ID, &treffer, &hit_bed))
         return PSM_INVALID_ID;
+
+    /* Im Mehrbett-Modus macht ein Tipp auf ein Objekt eines anderen
+     * Betts dieses Bett aktiv - wie ein Wechsel ueber den Bettwaehler,
+     * nur ohne den Umweg. Ohne das liesse sich nichts anfassen, was
+     * nicht zufaellig schon aktiv war. */
+    if (v->multi_bed_render && hit_bed != v->session->active_bed) {
+        v->session->active_bed = hit_bed;
+        v->session->mark_design_changed();
+        v->dirty = true;
+    }
     return treffer.object_id;
 }
 
@@ -1502,7 +1684,8 @@ PSM_API void psm_viewport_set_selections(psm_viewport *v,
 }
 
 static int raycast_model(psm_viewport *v, float x, float y,
-                         psm_object_id only_object, psm_surface_hit *out)
+                         psm_object_id only_object, psm_surface_hit *out,
+                         size_t *out_bed_index)
 {
     if (v == nullptr || out == nullptr || v->session == nullptr)
         return 0;
@@ -1528,11 +1711,16 @@ static int raycast_model(psm_viewport *v, float x, float y,
     bool found = false;
     psm_surface_hit best{};
     best.object_id = PSM_INVALID_ID;
+    size_t best_bed = 0;
 
     std::lock_guard<std::recursive_mutex> data_lock(
         v->session->data_mtx);
+    const size_t pick_bed_count = visible_bed_count(v);
+    for (size_t bed_index = 0; bed_index < pick_bed_count; ++bed_index) {
+    const size_t wirkliches_bett = bed_at(v, bed_index);
+    const Eigen::Translation3d bed_shift(bed_offset(v, bed_index));
     for (const Slic3r::ModelObject *object :
-         v->session->model().objects) {
+         v->session->bed_models[wirkliches_bett]->objects) {
         const psm_object_id object_id =
             static_cast<psm_object_id>(object->id().id);
         if (only_object != PSM_INVALID_ID && object_id != only_object)
@@ -1552,7 +1740,7 @@ static int raycast_model(psm_viewport *v, float x, float y,
                     continue;
 
                 const Slic3r::Transform3d to_world =
-                    instance->get_matrix() * volume->get_matrix();
+                    bed_shift * instance->get_matrix() * volume->get_matrix();
                 const Slic3r::Transform3d to_local =
                     to_world.inverse();
                 const Slic3r::Vec3d local_origin =
@@ -1657,14 +1845,19 @@ static int raycast_model(psm_viewport *v, float x, float y,
                         best.normal[axis] =
                             static_cast<float>(normal(axis));
                     }
+                    best_bed = wirkliches_bett;
                     found = true;
                 }
             }
         }
     }
+    }
 
-    if (found)
+    if (found) {
         *out = best;
+        if (out_bed_index != nullptr)
+            *out_bed_index = best_bed;
+    }
     return found ? 1 : 0;
 }
 
@@ -2087,7 +2280,7 @@ PSM_API int psm_viewport_pick_surface(psm_viewport *v, float x, float y,
      * ausschliesslich dazu. Beim Messen ohne Auswahl darf dagegen die
      * gesamte Platte getroffen werden.
      */
-    const int found = raycast_model(v, x, y, v->selection, out);
+    const int found = raycast_model(v, x, y, v->selection, out, nullptr);
     if (v->paint_enabled) {
         v->paint_hit_valid = found != 0 && out != nullptr;
         if (v->paint_hit_valid)
@@ -2208,6 +2401,33 @@ PSM_API void psm_viewport_set_layer_range(psm_viewport *v, int32_t first, int32_
         static_cast<libvgcode::Interval::value_type>(std::max(last, 0)));
 }
 
+PSM_API int psm_viewport_move_range_bounds(
+    psm_viewport *v, int32_t *out_min, int32_t *out_max)
+{
+    if (v == nullptr || ! v->gcode_loaded)
+        return 0;
+    /* "enabled" ist der Teil der Werkzeugwege, den die aktuelle
+     * Schicht-/Rollen-/Extruderauswahl ueberhaupt zulaesst - genau der
+     * Bereich, den der untere Regler abdecken soll. "full" waere
+     * unabhaengig von der Schichtauswahl, "visible" ist der bereits
+     * eingeschraenkte Anzeigebereich (das Ergebnis, nicht die Grenze). */
+    const libvgcode::Interval &bereich = v->gcode_viewer.get_view_enabled_range();
+    if (out_min != nullptr)
+        *out_min = static_cast<int32_t>(bereich[0]);
+    if (out_max != nullptr)
+        *out_max = static_cast<int32_t>(bereich[1]);
+    return 1;
+}
+
+PSM_API void psm_viewport_set_move_range(psm_viewport *v, int32_t first, int32_t last)
+{
+    if (v == nullptr || ! v->gcode_loaded)
+        return;
+    v->gcode_viewer.set_view_visible_range(
+        static_cast<libvgcode::Interval::value_type>(std::max(first, 0)),
+        static_cast<libvgcode::Interval::value_type>(std::max(last, 0)));
+}
+
 PSM_API const char *psm_viewport_last_error(psm_viewport *v)
 {
     return v == nullptr ? "" : v->last_error.c_str();
@@ -2216,6 +2436,44 @@ PSM_API const char *psm_viewport_last_error(psm_viewport *v)
 /* ------------------------------------------------------------------ */
 /* Griffe am Objekt                                                    */
 /* ------------------------------------------------------------------ */
+
+PSM_API int psm_viewport_bed_label_anchor(
+    psm_viewport *v, int32_t position, float *out_x, float *out_y)
+{
+    if (v == nullptr || out_x == nullptr || out_y == nullptr)
+        return 0;
+    if (! v->multi_bed_render || v->session->bed_models.size() <= 1)
+        return 0;
+
+    std::lock_guard<std::recursive_mutex> data_lock(v->session->data_mtx);
+    float min_x = 0.f, min_y = 0.f;
+    try {
+        const Slic3r::Points pts = Slic3r::get_bed_shape(v->session->config);
+        if (pts.size() < 3)
+            return 0;
+        Slic3r::BoundingBoxf bb;
+        for (const Slic3r::Point &p : pts)
+            bb.merge(Slic3r::Vec2d(Slic3r::unscale<double>(p.x()),
+                                   Slic3r::unscale<double>(p.y())));
+        min_x = static_cast<float>(bb.min.x());
+        min_y = static_cast<float>(bb.min.y());
+    } catch (...) {
+        return 0;
+    }
+
+    /* 4 mm von der Ecke nach innen - sonst sitzt das Schild genau auf
+     * dem Rand des Betts. */
+    const Slic3r::Vec3d off = bed_offset(v, static_cast<size_t>(position));
+    const psm::Vec3 world(min_x + static_cast<float>(off.x()) + 4.f,
+                          min_y + static_cast<float>(off.y()) + 4.f, 0.f);
+    const psm::Mat4 vp = v->projection() * v->view();
+    psm::Vec2 screen;
+    if (! psm::project_point(vp, world, v->width, v->height, screen))
+        return 0;
+    *out_x = screen.x();
+    *out_y = screen.y();
+    return 1;
+}
 
 PSM_API void psm_viewport_set_gizmo(psm_viewport *v, psm_gizmo_mode mode)
 {

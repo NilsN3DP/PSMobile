@@ -24,6 +24,11 @@ struct ExtruderBank: View {
 
     private var anzahl: Int { model.extruderCount }
 
+    @State private var turmX: Float = 0
+    @State private var turmY: Float = 0
+    @State private var turmDrehung: Float = 0
+    @State private var turmGeladen = false
+
     var body: some View {
         if anzahl > 1 {
             VStack(alignment: .leading, spacing: ps.pt(8)) {
@@ -34,9 +39,55 @@ struct ExtruderBank: View {
                     .fixedSize(horizontal: false, vertical: true)
                 koepfe
                 wahl
+                reinigungsturm
             }
             .sheet(isPresented: $zeigeFarbe) { farbblatt }
+            .onAppear {
+                guard !turmGeladen, let turm = model.wipeTower() else { return }
+                turmGeladen = true
+                turmX = turm.x
+                turmY = turm.y
+                turmDrehung = turm.rotationDeg
+            }
         }
+    }
+
+    /// Position und Drehung des Reinigungsturms - nur bei mehreren
+    /// Extrudern ueberhaupt relevant, deshalb hier statt in den
+    /// allgemeinen Druckeinstellungen.
+    private var reinigungsturm: some View {
+        VStack(alignment: .leading, spacing: ps.pt(6)) {
+            Text(st("Wipe tower", "Reinigungsturm"))
+                .font(.system(size: ps.font(11), weight: .semibold))
+                .foregroundStyle(PrusaColors.textMuted)
+                .padding(.top, ps.pt(6))
+            turmZeile(st("X position", "X-Position"), wert: $turmX)
+            turmZeile(st("Y position", "Y-Position"), wert: $turmY)
+            turmZeile(st("Rotation", "Drehung"), wert: $turmDrehung, einheit: "°")
+        }
+    }
+
+    private func turmZeile(_ titel: String, wert: Binding<Float>,
+                           einheit: String = "mm") -> some View {
+        Stepper(value: Binding(
+            get: { Double(wert.wrappedValue) },
+            set: { neu in
+                wert.wrappedValue = Float(neu)
+                model.setWipeTower(x: turmX, y: turmY, rotationDeg: turmDrehung)
+            }
+        ), in: einheit == "°" ? -360...360 : -1000...1000, step: einheit == "°" ? 5 : 1) {
+            HStack {
+                Text(titel)
+                    .font(.system(size: ps.font(12)))
+                    .foregroundStyle(PrusaColors.textPrimary)
+                Spacer()
+                Text(String(format: "%.0f", wert.wrappedValue) + " " + einheit)
+                    .font(.system(size: ps.font(12)))
+                    .foregroundStyle(PrusaColors.textMuted)
+                    .monospacedDigit()
+            }
+        }
+        .accessibilityIdentifier("extruder.turm." + titel)
     }
 
     /// Die Köpfe, höchstens acht je Zeile — dieselbe Aufteilung wie auf

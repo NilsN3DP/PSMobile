@@ -4,6 +4,12 @@ import PSMShared
 
 /// Gemeinsame Preview-Karte. Nur ihre Anordnung unterscheidet sich:
 /// iPad rechts kompakt, iPhone unten als Sheet.
+///
+/// Nur noch fuer den Simple Mode - der Advanced Mode zeigt Statistik
+/// und Legende stattdessen direkt im rechten Menueband
+/// (`PreviewStatsRow`/`PreviewLegendPicker` unten, wiederverwendet
+/// von `AdvancedWorkspaceView`) und ersetzt die beiden Schichtregler
+/// hier durch eigene Randregler am Viewport.
 struct FinalPreviewOverlay: View {
     let snapshot: PsmCore.PreviewSnapshot
     @Binding var range: PreviewRange
@@ -61,32 +67,14 @@ struct FinalPreviewOverlay: View {
                 .accessibilityIdentifier("vorschau.editor")
             }
 
-            statistik
+            PreviewStatsRow(range: range, snapshot: snapshot)
             layerBereich
 
-            Picker("", selection: $view) {
-                Text(st("Features", "Merkmale"))
-                    .tag(PsmViewport.PreviewView.feature)
-                Text(st("Extruders", "Extruder"))
-                    .tag(PsmViewport.PreviewView.extruder)
-            }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .accessibilityIdentifier("vorschau.farbmodus")
-
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: ps.pt(7)) {
-                    if view == .feature {
-                        ForEach(snapshot.roles) { item in
-                            rollenKnopf(item)
-                        }
-                    } else {
-                        ForEach(snapshot.extruders) { item in
-                            extruderKnopf(item)
-                        }
-                    }
-                }
-            }
+            PreviewLegendPicker(
+                snapshot: snapshot,
+                view: $view,
+                hiddenRoles: $hiddenRoles,
+                hiddenExtruders: $hiddenExtruders)
         }
         .padding(ps.pt(12))
         .background(PrusaColors.panel.opacity(0.97))
@@ -99,37 +87,6 @@ struct FinalPreviewOverlay: View {
                 style: .continuous)
                 .stroke(PrusaColors.divider, lineWidth: 1))
         .shadow(color: .black.opacity(0.28), radius: 12, y: 4)
-    }
-
-    private var statistik: some View {
-        let values = range.stats(in: snapshot.layers.map {
-            PreviewLayerMetrics(
-                zLower: $0.zLower,
-                zUpper: $0.zUpper,
-                timeSeconds: $0.timeSeconds,
-                filamentMm: $0.filamentMm,
-                filamentGrams: $0.filamentGrams)
-        })
-        return HStack(spacing: ps.pt(12)) {
-            stat("clock", duration(values.timeSeconds))
-            stat("scribble.variable",
-                 String(format: "%.2f m", values.filamentMm / 1000))
-            stat("scalemass",
-                 String(format: "%.1f g", values.filamentGrams))
-            Spacer(minLength: 0)
-            Text(String(format: "%.2f–%.2f mm",
-                        values.zLower, values.zUpper))
-                .font(.system(size: ps.font(11), design: .monospaced))
-                .foregroundStyle(PrusaColors.textMuted)
-        }
-        .accessibilityElement(children: .combine)
-        .accessibilityIdentifier("vorschau.statistik")
-    }
-
-    private func stat(_ symbol: String, _ value: String) -> some View {
-        Label(value, systemImage: symbol)
-            .font(.system(size: ps.font(11), weight: .medium))
-            .foregroundStyle(PrusaColors.textPrimary)
     }
 
     private var layerBereich: some View {
@@ -162,6 +119,100 @@ struct FinalPreviewOverlay: View {
                 .disabled(range.layerCount < 2)
                 .accessibilityLabel(st("Upper layer", "Obere Schicht"))
                 .accessibilityIdentifier("vorschau.layer.oben")
+        }
+    }
+
+    private func st(_ english: String, _ german: String) -> String {
+        SimpleModeState.shared.text(english: english, german: german)
+    }
+}
+
+/// Zeit/Filament/Hoehenbereich fuer den aktuell gewaehlten Schichtbereich.
+///
+/// Eigenstaendig, damit sowohl die schwebende Karte im Simple Mode als
+/// auch das rechte Menueband im Advanced Mode dieselbe Berechnung und
+/// Anzeige verwenden - zwei Kopien haetten irgendwann auseinanderlaufen
+/// koennen.
+struct PreviewStatsRow: View {
+    let range: PreviewRange
+    let snapshot: PsmCore.PreviewSnapshot
+
+    @Environment(\.psScale) private var ps
+
+    var body: some View {
+        let values = range.stats(in: snapshot.layers.map {
+            PreviewLayerMetrics(
+                zLower: $0.zLower,
+                zUpper: $0.zUpper,
+                timeSeconds: $0.timeSeconds,
+                filamentMm: $0.filamentMm,
+                filamentGrams: $0.filamentGrams)
+        })
+        HStack(spacing: ps.pt(12)) {
+            stat("clock", duration(values.timeSeconds))
+            stat("scribble.variable",
+                 String(format: "%.2f m", values.filamentMm / 1000))
+            stat("scalemass",
+                 String(format: "%.1f g", values.filamentGrams))
+            Spacer(minLength: 0)
+            Text(String(format: "%.2f–%.2f mm",
+                        values.zLower, values.zUpper))
+                .font(.system(size: ps.font(11), design: .monospaced))
+                .foregroundStyle(PrusaColors.textMuted)
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("vorschau.statistik")
+    }
+
+    private func stat(_ symbol: String, _ value: String) -> some View {
+        Label(value, systemImage: symbol)
+            .font(.system(size: ps.font(11), weight: .medium))
+            .foregroundStyle(PrusaColors.textPrimary)
+    }
+
+    private func duration(_ seconds: Double) -> String {
+        let total = max(Int(seconds.rounded()), 0)
+        return String(format: "%d:%02d", total / 3600,
+                      (total % 3600) / 60)
+    }
+}
+
+/// Farbmodus-Umschalter (Merkmale/Extruder) plus die dazugehoerigen
+/// Ein-/Ausblend-Chips - ebenfalls von Simple- und Advanced-Ansicht
+/// gemeinsam genutzt.
+struct PreviewLegendPicker: View {
+    let snapshot: PsmCore.PreviewSnapshot
+    @Binding var view: PsmViewport.PreviewView
+    @Binding var hiddenRoles: Set<PsmCore.PreviewFeatureRole>
+    @Binding var hiddenExtruders: Set<Int32>
+
+    @Environment(\.psScale) private var ps
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: ps.pt(7)) {
+            Picker("", selection: $view) {
+                Text(st("Features", "Merkmale"))
+                    .tag(PsmViewport.PreviewView.feature)
+                Text(st("Extruders", "Extruder"))
+                    .tag(PsmViewport.PreviewView.extruder)
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .accessibilityIdentifier("vorschau.farbmodus")
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: ps.pt(7)) {
+                    if view == .feature {
+                        ForEach(snapshot.roles) { item in
+                            rollenKnopf(item)
+                        }
+                    } else {
+                        ForEach(snapshot.extruders) { item in
+                            extruderKnopf(item)
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -261,12 +312,6 @@ struct FinalPreviewOverlay: View {
         case .custom: return st("Custom", "Benutzerdefiniert")
         case .none: return ""
         }
-    }
-
-    private func duration(_ seconds: Double) -> String {
-        let total = max(Int(seconds.rounded()), 0)
-        return String(format: "%d:%02d", total / 3600,
-                      (total % 3600) / 60)
     }
 
     private func st(_ english: String, _ german: String) -> String {

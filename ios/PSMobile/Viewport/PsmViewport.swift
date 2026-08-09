@@ -205,6 +205,21 @@ final class PsmViewport {
         psm_viewport_set_layer_range(handle, first, last)
     }
 
+    /// Die Grenzen des Werkzeugweg-Bereichs innerhalb der gerade
+    /// sichtbaren Schicht(en) - haengen vom Schichtbereich ab, also
+    /// nach jeder Aenderung von setLayerRange neu abfragen.
+    func moveRangeBounds() -> ClosedRange<Int32>? {
+        var minWert: Int32 = 0
+        var maxWert: Int32 = 0
+        guard psm_viewport_move_range_bounds(handle, &minWert, &maxWert) != 0,
+              minWert <= maxWert else { return nil }
+        return minWert...maxWert
+    }
+
+    func setMoveRange(first: Int32, last: Int32) {
+        psm_viewport_set_move_range(handle, first, last)
+    }
+
     func setPreviewView(_ view: PreviewView) {
         psm_viewport_set_preview_view(
             handle,
@@ -221,5 +236,31 @@ final class PsmViewport {
     func setExtruder(_ extruder: Int32, visible: Bool) {
         psm_viewport_set_extruder_visible(
             handle, extruder, visible ? 1 : 0)
+    }
+
+    /// Alle Betten raeumlich versetzt zeigen statt nur das aktive. Der
+    /// Kern verwirft einen gleichlautenden Wert selbst, ein Aufruf bei
+    /// jedem Redraw kostet also nichts.
+    var multiBedRender: Bool = false {
+        didSet {
+            psm_viewport_set_multi_bed_render(handle, multiBedRender ? 1 : 0)
+        }
+    }
+
+    /// Schwenkt zum Mittelpunkt des angegebenen Betts, ohne den Zoom zu
+    /// aendern.
+    func focusBed(_ index: Int32) {
+        psm_viewport_focus_bed(handle, index)
+    }
+
+    /// Bildschirmposition fuer ein Namensschild am jeweiligen Bett in
+    /// der raeumlichen Mehrbett-Darstellung - nil ausserhalb des
+    /// Mehrbett-Modus oder wenn das Bett gerade hinter der Kamera liegt.
+    func bedLabelAnchor(position: Int32) -> CGPoint? {
+        var x: Float = 0
+        var y: Float = 0
+        guard psm_viewport_bed_label_anchor(handle, position, &x, &y) != 0
+        else { return nil }
+        return CGPoint(x: CGFloat(x), y: CGFloat(y))
     }
 }

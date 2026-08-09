@@ -1,0 +1,16 @@
+services:
+  psmobile-remote-slice:
+    image: psmobile-remote-slice:1
+    container_name: psmobile-remote-slice
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    volumes:
+      - jobs:/app/jobs
+    environment:
+      # Local runtime injection only. Export PSM_AUTH_TOKEN before compose up;
+      # never put a credential in this repository or a compose override.
+      PSM_AUTH_TOKEN: ${PSM_AUTH_TOKEN:?Set PSM_AUTH_TOKEN in the local environment}
+
+volumes:
+  jobs:

@@ -21,6 +21,19 @@ struct SimpleObjectBarView: View {
     /// Meldet, ob das Flaechenwerkzeug an ist - dann muss der Viewport
     /// die Beruehrung an die Flaeche geben statt an die Kamera.
     var onFlaechenwahl: (Bool) -> Void = { _ in }
+    /// Nur der Advanced Mode uebergibt das - im Simple Mode sitzt die
+    /// Griffwahl schon im Werkzeug-Blatt, eine zweite waere doppelt.
+    /// War vorher eine eigene schwebende Leiste ohne Bezug zu dieser
+    /// hier - stand deshalb an wechselnden Stellen im Bild, je nachdem
+    /// wie breit das Fenster gerade war.
+    var gizmo: Binding<PsmViewport.Gizmo>? = nil
+    /// Obergrenze in Punkten, statt der festen ps.pt(640) - Advanced
+    /// Mode braucht das auf schmalen Fenstern, wo die Leiste sonst
+    /// per .fixedSize() ueber ihre eigentliche Wunschbreite hinaus in
+    /// die Seitenleiste ragt: .fixedSize() macht sie immun gegen jede
+    /// von aussen zugewiesene Breite (z. B. per .padding), begrenzen
+    /// laesst sie sich nur von innen, ueber dieses .frame(maxWidth:).
+    var maxBreite: CGFloat? = nil
 
     @Environment(\.psScale) private var ps
     @State private var zeigeSchnitt = false
@@ -30,6 +43,19 @@ struct SimpleObjectBarView: View {
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 0) {
+                if let gizmo {
+                    griffKnopf("arrow.up.and.down.and.arrow.left.and.right",
+                               st("Move", "Verschieben"), .move, gizmo)
+                    griffKnopf("arrow.triangle.2.circlepath",
+                               st("Rotate", "Drehen"), .rotate, gizmo)
+                    griffKnopf("arrow.up.left.and.arrow.down.right",
+                               st("Scale", "Skalieren"), .scale, gizmo)
+                    griffKnopf("hand.point.up.left",
+                               st("None", "Kein"), PsmViewport.Gizmo.none, gizmo)
+                    Divider()
+                        .frame(height: ps.pt(28))
+                        .padding(.horizontal, ps.pt(2))
+                }
                 aktion("✂", st("Cut", "Schneiden"), kennung: "objekt.schneiden") {
                     schnittHoehe = objekt.sizeMm.z / 2
                     zeigeSchnitt = true
@@ -69,7 +95,7 @@ struct SimpleObjectBarView: View {
             }
             .padding(.horizontal, ps.pt(4))
         }
-        .frame(maxWidth: ps.pt(640))
+        .frame(maxWidth: maxBreite ?? ps.pt(640))
         .background(PrusaColors.panel.opacity(0.95))
         .overlay(
             RoundedRectangle(cornerRadius: ps.pt(2))
@@ -125,6 +151,38 @@ struct SimpleObjectBarView: View {
         .padding(ps.pt(20))
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(PrusaColors.background)
+    }
+
+    /// Dieselbe Kennung wie zuvor die schwebende Leiste - vorhandene
+    /// Tests bleiben gueltig.
+    private func griffKnopf(_ symbol: String,
+                            _ label: String,
+                            _ wert: PsmViewport.Gizmo,
+                            _ binding: Binding<PsmViewport.Gizmo>) -> some View {
+        let aktiv = binding.wrappedValue == wert
+        return Button {
+            binding.wrappedValue = wert
+        } label: {
+            VStack(spacing: 0) {
+                Image(systemName: symbol).font(.system(size: ps.font(15)))
+                Text(label).font(.system(size: ps.font(8))).lineLimit(1)
+            }
+            .foregroundStyle(aktiv ? PrusaColors.background : PrusaColors.textPrimary)
+            .frame(width: ps.pt(58), height: ps.touch(46))
+            .background(aktiv ? PrusaColors.orange : Color.clear)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("advanced.gizmo." + kennungFuer(wert))
+    }
+
+    private func kennungFuer(_ wert: PsmViewport.Gizmo) -> String {
+        switch wert {
+        case .move:   return "move"
+        case .rotate: return "rotate"
+        case .scale:  return "scale"
+        default:      return "none"
+        }
     }
 
     private func aktion(_ glyph: String,

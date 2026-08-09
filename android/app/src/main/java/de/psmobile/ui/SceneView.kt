@@ -105,6 +105,42 @@ class SceneController {
      * den GL-Thread, weil der Viewport die Geometrie dabei neu baut.
      */
     fun setGizmo(g: PsmViewport.Gizmo) = run { it.setGizmo(g) }
+
+    /**
+     * Momentaufnahme der aktuellen Ansicht - fuer die "Zuletzt"-Kacheln
+     * auf der Startseite. Liest den GL-Framebuffer direkt aus, statt
+     * einen eigenen Offscreen-Puffer anzulegen: die Ansicht steht ja
+     * schon, sobald gespeichert wird. GL zaehlt Zeilen von unten,
+     * Bitmap von oben - deshalb die Spiegelung am Ende.
+     */
+    fun captureThumbnail(onResult: (android.graphics.Bitmap?) -> Unit) {
+        val v = view
+        if (v == null) { onResult(null); return }
+        v.queueEvent {
+            holder?.viewport?.render()
+            val w = v.width
+            val h = v.height
+            val bmp = if (w > 0 && h > 0) {
+                try {
+                    val buf = java.nio.ByteBuffer.allocateDirect(w * h * 4)
+                        .order(java.nio.ByteOrder.nativeOrder())
+                    android.opengl.GLES20.glReadPixels(
+                        0, 0, w, h,
+                        android.opengl.GLES20.GL_RGBA, android.opengl.GLES20.GL_UNSIGNED_BYTE, buf,
+                    )
+                    buf.rewind()
+                    val raw = android.graphics.Bitmap.createBitmap(w, h, android.graphics.Bitmap.Config.ARGB_8888)
+                    raw.copyPixelsFromBuffer(buf)
+                    val flip = android.graphics.Matrix().apply { preScale(1f, -1f) }
+                    android.graphics.Bitmap.createBitmap(raw, 0, 0, w, h, flip, false)
+                } catch (t: Throwable) {
+                    null
+                }
+            } else null
+            v.post { onResult(bmp) }
+        }
+        v.requestRender()
+    }
 }
 
 @Composable

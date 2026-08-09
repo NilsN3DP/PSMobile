@@ -36,11 +36,26 @@ struct SimpleModeView: View {
     var onOpenAdvanced: () -> Void = {}
     var onOpenPrinterSetup: () -> Void = {}
     var onAppSettings: () -> Void = {}
+    var onRemoteSettings: () -> Void = {}
     /// Den fertigen G-Code an einen Drucker schicken. Der Weg ueber die
     /// Zusammenfassung: dort liegt die Datei, dort ist die Frage faellig.
     var onSendToPrinter: (URL) -> Void = { _ in }
 
     @Environment(\.psScale) private var ps
+    @AppStorage(AppSettings.shared.KEY_PLUGIN_REMOTE_SLICE)
+    private var remoteSlicePluginAn = true
+    @State private var zeigeVerlassenNachfrage = false
+
+    /// Dieselbe Nachfrage wie im Advanced Mode - siehe dort fuer die
+    /// Begruendung (ein zweites Tippen auf einen Modus verwirft sonst
+    /// stillschweigend das offene Projekt).
+    private func nachHauseGehen() {
+        if model.hasUnsavedChanges {
+            zeigeVerlassenNachfrage = true
+        } else {
+            onHome()
+        }
+    }
     @State private var panel: SimplePanel = .workspace
     @State private var zeigeImporter = false
     @State private var zeigeColorMix = false
@@ -147,6 +162,10 @@ struct SimpleModeView: View {
                       allowedContentTypes: [.item],
                       allowsMultipleSelection: false) { ergebnis in
             guard case .success(let urls) = ergebnis, let u = urls.first else { return }
+            if u.pathExtension.lowercased() == "zip" {
+                _ = model.loadZip(url: u)
+                return
+            }
             switch zweck {
             case .modell:  model.load(url: u)
             case .projekt: model.loadProject(url: u)
@@ -155,6 +174,19 @@ struct SimpleModeView: View {
         .sheet(isPresented: $zeigeColorMix) {
             ColorMixView { zeigeColorMix = false }
                 .environmentObject(model)
+        }
+        .alert(st("Unsaved changes", "Ungesicherte Änderungen"),
+               isPresented: $zeigeVerlassenNachfrage) {
+            Button(st("Cancel", "Abbrechen"), role: .cancel) {}
+            Button(st("Discard", "Verwerfen"), role: .destructive) { onHome() }
+            Button(st("Save", "Sichern")) {
+                model.saveProject(name: model.projectURL?.deletingPathExtension()
+                    .lastPathComponent ?? model.objects.first?.name ?? "PSMobile")
+                onHome()
+            }
+        } message: {
+            Text(st("A second tap on a mode would discard this project.",
+                     "Ein erneutes Tippen auf einen Modus würde dieses Projekt verwerfen."))
         }
         .onChange(of: model.sceneRevision) { _ in
             if vorschau && model.previewSnapshot() == nil {
@@ -183,6 +215,12 @@ struct SimpleModeView: View {
                     inputEnabled: panel == .workspace,
                     gizmo: gizmo,
                     viewportMode: vorschau ? .preview : .editor,
+                    // Mehrbett ist absichtlich ein Advanced-Werkzeug:
+                    // Simple arbeitet immer auf dem aktuellen Bett, auch
+                    // wenn die globale Viewport-Option aktiviert ist.
+                    multiBedRender: false,
+                    focusBedIndex: model.activeBedIndex,
+                    focusBedKey: model.focusBedKey,
                     layerRange: vorschau && !previewRange.isEmpty
                         ? (Int32(previewRange.lower) ... Int32(previewRange.upper))
                         : nil,
@@ -243,7 +281,7 @@ struct SimpleModeView: View {
 
     private var kopfzeile: some View {
         HStack {
-            Button(action: onHome) {
+            Button(action: nachHauseGehen) {
                 Image(systemName: "house")
                     .font(.system(size: ps.font(kompakt ? 22 : 26)))
                     .foregroundStyle(PrusaColors.textMuted)
@@ -288,7 +326,7 @@ struct SimpleModeView: View {
     /// verstellt sonst die Sicht auf das Haeufige.
     private var kopfMenue: some View {
         Menu {
-            Button(st("Start page", "Startseite"), action: onHome)
+            Button(st("Start page", "Startseite"), action: nachHauseGehen)
             Button(st("App settings", "App-Einstellungen"), action: onAppSettings)
             Divider()
             Button(st("Expert mode", "Expertenmodus"), action: onOpenAdvanced)
@@ -327,9 +365,46 @@ struct SimpleModeView: View {
                      breite: ps.pt(kompakt ? 62 : 74)) { vorschauZeigen() }
             werkzeug(labels[5], gewaehlt: true,
                      breite: ps.pt(kompakt ? 84 : 100)) { schneiden() }
+            if remoteSlicePluginAn {
+                fernSchnittUmschalter
+            }
         }
         .padding(.horizontal, ps.pt(12))
         .padding(.vertical, ps.pt(kompakt ? 3 : 6))
+    }
+
+    /// Lokal/entfernt umschalten, wie im Advanced Mode - siehe dort
+    /// (AdvancedWorkspaceView.fernSchnittUmschalter) fuer die
+    /// Begruendung. Ohne eingerichteten Server fuehrt das Tippen erst
+    /// zur Einrichtung statt stumm auf einen leeren Host umzuschalten.
+    private var fernSchnittUmschalter: some View {
+        Button {
+            let host = UserDefaults.standard.string(
+                forKey: SlicerModel.remoteSliceHostKey) ?? ""
+            if host.isEmpty {
+                onRemoteSettings()
+            } else {
+                model.remoteSliceEnabled.toggle()
+            }
+        } label: {
+            Image(systemName: model.remoteSliceEnabled ? "cloud.fill" : "cloud")
+                .font(.system(size: ps.font(16)))
+                .foregroundStyle(model.remoteSliceEnabled
+                                 ? PrusaColors.background : PrusaColors.textPrimary)
+                .frame(width: ps.pt(kompakt ? 40 : 46), height: ps.pt(kompakt ? 46 : 54))
+                .background(model.remoteSliceEnabled ? PrusaColors.orange : PrusaColors.panel)
+                .overlay(
+                    RoundedRectangle(cornerRadius: ps.pt(1))
+                        .stroke(model.remoteSliceEnabled
+                                ? PrusaColors.orange : PrusaColors.divider, lineWidth: 1)
+                )
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("simple.fern.umschalten")
+        .accessibilityLabel(model.remoteSliceEnabled
+                            ? st("Remote slicing on", "Remote Slicing an")
+                            : st("Remote slicing off", "Remote Slicing aus"))
     }
 
     /// Statt eines ausgegrauten Knopfes, der nur sagt "geht nicht":
@@ -380,7 +455,10 @@ struct SimpleModeView: View {
         case "Material": return "◎\n" + st("Material", "Material")
         case "Settings": return "☷\n" + st("Settings", "Einstell.")
         case "Preview":  return "▱\n" + st("Preview", "Vorschau")
-        case "G-Code":   return "➤  G-Code"
+        case "G-Code":
+            return "➤  " + (model.remoteSliceEnabled
+                                 ? st("Slice on server", "Auf Server")
+                                 : st("Slice", "Slicen"))
         default:         return label
         }
     }
@@ -477,7 +555,7 @@ struct SimpleModeView: View {
     /// Vorschau geht danach von selbst auf.
     private func vorschauZeigen() {
         if vorschau { vorschau = false; return }
-        if model.sliceResultIsCurrent {
+        if model.sliceResultIsCurrent || model.lastSliceWasRemote {
             vorschauUmschalten()
             return
         }

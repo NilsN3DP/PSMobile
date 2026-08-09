@@ -155,6 +155,19 @@ fun AppSettingsScreen(
                         )
                     }
                 }
+                // Selbsttest- und Protokoll-Export-Eintraege (siehe iOS'
+                // "Diagnose"-Abschnitt) fehlen hier noch bewusst - beide
+                // Ziele existieren auf Android noch nicht (Selbsttest.kt,
+                // PsmLog-Portierung), ein Knopf ohne Ziel waere nur ein
+                // neuer toter Knopf. Nachtragen sobald Feature 2
+                // (android-parity-plan.md) so weit ist.
+                Text(
+                    "PSMobile ${de.psmobile.BuildConfig.VERSION_NAME} (${de.psmobile.BuildConfig.VERSION_CODE})",
+                    color = PrusaColors.TextMuted,
+                    fontSize = 11.sp,
+                    modifier = Modifier.fillMaxWidth().padding(top = 16.dp),
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                )
             }
         }
     }

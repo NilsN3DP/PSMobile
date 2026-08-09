@@ -1,0 +1,66 @@
+ M android/app/src/main/java/de/psmobile/MainActivity.kt
+ M android/app/src/main/java/de/psmobile/core/PsmCore.kt
+ M android/app/src/main/java/de/psmobile/slicing/ResourceInstaller.kt
+ M android/app/src/main/java/de/psmobile/slicing/SlicerService.kt
+ M android/app/src/main/java/de/psmobile/ui/AppSettingsScreen.kt
+ M android/app/src/main/java/de/psmobile/ui/SceneView.kt
+ M android/app/src/main/java/de/psmobile/ui/SettingsScreen.kt
+ M android/app/src/main/java/de/psmobile/ui/SimpleModeScreen.kt
+ M android/app/src/main/java/de/psmobile/ui/SlicerScreen.kt
+ M android/app/src/main/java/de/psmobile/ui/WorkflowStartScreen.kt
+ M android/shared/src/commonMain/kotlin/de/psmobile/shared/rules/AppSettings.kt
+ M android/shared/src/commonMain/kotlin/de/psmobile/shared/rules/PrinterGrouping.kt
+ M core/include/psmobile_core.h
+ M core/src/psmobile_core.cpp
+ M core/src/psmobile_extruders.cpp
+ M core/src/psmobile_presets.cpp
+ M core/src/psmobile_session.hpp
+ M core/test/psm_testcli.c
+ M ios/PSMobile/Core/PsmCore.swift
+ M ios/PSMobile/Core/PsmCoreSetup.swift
+ M ios/PSMobile/Core/PsmLog.swift
+ M ios/PSMobile/Networking/PrusaLinkClient.swift
+ M ios/PSMobile/PSMobileApp.swift
+ M ios/PSMobile/Screens/AdvancedWorkspaceView.swift
+ M ios/PSMobile/Screens/AppSettingsView.swift
+ M ios/PSMobile/Screens/BedSelector.swift
+ M ios/PSMobile/Screens/ExtruderBank.swift
+ M ios/PSMobile/Screens/FinalPreviewPanel.swift
+ M ios/PSMobile/Screens/PrintersView.swift
+ M ios/PSMobile/Screens/SelbsttestView.swift
+ M ios/PSMobile/Screens/SettingField.swift
+ M ios/PSMobile/Screens/SetupView.swift
+ M ios/PSMobile/Screens/SimpleModeView.swift
+ M ios/PSMobile/Screens/SimpleObjectBarView.swift
+ M ios/PSMobile/Screens/SliceSheet.swift
+ M ios/PSMobile/Screens/WorkflowStartView.swift
+ M ios/PSMobile/Selbsttest.swift
+ M ios/PSMobile/SlicerModel.swift
+ M ios/PSMobile/Support/Info.plist
+ M ios/PSMobile/Viewport/PsmViewport.swift
+ M ios/PSMobile/Viewport/ViewportView.swift
+ M viewport/include/psm_viewport.h
+ M viewport/src/psm_viewport.cpp
+?? android/app/src/main/java/de/psmobile/net/DiagnosticsReporter.kt
+?? android/app/src/main/java/de/psmobile/net/RecentProjectsStore.kt
+?? android/app/src/main/java/de/psmobile/net/RemoteSliceClient.kt
+?? android/app/src/main/java/de/psmobile/ui/EasyModeState.kt
+?? android/app/src/main/java/de/psmobile/ui/RemoteSliceScreen.kt
+?? core/test/psm_slice_cli.c
+?? docker/remote-slice/docker-compose.yml
+?? ios/PSMobile/Core/LogExport.swift
+?? ios/PSMobile/Networking/DiagnosticsReporter.swift
+?? ios/PSMobile/Networking/OctoPrintClient.swift
+?? ios/PSMobile/Networking/RemoteSliceClient.swift
+?? ios/PSMobile/Networking/RemoteSliceCredentialStore.swift
+?? ios/PSMobile/Networking/RemoteSliceDefaults.swift
+?? ios/PSMobile/Screens/AbsturzProtokollSheet.swift
+?? ios/PSMobile/Screens/RemoteSliceView.swift
+?? ios/PSMobile/UI/DualHandleSlider.swift
+?? ios/PSMobile/UI/QRPairing.swift
+?? ios/PSMobileUITests/DefaultFilamentUITests.swift
+?? ios/PSMobileUITests/FeatureCheckUITests.swift
+?? ios/PSMobileUITests/FullTourUITests.swift
+?? ios/PSMobileUITests/GcodePreviewUITests.swift
+?? ios/PSMobileUITests/MultiBedViewportUITests.swift
+?? ios/PSMobileUITests/ScreenshotTourUITests.swift

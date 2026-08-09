@@ -63,7 +63,8 @@ void refresh_config(psm_session *s)
     /* Die Abhaengigkeitsregeln haengen an der Konfiguration - jede
      * Aenderung macht die zwischengespeicherte Karte ungueltig. */
     ++s->config_revision;
-    s->mark_design_changed();
+    if (! s->defer_design_change)
+        s->mark_design_changed();
 }
 
 /* Hersteller eines Filaments, wie ihn der Assistent des Desktops liest. */
@@ -545,7 +546,20 @@ PSM_API psm_result psm_extruder_filament_set(psm_session *s, int32_t extruder,
         if (! s->presets->filaments.preset(pi).is_visible)
             s->presets->filaments.select_preset(pi);
 
-        if (! s->presets->extruders_filaments[idx].select_filament(name)) {
+        /*
+         * ExtruderFilaments::select_filament() gibt zurueck, ob sich die
+         * Auswahl GEAENDERT hat - nicht, ob der Name gueltig war. War das
+         * gewuenschte Filament schon ausgewaehlt (z. B. weil
+         * psm_presets_install es bereits als Standard gesetzt hat),
+         * liefert es false zurueck, obwohl alles passt. Deshalb hier
+         * ueber den tatsaechlich ausgewaehlten Namen pruefen statt ueber
+         * den Rueckgabewert - der signalisiert nur "kein passendes
+         * sichtbares Preset gefunden" zuverlaessig, wenn man ihn NACH dem
+         * Aufruf am Ergebnis abliest.
+         */
+        s->presets->extruders_filaments[idx].select_filament(name);
+        const Preset *gewaehlt = s->presets->extruders_filaments[idx].get_selected_preset();
+        if (gewaehlt == nullptr || gewaehlt->name != Preset::remove_suffix_modified(name)) {
             s->set_error(std::string("Filament passt nicht zum Drucker: ") + name);
             return PSM_ERR_INVALID_ARG;
         }

@@ -6,24 +6,6 @@ import de.psmobile.slicing.profileupdate.ProfilePackageStore
 import java.io.File
 
 /**
- * Vendor profiles resolve bed resources below their own vendor directory.
- * INDX reuses the bundled CORE One assets, so materialize those two files at
- * the vendor-relative location expected by the native profile loader.
- */
-internal fun ensureIndxBedAssets(resources: File) {
-    val shared = File(resources, "profiles/PrusaResearch")
-    val vendorAssets = File(resources, "profiles/PSMobileINDX/PrusaResearch")
-    listOf("coreone_indx.stl", "coreone_indx.svg").forEach { name ->
-        val source = File(shared, name)
-        val target = File(vendorAssets, name)
-        if (source.isFile && !target.isFile) {
-            target.parentFile?.mkdirs()
-            source.copyTo(target)
-        }
-    }
-}
-
-/**
  * Entpackt die PrusaSlicer-Ressourcen (Profile, Shader) aus den Assets
  * ins Dateisystem.
  *
@@ -39,6 +21,9 @@ object ResourceInstaller {
     private const val ASSET_ROOT = "psresources"
     private const val STAMP = ".installed-version"
 
+    internal fun activeResourceRoot(resourceRoot: File, fallback: File): File =
+        ProfilePackageStore(resourceRoot, fallback).activeRoot()
+
     fun ensureInstalled(context: Context): File {
         val resourceRoot = File(context.filesDir, "profile-resources")
         val fallback = File(resourceRoot, "fallback")
@@ -50,17 +35,15 @@ object ResourceInstaller {
         }
 
         if (stampFile.exists() && stampFile.readText().trim() == version) {
-            ensureIndxBundle(fallback)
-            return ProfilePackageStore(resourceRoot, fallback).activeRoot().also(::ensureIndxBundle)
+            return activeResourceRoot(resourceRoot, fallback)
         }
 
         Log.i(TAG, "entpacke Fallback-Ressourcen nach $fallback")
         fallback.deleteRecursively()
         fallback.mkdirs()
         copyAssetDir(context, ASSET_ROOT, fallback)
-        ensureIndxBundle(fallback)
         stampFile.writeText(version)
-        return ProfilePackageStore(resourceRoot, fallback).activeRoot().also(::ensureIndxBundle)
+        return activeResourceRoot(resourceRoot, fallback)
     }
 
     private fun copyAssetDir(context: Context, assetPath: String, target: File) {
@@ -79,79 +62,10 @@ object ResourceInstaller {
         }
     }
 
-    /** INDX is kept app-owned until it ships in the upstream vendor bundle. */
-    private fun ensureIndxBundle(resources: File) {
-        ensureIndxBedAssets(resources)
-        val file = File(resources, "profiles/PSMobileINDX.ini")
-        if (file.isFile) return
-        file.parentFile?.mkdirs()
-        file.writeText(
-            """
-            [vendor]
-            repo_id = psmobile-indx
-            name = PSMobile INDX
-            config_version = 1.0.0
-
-            [printer_model:COREONE_INDX4T]
-            name = Prusa CORE One INDX 4T
-            variants = HF0.4
-            technology = FFF
-            family = CORE
-            bed_model = PrusaResearch/coreone_indx.stl
-            bed_texture = PrusaResearch/coreone_indx.svg
-
-            [printer_model:COREONE_INDX8T]
-            name = Prusa CORE One INDX 8T
-            variants = HF0.4
-            technology = FFF
-            family = CORE
-            bed_model = PrusaResearch/coreone_indx.stl
-            bed_texture = PrusaResearch/coreone_indx.svg
-
-            [printer:Prusa CORE One INDX 4T HF0.4 nozzle]
-            printer_model = COREONE_INDX4T
-            printer_variant = HF0.4
-            bed_shape = 0x0,248x0,248x205,0x205
-            max_print_height = 270
-            gcode_flavor = marlin2
-            nozzle_diameter = 0.4,0.4,0.4,0.4
-            extruder_colour = #F58231;#1F77B4;#2CA02C;#D62728
-            extruder_offset = 0x0,0x0,0x0,0x0
-            start_gcode = M862.3 P "COREONEINDX"\nG90\nM83
-            toolchange_gcode = T[next_extruder] S1 L0 D0
-            default_filament_profile = PSMobile INDX PLA
-            default_print_profile = 0.20mm Balanced @PSMobile INDX
-
-            [printer:Prusa CORE One INDX 8T HF0.4 nozzle]
-            printer_model = COREONE_INDX8T
-            printer_variant = HF0.4
-            bed_shape = 0x0,248x0,248x205,0x205
-            max_print_height = 270
-            gcode_flavor = marlin2
-            nozzle_diameter = 0.4,0.4,0.4,0.4,0.4,0.4,0.4,0.4
-            extruder_colour = #F58231;#1F77B4;#2CA02C;#D62728;#9467BD;#8C564B;#17BECF;#BCBD22
-            extruder_offset = 0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0
-            start_gcode = M862.3 P "COREONEINDX"\nG90\nM83
-            toolchange_gcode = T[next_extruder] S1 L0 D0
-            default_filament_profile = PSMobile INDX PLA
-            default_print_profile = 0.20mm Balanced @PSMobile INDX
-
-            [print:0.20mm Balanced @PSMobile INDX]
-            layer_height = 0.2
-            fill_density = 15%
-            fill_pattern = grid
-            perimeters = 3
-            compatible_printers = Prusa CORE One INDX 4T HF0.4 nozzle;Prusa CORE One INDX 8T HF0.4 nozzle
-
-            [filament:PSMobile INDX PLA]
-            filament_type = PLA
-            filament_colour = #F58231
-            temperature = 215
-            first_layer_temperature = 220
-            bed_temperature = 60
-            first_layer_bed_temperature = 60
-            compatible_printers = Prusa CORE One INDX 4T HF0.4 nozzle;Prusa CORE One INDX 8T HF0.4 nozzle
-            """.trimIndent(),
-        )
-    }
+    // ensureIndxBundle() ist raus: das app-eigene Notprofil ist ueberholt,
+    // seit PrusaResearch.ini selbst (aus Prusas eigenem Live-Update-
+    // Kanal, config_version 2.5.5) echte CORE-One-INDX-Profile mitbringt
+    // - siehe stage-resources.sh. Zwei "Prusa CORE One INDX 4T"-Eintraege
+    // (einer echt, einer von hier) waeren in der Liste verwirrend
+    // doppelt gewesen.
 }

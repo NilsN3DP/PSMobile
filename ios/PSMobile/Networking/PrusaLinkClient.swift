@@ -15,11 +15,19 @@ import PSMShared
 /// Digest, nicht Basic - Basic wird abgelehnt.
 actor PrusaLinkClient {
 
+    /// Womit der Drucker spricht. PrusaLink bleibt die Vorgabe - jeder
+    /// vor diesem Feld gespeicherte Drucker dekodiert ohne den Schluessel
+    /// zu diesem Fall, siehe die Codable-Vorgabe darunter.
+    enum HostType: String, Codable, CaseIterable {
+        case prusaLink, octoprint
+    }
+
     struct Printer: Codable, Identifiable, Equatable {
         var id: String = UUID().uuidString
         var name: String = ""
         /// URL; ohne Schema gilt HTTPS.
         var host: String = ""
+        var hostType: HostType = .prusaLink
         var usesApiKey: Bool = false
         var username: String = PrusaLinkRules.shared.DEFAULT_USER
         var storage: String = "usb"
@@ -212,5 +220,38 @@ actor PrusaLinkClient {
                                                 uri: pfad),
                 forHTTPHeaderField: "Authorization")
         }
+    }
+}
+extension PrusaLinkClient.Printer {
+    private enum CodingKeys: String, CodingKey {
+        case id, name, host, hostType, usesApiKey, username, storage,
+             allowInsecureHttp, presetName
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(String.self, forKey: .id)
+        name = try c.decode(String.self, forKey: .name)
+        host = try c.decode(String.self, forKey: .host)
+        hostType = try c.decodeIfPresent(PrusaLinkClient.HostType.self, forKey: .hostType)
+            ?? .prusaLink
+        usesApiKey = try c.decode(Bool.self, forKey: .usesApiKey)
+        username = try c.decode(String.self, forKey: .username)
+        storage = try c.decode(String.self, forKey: .storage)
+        allowInsecureHttp = try c.decode(Bool.self, forKey: .allowInsecureHttp)
+        presetName = try c.decode(String.self, forKey: .presetName)
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(id, forKey: .id)
+        try c.encode(name, forKey: .name)
+        try c.encode(host, forKey: .host)
+        try c.encode(hostType, forKey: .hostType)
+        try c.encode(usesApiKey, forKey: .usesApiKey)
+        try c.encode(username, forKey: .username)
+        try c.encode(storage, forKey: .storage)
+        try c.encode(allowInsecureHttp, forKey: .allowInsecureHttp)
+        try c.encode(presetName, forKey: .presetName)
     }
 }

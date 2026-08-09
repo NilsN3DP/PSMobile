@@ -24,7 +24,6 @@ struct SetupView: View {
 
     @Environment(\.psScale) private var ps
     @State private var selected: Set<String> = []
-    @State private var showSla = false
     @State private var query = ""
     @State private var expandedVendors: Set<String> = []
     @State private var expandedFamilies: Set<String> = []
@@ -36,7 +35,13 @@ struct SetupView: View {
 
     private var shown: [PsmCore.PrinterModel] {
         models.filter { m in
-            (showSla || !m.isSla) &&
+            // Hart aus, nicht nur standardmaessig versteckt: PSMobile
+            // schneidet nur FFF (E-08), und das mitgelieferte
+            // PrusaResearchSLA-Buendel ist zudem kaputt (siehe
+            // build/scripts/stage-resources.sh). Ein Schalter, der zu
+            // einem funktionsunfaehigen Drucker fuehrt, ist schlimmer
+            // als gar keiner.
+            !m.isSla &&
             (query.trimmingCharacters(in: .whitespaces).isEmpty ||
              m.name.localizedCaseInsensitiveContains(query))
         }
@@ -130,15 +135,6 @@ struct SetupView: View {
                 }
             }
             Spacer()
-
-            Toggle(isOn: $showSla) {
-                Text(SimpleModeState.shared.text(english: "SLA", german: "SLA"))
-                    .font(.system(size: ps.font(12)))
-                    .foregroundStyle(PrusaColors.textMuted)
-            }
-            .toggleStyle(.switch)
-            .tint(PrusaColors.orange)
-            .fixedSize()
         }
     }
 
@@ -267,35 +263,93 @@ struct SetupView: View {
         // Jede Duesengroesse ist eine eigene Wahl - PrusaSlicer fuehrt sie
         // als getrennte Profile, und wer eine 0.6er Duese hat, braucht
         // nicht die 0.4er Profile.
-        VStack(alignment: .leading, spacing: ps.pt(4)) {
-            Text(modell.name)
-                .font(.system(size: ps.font(tight ? 16 : 17)))
-                .foregroundStyle(PrusaColors.textPrimary)
+        HStack(alignment: .top, spacing: ps.pt(10)) {
+            druckerBild(modell)
 
-            HStack(spacing: ps.pt(6)) {
-                ForEach(modell.variants, id: \.self) { variante in
-                    let key = "\(modell.key):\(variante)"
-                    Button {
-                        if selected.contains(key) { selected.remove(key) }
-                        else { selected.insert(key) }
-                    } label: {
-                        Text(variante)
-                            .font(.system(size: ps.font(15)))
-                            .foregroundStyle(selected.contains(key)
-                                             ? .white : PrusaColors.textMuted)
-                            .padding(.horizontal, ps.pt(16))
-                            .frame(minWidth: ps.touch(64),
-                                   minHeight: ps.touch(tight ? 48 : 56))
-                            .background(selected.contains(key)
-                                        ? PrusaColors.orange : PrusaColors.panelRaised)
-                            .clipShape(RoundedCornerShape(ps.pt(4)))
+            VStack(alignment: .leading, spacing: ps.pt(4)) {
+                Text(modell.name)
+                    .font(.system(size: ps.font(tight ? 16 : 17)))
+                    .foregroundStyle(PrusaColors.textPrimary)
+
+                HStack(spacing: ps.pt(6)) {
+                    ForEach(modell.variants, id: \.self) { variante in
+                        let key = "\(modell.key):\(variante)"
+                        Button {
+                            if selected.contains(key) { selected.remove(key) }
+                            else { selected.insert(key) }
+                        } label: {
+                            Text(variante)
+                                .font(.system(size: ps.font(15)))
+                                .foregroundStyle(selected.contains(key)
+                                                 ? .white : PrusaColors.textMuted)
+                                .padding(.horizontal, ps.pt(16))
+                                .frame(minWidth: ps.touch(64),
+                                       minHeight: ps.touch(tight ? 48 : 56))
+                                .background(selected.contains(key)
+                                            ? PrusaColors.orange : PrusaColors.panelRaised)
+                                .clipShape(RoundedCornerShape(ps.pt(4)))
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityIdentifier("variante.\(key)")
                     }
-                    .buttonStyle(.plain)
-                    .accessibilityIdentifier("variante.\(key)")
                 }
             }
         }
         .padding(.vertical, ps.pt(tight ? 10 : 14))
+    }
+
+    /// Vorschaubild je Druckermodell, wie in der Desktop-App - liegt als
+    /// loses PNG in den gebuendelten Ressourcen (profiles/<vendor>/
+    /// <model_id>_thumbnail.png), nicht im Asset-Katalog, deshalb ueber
+    /// den Dateipfad statt per Image(_:)-Name geladen. Fehlt die Datei
+    /// (z.B. bei einem Vendor ohne Vorschaubilder), bleibt ein
+    /// Platzhalter-Symbol statt einer leeren Luecke.
+    private func druckerBild(_ modell: PsmCore.PrinterModel) -> some View {
+        let seite = ps.pt(tight ? 40 : 48)
+        return Group {
+            if let pfad = thumbnailPfad(modell), let bild = UIImage(contentsOfFile: pfad) {
+                Image(uiImage: bild)
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+            } else {
+                Image(systemName: "printer")
+                    .font(.system(size: ps.font(18)))
+                    .foregroundStyle(PrusaColors.textMuted)
+            }
+        }
+        .frame(width: seite, height: seite)
+        .background(PrusaColors.panelRaised)
+        .clipShape(RoundedCornerShape(ps.pt(4)))
+    }
+
+    private func thumbnailPfad(_ modell: PsmCore.PrinterModel) -> String? {
+        // modell.key hat die Form "vendor:model_id" - der Dateiname der
+        // Vorschau folgt bei den meisten Herstellern genau der model_id
+        // (dem [printer_model:XXX]-Abschnitt in der Vendor-INI). Voron
+        // ist die Ausnahme: dort heisst die Datei z.B.
+        // "Voron_v2_250_thumbnail.png" statt "V2_250_thumbnail.png" -
+        // Vendor-Praefix und andere Gross-/Kleinschreibung. Deshalb erst
+        // den genauen Namen versuchen, sonst im Vendor-Ordner nach einer
+        // "*_thumbnail.png" suchen, die die model_id enthaelt.
+        let teile = modell.key.split(separator: ":", maxSplits: 1)
+        guard teile.count == 2 else { return nil }
+        guard let resDir = Bundle.main.resourceURL?.appendingPathComponent("psresources") else {
+            return nil
+        }
+        let vendorDir = resDir
+            .appendingPathComponent("profiles")
+            .appendingPathComponent(String(teile[0]))
+        let genau = vendorDir.appendingPathComponent("\(teile[1])_thumbnail.png")
+        if FileManager.default.fileExists(atPath: genau.path) {
+            return genau.path
+        }
+        let modelId = String(teile[1]).lowercased()
+        guard let dateien = try? FileManager.default.contentsOfDirectory(
+            at: vendorDir, includingPropertiesForKeys: nil) else { return nil }
+        return dateien.first {
+            let n = $0.lastPathComponent.lowercased()
+            return n.hasSuffix("_thumbnail.png") && n.contains(modelId)
+        }?.path
     }
 
     private var abschluss: some View {

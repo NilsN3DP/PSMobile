@@ -34,8 +34,23 @@ struct ViewportView: UIViewRepresentable {
     /// Umschalten geladen - sie sind zu gross, um sie vorsorglich
     /// vorzuhalten - und die Zahl der Schichten kommt zurueck.
     var viewportMode: PsmViewport.Mode = .editor
+    /// Siehe AppSettingsStore.multiBedRender - alle Betten raeumlich
+    /// versetzt zeichnen statt nur das aktive.
+    var multiBedRender: Bool = false
+    /// Welches Bett die Kamera zeigen soll. Wirkt, sobald sich
+    /// focusBedKey aendert - siehe SlicerModel.focusBedKey.
+    var focusBedIndex: Int32 = 0
+    var focusBedKey: Int = 0
+    /// Namen fuer die Namensschilder in der raeumlichen
+    /// Mehrbett-Darstellung, nach Bettindex geordnet (Position 0 =
+    /// Bett 0 usw.) - leer ausserhalb des Mehrbett-Modus.
+    var bedNamen: [String] = []
     /// Sichtbarer Schichtbereich in der Vorschau. Nil heisst: alles.
     var layerRange: ClosedRange<Int32>?
+    /// Der Werkzeugweg-Bereich innerhalb der sichtbaren Schicht(en) -
+    /// der untere Regler am Viewport-Rand. Nil laesst den vollen
+    /// bekannten Bereich stehen.
+    var moveRange: ClosedRange<Int32>?
     var previewView: PsmViewport.PreviewView = .feature
     var previewRoles: [PsmCore.PreviewFeatureRole] = []
     var hiddenPreviewRoles: Set<PsmCore.PreviewFeatureRole> = []
@@ -50,6 +65,11 @@ struct ViewportView: UIViewRepresentable {
     var viewPreset: PsmViewport.ViewPreset?
     var viewPresetKey: Int = 0
     var onPreviewLoaded: ((Int32) -> Void)?
+    /// Meldet die Grenzen des Werkzeugweg-Bereichs, sobald sie sich
+    /// aendern koennen - nach dem Laden und nach jeder Aenderung des
+    /// Schichtbereichs, denn der Move-Bereich haengt vom Schichtbereich
+    /// ab.
+    var onMoveRangeBounds: ((ClosedRange<Int32>?) -> Void)?
     var onSelect: (Int32) -> Void
     /// Ruft zurueck, sobald eine Geste das Objekt im Kern veraendert
     /// hat - Groesse, Lage, Drehung. Ohne das zeigt die Objektleiste
@@ -85,12 +105,30 @@ struct ViewportView: UIViewRepresentable {
             vp.setSelections(selectedIds, primary: selectedId)
             vp.setPaintOptions(paintOptions)
             if vp.gizmo != gizmo { vp.gizmo = gizmo }
+            if vp.multiBedRender != multiBedRender { vp.multiBedRender = multiBedRender }
+            v.bedNamen = bedNamen
+            if v.letzterFokusKey != focusBedKey {
+                v.letzterFokusKey = focusBedKey
+                vp.focusBed(focusBedIndex)
+            }
             let vorschauBetreten =
                 viewportMode == .preview && v.letzterModus != .preview
             v.letzterModus = viewportMode
-            if vorschauBetreten {
-                let schichten = vp.loadPreview() ? vp.layerCount : 0
-                DispatchQueue.main.async { onPreviewLoaded?(schichten) }
+            // Nicht nur beim Uebergang laden: die Kennung dafuer (ein
+            // Wechsel von Editor auf Preview) kann verpasst werden, wenn
+            // diese Ansicht neu aufgebaut wird, waehrend viewportMode
+            // schon .preview ist - dann bleibt gcode_loaded im Kern
+            // dauerhaft aus, und der Viewport zeigt fuer immer das
+            // Editor-Netz statt der Werkzeugwege. psm_viewport_load_preview
+            // ist bei unveraendertem Ergebnis ein billiges Nein, ein
+            // Aufruf bei jedem Durchlauf im Preview-Modus kostet also
+            // nichts, macht das Laden aber verlässlich.
+            if viewportMode == .preview {
+                let erfolg = vp.loadPreview()
+                if vorschauBetreten {
+                    let schichten = erfolg ? vp.layerCount : 0
+                    DispatchQueue.main.async { onPreviewLoaded?(schichten) }
+                }
             }
             if vp.mode != viewportMode { vp.mode = viewportMode }
             if viewportMode == .preview {
@@ -109,6 +147,11 @@ struct ViewportView: UIViewRepresentable {
             }
             if let bereich = layerRange {
                 vp.setLayerRange(first: bereich.lowerBound, last: bereich.upperBound)
+                let grenzen = vp.moveRangeBounds()
+                DispatchQueue.main.async { onMoveRangeBounds?(grenzen) }
+                if let move = moveRange {
+                    vp.setMoveRange(first: move.lowerBound, last: move.upperBound)
+                }
             }
             if zuruecksetzen { vp.resetView() }
             if let blick = blickwinkel { vp.setView(blick) }
@@ -197,6 +240,7 @@ final class PSMGLView: UIView {
     /// bei jeder Neuzeichnung erneut.
     var letzterResetKey = 0
     var letzterViewKey = 0
+    var letzterFokusKey = 0
     /// Nur beim Übergang Editor → Vorschau laden. C++ erkennt denselben
     /// finalen Result-Zeiger und überspringt eine teure Wiederholung.
     var letzterModus: PsmViewport.Mode = .editor
@@ -238,6 +282,11 @@ final class PSMGLView: UIView {
     private static let handleRadiusPx: Float = 44
     private var gizmoMarkers: [UIView] = []
     private let paintMarker = UIView(frame: .zero)
+    /// Namensschilder je Bett in der raeumlichen Mehrbett-Darstellung -
+    /// im Gegensatz zu den Gizmo-Markern hier sichtbar, keine reinen
+    /// Accessibility-Marker.
+    var bedNamen: [String] = []
+    private var bedLabelViews: [UILabel] = []
 
     init(session: OpaquePointer, shaderDir: String) {
         // GLES 2.0: genau dafuer sind die Shader aus PrusaSlicer
@@ -352,6 +401,50 @@ final class PSMGLView: UIView {
         if schichtdarstellung != letzteSchichtdarstellung {
             letzteSchichtdarstellung = schichtdarstellung
             onLayerVisualizationChanged?(schichtdarstellung)
+        }
+        aktualisiereBettSchilder(vp)
+    }
+
+    /// Ein Schild je Bett, an der vom Kern projizierten Ecke der
+    /// Druckflaeche - wandert mit Kamera und Bettversatz mit, weil sie
+    /// bei jedem Bild neu berechnet wird.
+    private func aktualisiereBettSchilder(_ vp: PsmViewport) {
+        guard vp.multiBedRender, bedNamen.count > 1, contentScaleFactor > 0
+        else {
+            bedLabelViews.forEach { $0.isHidden = true }
+            return
+        }
+        while bedLabelViews.count < bedNamen.count {
+            let schild = UILabel(frame: .zero)
+            schild.font = .systemFont(ofSize: 11, weight: .semibold)
+            schild.textColor = .white
+            schild.backgroundColor = UIColor.black.withAlphaComponent(0.55)
+            schild.textAlignment = .center
+            schild.layer.cornerRadius = 4
+            schild.layer.masksToBounds = true
+            schild.isUserInteractionEnabled = false
+            addSubview(schild)
+            bedLabelViews.append(schild)
+        }
+        for (position, name) in bedNamen.enumerated() {
+            let schild = bedLabelViews[position]
+            guard let punkt = vp.bedLabelAnchor(position: Int32(position)) else {
+                schild.isHidden = true
+                continue
+            }
+            let x = punkt.x / contentScaleFactor
+            let y = punkt.y / contentScaleFactor
+            schild.text = name
+            schild.sizeToFit()
+            let breite = schild.bounds.width + 10
+            let hoehe = schild.bounds.height + 4
+            schild.frame = CGRect(x: x, y: y - hoehe / 2,
+                                  width: breite, height: hoehe)
+            schild.isHidden = false
+            bringSubviewToFront(schild)
+        }
+        for index in bedNamen.count..<bedLabelViews.count {
+            bedLabelViews[index].isHidden = true
         }
     }
 

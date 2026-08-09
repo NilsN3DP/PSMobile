@@ -308,3 +308,23 @@ nur ohne `Pair`, das die Brücke nach Swift nicht überlebt.
 **Und das Wichtigste:** es lief noch nie auf echter Hardware. Alles
 Geprüfte ist Simulator. Die Feature-Matrix sagt deshalb
 `emulator_tested`, nicht `device_tested`.
+
+### Side-Build-Baseline – Fix-Runde 1
+
+Der geprüfte, lokale Side-Build-Snapshot hält die NAS-Quelle bei
+`61c1b47` fest. Zugangsdaten wurden vor dem rekonstruierten Commit entfernt:
+Remote-Slice-Tests verwenden nur lokal gesetzte `PSM_REMOTE_SLICE_HOST` und
+`PSM_REMOTE_SLICE_TOKEN`; Docker verlangt sein Token aus der lokalen
+Umgebung. Der Android-Regressionstest und der erneuerte
+`ResourceInstallerTest` liefen mit der vorhandenen Android-Studio-JBR.
+
+Der Host-C++-Vertragstest konnte weiterhin nicht eingerichtet werden, weil
+dieser Rechner weder die benötigten Boost-1.83-Host-Abhängigkeiten noch einen
+laufenden Docker-Daemon bereitstellt. Es wurden keine Buildprodukte oder
+Zugangsdaten importiert.
+
+Nachtrag Fix-Runde 1: Der isolierte Mac-Side-Build aus Commit `d281605`
+hat `psm_contract_tests` für `SIMULATORARM64` neu gelinkt und auf einem
+iOS-26.3-iPhone-17-Pro-Simulator ausgeführt. Der Contract-Test bestätigt
+ABI 7, den einzelnen Undo-Checkpoint für die Druckerprofilmutation und die
+Ablehnung eines während des Remote-Slice veralteten G-Code-Ergebnisses.

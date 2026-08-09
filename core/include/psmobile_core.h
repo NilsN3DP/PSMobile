@@ -37,7 +37,7 @@ extern "C" {
 /* Version                                                             */
 /* ------------------------------------------------------------------ */
 
-#define PSM_ABI_VERSION 6
+#define PSM_ABI_VERSION 7
 
 /** Gibt die ABI-Version zurueck. Die App prueft sie beim Start gegen
  *  PSM_ABI_VERSION und verweigert den Dienst bei Abweichung. */
@@ -1089,6 +1089,31 @@ PSM_API int psm_slice_result_is_current(psm_session *s);
 
 /** Blockiert, bis der Job fertig ist. timeout_ms < 0 = unbegrenzt. */
 PSM_API psm_result psm_slice_wait(psm_session *s, int timeout_ms);
+
+/**
+ * Laedt eine bereits fertige G-Code-Datei fuer die Vorschau, ohne selbst
+ * zu schneiden - fuer den Remote-Slice-Pfad, wo der Server das Schneiden
+ * uebernimmt und der Kern hier nur die fertige Datei bekommt.
+ *
+ * Nutzt denselben GCodeProcessor, den PrusaSlicer Desktop fuer "G-Code
+ * oeffnen" verwendet, und speist das Ergebnis in dieselben
+ * preview_*-Felder wie ein lokaler Schnitt. Damit funktionieren
+ * psm_slice_result_is_current und die Vorschau-Funktionen unveraendert
+ * weiter - sie koennen den Unterschied zwischen lokal und remote nicht
+ * sehen und muessen es auch nicht.
+ *
+ * Legacy-Variante fuer Aufrufer ohne gespeicherte Upload-Revision.
+ */
+PSM_API psm_result psm_slice_load_gcode_for_preview(psm_session *s, const char *path);
+
+/** Revision der Szene; beim Remote-Upload merken und beim Ergebnis angeben. */
+PSM_API uint64_t psm_design_revision(psm_session *s);
+
+/** Akzeptiert fertigen Remote-G-Code nur, wenn request_revision noch aktuell
+ *  ist. Bei einer zwischenzeitlichen Szenenmutation wird die Datei nicht
+ *  verarbeitet und PSM_ERR_STALE_RESULT geliefert. */
+PSM_API psm_result psm_slice_accept_remote_gcode(psm_session *s, const char *path,
+                                                  uint64_t request_revision);
 
 typedef struct {
     double  print_time_seconds;

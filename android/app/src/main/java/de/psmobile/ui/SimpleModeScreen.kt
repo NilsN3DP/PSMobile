@@ -31,12 +31,15 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
@@ -48,8 +51,11 @@ import androidx.compose.material3.TextField
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.Icon
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AccountCircle
-import androidx.compose.material.icons.filled.NotificationsNone
+import androidx.compose.material.icons.filled.Cloud
+import androidx.compose.material.icons.filled.CloudQueue
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.ui.draw.clip
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -64,6 +70,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 import androidx.core.view.WindowCompat
 import de.psmobile.core.PsmCore
@@ -85,13 +92,21 @@ fun SimpleModeScreen(
     service: SlicerService,
     window: Window,
     onPickFile: () -> Unit,
+    onHome: () -> Unit,
     onOpenAdvanced: () -> Unit,
     onOpenPrinterSetup: () -> Unit,
     onAppSettings: () -> Unit,
     onStartSlice: () -> Unit,
+    onSaveProject: () -> Unit,
+    onRemoteSettings: () -> Unit = {},
     onShareGcode: () -> Unit = {},
+    onControllerReady: (SceneController) -> Unit = {},
 ) {
+    val remoteSlicePluginAn = androidx.compose.ui.platform.LocalContext.current
+        .getSharedPreferences("psmobile", android.content.Context.MODE_PRIVATE)
+        .getBoolean(de.psmobile.shared.rules.AppSettings.KEY_PLUGIN_REMOTE_SLICE, true)
     val presets by service.presets.collectAsState()
+    val configRevision by service.configRevision.collectAsState()
     val progress by service.progress.collectAsState()
     val objects by service.objects.collectAsState()
     val beds by service.beds.collectAsState()
@@ -103,7 +118,15 @@ fun SimpleModeScreen(
     // losgehen.
     var hinderungsgruende by remember { mutableStateOf(emptyList<String>()) }
     var selectedId by remember { mutableStateOf<Int?>(null) }
+    var zeigeVerlassenNachfrage by remember { mutableStateOf(false) }
+    // Dieselbe Nachfrage wie im Advanced Mode - ein zweites Tippen auf
+    // einen Modus oder die Startseite verwirft sonst stillschweigend
+    // das offene Projekt.
+    val nachHauseGehen = {
+        if (service.hasUnsavedChanges) zeigeVerlassenNachfrage = true else onHome()
+    }
     val controller = remember { SceneController() }
+    LaunchedEffect(controller) { onControllerReady(controller) }
     val placement = SimpleModeLayout.toolbarPlacement(
         configuration.screenWidthDp,
         configuration.screenHeightDp,
@@ -162,7 +185,11 @@ fun SimpleModeScreen(
             SimpleHeader(
                 printer = SimpleModeState.printerLabel(presets.selectedPrinter),
                 compact = compactChrome,
+                onHome = nachHauseGehen,
+                onAppSettings = onAppSettings,
+                onOpenAdvanced = onOpenAdvanced,
             )
+            var remoteSliceOn by remember { mutableStateOf(service.remoteSliceEnabled) }
             SimpleToolbar(
                 placement = placement,
                 widthDp = configuration.screenWidthDp,
@@ -172,6 +199,16 @@ fun SimpleModeScreen(
                 // sagt, ist die schlechtere Auskunft als einer, der den
                 // Grund nennt.
                 canPrint = true,
+                showRemoteToggle = remoteSlicePluginAn,
+                remoteSliceOn = remoteSliceOn,
+                onToggleRemoteSlice = {
+                    if (service.remoteSliceHost.isBlank()) {
+                        onRemoteSettings()
+                    } else {
+                        service.remoteSliceEnabled = !service.remoteSliceEnabled
+                        remoteSliceOn = service.remoteSliceEnabled
+                    }
+                },
                 onPanel = { panel = if (panel == it) SimplePanel.WORKSPACE else it },
                 onStartSlice = {
                     val gruende = SliceSummary.blockers(
@@ -253,6 +290,7 @@ fun SimpleModeScreen(
                 panel = panel,
                 service = service,
                 presets = presets,
+                configRevision = configRevision,
                 quick = quick,
                 brim = quick.brim,
                 objects = objects,
@@ -265,6 +303,35 @@ fun SimpleModeScreen(
                 onOpenAdvanced = onOpenAdvanced,
                 onOpenPrinterSetup = onOpenPrinterSetup,
                 onAppSettings = onAppSettings,
+            )
+        }
+        if (zeigeVerlassenNachfrage) {
+            AlertDialog(
+                onDismissRequest = { zeigeVerlassenNachfrage = false },
+                containerColor = PrusaColors.Panel,
+                titleContentColor = PrusaColors.TextPrimary,
+                textContentColor = PrusaColors.TextMuted,
+                title = { Text(st("Unsaved changes", "Ungesicherte Änderungen")) },
+                text = { Text(st("A second tap on a mode would discard this project.",
+                    "Ein erneutes Tippen auf einen Modus würde dieses Projekt verwerfen.")) },
+                confirmButton = {
+                    TextButton(onClick = {
+                        zeigeVerlassenNachfrage = false
+                        onSaveProject()
+                        onHome()
+                    }) { Text(st("Save", "Sichern")) }
+                },
+                dismissButton = {
+                    Row {
+                        TextButton(onClick = { zeigeVerlassenNachfrage = false }) {
+                            Text(st("Cancel", "Abbrechen"))
+                        }
+                        TextButton(onClick = {
+                            zeigeVerlassenNachfrage = false
+                            onHome()
+                        }) { Text(st("Discard", "Verwerfen"), color = PrusaColors.Danger) }
+                    }
+                },
             )
         }
     }
@@ -293,17 +360,23 @@ private fun SimpleSceneWorkspace(
 )
 
 @Composable
-private fun SimpleHeader(printer: String, compact: Boolean) = Row(
+private fun SimpleHeader(
+    printer: String,
+    compact: Boolean,
+    onHome: () -> Unit,
+    onAppSettings: () -> Unit,
+    onOpenAdvanced: () -> Unit,
+) = Row(
     Modifier.fillMaxWidth().background(PrusaColors.Background)
         .padding(horizontal = if (compact) 16.dp else 20.dp, vertical = if (compact) 6.dp else 14.dp),
     verticalAlignment = Alignment.CenterVertically,
     horizontalArrangement = Arrangement.SpaceBetween,
 ) {
     Icon(
-        Icons.Default.AccountCircle,
-        contentDescription = null,
+        Icons.Default.Home,
+        contentDescription = st("Start page", "Startseite"),
         tint = PrusaColors.TextMuted,
-        modifier = Modifier.size(if (compact) 28.dp else 34.dp),
+        modifier = Modifier.size(if (compact) 28.dp else 34.dp).clickable(onClick = onHome),
     )
     Row(verticalAlignment = Alignment.CenterVertically) {
         Box(
@@ -321,12 +394,31 @@ private fun SimpleHeader(printer: String, compact: Boolean) = Row(
         if (printer.isNotBlank()) Text(printer, color = PrusaColors.TextMuted, style = MaterialTheme.typography.labelSmall)
         }
     }
-    Icon(
-        Icons.Default.NotificationsNone,
-        contentDescription = null,
-        tint = PrusaColors.Orange,
-        modifier = Modifier.size(if (compact) 28.dp else 34.dp),
-    )
+    var menuOffen by remember { mutableStateOf(false) }
+    Box {
+        Icon(
+            Icons.Default.MoreVert,
+            contentDescription = st("More", "Mehr"),
+            tint = PrusaColors.Orange,
+            modifier = Modifier.size(if (compact) 28.dp else 34.dp)
+                .clickable(onClick = { menuOffen = true }),
+        )
+        DropdownMenu(menuOffen, onDismissRequest = { menuOffen = false }) {
+            DropdownMenuItem(
+                text = { Text(st("Start page", "Startseite")) },
+                onClick = { menuOffen = false; onHome() },
+            )
+            DropdownMenuItem(
+                text = { Text(st("App settings", "App-Einstellungen")) },
+                onClick = { menuOffen = false; onAppSettings() },
+            )
+            HorizontalDivider()
+            DropdownMenuItem(
+                text = { Text(st("Expert mode", "Expertenmodus")) },
+                onClick = { menuOffen = false; onOpenAdvanced() },
+            )
+        }
+    }
 }
 
 @Composable
@@ -336,6 +428,9 @@ private fun SimpleToolbar(
     compact: Boolean,
     selected: SimplePanel,
     canPrint: Boolean,
+    showRemoteToggle: Boolean = false,
+    remoteSliceOn: Boolean = false,
+    onToggleRemoteSlice: () -> Unit = {},
     onPanel: (SimplePanel) -> Unit,
     onStartSlice: () -> Unit,
 ) {
@@ -358,6 +453,28 @@ private fun SimpleToolbar(
         }
         Spacer(Modifier.weight(1f))
         SimpleToolbarButton(label = labels[4], selected = false, width = buttonWidth, compact = compact, enabled = canPrint, onClick = onStartSlice)
+        // Lokal/entfernt umschalten - siehe RemoteSliceScreen.kt fuer die
+        // Einrichtung. Ohne eingerichteten Server fuehrt das Tippen erst
+        // zur Einrichtung statt stumm auf einen leeren Host umzuschalten.
+        if (showRemoteToggle) {
+            Box(
+                Modifier
+                    .height(if (compact) 46.dp else 54.dp)
+                    .width(if (compact) 40.dp else 46.dp)
+                    .clip(RoundedCornerShape(1.dp))
+                    .background(if (remoteSliceOn) PrusaColors.Orange else PrusaColors.Panel)
+                    .border(1.dp, if (remoteSliceOn) PrusaColors.Orange else PrusaColors.Divider, RoundedCornerShape(1.dp))
+                    .clickable(onClick = onToggleRemoteSlice),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    if (remoteSliceOn) Icons.Default.Cloud else Icons.Default.CloudQueue,
+                    contentDescription = st("Remote Slicing", "Remote Slicing"),
+                    tint = if (remoteSliceOn) PrusaColors.Background else PrusaColors.TextPrimary,
+                    modifier = Modifier.size(18.dp),
+                )
+            }
+        }
         SimpleToolbarButton(label = labels[5], selected = true, width = (buttonWidth.value * 1.35f).dp, compact = compact, enabled = canPrint, onClick = onStartSlice)
     }
 }
@@ -415,6 +532,7 @@ private fun SimpleOverlay(
     panel: SimplePanel,
     service: SlicerService,
     presets: SlicerService.Presets,
+    configRevision: Int,
     quick: SlicerService.QuickSettings,
     brim: String,
     objects: List<PsmCore.ObjectInfo>,
@@ -480,7 +598,7 @@ private fun SimpleOverlay(
                     )
                     SimplePanel.SUPPORTS -> SimpleSupportsPanel(service, quick)
                     SimplePanel.ADHESION -> SimpleAdhesionPanel(service, brim, objects)
-                    SimplePanel.PRINT_SETTINGS -> SimplePrintSettingsPanel(service, presets, onDismiss, onOpenAdvanced)
+                    SimplePanel.PRINT_SETTINGS -> SimplePrintSettingsPanel(service, presets, configRevision, onDismiss, onOpenAdvanced)
                     SimplePanel.WORKSPACE -> Unit
                 }
             }
@@ -956,14 +1074,40 @@ private fun SimpleAdhesionPanel(
     ) { service.setConfig("brim_width", AdhesionAdvice.SUGGESTED_BRIM_MM.toString()) }
 }
 
+/**
+ * Welche Schluessel unter welcher Spaltenueberschrift stehen - dieselbe
+ * Zuordnung wie iOS' `druckprofilPanel` (SimpleModeView.swift), nur
+ * ohne die schmale-Bildschirm-Fallunterscheidung, da Android bisher
+ * nur ein Layout fuer dieses Panel hat.
+ */
+private val PRINT_SETTINGS_QUICK_KEYS = mapOf(
+    "Print Settings" to listOf("layer_height"),
+    "Infill" to listOf("fill_density", "fill_pattern"),
+    "Shell Thickness" to listOf("perimeters", "top_solid_layers", "bottom_solid_layers"),
+)
+
 @Composable
-private fun SimplePrintSettingsPanel(service: SlicerService, presets: SlicerService.Presets, onDismiss: () -> Unit, onOpenAdvanced: () -> Unit) {
+private fun SimplePrintSettingsPanel(service: SlicerService, presets: SlicerService.Presets, configRevision: Int, onDismiss: () -> Unit, onOpenAdvanced: () -> Unit) {
     Text(st("PRINT SETTINGS", "DRUCKEINSTELLUNGEN"), style = MaterialTheme.typography.titleLarge)
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    val core = service.coreOrNull
+    if (core != null) {
         SimpleModeState.printSettingsColumns().forEach { title ->
-            Card(Modifier.weight(1f), colors = CardDefaults.cardColors(containerColor = PrusaColors.PanelRaised), shape = RoundedCornerShape(2.dp)) { Text(st(title, printSettingsColumnGerman(title)), modifier = Modifier.padding(10.dp)) }
+            Text(
+                st(title, printSettingsColumnGerman(title)).uppercase(),
+                color = PrusaColors.TextMuted,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.padding(top = 10.dp, bottom = 4.dp),
+            )
+            PRINT_SETTINGS_QUICK_KEYS[title].orEmpty().forEach { key ->
+                val meta = remember(key, configRevision) { core.configMeta(key) }
+                if (meta != null) {
+                    SettingRow(core, meta, configRevision, multiline = false, onChanged = {})
+                }
+            }
         }
     }
+    Text(st("Profiles", "Profile").uppercase(), color = PrusaColors.TextMuted, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 10.dp, bottom = 4.dp))
     if (presets.prints.isEmpty()) TextButton(onClick = onOpenAdvanced) { Text(st("Set up print settings", "Druckeinstellungen einrichten")) }
     presets.prints.take(10).forEach { profile ->
         OutlinedButton(onClick = { service.selectPreset(PsmCore.PresetType.PRINT, profile); onDismiss() }, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) { Text(if (profile == presets.selectedPrint) "✓ $profile" else profile) }

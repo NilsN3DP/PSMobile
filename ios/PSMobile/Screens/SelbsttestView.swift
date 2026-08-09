@@ -63,7 +63,7 @@ struct SelbsttestView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: ps.pt(10)) {
                 Text(st("Runs everything that needs real hardware: loading, slicing, saving, reloading, painting, multi-material, and finally under load. The simulator answers none of these questions honestly.",
-                        "Prüft alles, was echtes Gerät braucht: laden, schneiden, sichern, wieder laden, bemalen, mehrfarbig, und zum Schluss unter Last. Der Simulator beantwortet keine dieser Fragen ehrlich."))
+                        "Prüft alles, was echtes Gerät braucht: laden, slicen, sichern, wieder laden, bemalen, mehrfarbig, und zum Schluss unter Last. Der Simulator beantwortet keine dieser Fragen ehrlich."))
                     .font(.system(size: ps.font(12)))
                     .foregroundStyle(PrusaColors.textMuted)
                     .fixedSize(horizontal: false, vertical: true)

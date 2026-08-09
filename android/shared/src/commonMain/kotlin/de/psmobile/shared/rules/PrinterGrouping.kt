@@ -71,8 +71,16 @@ object PrinterGrouping {
     const val UNKNOWN_VENDOR = "Weitere"
 
     /**
-     * Die Hersteller in der Reihenfolge ihres ersten Auftretens, mit
-     * den Positionen ihrer Modelle.
+     * Die Hersteller alphabetisch, mit den Positionen ihrer Modelle.
+     *
+     * War frueher Reihenfolge des ersten Auftretens (wie group() oben
+     * fuer Familien) - bei zwei, drei Herstellern (Prusa, Voron,
+     * Templates) noch ueberschaubar, aber mit allen 36
+     * PrusaSlicer-Herstellern kommt die Reihenfolge aus der
+     * Verzeichnis-Iteration beim Einscannen und ist damit keine
+     * absichtliche Ordnung mehr, sondern reiner Dateisystem-Zufall -
+     * "durchgemixt", wie der Feldbericht es nannte. Alphabetisch ist
+     * hier die tatsaechlich absichtliche Ordnung.
      */
     fun groupByVendor(keys: List<String>): List<Group> {
         val byVendor = LinkedHashMap<String, MutableList<Int>>()
@@ -80,5 +88,6 @@ object PrinterGrouping {
             byVendor.getOrPut(vendorOf(key)) { mutableListOf() }.add(index)
         }
         return byVendor.map { (vendor, indices) -> Group(vendor, false, indices) }
+            .sortedBy { it.family.lowercase() }
     }
 }

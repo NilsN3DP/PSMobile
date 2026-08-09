@@ -57,12 +57,14 @@ int main(int argc, char **argv)
     const char *outfile = "out.gcode";
     const char *input   = NULL;
     const char *printer = NULL;
+    const char *save_project = NULL;
 
     for (int i = 1; i < argc; ++i) {
         if (strcmp(argv[i], "--res") == 0 && i + 1 < argc)        resdir  = argv[++i];
         else if (strcmp(argv[i], "--data") == 0 && i + 1 < argc)  datadir = argv[++i];
         else if (strcmp(argv[i], "--out") == 0 && i + 1 < argc)   outfile = argv[++i];
         else if (strcmp(argv[i], "--printer") == 0 && i + 1 < argc) printer = argv[++i];
+        else if (strcmp(argv[i], "--save-project") == 0 && i + 1 < argc) save_project = argv[++i];
         else input = argv[i];
     }
 
@@ -174,6 +176,13 @@ int main(int argc, char **argv)
 
     printf("geschaetzter Spitzenspeicher: %.0f MB\n",
            (double) psm_estimate_slice_memory(s) / (1024.0 * 1024.0));
+
+    if (save_project != NULL) {
+        if (psm_project_save_3mf(s, save_project) == PSM_OK)
+            printf("Projekt gesichert: %s\n", save_project);
+        else
+            fprintf(stderr, "Projekt sichern fehlgeschlagen: %s\n", psm_last_error(s));
+    }
 
     printf("slice...\n");
     const double t0 = now_seconds();

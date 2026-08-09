@@ -47,6 +47,13 @@ struct SliceSheet: View {
         .overlay(alignment: .topLeading) { PSMarke(name: "slice.blatt") }
     }
 
+    /// "3.2 s" unter einer Sekunde grob, sonst auf eine Nachkommastelle -
+    /// niemand braucht Millisekunden, aber "0 s" bei einem schnellen
+    /// lokalen Schnitt waere eine falsche Auskunft.
+    private func dauerText(_ sekunden: Double) -> String {
+        sekunden < 1 ? String(format: "%.2f s", sekunden) : String(format: "%.1f s", sekunden)
+    }
+
     private var laeuft: Bool {
         if case .running = model.progress { return true }
         return false
@@ -55,7 +62,7 @@ struct SliceSheet: View {
     @ViewBuilder private var inhalt: some View {
         switch model.progress {
         case .running(let prozent, let phase):
-            titel(st("Slicing", "Wird geschnitten"))
+            titel(st("Slicing", "Wird gesliced"))
             // Die Phase mit anzeigen, nicht nur Prozent: das macht eine
             // mehrminuetige Wartezeit ertraeglich, weil man sieht, dass
             // sich etwas bewegt, auch wenn die Zahl stehen bleibt.
@@ -68,12 +75,66 @@ struct SliceSheet: View {
                 model.cancel()
             }
 
-        case .done:
+        case .done(let sekunden, _, _):
             titel(st("Ready to print", "Fertig zum Drucken"))
+            Text(st("Sliced in \(dauerText(sekunden))",
+                    "Geslict in \(dauerText(sekunden))"))
+                .font(.system(size: ps.font(11)))
+                .foregroundStyle(PrusaColors.textMuted)
             if let werte = model.stats {
                 zahlen(werte)
             }
-            if let url = model.gcodeURL {
+            if model.gcodeURLs.count > 1 {
+                // "Alle Betten schneiden": mehrere Dateien auf einmal.
+                // ShareLink nimmt eine Sammlung genauso wie eine
+                // einzelne Datei - AirDrop, Dateien-App und Drucker-Apps
+                // zeigen dann alle Dateien zur Auswahl.
+                Text(st("\(model.gcodeURLs.count) G-Code files",
+                        "\(model.gcodeURLs.count) G-Code-Dateien"))
+                    .font(.system(size: ps.font(12)))
+                    .foregroundStyle(PrusaColors.textMuted)
+                ShareLink(items: model.gcodeURLs) {
+                    Text(st("Export all", "Alle exportieren"))
+                        .font(.system(size: ps.font(14)))
+                        .foregroundStyle(.white)
+                        .frame(maxWidth: .infinity, minHeight: ps.touch(50))
+                        .background(PrusaColors.orange)
+                        .clipShape(RoundedRectangle(cornerRadius: ps.pt(3)))
+                        .contentShape(Rectangle())
+                }
+                .accessibilityIdentifier("slice.sichern")
+
+                // Alle Betten teilen sich heute noch ein Druckerprofil
+                // (siehe Uebergabe zu Profilen je Bett) - PrusaLink
+                // bekommt darum jede Datei einzeln vom selben Drucker
+                // aus angeboten, statt eine eigene Mehrfachauswahl zu
+                // bauen, die es beim aktuellen Stand nicht braucht.
+                if let senden = onSendToPrinter {
+                    VStack(spacing: ps.pt(6)) {
+                        ForEach(model.gcodeURLs, id: \.self) { datei in
+                            Button { senden(datei) } label: {
+                                HStack {
+                                    Text(datei.lastPathComponent)
+                                        .font(.system(size: ps.font(12)))
+                                        .foregroundStyle(PrusaColors.textPrimary)
+                                        .lineLimit(1)
+                                    Spacer()
+                                    Text(st("Send", "Senden"))
+                                        .font(.system(size: ps.font(12), weight: .semibold))
+                                        .foregroundStyle(PrusaColors.orange)
+                                }
+                                .padding(.horizontal, ps.pt(10))
+                                .frame(minHeight: ps.touch(40))
+                                .background(PrusaColors.panelRaised)
+                                .clipShape(RoundedRectangle(cornerRadius: ps.pt(3)))
+                                .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityIdentifier("slice.andrucker." + datei.lastPathComponent)
+                        }
+                    }
+                }
+            } else if let url = model.gcodeURL {
                 // Auf iOS gibt es keinen Ordner, in den eine App einfach
                 // schreibt. Das Teilen-Blatt deckt alles ab, was der
                 // Nutzer damit vorhat: in Dateien sichern, per AirDrop
@@ -100,7 +161,7 @@ struct SliceSheet: View {
             knopf(st("Close", "Schließen"), kennung: "slice.schliessen", betont: false, aktion: onClose)
 
         case .failed(let meldung):
-            titel(st("Slicing failed", "Schneiden fehlgeschlagen"))
+            titel(st("Slicing failed", "Slicen fehlgeschlagen"))
             // Die Meldung des Kerns woertlich. Sie nennt meist den
             // Grund - eine eigene, freundlichere Formulierung wuerde ihn
             // verstecken.

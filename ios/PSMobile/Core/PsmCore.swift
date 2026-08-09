@@ -429,6 +429,22 @@ final class PsmCore {
         try check(psm_gcode_export(raw, path), "G-Code-Export")
     }
 
+    /// Speist eine bereits fertige G-Code-Datei in dieselbe Vorschau
+    /// wie einen lokalen Schnitt ein - fuer Remote Slicing, wo der
+    /// Server schneidet und der Kern nur die fertige Datei bekommt.
+    func loadGcodeForPreview(path: String) throws {
+        try check(psm_slice_load_gcode_for_preview(raw, path), "G-Code fuer Vorschau laden")
+    }
+
+    func designRevision() -> UInt64 {
+        psm_design_revision(raw)
+    }
+
+    func acceptRemoteGcode(path: String, requestRevision: UInt64) throws {
+        try check(psm_slice_accept_remote_gcode(raw, path, requestRevision),
+                  "Remote-G-Code fuer Vorschau annehmen")
+    }
+
     /// Geschaetzter Spitzenspeicher in Bytes.
     ///
     /// Auf iOS besonders wichtig: es gibt keinen zweiten Prozess, in den

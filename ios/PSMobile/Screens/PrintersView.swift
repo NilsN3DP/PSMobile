@@ -13,6 +13,11 @@ struct PrintersView: View {
     /// Senden.
     var senden: URL?
     var dateiname: String = "psmobile.gcode"
+    /// Der Druckerprofilname des Projekts, aus dem der G-Code kommt -
+    /// nur damit lassen sich passende von unpassenden Geraeten
+    /// unterscheiden. Ohne Angabe (z.B. beim reinen Verwalten der
+    /// Drucker) stehen alle gleichrangig da.
+    var passendesProfil: String? = nil
     var onClose: () -> Void
 
     @Environment(\.psScale) private var ps
@@ -20,8 +25,66 @@ struct PrintersView: View {
     @State private var meldung: String?
     @State private var laeuft = false
     @State private var nachDemSendenDrucken = false
+    /// Aus wegen Unuebersichtlichkeit, wie schon bei den Filamenten:
+    /// wer mehrere Drucker eingerichtet hat, sieht beim Senden zuerst
+    /// nur die, die zum geschnittenen Profil passen.
+    @State private var zeigeAlleDrucker = false
+    /// Ob ein eingerichteter Drucker gerade erreichbar ist - automatisch
+    /// geprueft beim Oeffnen, nicht erst auf Tippen. nil heisst "wird
+    /// noch geprueft", nicht "unbekannt fuer immer".
+    @State private var erreichbarkeit: [String: Bool] = [:]
+
+    private var passende: [PrusaLinkClient.Printer] {
+        guard senden != nil, let profil = passendesProfil, !profil.isEmpty else {
+            return store.printers
+        }
+        return store.printers.filter { $0.presetName == profil }
+    }
+
+    private var unpassendeAnzahl: Int {
+        guard senden != nil, let profil = passendesProfil, !profil.isEmpty else { return 0 }
+        return store.printers.count - passende.count
+    }
+
+    private var angezeigt: [PrusaLinkClient.Printer] {
+        zeigeAlleDrucker || passende.isEmpty ? store.printers : passende
+    }
 
     private let client = PrusaLinkClient()
+    private let octoClient = OctoPrintClient()
+
+    /// Ergebnis unabhaengig vom tatsaechlichen Client - beide melden
+    /// dieselbe Zweiheit (ok/fehler), nur mit eigenem Typ, weil
+    /// OctoPrintClient nichts von PrusaLinkClient wissen muss.
+    private func pruefen(_ drucker: PrusaLinkClient.Printer,
+                         secret: PrusaLinkClient.Secret) async -> PrusaLinkClient.Ergebnis {
+        switch drucker.hostType {
+        case .prusaLink:
+            return await client.probe(drucker, secret: secret)
+        case .octoprint:
+            switch await octoClient.probe(drucker, apiKey: secret.apiKey) {
+            case .ok(let t):     return .ok(t)
+            case .fehler(let t): return .fehler(t)
+            }
+        }
+    }
+
+    private func hochladen(_ drucker: PrusaLinkClient.Printer,
+                           secret: PrusaLinkClient.Secret,
+                           datei: URL, name: String,
+                           printAfter: Bool) async -> PrusaLinkClient.Ergebnis {
+        switch drucker.hostType {
+        case .prusaLink:
+            return await client.upload(drucker, secret: secret, datei: datei,
+                                       name: name, printAfter: printAfter)
+        case .octoprint:
+            switch await octoClient.upload(drucker, apiKey: secret.apiKey, datei: datei,
+                                           name: name, printAfter: printAfter) {
+            case .ok(let t):     return .ok(t)
+            case .fehler(let t): return .fehler(t)
+            }
+        }
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -52,7 +115,27 @@ struct PrintersView: View {
                             .font(.system(size: ps.font(13)))
                             .foregroundStyle(PrusaColors.textMuted)
                     }
-                    ForEach(store.printers) { drucker in
+                    if unpassendeAnzahl > 0 && !passende.isEmpty {
+                        Button { zeigeAlleDrucker.toggle() } label: {
+                            HStack(spacing: ps.pt(5)) {
+                                Image(systemName: zeigeAlleDrucker ? "eye.fill" : "eye.slash")
+                                Text(zeigeAlleDrucker
+                                     ? st("Hide \(unpassendeAnzahl) other printers",
+                                          "\(unpassendeAnzahl) andere Drucker ausblenden")
+                                     : st("Show \(unpassendeAnzahl) other printers",
+                                          "\(unpassendeAnzahl) andere Drucker anzeigen"))
+                            }
+                            .font(.system(size: ps.font(11)))
+                            .foregroundStyle(PrusaColors.textMuted)
+                            .padding(.horizontal, ps.pt(10))
+                            .frame(height: ps.touch(30))
+                            .background(PrusaColors.panelRaised)
+                            .clipShape(Capsule())
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityIdentifier("drucker.andere.umschalten")
+                    }
+                    ForEach(angezeigt) { drucker in
                         zeile(drucker)
                     }
                     knopf(st("Add printer", "Drucker hinzufügen"),
@@ -69,6 +152,28 @@ struct PrintersView: View {
         .overlay(alignment: .topLeading) { PSMarke(name: "drucker") }
         .sheet(item: $bearbeitet) { drucker in
             PrinterEditView(store: store, printer: drucker) { bearbeitet = nil }
+        }
+        .task(id: store.printers.map(\.id)) { await alleAutomatischPruefen() }
+    }
+
+    /// Alle eingerichteten Drucker gleichzeitig anfragen - nur im
+    /// eigenen Netz schnell genug, um beim Oeffnen nicht aufzufallen;
+    /// ueber das offene Internet blockiert nichts, weil jede Anfrage
+    /// ihr eigenes Ergebnis unabhaengig eintraegt.
+    private func alleAutomatischPruefen() async {
+        await withTaskGroup(of: (String, Bool).self) { gruppe in
+            for drucker in store.printers {
+                let secret = store.secret(for: drucker)
+                guard drucker.isComplete(secret: secret) else { continue }
+                gruppe.addTask {
+                    let ergebnis = await pruefen(drucker, secret: secret)
+                    if case .ok = ergebnis { return (drucker.id, true) }
+                    return (drucker.id, false)
+                }
+            }
+            for await (id, ok) in gruppe {
+                erreichbarkeit[id] = ok
+            }
         }
     }
 
@@ -96,6 +201,7 @@ struct PrintersView: View {
 
     private func zeile(_ drucker: PrusaLinkClient.Printer) -> some View {
         HStack(spacing: ps.pt(12)) {
+            erreichbarkeitsPunkt(drucker)
             VStack(alignment: .leading, spacing: ps.pt(2)) {
                 Text(drucker.name.isEmpty ? drucker.host : drucker.name)
                     .font(.system(size: ps.font(14)))
@@ -134,6 +240,24 @@ struct PrintersView: View {
         .clipShape(RoundedRectangle(cornerRadius: ps.pt(4)))
     }
 
+    /// Gruen erreichbar, gedaempft nicht erreichbar, ein kleiner Kreis
+    /// waehrend der ersten Pruefung noch laeuft - dieselbe Sprache wie
+    /// die Fortschrittspunkte anderswo in der App.
+    private func erreichbarkeitsPunkt(_ drucker: PrusaLinkClient.Printer) -> some View {
+        let zustand = erreichbarkeit[drucker.id]
+        return Circle()
+            .fill(zustand == true ? PrusaColors.orange
+                  : zustand == false ? PrusaColors.textMuted.opacity(0.3)
+                  : PrusaColors.textMuted.opacity(0.15))
+            .frame(width: ps.pt(9), height: ps.pt(9))
+            .accessibilityIdentifier("drucker.erreichbar." + drucker.id)
+            .accessibilityValue(zustand == true
+                ? st("Reachable", "Erreichbar")
+                : zustand == false
+                    ? st("Not reachable", "Nicht erreichbar")
+                    : st("Checking", "Wird geprüft"))
+    }
+
     private func handle(_ drucker: PrusaLinkClient.Printer) {
         let secret = store.secret(for: drucker)
         guard drucker.isComplete(secret: secret) else {
@@ -146,17 +270,21 @@ struct PrintersView: View {
         Task {
             let ergebnis: PrusaLinkClient.Ergebnis
             if let datei = senden {
-                ergebnis = await client.upload(drucker, secret: secret, datei: datei,
-                                               name: dateiname,
-                                               printAfter: nachDemSendenDrucken)
+                ergebnis = await hochladen(drucker, secret: secret, datei: datei,
+                                           name: dateiname,
+                                           printAfter: nachDemSendenDrucken)
             } else {
-                ergebnis = await client.probe(drucker, secret: secret)
+                ergebnis = await pruefen(drucker, secret: secret)
             }
             await MainActor.run {
                 laeuft = false
                 switch ergebnis {
-                case .ok(let text):     meldung = text
-                case .fehler(let text): meldung = text
+                case .ok(let text):
+                    meldung = text
+                    if senden == nil { erreichbarkeit[drucker.id] = true }
+                case .fehler(let text):
+                    meldung = text
+                    if senden == nil { erreichbarkeit[drucker.id] = false }
                 }
             }
         }
@@ -208,20 +336,40 @@ struct PrinterEditView: View {
                     .foregroundStyle(PrusaColors.textPrimary)
 
                 feld(st("Name", "Name"), text: $printer.name, kennung: "drucker.name")
+
+                // Der Host-Typ entscheidet, welcher Client ueberhaupt
+                // spricht (siehe PrintersView.pruefen/hochladen) - vor
+                // der Adresse, weil er auch bestimmt, welche Felder
+                // danach ueberhaupt Sinn ergeben.
+                Picker("", selection: $printer.hostType) {
+                    Text("PrusaLink").tag(PrusaLinkClient.HostType.prusaLink)
+                    Text("OctoPrint").tag(PrusaLinkClient.HostType.octoprint)
+                }
+                .pickerStyle(.segmented)
+                .accessibilityIdentifier("drucker.hosttyp")
+                .onChange(of: printer.hostType) { neu in
+                    // OctoPrint kennt in dieser Anbindung nur den
+                    // API-Schluessel, kein Digest-Verfahren.
+                    if neu == .octoprint { printer.usesApiKey = true }
+                }
+
                 feld(st("Address", "Adresse"), text: $printer.host, kennung: "drucker.adresse")
                 Text(st("Without a scheme, HTTPS applies.",
                         "Ohne Schema gilt HTTPS."))
                     .font(.system(size: ps.font(11)))
                     .foregroundStyle(PrusaColors.textMuted)
 
-                // PrusaLink ab 0.7 nutzt Benutzername und Passwort ueber
-                // HTTP-Digest; aeltere Firmware einen API-Schluessel.
-                Picker("", selection: $printer.usesApiKey) {
-                    Text(st("User + password", "Benutzer + Passwort")).tag(false)
-                    Text(st("API key", "API-Schlüssel")).tag(true)
+                if printer.hostType == .prusaLink {
+                    // PrusaLink ab 0.7 nutzt Benutzername und Passwort
+                    // ueber HTTP-Digest; aeltere Firmware einen
+                    // API-Schluessel.
+                    Picker("", selection: $printer.usesApiKey) {
+                        Text(st("User + password", "Benutzer + Passwort")).tag(false)
+                        Text(st("API key", "API-Schlüssel")).tag(true)
+                    }
+                    .pickerStyle(.segmented)
+                    .accessibilityIdentifier("drucker.verfahren")
                 }
-                .pickerStyle(.segmented)
-                .accessibilityIdentifier("drucker.verfahren")
 
                 if printer.usesApiKey {
                     geheimFeld(st("API key", "API-Schlüssel"), text: $apiKey,
@@ -233,8 +381,10 @@ struct PrinterEditView: View {
                                kennung: "drucker.passwort")
                 }
 
-                feld(st("Storage", "Speicher"), text: $printer.storage,
-                     kennung: "drucker.speicher")
+                if printer.hostType == .prusaLink {
+                    feld(st("Storage", "Speicher"), text: $printer.storage,
+                         kennung: "drucker.speicher")
+                }
 
                 Toggle(isOn: $printer.allowInsecureHttp) {
                     VStack(alignment: .leading, spacing: ps.pt(2)) {
