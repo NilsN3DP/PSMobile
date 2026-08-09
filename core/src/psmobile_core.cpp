@@ -4321,6 +4321,112 @@ PSM_API psm_result psm_config_set(psm_session *s, const char *key, const char *v
     PSM_GUARD_END(s)
 }
 
+PSM_API psm_result psm_object_config_get(psm_session *s, psm_object_id id,
+                                         const char *key, char *out, size_t out_cap)
+{
+    PSM_GUARD_BEGIN(s)
+        if (key == nullptr || out == nullptr)
+            return PSM_ERR_INVALID_ARG;
+        std::lock_guard<std::recursive_mutex> data_lock(s->data_mtx);
+        const Slic3r::ModelObject *object = find_object(s, id);
+        if (object == nullptr)
+            return PSM_ERR_NOT_FOUND;
+        if (! s->config.has(key))
+            return PSM_ERR_NOT_FOUND;
+        const Slic3r::ConfigOption *option = object->config.has(key)
+            ? object->config.option(key) : s->config.option(key);
+        if (const auto *str = dynamic_cast<const Slic3r::ConfigOptionString *>(option))
+            copy_str(out, out_cap, str->value);
+        else
+            copy_str(out, out_cap, object->config.has(key)
+                ? object->config.opt_serialize(key) : s->config.opt_serialize(key));
+        return PSM_OK;
+    PSM_GUARD_END(s)
+}
+
+PSM_API psm_result psm_object_config_set(psm_session *s, psm_object_id id,
+                                         const char *key, const char *value)
+{
+    PSM_GUARD_BEGIN(s)
+        if (key == nullptr || value == nullptr)
+            return PSM_ERR_INVALID_ARG;
+        std::lock_guard<std::recursive_mutex> data_lock(s->data_mtx);
+        Slic3r::ModelObject *object = find_object(s, id);
+        if (object == nullptr)
+            return PSM_ERR_NOT_FOUND;
+        if (! s->config.has(key)) {
+            s->set_error(std::string("unbekannter Parameter: ") + key);
+            return PSM_ERR_NOT_FOUND;
+        }
+
+        /* Erst an einer Kopie des passenden globalen beziehungsweise
+         * vorhandenen Objekt-Typs parsen. Fehlgeschlagene Validierung darf
+         * weder einen Override noch Verlauf oder Revision erzeugen. */
+        const Slic3r::ConfigOption *source = object->config.has(key)
+            ? object->config.option(key) : s->config.option(key);
+        Slic3r::DynamicPrintConfig candidate;
+        candidate.set_key_value(key, source->clone());
+        if (auto *str = dynamic_cast<Slic3r::ConfigOptionString *>(candidate.option(key))) {
+            str->value = value;
+        } else {
+            Slic3r::ConfigSubstitutionContext substitutions(
+                Slic3r::ForwardCompatibilitySubstitutionRule::Disable);
+            if (! candidate.set_deserialize_nothrow(key, value, substitutions)) {
+                s->set_error(std::string("ungueltiger Wert fuer ") + key + ": " + value);
+                return PSM_ERR_INVALID_ARG;
+            }
+        }
+
+        if (object->config.has(key) &&
+            *object->config.option(key) == *candidate.option(key))
+            return PSM_OK;
+
+        s->history_checkpoint("Objekt-Einstellung ändern");
+        object->config.set_key_value(key, candidate.option(key)->clone());
+        ++s->config_revision;
+        s->mark_design_changed();
+        return PSM_OK;
+    PSM_GUARD_END(s)
+}
+
+PSM_API psm_result psm_object_config_reset(psm_session *s, psm_object_id id,
+                                           const char *key)
+{
+    PSM_GUARD_BEGIN(s)
+        if (key == nullptr)
+            return PSM_ERR_INVALID_ARG;
+        std::lock_guard<std::recursive_mutex> data_lock(s->data_mtx);
+        Slic3r::ModelObject *object = find_object(s, id);
+        if (object == nullptr)
+            return PSM_ERR_NOT_FOUND;
+        if (! s->config.has(key)) {
+            s->set_error(std::string("unbekannter Parameter: ") + key);
+            return PSM_ERR_NOT_FOUND;
+        }
+        if (! object->config.has(key))
+            return PSM_OK;
+
+        s->history_checkpoint("Objekt-Einstellung zurücksetzen");
+        object->config.erase(key);
+        ++s->config_revision;
+        s->mark_design_changed();
+        return PSM_OK;
+    PSM_GUARD_END(s)
+}
+
+PSM_API int32_t psm_object_config_is_overridden(psm_session *s,
+                                                 psm_object_id id,
+                                                 const char *key)
+{
+    if (s == nullptr || key == nullptr)
+        return -1;
+    std::lock_guard<std::recursive_mutex> data_lock(s->data_mtx);
+    const Slic3r::ModelObject *object = find_object(s, id);
+    if (object == nullptr || ! s->config.has(key))
+        return -1;
+    return object->config.has(key) ? 1 : 0;
+}
+
 PSM_API uint64_t psm_estimate_slice_memory(psm_session *s)
 {
     if (s == nullptr)

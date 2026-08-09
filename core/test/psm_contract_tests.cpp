@@ -106,8 +106,8 @@ int main(int argc, char **argv)
     require(argc == 6,
             "usage: psm_contract_tests DATADIR RESDIR MODEL PROJECT3MF "
             "INSTALLED_PROFILE_PROJECT3MF");
-    require(PSM_ABI_VERSION == 7, "header ABI version is bumped for completed exports");
-    require(psm_abi_version() == 7, "runtime ABI version is bumped for completed exports");
+    require(PSM_ABI_VERSION == 8, "header ABI version includes object config exports");
+    require(psm_abi_version() == 8, "runtime ABI version includes object config exports");
 
     std::filesystem::create_directories(argv[1]);
     psm_session *session = psm_session_create(argv[1], argv[2]);
@@ -126,6 +126,99 @@ int main(int argc, char **argv)
     psm_object_info info{};
     require(psm_model_info(session, id, &info) == PSM_OK, "object info");
     require(info.triangle_count == 12, "cube has twelve triangles");
+
+    /*
+     * Objektwerte sind echte lokale Overrides: ohne Override wird die
+     * globale Konfiguration gelesen, ein gueltiger Write erzeugt genau
+     * einen Verlaufsschritt, und Reset stellt die Vererbung wieder her.
+     */
+    {
+        constexpr const char *key = "fill_density";
+        char inherited[64]{};
+        char value[64]{};
+        char zero_cap = 'x';
+        require(psm_config_get(session, key, inherited, sizeof(inherited)) == PSM_OK,
+                "read inherited global object setting");
+        require(psm_history_clear(session) == PSM_OK,
+                "clear history before object config contract");
+        const uint64_t design_before = psm_design_revision(session);
+#if defined(PSM_TEST_MULTIPLE_BEDS_STATE)
+        const uint64_t config_before = session->config_revision;
+#endif
+
+        require(psm_object_config_is_overridden(session, id, key) == 0,
+                "object config starts inherited");
+        require(psm_object_config_get(session, id, key, value, sizeof(value)) == PSM_OK &&
+                    std::string(value) == inherited,
+                "object config reads inherited global value");
+        require(psm_object_config_get(session, id, key, &zero_cap, 0) == PSM_OK &&
+                    zero_cap == 'x',
+                "object config follows global zero-capacity read convention");
+        require(psm_object_config_get(nullptr, id, key, value, sizeof(value)) ==
+                    PSM_ERR_INVALID_ARG &&
+                    psm_object_config_get(session, id, nullptr, value, sizeof(value)) ==
+                    PSM_ERR_INVALID_ARG &&
+                    psm_object_config_get(session, id, key, nullptr, sizeof(value)) ==
+                    PSM_ERR_INVALID_ARG,
+                "object config get rejects invalid session key and buffer");
+        require(psm_object_config_is_overridden(nullptr, id, key) == -1 &&
+                    psm_object_config_is_overridden(session, id, nullptr) == -1,
+                "object config override query rejects invalid session and key");
+        require(psm_object_config_get(session, PSM_INVALID_ID, key, value, sizeof(value)) ==
+                    PSM_ERR_NOT_FOUND &&
+                    psm_object_config_set(session, PSM_INVALID_ID, key, "35%") ==
+                    PSM_ERR_NOT_FOUND &&
+                    psm_object_config_reset(session, PSM_INVALID_ID, key) ==
+                    PSM_ERR_NOT_FOUND &&
+                    psm_object_config_is_overridden(session, PSM_INVALID_ID, key) == -1,
+                "object config rejects missing object without mutation");
+        require(psm_object_config_set(session, id, "no_such_object_option", "1") ==
+                    PSM_ERR_NOT_FOUND &&
+                    psm_object_config_set(session, id, key, "not-a-density") ==
+                    PSM_ERR_INVALID_ARG,
+                "object config rejects unknown key and invalid value without mutation");
+        require(psm_object_config_reset(session, id, key) == PSM_OK &&
+                    psm_history_undo_count(session) == 0 &&
+                    psm_design_revision(session) == design_before,
+                "reset of inherited object config is a successful no-op");
+#if defined(PSM_TEST_MULTIPLE_BEDS_STATE)
+        require(session->config_revision == config_before,
+                "failed and no-op object config calls keep config revision");
+#endif
+
+        require(psm_object_config_set(session, id, key, "35%") == PSM_OK &&
+                    psm_object_config_get(session, id, key, value, sizeof(value)) == PSM_OK &&
+                    std::string(value) == "35%" &&
+                    psm_object_config_is_overridden(session, id, key) == 1,
+                "object config set creates a local validated override");
+        require(psm_history_undo_count(session) == 1 &&
+                    psm_design_revision(session) == design_before + 1,
+                "object config set creates one checkpoint and invalidation");
+#if defined(PSM_TEST_MULTIPLE_BEDS_STATE)
+        require(session->config_revision == config_before + 1,
+                "object config set increments config revision once");
+#endif
+        require(psm_object_config_set(session, id, key, "35%") == PSM_OK &&
+                    psm_history_undo_count(session) == 1 &&
+                    psm_design_revision(session) == design_before + 1,
+                "identical object config set is a successful no-op");
+#if defined(PSM_TEST_MULTIPLE_BEDS_STATE)
+        require(session->config_revision == config_before + 1,
+                "identical object config set keeps config revision");
+#endif
+        require(psm_object_config_reset(session, id, key) == PSM_OK &&
+                    psm_object_config_is_overridden(session, id, key) == 0 &&
+                    psm_object_config_get(session, id, key, value, sizeof(value)) == PSM_OK &&
+                    std::string(value) == inherited,
+                "object config reset restores inherited global value");
+        require(psm_history_undo_count(session) == 2 &&
+                    psm_design_revision(session) == design_before + 2,
+                "object config reset creates one checkpoint and invalidation");
+#if defined(PSM_TEST_MULTIPLE_BEDS_STATE)
+        require(session->config_revision == config_before + 2,
+                "object config reset increments config revision once");
+#endif
+    }
 
     /*
      * Ein zweiter Import darf nicht im ersten stecken. Vorher landete

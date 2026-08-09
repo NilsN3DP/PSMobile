@@ -416,3 +416,32 @@ Produktions-APK nicht. `Test-Path` und `Get-Item` arbeiten dort jetzt mit
 Produktions-APK installiert wird. Danach liefen alle 18 Python-Buildtests,
 beide Android-Flavor-Unit-Suiten, der Identitäts-Artefakttest sowie Bash- und
 PowerShell-Parseprüfungen grün.
+
+### Side-Build-Baseline – Task 3: Objekt-Konfigurations-Overrides
+
+Der C-Kern kann globale Druckparameter jetzt pro Objekt übersteuern,
+zurücksetzen und als lokal/geerbt abfragen. Lesen fällt ohne Override auf die
+globale Konfiguration zurück. Die Validierung arbeitet zuerst an einer
+geklonten typgleichen Konfiguration, so dass ungültige Werte, unbekannte
+Schlüssel und fehlende Objekt-IDs keine Teilmutation erzeugen. Wirksame
+Änderungen erzeugen genau einen Verlaufseintrag, eine `config_revision` und
+eine Design-Invalidierung; Reset eines nur geerbten Werts und ein identisches
+Set sind erfolgreiche No-ops.
+
+Der Contract wurde test-first geschrieben: der direkte Windows-MSVC-RED-Lauf
+meldete die erwarteten fehlenden `psm_object_config_*`-Deklarationen. Der
+Host-CMake-Build war weiterhin nur wegen fehlender Boost-1.83-Abhängigkeiten
+nicht einrichtbar. Danach kompilierte der reine C-`psm_testcli` gegen die
+neuen Deklarationen. Die ABI wurde wegen vier neuer C-Exports von 7 auf 8
+erhöht; App und Kern vergleichen weiterhin dieselbe Header-Konstante.
+
+Der Commit `97df4ddfe09918b0b8c76c293ff965b8d07432c3` lief auf dem Mac in
+einem neuen, abgehängten Verzeichnis
+`/Volumes/Macintosh_HD/Users/user289137/psmobile-task3-object-config-97df4dd`.
+Der schmutzige Hauptcheckout blieb unangetastet; vorhandene Tool-,
+Abhängigkeits- und Quellen-Caches wurden nur verlinkt. Der frische
+SIMULATORARM64-Build linkte 50 Ziele einschließlich Kern, C-CLI und
+Contract-Test. Auf dem iPhone-17-Pro-Simulator ergab der Lauf mit absoluten
+Fixture-Pfaden `PASS: psm_contract_tests`. Zusätzlich lief lokal
+`:shared:allTests :app:testProductionDebugUnitTest` erfolgreich (58 Aufgaben,
+alle up-to-date). Der vollständige Nachweis steht im Task-3-Bericht.

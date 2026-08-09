@@ -37,7 +37,7 @@ extern "C" {
 /* Version                                                             */
 /* ------------------------------------------------------------------ */
 
-#define PSM_ABI_VERSION 7
+#define PSM_ABI_VERSION 8
 
 /** Gibt die ABI-Version zurueck. Die App prueft sie beim Start gegen
  *  PSM_ABI_VERSION und verweigert den Dienst bei Abweichung. */
@@ -1039,6 +1039,20 @@ PSM_API psm_result psm_config_enum_value_at(psm_session *s, const char *key, siz
  *  genau wie PrusaSlicer es intern auch macht. */
 PSM_API psm_result psm_config_get(psm_session *s, const char *key, char *out, size_t out_cap);
 PSM_API psm_result psm_config_set(psm_session *s, const char *key, const char *value);
+
+/* Lokale Objektwerte überschreiben die globale Konfiguration nur für das
+ * angegebene Objekt. Lesen fällt ohne lokalen Wert auf die globale
+ * Konfiguration zurück; reset entfernt den lokalen Wert wieder. */
+PSM_API psm_result psm_object_config_get(psm_session *s, psm_object_id id,
+                                         const char *key, char *out, size_t out_cap);
+PSM_API psm_result psm_object_config_set(psm_session *s, psm_object_id id,
+                                         const char *key, const char *value);
+PSM_API psm_result psm_object_config_reset(psm_session *s, psm_object_id id,
+                                           const char *key);
+/* 1: lokal überschrieben, 0: geerbt, -1: ungültige Session/Objekt/Schlüssel. */
+PSM_API int32_t psm_object_config_is_overridden(psm_session *s,
+                                                 psm_object_id id,
+                                                 const char *key);
 
 /* ------------------------------------------------------------------ */
 /* Slicing                                                             */

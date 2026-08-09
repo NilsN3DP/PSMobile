@@ -164,6 +164,15 @@ int main(int argc, char **argv)
     }
     printf("geladen: %zu Objekt(e) aus %s\n", count, input);
 
+    if (count > 0) {
+        char fill_density[64] = { 0 };
+        if (psm_object_config_get(s, ids[0], "fill_density",
+                                  fill_density, sizeof(fill_density)) == PSM_OK)
+            printf("  Objektfüllung: %s%s\n", fill_density,
+                   psm_object_config_is_overridden(s, ids[0], "fill_density") == 1
+                       ? " (lokal)" : "");
+    }
+
     for (size_t i = 0; i < count && i < 64; ++i) {
         psm_object_info info;
         if (psm_model_info(s, ids[i], &info) == PSM_OK)
