@@ -52,7 +52,6 @@ internal fun SimpleObjectBar(
     service: SlicerService,
     obj: PsmCore.ObjectInfo,
     beds: List<PsmCore.Bed>,
-    activeBed: Int,
     onClearSelection: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -83,7 +82,6 @@ internal fun SimpleObjectBar(
         MoveToBedDialog(
             service = service,
             beds = beds,
-            activeBed = activeBed,
             ids = listOf(obj.id),
             onDone = { moveOpen = false; onClearSelection() },
             onDismiss = { moveOpen = false },

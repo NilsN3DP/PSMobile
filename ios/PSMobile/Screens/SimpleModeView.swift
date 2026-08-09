@@ -60,6 +60,7 @@ struct SimpleModeView: View {
     @State private var zeigeImporter = false
     @State private var zeigeColorMix = false
     @State private var zeigeArrange = false
+    @State private var zeigeBettwahl = false
     @State private var hinderungsgruende: [String] = []
 
     /// Wofuer der Dateiwaehler offen ist. Eine 3MF kann beides sein -
@@ -101,6 +102,9 @@ struct SimpleModeView: View {
             VStack(spacing: 0) {
                 kopfzeile
                 werkzeugleiste
+                BedSelector(model: model,
+                            onArrange: { zeigeArrange = true },
+                            onOpenSelection: { zeigeBettwahl = true })
                 Spacer()
             }
             if panel == .workspace,
@@ -140,6 +144,9 @@ struct SimpleModeView: View {
             }
             if !hinderungsgruende.isEmpty {
                 SliceBlockerSheet(gruende: hinderungsgruende) { hinderungsgruende = [] }
+            }
+            if zeigeBettwahl {
+                BedSelectionOverlay(model: model, isPresented: $zeigeBettwahl)
             }
             PSMarke(name: "simple.arbeitsbereich")
         }
@@ -215,10 +222,11 @@ struct SimpleModeView: View {
                     inputEnabled: panel == .workspace,
                     gizmo: gizmo,
                     viewportMode: vorschau ? .preview : .editor,
-                    // Mehrbett ist absichtlich ein Advanced-Werkzeug:
-                    // Simple arbeitet immer auf dem aktuellen Bett, auch
-                    // wenn die globale Viewport-Option aktiviert ist.
-                    multiBedRender: false,
+                    // Die Bettleiste steht in beiden Modi fuer denselben
+                    // Kernzustand. Der Viewport zeigt deshalb ebenfalls
+                    // alle Betten statt beim Moduswechsel einen zweiten,
+                    // abweichenden Bettzustand zu erzeugen.
+                    multiBedRender: true,
                     focusBedIndex: model.activeBedIndex,
                     focusBedKey: model.focusBedKey,
                     layerRange: vorschau && !previewRange.isEmpty

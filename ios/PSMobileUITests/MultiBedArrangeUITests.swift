@@ -28,13 +28,8 @@ final class MultiBedArrangeUITests: XCTestCase {
         app.launch()
         let marke = modus == "advanced" ? "arbeitsbereich" : "simple.arbeitsbereich"
         XCTAssertTrue(app.otherElements[marke].waitForExistence(timeout: 60))
-        // Der Easy Mode arbeitet bewusst auf einem Bett - die Bettauswahl
-        // gehoert seit dieser Sitzung nur noch zum Advanced Mode, sie
-        // blockierte dort vorher die Oberflaeche ohne Nutzen.
-        if modus == "advanced" {
-            XCTAssertTrue(app.otherElements["bed.selector"].waitForExistence(timeout: 15),
-                          "Die Bettauswahl fehlt im Advanced Mode")
-        }
+        XCTAssertTrue(app.otherElements["bed.selector"].waitForExistence(timeout: 15),
+                      "Die gemeinsame Bettauswahl fehlt im \(modus)-Modus")
     }
 
     private func oeffneAuswahlWennNoetig() {
@@ -51,16 +46,25 @@ final class MultiBedArrangeUITests: XCTestCase {
         }
     }
 
-    /// Der Easy Mode zeigt seit dieser Sitzung keine Bettauswahl mehr -
-    /// Mehrbett ist bewusst ein Werkzeug des Advanced Mode. Dasselbe
-    /// Verhalten (neues leeres Bett bleibt als Karte wechselbar) prueft
-    /// testArrangePanelOrdnetDasExpliziteZielbett bereits fuer Advanced.
-    func testBettauswahlFehltImSimpleMode() {
+    /// Simple und Advanced arbeiten auf derselben Kern-Bettauswahl. Das
+    /// neue Bett muss daher im Simple Mode sichtbar und unmittelbar
+    /// erreichbar bleiben, statt beim Moduswechsel wieder ein lokales
+    /// Auswahl- oder Viewport-Flag zu erzeugen.
+    func testBettauswahlVerwendetImSimpleModeDieselbeKernauswahl() {
         starte("simple")
-        XCTAssertFalse(app.otherElements["bed.selector"].exists,
-                       "Der Easy Mode zeigt weiterhin eine Bettauswahl")
-        XCTAssertFalse(app.buttons["bed.add"].exists,
-                       "Der Easy Mode erlaubt weiterhin, ein Bett hinzuzufuegen")
+        oeffneAuswahlWennNoetig()
+        let hinzufuegen = app.buttons["bed.add"]
+        XCTAssertTrue(hinzufuegen.waitForExistence(timeout: 5),
+                      "Der Easy Mode bietet kein weiteres Kern-Bett an")
+        hinzufuegen.tap()
+
+        if istSchmal {
+            app.buttons["bed.selector.close"].tap()
+            XCTAssertTrue(app.buttons["bed.selector.active"].waitForExistence(timeout: 5))
+        } else {
+            XCTAssertTrue(app.buttons["bed.card.1"].waitForExistence(timeout: 5),
+                          "Das neue Bett ist im gemeinsamen Selector nicht sichtbar")
+        }
     }
 
     func testLockKommtAusDemKernUndBlockiertArrange() {

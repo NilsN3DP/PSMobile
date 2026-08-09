@@ -99,6 +99,8 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.zIndex
 import de.psmobile.core.PsmViewport
 import de.psmobile.core.PsmCore
+import de.psmobile.shared.rules.BedInput
+import de.psmobile.shared.rules.BedStripContract
 import de.psmobile.slicing.SlicerService
 import de.psmobile.ui.theme.PrusaColors
 import de.psmobile.ui.theme.uiScaleFor
@@ -1746,7 +1748,7 @@ private fun WerkzeugTrenner() {
  */
 @Composable
 @OptIn(ExperimentalFoundationApi::class, androidx.compose.material3.ExperimentalMaterial3Api::class)
-private fun BedSelector(
+internal fun BedSelector(
     beds: List<PsmCore.Bed>,
     onSelect: (Int) -> Unit,
     onAdd: () -> Unit,
@@ -1756,8 +1758,19 @@ private fun BedSelector(
     schmal: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
-    if (beds.isEmpty()) return
-    val active = beds.firstOrNull { it.active } ?: beds.first()
+    val strip = BedStripContract.state(
+        beds = beds.map { bed ->
+            BedInput(
+                id = bed.index,
+                name = "${advancedText("Bed", "Bett")} ${bed.index + 1}",
+                locked = bed.index in lockedBeds,
+                objectCount = bed.objectCount,
+                instanceCount = bed.objectCount,
+            )
+        },
+        activeIndex = beds.indexOfFirst { it.active },
+    )
+    val active = strip.items.first { it.active }
 
     if (schmal) {
         var zeigeListe by remember { mutableStateOf(false) }
@@ -1772,14 +1785,14 @@ private fun BedSelector(
             horizontalArrangement = Arrangement.spacedBy(7.dp),
         ) {
             Icon(
-                if (active.index in lockedBeds) Icons.Default.Lock else Icons.Default.Layers,
+                if (active.locked) Icons.Default.Lock else Icons.Default.Layers,
                 contentDescription = null,
                 tint = PrusaColors.TextPrimary,
                 modifier = Modifier.size(16.dp),
             )
             Column {
                 Text(
-                    "${advancedText("Bed", "Bett")} ${active.index + 1}",
+                    active.name,
                     color = PrusaColors.TextPrimary,
                     fontSize = 13.sp,
                     fontWeight = FontWeight.SemiBold,
@@ -1805,26 +1818,26 @@ private fun BedSelector(
                         fontSize = 18.sp,
                         fontWeight = FontWeight.SemiBold,
                     )
-                    beds.forEach { bett ->
+                    strip.items.forEach { bett ->
                         Row(
                             Modifier
                                 .fillMaxWidth()
                                 .heightIn(min = 64.dp)
                                 .clip(RoundedCornerShape(8.dp))
                                 .background(if (bett.active) PrusaColors.Orange else PrusaColors.PanelRaised)
-                                .clickable { onSelect(bett.index); zeigeListe = false }
+                                .clickable { onSelect(bett.id); zeigeListe = false }
                                 .padding(horizontal = 12.dp),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(10.dp),
                         ) {
                             Icon(
-                                if (bett.index in lockedBeds) Icons.Default.Lock else Icons.Default.Layers,
+                                if (bett.locked) Icons.Default.Lock else Icons.Default.Layers,
                                 contentDescription = null,
                                 tint = if (bett.active) PrusaColors.Background else PrusaColors.TextPrimary,
                             )
                             Column(Modifier.weight(1f)) {
                                 Text(
-                                    "${advancedText("Bed", "Bett")} ${bett.index + 1}",
+                                    bett.name,
                                     color = if (bett.active) PrusaColors.Background else PrusaColors.TextPrimary,
                                     fontWeight = FontWeight.SemiBold,
                                 )
@@ -1834,15 +1847,15 @@ private fun BedSelector(
                                     fontSize = 12.sp,
                                 )
                             }
-                            IconButton(onClick = { onToggleLock(bett.index) }) {
+                            IconButton(onClick = { onToggleLock(bett.id) }) {
                                 Icon(
-                                    if (bett.index in lockedBeds) Icons.Default.Lock else Icons.Default.LockOpen,
+                                    if (bett.locked) Icons.Default.Lock else Icons.Default.LockOpen,
                                     contentDescription = advancedText("Lock bed", "Bett sperren"),
                                     tint = if (bett.active) PrusaColors.Background else PrusaColors.TextMuted,
                                 )
                             }
-                            if (beds.size > 1 && bett.objectCount == 0) {
-                                IconButton(onClick = { onRemove(bett.index) }) {
+                            if (bett.canRemove) {
+                                IconButton(onClick = { onRemove(bett.id) }) {
                                     Icon(
                                         Icons.Default.Close,
                                         contentDescription = advancedText("Remove bed", "Bett entfernen"),
@@ -1875,9 +1888,9 @@ private fun BedSelector(
         horizontalArrangement = Arrangement.spacedBy(3.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        beds.forEach { bed ->
+        strip.items.forEach { bed ->
             Text(
-                "${if (bed.index in lockedBeds) "🔒 " else ""}${advancedText("Bed", "Bett")} ${bed.index + 1} · ${bed.objectCount}",
+                "${if (bed.locked) "🔒 " else ""}${bed.name} · ${bed.objectCount}",
                 color = if (bed.active) Color.White else PrusaColors.TextPrimary,
                 fontSize = 14.sp,
                 fontWeight = if (bed.active) FontWeight.SemiBold else FontWeight.Normal,
@@ -1887,8 +1900,8 @@ private fun BedSelector(
                     .background(if (bed.active) PrusaColors.Orange else PrusaColors.PanelRaised)
                     .combinedClickable(
                         enabled = true,
-                        onClick = { if (!bed.active) onSelect(bed.index) },
-                        onLongClick = { onToggleLock(bed.index) },
+                        onClick = { if (!bed.active) onSelect(bed.id) },
+                        onLongClick = { onToggleLock(bed.id) },
                     )
                     .padding(horizontal = 16.dp, vertical = 14.dp),
             )
@@ -1899,20 +1912,20 @@ private fun BedSelector(
                 .size(50.dp)
                 .clip(RoundedCornerShape(8.dp))
                 .background(PrusaColors.PanelRaised)
-                .clickable(onClick = onAdd),
+                .clickable(enabled = strip.canAdd, onClick = onAdd),
             contentAlignment = Alignment.Center,
         ) {
             Icon(Icons.Default.Add, contentDescription = advancedText("Add print bed", "Druckbett hinzufügen"),
                  tint = PrusaColors.TextPrimary)
         }
 
-        if (beds.size > 1) {
+        if (active.canRemove) {
             Box(
                 Modifier
                     .size(50.dp)
                     .clip(RoundedCornerShape(8.dp))
                     .background(PrusaColors.PanelRaised)
-                    .clickable { onRemove(active.index) },
+                .clickable { onRemove(active.id) },
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(Icons.Default.Delete, contentDescription = advancedText("Remove active print bed", "Aktives Druckbett entfernen"),

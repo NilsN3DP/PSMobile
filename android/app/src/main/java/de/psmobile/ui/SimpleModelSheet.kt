@@ -86,7 +86,6 @@ internal fun SimpleModelSheet(
     val ids = objects.map { it.id }
     LaunchedEffect(ids) { picked = SimpleModelSheetState.pruned(picked, ids) }
 
-    val activeBed = beds.indexOfFirst { it.active }.coerceAtLeast(0)
     val bedCount = beds.size.coerceAtLeast(1)
     val actions = SimpleModelSheetState.enabledActions(
         objectsOnBed = objects.size,
@@ -174,43 +173,6 @@ internal fun SimpleModelSheet(
                     )
                 }
             }
-
-            // Verschieben legt bei Bedarf ein weiteres Bett an. Ohne eine
-            // Auswahl kaeme man dort nie wieder hin - das Objekt waere
-            // verschwunden statt verschoben.
-            if (beds.size > 1) {
-                HorizontalDivider(color = PrusaColors.Divider)
-                Row(
-                    Modifier.fillMaxWidth()
-                        .horizontalScroll(rememberScrollState())
-                        .padding(horizontal = 8.dp, vertical = 6.dp),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    beds.forEachIndexed { index, bed ->
-                        val active = index == activeBed
-                        Box(
-                            Modifier
-                                .heightIn(min = 36.dp)
-                                .clip(RoundedCornerShape(2.dp))
-                                .background(
-                                    if (active) PrusaColors.Orange else PrusaColors.PanelRaised
-                                )
-                                .clickable { service.selectBed(index) }
-                                .padding(horizontal = 12.dp, vertical = 8.dp),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Text(
-                                t("Bed ", "Bett ") + (index + 1) + " · " + bed.objectCount,
-                                color = if (active) PrusaColors.Background
-                                        else PrusaColors.TextPrimary,
-                                style = MaterialTheme.typography.labelSmall,
-                                maxLines = 1,
-                            )
-                        }
-                    }
-                }
-            }
         }
     }
 
@@ -218,7 +180,6 @@ internal fun SimpleModelSheet(
         MoveToBedDialog(
             service = service,
             beds = beds,
-            activeBed = activeBed,
             ids = picked,
             onDone = { picked = emptyList(); moveOpen = false },
             onDismiss = { moveOpen = false },
@@ -236,11 +197,11 @@ internal fun SimpleModelSheet(
 internal fun MoveToBedDialog(
     service: SlicerService,
     beds: List<PsmCore.Bed>,
-    activeBed: Int,
     ids: List<Int>,
     onDone: () -> Unit,
     onDismiss: () -> Unit,
 ) {
+    val activeBed = beds.indexOfFirst { it.active }.coerceAtLeast(0)
     val targets = SimpleModelSheetState.moveTargets(
         beds.size.coerceAtLeast(1), activeBed, MAX_BEDS,
     )

@@ -110,6 +110,7 @@ fun SimpleModeScreen(
     val progress by service.progress.collectAsState()
     val objects by service.objects.collectAsState()
     val beds by service.beds.collectAsState()
+    val lockedBeds by service.lockedBeds.collectAsState()
     val quick by service.quickSettings.collectAsState()
     val sceneRevision by service.sceneRevision.collectAsState()
     val configuration = LocalConfiguration.current
@@ -225,6 +226,16 @@ fun SimpleModeScreen(
                     }
                 },
             )
+            BedSelector(
+                beds = beds,
+                onSelect = service::selectBed,
+                onAdd = service::addBed,
+                onRemove = service::removeBed,
+                lockedBeds = lockedBeds,
+                onToggleLock = service::toggleBedLock,
+                schmal = compactChrome,
+                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+            )
         }
         // Leiste am ausgewaehlten Objekt. Nur wenn kein Menue offen ist -
         // sonst schwebt sie ueber dem Overlay und lenkt vom eigentlichen
@@ -235,7 +246,6 @@ fun SimpleModeScreen(
                 service = service,
                 obj = selectedObject,
                 beds = beds,
-                activeBed = beds.indexOfFirst { it.active }.coerceAtLeast(0),
                 onClearSelection = { selectedId = null },
                 modifier = Modifier
                     .align(Alignment.TopCenter)

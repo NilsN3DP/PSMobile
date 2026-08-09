@@ -18,7 +18,22 @@ struct BedSelector: View {
     @State private var name = ""
 
     private var schmal: Bool { ps.windowSize.width < 760 }
-    private var aktiv: PsmCore.Bed? { model.beds.first(where: \.active) }
+    /// `BedStripContract` is exported by the real PSMShared Kotlin/Native
+    /// framework. The model/core still owns mutations; this contract owns the
+    /// platform-neutral presentation capabilities.
+    private var strip: BedStripState {
+        BedStripContract.shared.state(
+            beds: model.beds.map { bed in
+                BedInput(id: Int32(bed.index), name: model.bedLabel(bed.index),
+                         locked: bed.locked, objectCount: Int32(bed.objectCount),
+                         instanceCount: Int32(bed.objectCount))
+            },
+            activeIndex: model.activeBedIndex)
+    }
+    private var aktiveItem: BedStripItem? { strip.items.first { $0.active } }
+    private func item(for bed: PsmCore.Bed) -> BedStripItem? {
+        strip.items.first { $0.id == Int32(bed.index) }
+    }
 
     var body: some View {
         ZStack {
@@ -54,13 +69,13 @@ struct BedSelector: View {
         HStack(spacing: ps.pt(8)) {
             Button(action: onOpenSelection) {
                 HStack(spacing: ps.pt(7)) {
-                    Image(systemName: aktiv?.locked == true
+                    Image(systemName: aktiveItem?.locked == true
                           ? "lock.fill" : "square.stack.3d.up")
                     VStack(alignment: .leading, spacing: 1) {
-                        Text(aktiv.map { model.bedLabel($0.index) } ?? st("Bed", "Bett"))
+                        Text(aktiveItem?.name ?? st("Bed", "Bett"))
                             .font(.system(size: ps.font(13), weight: .semibold))
-                        Text(st("\(aktiv?.objectCount ?? 0) objects",
-                                "\(aktiv?.objectCount ?? 0) Objekte"))
+                        Text(st("\(aktiveItem?.objectCount ?? 0) objects",
+                                "\(aktiveItem?.objectCount ?? 0) Objekte"))
                             .font(.system(size: ps.font(10)))
                             .foregroundStyle(PrusaColors.textMuted)
                     }
@@ -89,7 +104,9 @@ struct BedSelector: View {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: ps.pt(6)) {
                     ForEach(model.beds, id: \.index) { bett in
-                        bettKapsel(bett)
+                        if let item = item(for: bett) {
+                            bettKapsel(bett, item: item)
+                        }
                     }
                     Button { model.addBed() } label: {
                         Image(systemName: "plus")
@@ -101,6 +118,7 @@ struct BedSelector: View {
                             .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
+                    .disabled(!strip.canAdd)
                     .accessibilityIdentifier("bed.add")
                 }
             }
@@ -114,7 +132,7 @@ struct BedSelector: View {
     /// Entfernen sind selten und liegen deshalb im Kontextmenue (langer
     /// Druck) statt als eigene, immer sichtbare Knoepfe - die haben zuvor
     /// die Karte breiter gemacht, als der Name Platz hatte.
-    private func bettKapsel(_ bett: PsmCore.Bed) -> some View {
+    private func bettKapsel(_ bett: PsmCore.Bed, item: BedStripItem) -> some View {
         // Dezenter als das volle Orange der uebrigen Aktionsknoepfe: das
         // aktive Bett ist ein Zustand, den man staendig im Blick hat,
         // kein Befehl, den man antippt - er soll nicht um Aufmerksamkeit
@@ -124,37 +142,39 @@ struct BedSelector: View {
                 model.selectBed(bett.index)
             } label: {
                 HStack(spacing: ps.pt(4)) {
-                    Text(model.bedLabel(bett.index))
+                    Text(item.name)
                         .font(.system(size: ps.font(11), weight: .medium))
                         .lineLimit(1)
-                    Text("\(bett.objectCount)")
+                    Text("\(item.objectCount)")
                         .font(.system(size: ps.font(9)))
                         .foregroundStyle(PrusaColors.textMuted)
                 }
-                .foregroundStyle(bett.active
+                .foregroundStyle(item.active
                                  ? PrusaColors.orange : PrusaColors.textPrimary)
                 .padding(.leading, ps.pt(10))
                 .frame(minHeight: ps.touch(32))
             }
             .buttonStyle(.plain)
+            .disabled(!item.canSelect)
             .accessibilityIdentifier("bed.card.\(bett.index)")
 
             Button {
                 model.toggleBedLock(bett.index)
             } label: {
-                Image(systemName: bett.locked ? "lock.fill" : "lock.open")
+                Image(systemName: item.locked ? "lock.fill" : "lock.open")
                     .font(.system(size: ps.font(9)))
                     .foregroundStyle(PrusaColors.textMuted)
                     .frame(width: ps.touch(26), height: ps.touch(32))
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+            .disabled(!item.canToggleLock)
             .accessibilityIdentifier("bed.lock.\(bett.index)")
 
             // Direkt sichtbar statt nur im Kontextmenue (langer Druck) -
             // auf dem iPad findet den kaum jemand von selbst. Nur bei
             // einem leeren Bett: ein volles darf nicht so verschwinden.
-            if model.beds.count > 1 && bett.objectCount == 0 {
+            if item.canRemove {
                 Button {
                     model.removeBed(bett.index)
                 } label: {
@@ -174,18 +194,20 @@ struct BedSelector: View {
         .background(PrusaColors.panelRaised)
         .overlay(
             RoundedRectangle(cornerRadius: ps.pt(6))
-                .stroke(bett.active ? PrusaColors.orange.opacity(0.6) : Color.clear,
+                .stroke(item.active ? PrusaColors.orange.opacity(0.6) : Color.clear,
                         lineWidth: 1)
         )
         .clipShape(RoundedRectangle(cornerRadius: ps.pt(6)))
         .contextMenu {
-            Button {
-                name = bett.name
-                umzubenennen = bett.index
-            } label: {
-                Label(st("Rename", "Umbenennen"), systemImage: "pencil")
+            if item.canRename {
+                Button {
+                    name = item.name
+                    umzubenennen = bett.index
+                } label: {
+                    Label(st("Rename", "Umbenennen"), systemImage: "pencil")
+                }
             }
-            if model.beds.count > 1 && bett.objectCount == 0 {
+            if item.canRemove {
                 Button(role: .destructive) {
                     model.removeBed(bett.index)
                 } label: {
@@ -214,6 +236,19 @@ struct BedSelectionSheet: View {
     @Environment(\.psScale) private var ps
     @State private var umzubenennen: Int?
     @State private var name = ""
+
+    private var strip: BedStripState {
+        BedStripContract.shared.state(
+            beds: model.beds.map { bed in
+                BedInput(id: Int32(bed.index), name: model.bedLabel(bed.index),
+                         locked: bed.locked, objectCount: Int32(bed.objectCount),
+                         instanceCount: Int32(bed.objectCount))
+            },
+            activeIndex: model.activeBedIndex)
+    }
+    private func item(for bed: PsmCore.Bed) -> BedStripItem? {
+        strip.items.first { $0.id == Int32(bed.index) }
+    }
 
     var body: some View {
         NavigationStack {
@@ -262,7 +297,7 @@ struct BedSelectionSheet: View {
                                           id: "bed.lock.\(bett.index)") {
                                     model.toggleBedLock(bett.index)
                                 }
-                                if model.beds.count > 1 && bett.objectCount == 0 {
+                                if item(for: bett)?.canRemove == true {
                                     miniKnopf("trash", id: "bed.remove.\(bett.index)") {
                                         model.removeBed(bett.index)
                                     }
@@ -282,6 +317,7 @@ struct BedSelectionSheet: View {
                     }
                     .buttonStyle(.borderedProminent)
                     .tint(PrusaColors.orange)
+                    .disabled(!strip.canAdd)
                     .accessibilityIdentifier("bed.add")
                 }
                 .padding()
@@ -372,6 +408,26 @@ struct ArrangePanel: View {
     /// Entspricht ArrangeSettings::set_rotation_enabled im Kern -
     /// Vorgabe aus, wie am Desktop.
     @State private var drehenErlauben = false
+
+    private var inputs: [BedInput] {
+        model.beds.map { bed in
+            BedInput(id: Int32(bed.index), name: model.bedLabel(bed.index),
+                     locked: bed.locked, objectCount: Int32(bed.objectCount),
+                     instanceCount: Int32(bed.objectCount))
+        }
+    }
+
+    private func arrangeAvailability(for index: Int) -> ArrangeAvailability {
+        let active = model.beds.firstIndex { $0.index == index } ?? 0
+        return BedStripContract.shared.state(beds: inputs, activeIndex: Int32(active)).arrange
+    }
+
+    private var canArrange: Bool {
+        if alleBetten {
+            return model.beds.contains { arrangeAvailability(for: $0.index) == .available }
+        }
+        return arrangeAvailability(for: ziel) == .available
+    }
 
     /// Ein kleines, am Knopf verankertes Popover statt eines
     /// Vollbild-Sheets - "Arrange" ist eine schnelle Randentscheidung,
@@ -505,9 +561,30 @@ struct ArrangePanel: View {
 
     private func anordnen() {
         if alleBetten {
+            guard canArrange else {
+                ergebnis = st("No unlocked bed contains instances to arrange.",
+                              "Kein entsperrtes Bett enthält Instanzen zum Anordnen.")
+                return
+            }
             model.arrangeAll(gapMm: Float(abstand), allowRotation: drehenErlauben)
             ergebnis = st("All beds arranged.", "Alle Betten angeordnet.")
             return
+        }
+        switch arrangeAvailability(for: ziel) {
+        case .locked:
+            ergebnis = st(
+                "Bed \(ziel + 1) is locked. Unlock it in the bed selector.",
+                "Bett \(ziel + 1) ist gesperrt. Entsperre es in der Bettauswahl.")
+            return
+        case .empty:
+            ergebnis = st(
+                "Bed \(ziel + 1) is empty. There is nothing to arrange.",
+                "Bett \(ziel + 1) ist leer. Es gibt nichts anzuordnen.")
+            return
+        case .available:
+            break
+        default:
+            break
         }
         do {
             let info = try model.arrange(target: ziel, gapMm: Float(abstand),

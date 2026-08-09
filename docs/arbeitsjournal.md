@@ -487,6 +487,42 @@ bestehende `FavoriteSettings.orderedFor` delegiert direkt an diese Regel. Das
 `SharedPreferences`-String-Set mit dem Namen `favorites`, die Toggle-API und
 das Speicherformat bleiben unverändert.
 
+### Side-Build-Baseline – Task 5: gemeinsame Mehrbett-Darstellung
+
+Die Präsentationsregeln für Druckbetten liegen jetzt einmal im Kotlin-
+Multiplatform-Modul `android/shared` und werden als echtes
+`PSMShared.framework` nach Swift exportiert. Der Vertrag hält mindestens ein
+Bett vor, normalisiert den aktiven Index, erhält IDs, Namen und Reihenfolge
+stabil und beschreibt Add/Select/Lock/Rename/Remove. Das letzte Bett bleibt
+unentfernbar; auch ein Bett mit Instanzen und einem veralteten
+Objektzähler kann nicht entfernt werden. Arrange unterscheidet anhand von
+Sperre, Objekt- und Instanzanzahl zwischen verfügbar, leer und gesperrt.
+
+Der ursprüngliche RED-Lauf meldete die fehlenden `BedStrip*`-Typen. Bei der
+Übernahme wurde ein zweiter RED-Fall ergänzt: `:shared:allTests` endete mit
+132 Tests und genau einem Fehler, weil ein Bett mit drei Instanzen bei null
+Objekten entfernbar war. Nach der minimalen Regelkorrektur lief der komplette
+Shared-Lauf grün. Ein Android-Integrations-RED belegte außerdem, dass Simple
+noch eine lokale Bettleiste führte; Simple und Advanced verwenden jetzt beide
+den selben Selector und den von `SlicerService` gelesenen Kern-Aktivstatus.
+
+iOS Simple verwendet denselben Selector, Arrange-Panel und
+Mehrbett-Viewport-Modus wie Advanced. Ein erster fokussierter XCTest-Lauf
+fand, dass ein gesperrtes Bett Arrange stumm deaktivierte. Das Panel zeigt
+nun die vom gemeinsamen Vertrag abgeleiteten Locked-/Empty-Erklärungen; nach
+einem zusätzlich erforderlichen `default`-Fall für das Kotlin-exportierte
+Enum liefen alle drei `MultiBedArrangeUITests` grün.
+
+Die Windows-Verifikation mit Java 17 (`:shared:allTests`, Production- und
+Preview-Unit-Tests sowie beide Debug-APKs) war grün. In einer frischen,
+abgehängten Mac-Worktree aus `155f78c` plus exaktem Task-Diff wurde das echte
+iOS-Simulator-Framework gebaut (der Header exportiert `PSMSBedStripContract`
+und alle zugehörigen Datenklassen), der Simulator-Core meldete
+`PASS: psm_contract_tests`, XcodeGen sowie Production/Preview-Builds liefen
+grün und der fokussierte Mehrbett-XCTest-Lauf meldete 3 Tests ohne Fehler.
+Der schmutzige Mac-Hauptcheckout wurde nur als Quelle vorhandener
+Abhängigkeits- und Ressourcen-Caches verwendet und nicht verändert.
+
 Der Test-first-Lauf `./android/gradlew -p android :shared:allTests` war
 zunächst mit den erwarteten fehlenden `Inspector*`- und
 `FavoriteSettingRules`-Typen rot. Der Android-RED-Lauf
