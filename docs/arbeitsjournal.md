@@ -344,3 +344,14 @@ lokale Testdatei lieferte zuvor den erwarteten RED-Lauf. Der C++-Contract-Test
 lief danach erneut mit `PASS: psm_contract_tests`; die Android-Regression
 `:shared:allTests :app:testDebugUnitTest` lief lokal ebenfalls erfolgreich.
 Der vollständige technische Nachweis steht im Task-1-Bericht.
+
+### Side-Build-Baseline – Fix-Runde 3
+
+Die Remote-Slice-Tests prüfen nun nicht nur eine geworfene Annahme, sondern
+den tatsächlich von `SlicerModel` verwendeten Veröffentlichungswert: Erfolg
+liefert die konkrete G-Code-URL, `.done` und das Remote-Flag; eine veraltete
+Annahme liefert keine URL, `.failed` und kein Remote-Flag. Der RED-Lauf auf
+dem Mac-Simulator fand die bewusst noch fehlende Zustands-Seam. Danach liefen
+alle drei `RemoteSliceCompletionTests` mit 0 Fehlern bei vollständigem App-
+Compile und Link. C++ und Android blieben unverändert; deren Nachweise aus
+Fix-Runde 2 gelten fort.

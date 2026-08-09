@@ -13,15 +13,26 @@ final class RemoteSliceCompletionTests: XCTestCase {
         XCTAssertEqual(request.designRevision, 41)
     }
 
-    func testRejectedPreviewDoesNotPublishRemoteResult() {
-        var published = false
+    func testAcceptedPreviewPublishesRemoteOutput() {
+        let gcodeURL = URL(fileURLWithPath: "/tmp/remote-result.gcode")
 
-        let didPublish = RemoteSliceCompletion.publishIfPreviewAccepted(
-            acceptPreview: { throw TestError.staleResult },
-            publish: { published = true })
+        let publication = RemoteSliceCompletion.publication(
+            acceptPreview: {}, gcodeURL: gcodeURL)
 
-        XCTAssertFalse(didPublish)
-        XCTAssertFalse(published)
+        XCTAssertEqual(publication.gcodeURL, gcodeURL)
+        XCTAssertEqual(publication.status, .done)
+        XCTAssertTrue(publication.lastSliceWasRemote)
+    }
+
+    func testRejectedPreviewPublishesFailedNonRemoteState() {
+        let gcodeURL = URL(fileURLWithPath: "/tmp/stale-result.gcode")
+
+        let publication = RemoteSliceCompletion.publication(
+            acceptPreview: { throw TestError.staleResult }, gcodeURL: gcodeURL)
+
+        XCTAssertNil(publication.gcodeURL)
+        XCTAssertEqual(publication.status, .failed)
+        XCTAssertFalse(publication.lastSliceWasRemote)
     }
 
     private enum TestError: Error {

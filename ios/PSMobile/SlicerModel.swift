@@ -1519,7 +1519,7 @@ final class SlicerModel: ObservableObject {
                     jobId: jobId, baseURL: baseURL, token: token, to: ziel)
                 let secs = Date().timeIntervalSince(t0)
                 await MainActor.run {
-                    let published = RemoteSliceCompletion.publishIfPreviewAccepted(
+                    let publication = RemoteSliceCompletion.publication(
                         acceptPreview: {
                             guard let core = self.core else {
                                 throw PsmCore.PsmError.createFailed("Core fehlt")
@@ -1527,13 +1527,15 @@ final class SlicerModel: ObservableObject {
                             try core.acceptRemoteGcode(
                                 path: ziel.path, requestRevision: requestRevision)
                         },
-                        publish: {
-                            self.gcodeURL = ziel
-                            self.progress = .done(
-                                seconds: secs,
-                                printMinutes: Int((stand.stats?.printTimeSeconds ?? 0) / 60),
-                                grams: stand.stats?.filamentG ?? 0)
-                            self.lastSliceWasRemote = true
+                        gcodeURL: ziel)
+                    self.gcodeURL = publication.gcodeURL
+                    self.lastSliceWasRemote = publication.lastSliceWasRemote
+                    switch publication.status {
+                    case .done:
+                        self.progress = .done(
+                            seconds: secs,
+                            printMinutes: Int((stand.stats?.printTimeSeconds ?? 0) / 60),
+                            grams: stand.stats?.filamentG ?? 0)
                             // Der Server liefert Zeit/Gewicht direkt mit - anders als
                             // beim lokalen Schnitt setzt hier aber nie
                             // psm_slice_wait self.stats, darum blieb die
@@ -1557,10 +1559,7 @@ final class SlicerModel: ObservableObject {
                                 dreiecke: self.objects.reduce(0) { $0 + $1.triangles },
                                 weg: "remote", fehler: nil),
                                 projektname: self.objects.first?.name)
-                        })
-                    guard published else {
-                        self.gcodeURL = nil
-                        self.lastSliceWasRemote = false
+                    case .failed:
                         let message = SimpleModeState.shared.text(
                             english: "The design changed while remote slicing. Please slice again.",
                             german: "Das Modell wurde waehrend des Remote-Slicens geaendert. Bitte erneut slicen.")

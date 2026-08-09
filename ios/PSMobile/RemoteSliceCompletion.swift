@@ -13,17 +13,31 @@ struct RemoteSliceRequest: Sendable {
 /// Veröffentlicht einen Remote-Slice nur, nachdem der Kern ihn fuer den
 /// beim Start festgehaltenen Designstand akzeptiert hat.
 enum RemoteSliceCompletion {
-    @discardableResult
-    static func publishIfPreviewAccepted(
+    /// Die drei Werte, die SlicerModel bei einem abgeschlossenen Remote-Job
+    /// veroeffentlicht. Ein abgelehnter Kern-Import darf keinen davon wie ein
+    /// brauchbares Ergebnis aussehen lassen.
+    struct Publication: Equatable {
+        enum Status: Equatable {
+            case done
+            case failed
+        }
+
+        let gcodeURL: URL?
+        let status: Status
+        let lastSliceWasRemote: Bool
+    }
+
+    static func publication(
         acceptPreview: () throws -> Void,
-        publish: () -> Void
-    ) -> Bool {
+        gcodeURL: URL
+    ) -> Publication {
         do {
             try acceptPreview()
-            publish()
-            return true
+            return Publication(gcodeURL: gcodeURL, status: .done,
+                               lastSliceWasRemote: true)
         } catch {
-            return false
+            return Publication(gcodeURL: nil, status: .failed,
+                               lastSliceWasRemote: false)
         }
     }
 }
