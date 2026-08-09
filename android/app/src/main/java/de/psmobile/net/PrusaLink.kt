@@ -63,6 +63,13 @@ object PrusaLink {
         val lightingOptIn: Boolean = false,
         /** Alte Eintraege bleiben unbekannt und erhalten damit keine Capability. */
         val lightingProfile: LightingPrinterProfile = LightingPrinterProfile.MANUAL_PHYSICAL,
+        /** Experimental local-hotspot pairing metadata; token stays in SecretStore. */
+        val localExperimental: Boolean = false,
+        val localHosts: List<String> = emptyList(),
+        val localModel: String = "",
+        val localCapabilities: Set<String> = emptySet(),
+        val localNozzleDiameter: Double? = null,
+        val localNozzleMaterial: String = "unknown",
     ) {
         val baseUrl: String get() = PrusaLinkRules.baseUrl(host)
 

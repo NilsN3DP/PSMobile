@@ -80,6 +80,16 @@ object PrinterStore {
                 lightingProfile = o.optString("lightingProfile")
                     .let { raw -> LightingPrinterProfile.entries.firstOrNull { it.name == raw } }
                     ?: LightingPrinterProfile.UNKNOWN,
+                localExperimental = o.optBoolean("localExperimental", false),
+                localHosts = o.optJSONArray("localHosts")?.let { hosts ->
+                    (0 until hosts.length()).mapNotNull { hosts.optString(it).takeIf(String::isNotBlank) }
+                }.orEmpty(),
+                localModel = o.optString("localModel"),
+                localCapabilities = o.optJSONArray("localCapabilities")?.let { caps ->
+                    (0 until caps.length()).mapNotNull { caps.optString(it).takeIf(String::isNotBlank) }.toSet()
+                }.orEmpty(),
+                localNozzleDiameter = if (o.has("localNozzleDiameter")) o.optDouble("localNozzleDiameter") else null,
+                localNozzleMaterial = o.optString("localNozzleMaterial", "unknown"),
             )
         }
         if (migrated)
@@ -111,6 +121,12 @@ object PrinterStore {
                 put("allowInsecureHttp", p.allowInsecureHttp)
                 put("lightingOptIn", p.lightingOptIn)
                 put("lightingProfile", p.lightingProfile.name)
+                put("localExperimental", p.localExperimental)
+                put("localHosts", JSONArray(p.localHosts))
+                put("localModel", p.localModel)
+                put("localCapabilities", JSONArray(p.localCapabilities.toList()))
+                p.localNozzleDiameter?.let { put("localNozzleDiameter", it) }
+                put("localNozzleMaterial", p.localNozzleMaterial)
             })
         }
         /* Metadaten erst nach erfolgreicher Secret-Speicherung ersetzen. */
@@ -118,6 +134,29 @@ object PrinterStore {
     }
 
     fun add(c: Context, p: PrusaLink.Printer) = save(c, all(c) + p)
+
+    /** Fügt ein lokales Gerät hinzu oder aktualisiert die bekannte Geräte-ID anhand von Modell/Host. */
+    fun upsertLocal(c: Context, incoming: PrusaLink.Printer, pairingToken: String) {
+        val current = all(c).toMutableList()
+        val match = current.indexOfFirst { existing ->
+            existing.localExperimental &&
+                existing.localModel.equals(incoming.localModel, ignoreCase = true) &&
+                (existing.localHosts + existing.host).intersect(incoming.localHosts + incoming.host).isNotEmpty()
+        }
+        val merged = if (match >= 0) {
+            val existing = current[match]
+            LocalPrinterMerge.withHost(existing.copy(
+                name = incoming.name.ifBlank { existing.name },
+                localModel = incoming.localModel.ifBlank { existing.localModel },
+                localCapabilities = incoming.localCapabilities.ifEmpty { existing.localCapabilities },
+                localNozzleDiameter = incoming.localNozzleDiameter ?: existing.localNozzleDiameter,
+                localNozzleMaterial = incoming.localNozzleMaterial.ifBlank { existing.localNozzleMaterial },
+            ), incoming.host)
+        } else incoming.copy(localExperimental = true, localHosts = (incoming.localHosts + incoming.host).distinct())
+        if (match >= 0) current[match] = merged else current += merged
+        save(c, current)
+        setLocalPairingToken(c, merged.id, pairingToken)
+    }
 
     fun remove(c: Context, id: String) {
         val remaining = all(c).filterNot { it.id == id }
@@ -127,6 +166,17 @@ object PrinterStore {
 
     fun update(c: Context, p: PrusaLink.Printer) =
         save(c, all(c).map { if (it.id == p.id) p else it })
+
+    /** Pairing token remains in the encrypted SecretStore and never in printer metadata JSON. */
+    fun localPairingToken(c: Context, id: String): String? =
+        SecretStore.get(c, "printer-$id")?.let { runCatching { JSONObject(it).optString("localPairingToken").takeIf(String::isNotBlank) }.getOrNull() }
+
+    fun setLocalPairingToken(c: Context, id: String, token: String?) {
+        val ref = "printer-$id"
+        val current = SecretStore.get(c, ref)?.let { runCatching { JSONObject(it) }.getOrNull() } ?: JSONObject()
+        if (token.isNullOrBlank()) current.remove("localPairingToken") else current.put("localPairingToken", token)
+        SecretStore.put(c, ref, current.toString())
+    }
 
     /**
      * Nur Druckerprofile anzeigen, zu denen ein eingerichteter
