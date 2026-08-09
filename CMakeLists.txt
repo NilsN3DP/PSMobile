@@ -121,6 +121,12 @@ endif ()
 # So liefert die App genau eine Bibliothek aus und Gradle braucht kein NDK.
 if (ANDROID)
     list(APPEND PSM_CORE_SOURCES android/jni/psm_jni.cpp)
+    # GMP's x86_64 Android build references a glibc fortify symbol which
+    # Bionic API 26 does not provide. Keep the compatibility bridge off every
+    # other ABI and platform.
+    if (ANDROID_ABI STREQUAL "x86_64")
+        list(APPEND PSM_CORE_SOURCES core/src/psm_android_x86_fortify_compat.cpp)
+    endif ()
 endif ()
 
 # Auf iOS statisch: die App bindet den Kern direkt ein. Eine eigene
