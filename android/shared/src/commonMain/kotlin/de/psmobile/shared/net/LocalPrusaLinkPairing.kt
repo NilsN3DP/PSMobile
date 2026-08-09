@@ -40,6 +40,32 @@ data class LocalPrusaLinkQrPayload(
     val expiresAtEpochSeconds: Long? = null,
 )
 
+data class LocalPrusaLinkCredentials(
+    val username: String,
+    val password: String,
+    val model: String,
+    val nozzleDiameter: Double,
+    val nozzleHardened: Boolean,
+    val host: String,
+    val port: Int,
+)
+
+sealed interface LocalPairingExchangeResult {
+    data class Success(val credentials: LocalPrusaLinkCredentials) : LocalPairingExchangeResult
+    data class Rejected(val unauthorized: Boolean) : LocalPairingExchangeResult
+    data object Malformed : LocalPairingExchangeResult
+}
+
+object LocalPrusaLinkCapabilities {
+    const val STATUS = "status"
+    const val FILES = "files"
+    const val UPLOAD = "upload"
+    const val PAUSE = "pause"
+
+    fun supports(capabilities: Set<String>, capability: String): Boolean =
+        capability.lowercase() in capabilities.map(String::lowercase).toSet()
+}
+
 sealed interface LocalPairingValidation {
     data class Valid(val payload: LocalPrusaLinkQrPayload, val endpoint: String) : LocalPairingValidation
     data class Invalid(val reason: Reason) : LocalPairingValidation
@@ -135,4 +161,28 @@ object LocalPrusaLinkPairing {
 
     private fun JsonObject.string(key: String): String = this[key]?.jsonPrimitive?.content ?: ""
     private fun JsonObject.int(key: String): Int = this[key]?.jsonPrimitive?.intOrNull ?: -1
+}
+
+object LocalPairingExchange {
+    private val json = Json { ignoreUnknownKeys = true }
+
+    fun parseResponse(jsonText: String, expectedHost: String, expectedPort: Int): LocalPairingExchangeResult {
+        return try {
+        val root = json.parseToJsonElement(jsonText).jsonObject
+        val username = root["username"]?.jsonPrimitive?.contentOrNull.orEmpty()
+        val password = root["password"]?.jsonPrimitive?.contentOrNull.orEmpty()
+        val model = root["model"]?.jsonPrimitive?.contentOrNull.orEmpty()
+        val host = root["host"]?.jsonPrimitive?.contentOrNull.orEmpty()
+        val port = root["port"]?.jsonPrimitive?.intOrNull ?: -1
+        val nozzle = root["nozzle"]?.jsonObject ?: return LocalPairingExchangeResult.Malformed
+        val diameter = nozzle["diameter"]?.jsonPrimitive?.doubleOrNull ?: return LocalPairingExchangeResult.Malformed
+        val hardened = nozzle["hardened"]?.jsonPrimitive?.contentOrNull?.toBooleanStrictOrNull()
+            ?: return LocalPairingExchangeResult.Malformed
+        if (username.isBlank() || password.isBlank() || model.isBlank() || host != expectedHost || port != expectedPort || diameter <= 0.0)
+            return LocalPairingExchangeResult.Malformed
+        LocalPairingExchangeResult.Success(LocalPrusaLinkCredentials(username, password, model, diameter, hardened, host, port))
+        } catch (_: Throwable) {
+            LocalPairingExchangeResult.Malformed
+        }
+    }
 }

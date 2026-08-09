@@ -3,8 +3,35 @@ package de.psmobile.shared.net
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
+import kotlin.test.assertTrue
+import kotlin.test.assertFalse
 
 class LocalPrusaLinkPairingTest {
+
+    @Test
+    fun `pair response accepts credentials only for the validated local endpoint`() {
+        val result = LocalPairingExchange.parseResponse(
+            """{"username":"maker","password":"secret","model":"COREONE","host":"192.168.4.1","port":80,"nozzle":{"diameter":0.4,"hardened":true}}""",
+            "192.168.4.1", 80,
+        )
+        assertTrue(result is LocalPairingExchangeResult.Success)
+        assertEquals("maker", (result as LocalPairingExchangeResult.Success).credentials.username)
+    }
+
+    @Test
+    fun `pair response rejects mismatched host and incomplete secrets`() {
+        val result = LocalPairingExchange.parseResponse(
+            """{"username":"maker","password":"secret","model":"COREONE","host":"10.0.0.2","port":80,"nozzle":{"diameter":0.4,"hardened":false}}""",
+            "192.168.4.1", 80,
+        )
+        assertTrue(result is LocalPairingExchangeResult.Malformed)
+    }
+
+    @Test
+    fun `capabilities are allowlisted by the payload`() {
+        assertTrue(LocalPrusaLinkCapabilities.supports(setOf("status", "upload"), "upload"))
+        assertFalse(LocalPrusaLinkCapabilities.supports(setOf("status"), "pause"))
+    }
     private val valid = """
         {"type":"prusalink-local","version":1,"model":"COREONE","host":"192.168.4.1","port":80,
          "transport":"http","pairing_token":"secret-token","capabilities":["status","files","upload","pause"],

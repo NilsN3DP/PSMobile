@@ -50,6 +50,8 @@ import de.psmobile.net.BackupStore
 import de.psmobile.net.PrinterStore
 import de.psmobile.shared.net.PrusaLinkRules.Auth
 import de.psmobile.net.PrusaLink
+import de.psmobile.shared.net.LocalPrusaLinkPairing
+import de.psmobile.shared.net.LocalPairingValidation
 import de.psmobile.ui.theme.PrusaColors
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -77,6 +79,7 @@ fun PrintersScreen(
     var editing by remember { mutableStateOf<PrusaLink.Printer?>(null) }
     var status by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
     var backupName by remember { mutableStateOf(BackupStore.folderName(context)) }
+    var localPairingOptIn by remember { mutableStateOf(PrinterStore.localPairingOptIn(context)) }
 
     LaunchedEffect(Unit) { backupName = BackupStore.folderName(context) }
 
@@ -104,6 +107,17 @@ fun PrintersScreen(
                     modifier = Modifier.height(52.dp),
                     shape = RoundedCornerShape(10.dp),
                 ) { Text(PsUi.tr("Add printer")) }
+                if (localPairingOptIn) {
+                    OutlinedButton(
+                        onClick = {
+                            editing = PrusaLink.Printer(
+                                UUID.randomUUID().toString(), "", "http://192.168.4.1",
+                                localExperimental = true, allowInsecureHttp = true,
+                            )
+                        },
+                        modifier = Modifier.height(52.dp),
+                    ) { Text("Experimental: QR koppeln") }
+                }
             }
 
             Text("PrusaLink", color = PrusaColors.TextPrimary,
@@ -113,6 +127,23 @@ fun PrintersScreen(
                 "Geräte im Netzwerk. Benutzername und Passwort stehen auf dem Drucker unter Einstellungen › Netzwerk › PrusaLink.",
                 color = PrusaColors.TextMuted, fontSize = 13.sp,
             )
+            Row(
+                Modifier.fillMaxWidth().padding(top = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text("Experimentelle lokale PrusaLink-Kopplung", color = PrusaColors.TextPrimary, fontSize = 13.sp)
+                    Text("Standardmäßig aus. Akzeptiert nur lokale Drucker-Hotspots; QR-Scan oder manuelle JSON-Eingabe.", color = PrusaColors.TextMuted, fontSize = 11.sp)
+                }
+                Switch(
+                    checked = localPairingOptIn,
+                    onCheckedChange = {
+                        localPairingOptIn = it
+                        PrinterStore.setLocalPairingOptIn(context, it)
+                    },
+                    colors = SwitchDefaults.colors(checkedTrackColor = PrusaColors.Orange),
+                )
+            }
 
             HorizontalDivider(Modifier.padding(vertical = 14.dp), color = PrusaColors.Divider)
 
@@ -208,6 +239,22 @@ fun PrintersScreen(
                     }
                 }
             },
+            onPair = { jsonText ->
+                withContext(Dispatchers.IO) {
+                    when (val validation = LocalPrusaLinkPairing.parse(jsonText, System.currentTimeMillis() / 1000)) {
+                        is LocalPairingValidation.Invalid -> "!QR-Code ungültig: ${validation.reason}"
+                        is LocalPairingValidation.Valid -> when (val result = PrusaLink.pairLocal(validation.payload)) {
+                            is PrusaLink.LocalPairResult.Error -> "!${result.message}"
+                            is PrusaLink.LocalPairResult.Success -> {
+                                PrinterStore.upsertLocal(context, result.printer, validation.payload.pairingToken)
+                                printers = PrinterStore.all(context)
+                                editing = null
+                                "Lokaler Drucker gekoppelt"
+                            }
+                        }
+                    }
+                }
+            },
             onSave = { updated ->
                 val exists = printers.any { it.id == updated.id }
                 if (exists) PrinterStore.update(context, updated)
@@ -230,6 +277,7 @@ private fun PrinterEditor(
     printer: PrusaLink.Printer,
     presetNames: List<String>,
     onTest: suspend (PrusaLink.Printer) -> String,
+    onPair: suspend (String) -> String,
     onSave: (PrusaLink.Printer) -> Unit,
     onDelete: () -> Unit,
     onCancel: () -> Unit,
@@ -245,6 +293,8 @@ private fun PrinterEditor(
     var preset by remember { mutableStateOf(printer.presetName) }
     var testResult by remember { mutableStateOf<String?>(null) }
     var testing by remember { mutableStateOf(false) }
+    var pairingJson by remember { mutableStateOf("") }
+    var pairingResult by remember { mutableStateOf<String?>(null) }
     val scope = androidx.compose.runtime.rememberCoroutineScope()
 
     Box(Modifier.fillMaxSize().background(PrusaColors.Background.copy(alpha = 0.94f)),
@@ -262,6 +312,27 @@ private fun PrinterEditor(
             Text(if (printer.name.isBlank()) "Drucker hinzufügen" else "Drucker bearbeiten",
                  color = PrusaColors.TextPrimary, fontSize = 18.sp,
                  fontWeight = FontWeight.SemiBold)
+
+            if (printer.localExperimental) {
+                Text("Experimental · Lokaler Drucker", color = PrusaColors.Orange, fontSize = 13.sp)
+                Text("QR-Scanner-Adapter folgt; bis dahin kann der vom Drucker angezeigte JSON-Inhalt manuell eingefügt werden.", color = PrusaColors.TextMuted, fontSize = 11.sp)
+                Field("QR-Payload (manuelle Fallback-Eingabe)", pairingJson) { pairingJson = it }
+                OutlinedButton(
+                    enabled = pairingJson.isNotBlank() && !testing,
+                    onClick = {
+                        testing = true
+                        pairingResult = null
+                        scope.launch {
+                            pairingResult = onPair(pairingJson)
+                            testing = false
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth().height(52.dp),
+                ) { Text(if (testing) "Kopplung läuft…" else "QR-Payload koppeln") }
+                pairingResult?.let {
+                    Text(it.removePrefix("!"), color = if (it.startsWith("!")) PrusaColors.Danger else PrusaColors.Ok, fontSize = 13.sp)
+                }
+            }
 
             Field("Name", name) { name = it }
             Field("Adresse (HTTPS-URL oder Hostname)", host) { host = it }

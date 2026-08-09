@@ -24,6 +24,7 @@ object PrinterStore {
     private const val KEY_PRINTERS = "prusalink_printers"
     private const val KEY_ONLY_LINKED = "only_linked_printers"
     private const val KEY_BACKUP_TREE = "backup_tree_uri"
+    private const val KEY_LOCAL_PAIRING_OPT_IN = "experimental_local_pairing_opt_in"
 
     private fun prefs(c: Context) = c.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
@@ -187,6 +188,11 @@ object PrinterStore {
 
     fun setOnlyLinked(c: Context, v: Boolean) =
         prefs(c).edit { putBoolean(KEY_ONLY_LINKED, v) }
+
+    fun localPairingOptIn(c: Context): Boolean = prefs(c).getBoolean(KEY_LOCAL_PAIRING_OPT_IN, false)
+
+    fun setLocalPairingOptIn(c: Context, enabled: Boolean) =
+        prefs(c).edit { putBoolean(KEY_LOCAL_PAIRING_OPT_IN, enabled) }
 
     /** Zielordner fuer die Sicherung gesendeter Dateien, als SAF-Baum-URI. */
     fun backupTree(c: Context): String? = prefs(c).getString(KEY_BACKUP_TREE, null)

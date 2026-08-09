@@ -12,6 +12,10 @@ import de.psmobile.shared.net.LightingSettings
 import de.psmobile.shared.net.PendingDocumentedLightingEndpointAdapter
 import de.psmobile.shared.net.PrusaLinkLighting
 import java.io.File
+import de.psmobile.shared.net.LocalPrusaLinkPairing
+import de.psmobile.shared.net.LocalPairingExchange
+import de.psmobile.shared.net.LocalPairingExchangeResult
+import de.psmobile.shared.net.LocalPrusaLinkQrPayload
 import java.net.HttpURLConnection
 import java.net.URL
 import java.util.concurrent.ConcurrentHashMap
@@ -86,6 +90,76 @@ object PrusaLink {
     sealed interface Result {
         data class Ok(val message: String) : Result
         data class Error(val message: String) : Result
+    }
+
+    sealed interface LocalPairResult {
+        data class Success(val printer: Printer, val nozzleDiameter: Double, val nozzleMaterial: String) : LocalPairResult
+        data class Error(val message: String) : LocalPairResult
+    }
+
+    /** Exchanges the QR token at the CFW-local endpoint. The token is never logged. */
+    fun pairLocal(payload: LocalPrusaLinkQrPayload, nowEpochSeconds: Long = System.currentTimeMillis() / 1000): LocalPairResult {
+        val validation = LocalPrusaLinkPairing.validate(payload, nowEpochSeconds)
+        if (validation !is de.psmobile.shared.net.LocalPairingValidation.Valid)
+            return LocalPairResult.Error("QR-Code ungültig oder abgelaufen")
+        return try {
+            val url = URL(validation.endpoint + "/api/pair")
+            val c = (url.openConnection() as HttpURLConnection).apply {
+                requestMethod = "POST"
+                connectTimeout = de.psmobile.shared.net.PrusaLinkRules.TIMEOUT_MS
+                readTimeout = de.psmobile.shared.net.PrusaLinkRules.TIMEOUT_MS
+                doOutput = true
+                setRequestProperty("Content-Type", "application/json")
+                setRequestProperty("Accept", "application/json")
+            }
+            val body = "{\"pairing_token\":\"${jsonEscape(payload.pairingToken)}\"}"
+            c.outputStream.use { it.write(body.toByteArray(Charsets.UTF_8)) }
+            val code = c.responseCode
+            val response = (if (code in 200..299) c.inputStream else c.errorStream)
+                ?.bufferedReader()?.use { it.readText() }.orEmpty()
+            c.disconnect()
+            if (code == 401) return LocalPairResult.Error("Pairing-Token ungültig, abgelaufen oder widerrufen")
+            if (code !in 200..299) return LocalPairResult.Error("Lokale Kopplung fehlgeschlagen ($code)")
+            when (val parsed = LocalPairingExchange.parseResponse(response, payload.host, payload.port)) {
+                is LocalPairingExchangeResult.Success -> {
+                    val credentials = parsed.credentials
+                    val material = if (credentials.nozzleHardened) "hardened" else "brass"
+                    LocalPairResult.Success(
+                        Printer(
+                            id = java.util.UUID.randomUUID().toString(),
+                            name = credentials.model,
+                            host = "http://${credentials.host}:${credentials.port}",
+                            auth = Auth.USER_PASSWORD,
+                            username = credentials.username,
+                            password = credentials.password,
+                            localExperimental = true,
+                            localHosts = listOf(credentials.host),
+                            localModel = credentials.model,
+                            localCapabilities = payload.capabilities,
+                            localNozzleDiameter = credentials.nozzleDiameter,
+                            localNozzleMaterial = material,
+                            allowInsecureHttp = true,
+                        ), credentials.nozzleDiameter, material,
+                    )
+                }
+                else -> LocalPairResult.Error("Antwort der lokalen Kopplung ist ungültig")
+            }
+        } catch (_: Throwable) {
+            LocalPairResult.Error("Drucker-Hotspot nicht erreichbar")
+        }
+    }
+
+    private fun jsonEscape(value: String): String = buildString {
+        value.forEach { ch ->
+            when (ch) {
+                '\\' -> append("\\\\")
+                '"' -> append("\\\"")
+                '\n' -> append("\\n")
+                '\r' -> append("\\r")
+                '\t' -> append("\\t")
+                else -> append(ch)
+            }
+        }
     }
 
     /**

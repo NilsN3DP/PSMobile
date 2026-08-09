@@ -86,6 +86,95 @@ actor PrusaLinkClient {
         case fehler(String)
     }
 
+    struct LocalPairingPayload: Codable {
+        var type: String
+        var version: Int
+        var model: String
+        var host: String
+        var port: Int
+        var transport: String
+        var pairingToken: String
+        var capabilities: Set<String>
+        var nozzle: Nozzle
+
+        struct Nozzle: Codable {
+            var diameter: Double
+            var material: String?
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case type, version, model, host, port, transport, capabilities, nozzle
+            case pairingToken = "pairing_token"
+        }
+    }
+
+    private struct LocalPairResponse: Codable {
+        var username: String
+        var password: String
+        var model: String
+        var nozzle: Nozzle
+        var host: String
+        var port: Int
+        struct Nozzle: Codable { var diameter: Double; var hardened: Bool }
+    }
+
+    struct LocalPairResult {
+        var printer: Printer
+        var secret: Secret
+        var nozzleDiameter: Double
+        var nozzleMaterial: String
+    }
+
+    enum LocalPairError: Error {
+        case invalidPayload
+        case unauthorized
+        case invalidResponse
+    }
+
+    /// Exchanges the QR token with the CFW-only local pairing endpoint.
+    /// The token is sent once and is never included in errors or logs.
+    func pairLocal(_ payload: LocalPairingPayload) async throws -> LocalPairResult {
+        guard payload.type == "prusalink-local", payload.version == 1,
+              payload.transport.lowercased() == "http", !payload.model.isEmpty,
+              payload.pairingToken.isEmpty == false,
+              Self.isLocalHost(payload.host), (1...65535).contains(payload.port)
+        else { throw LocalPairError.invalidPayload }
+        guard let url = URL(string: "http://\(payload.host):\(payload.port)/api/pair") else {
+            throw LocalPairError.invalidPayload
+        }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        request.httpBody = try JSONEncoder().encode(["pairing_token": payload.pairingToken])
+        let (data, response) = try await session.data(for: request)
+        let code = (response as? HTTPURLResponse)?.statusCode ?? 0
+        guard code != 401 else { throw LocalPairError.unauthorized }
+        guard (200...299).contains(code), let result = try? JSONDecoder().decode(LocalPairResponse.self, from: data),
+              result.host == payload.host, result.port == payload.port,
+              !result.username.isEmpty, !result.password.isEmpty,
+              result.nozzle.diameter > 0 else { throw LocalPairError.invalidResponse }
+        let material = result.nozzle.hardened ? "hardened" : "brass"
+        let printer = Printer(
+            name: result.model, host: "http://\(result.host):\(result.port)",
+            username: result.username, allowInsecureHttp: true,
+            localExperimental: true, localHosts: [result.host],
+            localModel: result.model, localCapabilities: payload.capabilities,
+            localNozzleDiameter: result.nozzle.diameter, localNozzleMaterial: material,
+        )
+        return LocalPairResult(printer: printer,
+                               secret: Secret(password: result.password),
+                               nozzleDiameter: result.nozzle.diameter,
+                               nozzleMaterial: material)
+    }
+
+    private static func isLocalHost(_ host: String) -> Bool {
+        let parts = host.split(separator: ".").compactMap { Int($0) }
+        guard parts.count == 4, parts.allSatisfy({ (0...255).contains($0) }) else { return false }
+        return parts[0] == 10 || (parts[0] == 172 && (16...31).contains(parts[1])) ||
+            (parts[0] == 192 && parts[1] == 168)
+    }
+
     /// Digest-Herausforderungen je Drucker merken.
     ///
     /// Wichtig fuers Hochladen: Wer erst sendet und dann eine 401
