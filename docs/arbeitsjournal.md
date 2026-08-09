@@ -328,3 +328,18 @@ hat `psm_contract_tests` für `SIMULATORARM64` neu gelinkt und auf einem
 iOS-26.3-iPhone-17-Pro-Simulator ausgeführt. Der Contract-Test bestätigt
 ABI 7, den einzelnen Undo-Checkpoint für die Druckerprofilmutation und die
 Ablehnung eines während des Remote-Slice veralteten G-Code-Ergebnisses.
+
+### Side-Build-Baseline – Fix-Runde 2
+
+Der Remote-Slice-Weg hält die Designrevision nun beim Start fest und gibt
+einen heruntergeladenen G-Code erst frei, nachdem der Kern genau diese
+Revision akzeptiert hat. Ein inzwischen veraltetes Ergebnis landet nicht mehr
+in `gcodeURL` oder `.done`, sondern endet mit einem erneuten Slice-Hinweis.
+
+Auf dem isolierten Mac-Side-Build (iOS-26.3-iPhone-17-Pro-Simulator) liefen
+die zwei neuen `RemoteSliceCompletionTests` mit 0 Fehlern. Dafür wurde der
+Kern per `bash build/scripts/build-ios.sh core` im Side-Build gebündelt; die
+fehlende lokale Testdatei lieferte zuvor den erwarteten RED-Lauf. Der C++-
+Contract-Test lief danach erneut mit `PASS: psm_contract_tests`; die Android-
+Regression `:shared:allTests :app:testDebugUnitTest` lief lokal ebenfalls
+erfolgreich. Der vollständige technische Nachweis steht im Task-1-Bericht.

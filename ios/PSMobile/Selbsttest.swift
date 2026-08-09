@@ -353,7 +353,7 @@ final class Selbsttest: ObservableObject {
                 return (.warnung, "übersprungen: kein Remote-Slice-Host konfiguriert")
             }
             guard let token = try? RemoteSliceCredentialStore().load(),
-                  let token, !token.isEmpty else {
+                  !token.isEmpty else {
                 return (.warnung, "übersprungen: kein Remote-Slice-Token konfiguriert")
             }
             let projektDatei = FileManager.default.temporaryDirectory

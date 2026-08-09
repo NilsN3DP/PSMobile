@@ -1374,7 +1374,6 @@ final class SlicerModel: ObservableObject {
         // teilt eine Datei, die zu dem, was auf dem Bett liegt, nicht
         // mehr passt.
         gcodeURL = nil
-        let requestRevision = core?.designRevision() ?? 0
         let t0 = Date()
 
         sliceTask = Task.detached(priority: .userInitiated) { [weak self] in
@@ -1451,6 +1450,9 @@ final class SlicerModel: ObservableObject {
             english: "uploading", german: "wird hochgeladen"))
         stats = nil
         gcodeURL = nil
+        let request = RemoteSliceRequest.capture { [weak core] in
+            core?.designRevision() ?? 0
+        }
 
         saveProject()
         guard let projektURL = projectURL else {
@@ -1469,7 +1471,7 @@ final class SlicerModel: ObservableObject {
                     projectFileURL: projektURL, baseURL: basis, token: token)
                 try await self.remotePollLoop(
                     jobId: jobId, baseURL: basis, token: token, t0: t0,
-                    requestRevision: requestRevision)
+                    requestRevision: request.designRevision)
             } catch {
                 await MainActor.run {
                     self.progress = Task.isCancelled
@@ -1517,42 +1519,60 @@ final class SlicerModel: ObservableObject {
                     jobId: jobId, baseURL: baseURL, token: token, to: ziel)
                 let secs = Date().timeIntervalSince(t0)
                 await MainActor.run {
-                    self.gcodeURL = ziel
-                    // Speist die heruntergeladene Datei in dieselbe
-                    // Vorschau wie ein lokaler Schnitt ein. Schlaegt das
-                    // fehl (kaputte Datei, o.ae.), bleibt die Vorschau
-                    // leer statt die restliche Anzeige zu blockieren -
-                    // Export und Senden haengen nicht daran.
-                    try? self.core?.acceptRemoteGcode(
-                        path: ziel.path, requestRevision: requestRevision)
-                    self.progress = .done(
-                        seconds: secs,
-                        printMinutes: Int((stand.stats?.printTimeSeconds ?? 0) / 60),
-                        grams: stand.stats?.filamentG ?? 0)
-                    self.lastSliceWasRemote = true
-                    // Der Server liefert Zeit/Gewicht direkt mit - anders als
-                    // beim lokalen Schnitt setzt hier aber nie
-                    // psm_slice_wait self.stats, darum blieb die
-                    // Seitenleisten-Zusammenfassung (abschluss) nach jedem
-                    // Remote-Schnitt leer. Kosten kennt nur der lokale Kern
-                    // (aus dem Filamentpreis-Profil) - hier nur fuer den
-                    // ersten Extruder genaehert, mehrfarbige Projekte
-                    // koennen leicht daneben liegen.
-                    let kostenProKg = Double(
-                        self.core?["filament_cost"]?
-                            .split(separator: ",").first.map(String.init) ?? "0") ?? 0
-                    let gramm = stand.stats?.filamentG ?? 0
-                    self.stats = PsmCore.SliceStats(
-                        printTimeSeconds: stand.stats?.printTimeSeconds ?? 0,
-                        filamentMm: stand.stats?.filamentMm ?? 0,
-                        filamentGrams: gramm,
-                        cost: kostenProKg * gramm / 1000,
-                        objects: self.objects.count)
-                    DiagnosticsReporter.nachSlice(.init(
-                        erfolgreich: true, sekunden: secs,
-                        dreiecke: self.objects.reduce(0) { $0 + $1.triangles },
-                        weg: "remote", fehler: nil),
-                        projektname: self.objects.first?.name)
+                    let published = RemoteSliceCompletion.publishIfPreviewAccepted(
+                        acceptPreview: {
+                            guard let core = self.core else {
+                                throw PsmCore.PsmError.createFailed("Core fehlt")
+                            }
+                            try core.acceptRemoteGcode(
+                                path: ziel.path, requestRevision: requestRevision)
+                        },
+                        publish: {
+                            self.gcodeURL = ziel
+                            self.progress = .done(
+                                seconds: secs,
+                                printMinutes: Int((stand.stats?.printTimeSeconds ?? 0) / 60),
+                                grams: stand.stats?.filamentG ?? 0)
+                            self.lastSliceWasRemote = true
+                            // Der Server liefert Zeit/Gewicht direkt mit - anders als
+                            // beim lokalen Schnitt setzt hier aber nie
+                            // psm_slice_wait self.stats, darum blieb die
+                            // Seitenleisten-Zusammenfassung (abschluss) nach jedem
+                            // Remote-Schnitt leer. Kosten kennt nur der lokale Kern
+                            // (aus dem Filamentpreis-Profil) - hier nur fuer den
+                            // ersten Extruder genaehert, mehrfarbige Projekte
+                            // koennen leicht daneben liegen.
+                            let kostenProKg = Double(
+                                self.core?["filament_cost"]?
+                                    .split(separator: ",").first.map(String.init) ?? "0") ?? 0
+                            let gramm = stand.stats?.filamentG ?? 0
+                            self.stats = PsmCore.SliceStats(
+                                printTimeSeconds: stand.stats?.printTimeSeconds ?? 0,
+                                filamentMm: stand.stats?.filamentMm ?? 0,
+                                filamentGrams: gramm,
+                                cost: kostenProKg * gramm / 1000,
+                                objects: self.objects.count)
+                            DiagnosticsReporter.nachSlice(.init(
+                                erfolgreich: true, sekunden: secs,
+                                dreiecke: self.objects.reduce(0) { $0 + $1.triangles },
+                                weg: "remote", fehler: nil),
+                                projektname: self.objects.first?.name)
+                        })
+                    guard published else {
+                        self.gcodeURL = nil
+                        self.lastSliceWasRemote = false
+                        let message = SimpleModeState.shared.text(
+                            english: "The design changed while remote slicing. Please slice again.",
+                            german: "Das Modell wurde waehrend des Remote-Slicens geaendert. Bitte erneut slicen.")
+                        self.progress = .failed(message)
+                        DiagnosticsReporter.nachSlice(.init(
+                            erfolgreich: false, sekunden: secs,
+                            dreiecke: self.objects.reduce(0) { $0 + $1.triangles },
+                            weg: "remote", fehler: message),
+                            projektname: self.objects.first?.name)
+                        self.finishSlice()
+                        return
+                    }
                     self.finishSlice()
                 }
                 return
