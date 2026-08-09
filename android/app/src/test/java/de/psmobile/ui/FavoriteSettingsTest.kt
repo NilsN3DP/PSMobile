@@ -35,6 +35,17 @@ class FavoriteSettingsTest {
     }
 
     @Test
+    fun `persisted favorites use the shared catalog sanitation`() {
+        assertEquals(
+            listOf("layer_height", "fill_density"),
+            FavoriteSettings.orderedFor(
+                setOf("fill_density", "gone", "layer_height"),
+                listOf("layer_height", "fill_density", "layer_height"),
+            ),
+        )
+    }
+
+    @Test
     fun `keysOf walks pages and groups and drops duplicates`() {
         val pages = listOf(
             PsUi.Page(

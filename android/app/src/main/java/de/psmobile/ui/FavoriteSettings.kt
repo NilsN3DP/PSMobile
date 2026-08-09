@@ -1,5 +1,7 @@
 package de.psmobile.ui
 
+import de.psmobile.shared.rules.FavoriteSettingRules
+
 /**
  * Selbst gewaehlte Einstellungen, die oben in der Seitenliste stehen.
  *
@@ -25,7 +27,7 @@ object FavoriteSettings {
      * Profilpaket-Update darf keine toten Eintraege hinterlassen.
      */
     fun orderedFor(favorites: Set<String>, keysInTabOrder: List<String>): List<String> =
-        keysInTabOrder.filter { it in favorites }
+        FavoriteSettingRules.sanitize(favorites, keysInTabOrder)
 
     /** Alle Schluessel eines Reiters in Seiten- und Gruppenreihenfolge. */
     fun keysOf(pages: List<PsUi.Page>): List<String> =

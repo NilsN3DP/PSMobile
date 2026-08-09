@@ -470,3 +470,29 @@ Headerdatei, und die Android-Regression `:shared:allTests
 `psm_object_config_is_overridden` fängt jetzt zudem Ausnahmen aus seiner
 Lock-/Lesestrecke ab und liefert konsistent den `-1`-Sentinel; eine
 öffentliche Mutex-Fehlerinjektion existiert nicht.
+
+### Side-Build-Baseline – Task 4: gemeinsame Inspektor- und Favoritenregeln
+
+Die gemeinsamen, reinen Kotlin-Regeln legen das Inspektor-Ziel eindeutig
+fest: keine Auswahl bedeutet Projekt mit keiner Objekt-ID, eine vorhandene
+stabile Objekt-ID bedeutet Objekt mit genau dieser ID. Im vorhandenen
+Android-/Shared-Code gibt es keinen weiteren Auswahl-Sentinel, deshalb wird
+nur `null` als keine Auswahl behandelt.
+
+Favoriten werden nach der autoritativen Reihenfolge des verfügbaren Katalogs
+geordnet. Nicht verfügbare gespeicherte Schlüssel fallen weg und doppelt im
+Katalog vorkommende Schlüssel erscheinen einmal an ihrer ersten Position;
+leere Favoriten oder ein leerer Katalog ergeben eine leere Liste. Androids
+bestehende `FavoriteSettings.orderedFor` delegiert direkt an diese Regel. Das
+`SharedPreferences`-String-Set mit dem Namen `favorites`, die Toggle-API und
+das Speicherformat bleiben unverändert.
+
+Der Test-first-Lauf `./android/gradlew -p android :shared:allTests` war
+zunächst mit den erwarteten fehlenden `Inspector*`- und
+`FavoriteSettingRules`-Typen rot. Der Android-RED-Lauf
+`./android/gradlew -p android :app:testProductionDebugUnitTest --tests
+de.psmobile.ui.FavoriteSettingsTest` scheiterte gezielt nur daran, dass der
+alte Filter einen doppelten Katalogschlüssel doppelt ausgab. Nach der
+minimalen gemeinsamen Implementierung liefen `:shared:allTests` samt
+gezieltem Favoriten-Test, beide Android-Debug-Flavor-Unit-Suiten und die 18
+Python-Buildskript-Regressionen grün (ein erwarteter Skip).
