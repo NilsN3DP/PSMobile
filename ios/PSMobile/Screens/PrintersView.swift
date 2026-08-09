@@ -400,6 +400,24 @@ struct PrinterEditView: View {
                 }
                 .tint(PrusaColors.orange)
 
+                Toggle(isOn: $printer.lightingOptIn) {
+                    VStack(alignment: .leading, spacing: ps.pt(2)) {
+                        Text(st("Experimental lighting", "Experimentelle Beleuchtung"))
+                            .font(.system(size: ps.font(13)))
+                            .foregroundStyle(PrusaColors.textPrimary)
+                        Text(st("Off per printer. It sends no command until a documented CFW hardware API is available.",
+                                "Pro Drucker deaktiviert. Es wird kein Befehl gesendet, bis eine dokumentierte CFW-Hardware-API vorliegt."))
+                            .font(.system(size: ps.font(11)))
+                            .foregroundStyle(PrusaColors.textMuted)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                .tint(PrusaColors.orange)
+                .disabled(printer.hostType != .prusaLink)
+                .onChange(of: printer.hostType) { neu in
+                    if neu != .prusaLink { printer.lightingOptIn = false }
+                }
+
                 HStack(spacing: ps.pt(12)) {
                     Button(st("Delete", "Löschen")) {
                         store.remove(printer)

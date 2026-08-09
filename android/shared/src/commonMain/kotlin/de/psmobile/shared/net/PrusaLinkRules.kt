@@ -2,6 +2,116 @@ package de.psmobile.shared.net
 
 import de.psmobile.shared.rules.SimpleModeState
 
+/** Herkunft des Druckerprofils. Nur ein bewusst lokal eingerichtetes
+ * physisches Geraet darf die experimentelle Lichtfunktion erhalten. */
+enum class LightingPrinterProfile { MANUAL_PHYSICAL, CLOUD, DEMO, SIMULATED, UNKNOWN }
+
+/** Ergebnis der streng fail-closed Capability-Pruefung. */
+enum class LightingCapability { SUPPORTED, UNSUPPORTED }
+
+/** Die Bedienarten, unabhaengig vom spaeter dokumentierten Hardware-Protokoll. */
+enum class LightingMode { AUTO, MANUAL, ANIMATION, OFF }
+
+/** Status der letzten Capability-/Verbindungspruefung fuer die UI und das Sende-Gate. */
+enum class LightingConnectionStatus { ONLINE, OFFLINE, PROBE_FAILED }
+
+/** Warum kein Lichtbefehl gesendet werden darf. */
+enum class LightingCommandGate { ALLOWED, DISABLED, UNSUPPORTED, OFFLINE, PROBE_FAILED }
+
+/** Zustande, die die Automatik kennt. Unbekanntes wird bewusst nicht gemappt. */
+enum class LightingPrinterState { IDLE, HEATING, PRINTING, PAUSED, ERROR, COMPLETED, UNKNOWN }
+
+data class LightingColor(val red: Int, val green: Int, val blue: Int) {
+    init {
+        require(red in 0..255 && green in 0..255 && blue in 0..255)
+    }
+}
+
+/** Nicht geheime, pro Drucker persistierbare Voreinstellung. */
+data class LightingSettings(
+    val optIn: Boolean = false,
+    val mode: LightingMode = LightingMode.AUTO,
+    val brightness: Int = 100,
+    val color: LightingColor = LightingColor(255, 255, 255),
+    val animation: String? = null,
+) {
+    init { require(brightness in 0..100) }
+}
+
+/** Werte, die von einem erfolgreichen und vertrauenswuerdigen Probe stammen muessen. */
+data class LightingProbe(
+    val profile: LightingPrinterProfile,
+    val firmware: String?,
+    val model: String?,
+)
+
+/** Eine Automatikvorgabe. Ein null-Ergebnis bedeutet: bestehenden Lichtzustand nicht anfassen. */
+data class LightingAutomaticSetting(val color: LightingColor, val brightness: Int)
+
+/**
+ * Explizite Grenze fuer die erst noch zu belegende Hardware-Integration.
+ *
+ * Eine Plattform darf diese Schnittstelle erst mit einem Adapter verbinden,
+ * wenn der Prusa-CFW-Endpunkt samt Request-/Response-Vertrag autoritativ
+ * dokumentiert ist. Bis dahin ist kein HTTP-Pfad hinterlegt.
+ */
+interface LightingEndpointAdapter {
+    fun dispatch(settings: LightingSettings): LightingEndpointResult
+}
+
+sealed interface LightingEndpointResult {
+    data class BlockedBySafetyGate(val gate: LightingCommandGate) : LightingEndpointResult
+    data object BlockedPendingDocumentedEndpoint : LightingEndpointResult
+}
+
+/** Sicherer Platzhalter: selbst bei einem erlaubten UI-Gate wird nichts an Hardware gesendet. */
+object PendingDocumentedLightingEndpointAdapter : LightingEndpointAdapter {
+    override fun dispatch(settings: LightingSettings): LightingEndpointResult =
+        LightingEndpointResult.BlockedPendingDocumentedEndpoint
+}
+
+/** Gemeinsame fail-closed Regeln fuer die experimentelle Beleuchtung. */
+object PrusaLinkLighting {
+    private val supportedFirmware = Regex("""^6\.5\.3(?:[-+].*)?$""")
+
+    fun capability(probe: LightingProbe): LightingCapability = when {
+        probe.profile != LightingPrinterProfile.MANUAL_PHYSICAL -> LightingCapability.UNSUPPORTED
+        probe.firmware?.trim()?.matches(supportedFirmware) != true -> LightingCapability.UNSUPPORTED
+        !isCoreOneMini(probe.model) -> LightingCapability.UNSUPPORTED
+        else -> LightingCapability.SUPPORTED
+    }
+
+    fun commandGate(
+        settings: LightingSettings,
+        capability: LightingCapability,
+        connection: LightingConnectionStatus,
+    ): LightingCommandGate = when {
+        !settings.optIn -> LightingCommandGate.DISABLED
+        capability != LightingCapability.SUPPORTED -> LightingCommandGate.UNSUPPORTED
+        connection == LightingConnectionStatus.PROBE_FAILED -> LightingCommandGate.PROBE_FAILED
+        connection != LightingConnectionStatus.ONLINE -> LightingCommandGate.OFFLINE
+        else -> LightingCommandGate.ALLOWED
+    }
+
+    fun resetToAuto(settings: LightingSettings): LightingSettings =
+        settings.copy(mode = LightingMode.AUTO, animation = null)
+
+    fun automatic(state: LightingPrinterState): LightingAutomaticSetting? = when (state) {
+        LightingPrinterState.IDLE -> LightingAutomaticSetting(LightingColor(255, 255, 255), 25)
+        LightingPrinterState.HEATING -> LightingAutomaticSetting(LightingColor(255, 64, 0), 70)
+        LightingPrinterState.PRINTING -> LightingAutomaticSetting(LightingColor(0, 180, 255), 70)
+        LightingPrinterState.PAUSED -> LightingAutomaticSetting(LightingColor(255, 180, 0), 70)
+        LightingPrinterState.ERROR -> LightingAutomaticSetting(LightingColor(255, 0, 0), 100)
+        LightingPrinterState.COMPLETED -> LightingAutomaticSetting(LightingColor(0, 200, 80), 60)
+        LightingPrinterState.UNKNOWN -> null
+    }
+
+    private fun isCoreOneMini(model: String?): Boolean = model
+        ?.lowercase()
+        ?.filter { it.isLetterOrDigit() }
+        ?.contains("coreonemini") == true
+}
+
 /**
  * Alles an der PrusaLink-Anbindung, was keine Steckdose braucht.
  *

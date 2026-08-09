@@ -241,6 +241,7 @@ private fun PrinterEditor(
     var pass by remember { mutableStateOf(printer.password) }
     var auth by remember { mutableStateOf(printer.auth) }
     var allowHttp by remember { mutableStateOf(printer.allowInsecureHttp) }
+    var lightingOptIn by remember { mutableStateOf(printer.lightingOptIn) }
     var preset by remember { mutableStateOf(printer.presetName) }
     var testResult by remember { mutableStateOf<String?>(null) }
     var testing by remember { mutableStateOf(false) }
@@ -326,6 +327,23 @@ private fun PrinterEditor(
                 PresetPickerCompact(presetNames, preset) { preset = it }
             }
 
+            Row(
+                Modifier.fillMaxWidth()
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(PrusaColors.PanelRaised)
+                    .padding(horizontal = 10.dp, vertical = 7.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text("Experimentelle Beleuchtung", color = PrusaColors.TextPrimary, fontSize = 13.sp)
+                    Text(
+                        "Pro Drucker deaktiviert. Erst aktivieren, wenn dieses lokale Gerät unterstützt ist.",
+                        color = PrusaColors.TextMuted, fontSize = 10.sp,
+                    )
+                }
+                Switch(checked = lightingOptIn, onCheckedChange = { lightingOptIn = it })
+            }
+
             testResult?.let {
                 Text(it.removePrefix("!"),
                      color = if (it.startsWith("!")) PrusaColors.Danger else PrusaColors.Ok,
@@ -377,6 +395,7 @@ private fun PrinterEditor(
                             username = user, password = pass,
                             presetName = preset,
                             allowInsecureHttp = allowHttp,
+                            lightingOptIn = lightingOptIn,
                         ))
                     },
                     modifier = Modifier.weight(1f).height(52.dp),

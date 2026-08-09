@@ -1,6 +1,7 @@
 package de.psmobile.net
 
 import de.psmobile.shared.net.PrusaLinkRules.Auth
+import de.psmobile.shared.net.LightingPrinterProfile
 import android.content.Context
 import androidx.core.content.edit
 import org.json.JSONArray
@@ -73,6 +74,12 @@ object PrinterStore {
                 presetName = o.optString("presetName"),
                 storage = o.optString("storage", "usb"),
                 allowInsecureHttp = o.optBoolean("allowInsecureHttp", false),
+                lightingOptIn = o.optBoolean("lightingOptIn", false),
+                // Ohne explizite Herkunft sicher sperren; neue Eintraege
+                // erhalten den manuellen Standard im Printer-Konstruktor.
+                lightingProfile = o.optString("lightingProfile")
+                    .let { raw -> LightingPrinterProfile.entries.firstOrNull { it.name == raw } }
+                    ?: LightingPrinterProfile.UNKNOWN,
             )
         }
         if (migrated)
@@ -102,6 +109,8 @@ object PrinterStore {
                 put("presetName", p.presetName)
                 put("storage", p.storage)
                 put("allowInsecureHttp", p.allowInsecureHttp)
+                put("lightingOptIn", p.lightingOptIn)
+                put("lightingProfile", p.lightingProfile.name)
             })
         }
         /* Metadaten erst nach erfolgreicher Secret-Speicherung ersetzen. */

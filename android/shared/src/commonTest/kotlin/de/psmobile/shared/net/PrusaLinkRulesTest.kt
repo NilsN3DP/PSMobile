@@ -9,6 +9,142 @@ import kotlin.test.assertTrue
 class PrusaLinkRulesTest {
 
     @Test
+    fun `lighting recognizes an explicitly manual Core One Mini with firmware 6 5 3`() {
+        assertEquals(
+            LightingCapability.SUPPORTED,
+            PrusaLinkLighting.capability(
+                LightingProbe(
+                    profile = LightingPrinterProfile.MANUAL_PHYSICAL,
+                    firmware = "6.5.3+1234",
+                    model = "Prusa CORE-One Mini",
+                ),
+            ),
+        )
+    }
+
+    @Test
+    fun `lighting rejects non physical and unknown printer profiles`() {
+        val profiles = listOf(
+            LightingPrinterProfile.CLOUD,
+            LightingPrinterProfile.DEMO,
+            LightingPrinterProfile.SIMULATED,
+            LightingPrinterProfile.UNKNOWN,
+        )
+
+        profiles.forEach { profile ->
+            assertEquals(
+                LightingCapability.UNSUPPORTED,
+                PrusaLinkLighting.capability(
+                    LightingProbe(profile, "6.5.3", "CORE One Mini"),
+                ),
+                profile.name,
+            )
+        }
+    }
+
+    @Test
+    fun `lighting rejects unknown firmware models and firmware boundaries`() {
+        val physical = LightingPrinterProfile.MANUAL_PHYSICAL
+        assertEquals(
+            LightingCapability.UNSUPPORTED,
+            PrusaLinkLighting.capability(LightingProbe(physical, null, "CORE One Mini")),
+        )
+        assertEquals(
+            LightingCapability.UNSUPPORTED,
+            PrusaLinkLighting.capability(LightingProbe(physical, "6.5.2", "CORE One Mini")),
+        )
+        assertEquals(
+            LightingCapability.UNSUPPORTED,
+            PrusaLinkLighting.capability(LightingProbe(physical, "6.5.4", "CORE One Mini")),
+        )
+        assertEquals(
+            LightingCapability.UNSUPPORTED,
+            PrusaLinkLighting.capability(LightingProbe(physical, "6.5.3", "Unknown printer")),
+        )
+    }
+
+    @Test
+    fun `lighting command is blocked until opt in capability and successful online probe`() {
+        val settings = LightingSettings(optIn = false)
+        assertEquals(
+            LightingCommandGate.DISABLED,
+            PrusaLinkLighting.commandGate(
+                settings,
+                LightingCapability.SUPPORTED,
+                LightingConnectionStatus.ONLINE,
+            ),
+        )
+        assertEquals(
+            LightingCommandGate.UNSUPPORTED,
+            PrusaLinkLighting.commandGate(
+                settings.copy(optIn = true),
+                LightingCapability.UNSUPPORTED,
+                LightingConnectionStatus.ONLINE,
+            ),
+        )
+        assertEquals(
+            LightingCommandGate.OFFLINE,
+            PrusaLinkLighting.commandGate(
+                settings.copy(optIn = true),
+                LightingCapability.SUPPORTED,
+                LightingConnectionStatus.OFFLINE,
+            ),
+        )
+        assertEquals(
+            LightingCommandGate.PROBE_FAILED,
+            PrusaLinkLighting.commandGate(
+                settings.copy(optIn = true),
+                LightingCapability.SUPPORTED,
+                LightingConnectionStatus.PROBE_FAILED,
+            ),
+        )
+        assertEquals(
+            LightingCommandGate.ALLOWED,
+            PrusaLinkLighting.commandGate(
+                settings.copy(optIn = true),
+                LightingCapability.SUPPORTED,
+                LightingConnectionStatus.ONLINE,
+            ),
+        )
+    }
+
+    @Test
+    fun `lighting keeps all modes color brightness and animation in the common contract`() {
+        assertEquals(
+            setOf(LightingMode.AUTO, LightingMode.MANUAL, LightingMode.ANIMATION, LightingMode.OFF),
+            LightingMode.entries.toSet(),
+        )
+        val settings = LightingSettings(
+            optIn = true,
+            mode = LightingMode.ANIMATION,
+            brightness = 72,
+            color = LightingColor(12, 34, 56),
+            animation = "pulse",
+        )
+        assertEquals(72, settings.brightness)
+        assertEquals(LightingColor(12, 34, 56), settings.color)
+        assertEquals("pulse", settings.animation)
+        assertEquals(LightingMode.AUTO, PrusaLinkLighting.resetToAuto(settings).mode)
+    }
+
+    @Test
+    fun `lighting auto maps known printer states and leaves unknown state untouched`() {
+        assertEquals(
+            LightingColor(255, 64, 0),
+            PrusaLinkLighting.automatic(LightingPrinterState.HEATING)?.color,
+        )
+        assertEquals(
+            LightingColor(0, 180, 255),
+            PrusaLinkLighting.automatic(LightingPrinterState.PRINTING)?.color,
+        )
+        assertEquals(
+            LightingColor(255, 0, 0),
+            PrusaLinkLighting.automatic(LightingPrinterState.ERROR)?.color,
+        )
+        assertNull(PrusaLinkLighting.automatic(LightingPrinterState.UNKNOWN))
+    }
+
+    @Test
     fun `ohne Schema gilt HTTPS`() {
         // Ein Drucker im eigenen Netz wird gern als nackte IP
         // eingetragen. Daraus http zu machen waere bequemer und falsch -

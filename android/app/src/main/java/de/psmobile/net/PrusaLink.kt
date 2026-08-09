@@ -4,6 +4,13 @@ import android.util.Log
 import de.psmobile.shared.net.DigestAuth
 import de.psmobile.shared.net.PrusaLinkRules
 import de.psmobile.shared.net.PrusaLinkRules.Auth
+import de.psmobile.shared.net.LightingPrinterProfile
+import de.psmobile.shared.net.LightingCapability
+import de.psmobile.shared.net.LightingConnectionStatus
+import de.psmobile.shared.net.LightingEndpointResult
+import de.psmobile.shared.net.LightingSettings
+import de.psmobile.shared.net.PendingDocumentedLightingEndpointAdapter
+import de.psmobile.shared.net.PrusaLinkLighting
 import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
@@ -52,6 +59,10 @@ object PrusaLink {
         val presetName: String = "",
         val storage: String = "usb",
         val allowInsecureHttp: Boolean = false,
+        /** Nicht geheime, pro Drucker getrennte Experimental-Einwilligung. */
+        val lightingOptIn: Boolean = false,
+        /** Alte Eintraege bleiben unbekannt und erhalten damit keine Capability. */
+        val lightingProfile: LightingPrinterProfile = LightingPrinterProfile.MANUAL_PHYSICAL,
     ) {
         val baseUrl: String get() = PrusaLinkRules.baseUrl(host)
 
@@ -68,6 +79,34 @@ object PrusaLink {
     sealed interface Result {
         data class Ok(val message: String) : Result
         data class Error(val message: String) : Result
+    }
+
+    /**
+     * Einzige Lighting-Grenze des Android-Clients.
+     *
+     * Erst die fail-closed Regeln pruefen, dann den bewusst leeren
+     * Adapter. Damit kann kein künftiger UI-Aufrufer versehentlich einen
+     * Pfad, Header oder ein Geheimnis an eine undokumentierte CFW-API
+     * senden.
+     */
+    fun lightingEndpointResult(
+        p: Printer,
+        probedCapability: LightingCapability,
+        connection: LightingConnectionStatus,
+    ): LightingEndpointResult {
+        val capability = if (p.lightingProfile == LightingPrinterProfile.MANUAL_PHYSICAL) {
+            probedCapability
+        } else {
+            LightingCapability.UNSUPPORTED
+        }
+        val gate = PrusaLinkLighting.commandGate(
+            LightingSettings(optIn = p.lightingOptIn), capability, connection,
+        )
+        return if (gate == de.psmobile.shared.net.LightingCommandGate.ALLOWED) {
+            PendingDocumentedLightingEndpointAdapter.dispatch(LightingSettings(optIn = p.lightingOptIn))
+        } else {
+            LightingEndpointResult.BlockedBySafetyGate(gate)
+        }
     }
 
     /**

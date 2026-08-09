@@ -22,6 +22,13 @@ actor PrusaLinkClient {
         case prusaLink, octoprint
     }
 
+    /// Herkunft des Eintrags fuer die experimentelle Beleuchtung. Alte
+    /// Eintraege bleiben unbekannt, damit sie bis zu einer bewussten
+    /// Neueinrichtung keine Lighting-Capability erhalten.
+    enum LightingProfile: String, Codable {
+        case manualPhysical, cloud, demo, simulated, unknown
+    }
+
     struct Printer: Codable, Identifiable, Equatable {
         var id: String = UUID().uuidString
         var name: String = ""
@@ -32,6 +39,9 @@ actor PrusaLinkClient {
         var username: String = PrusaLinkRules.shared.DEFAULT_USER
         var storage: String = "usb"
         var allowInsecureHttp: Bool = false
+        /// Nicht geheime, pro Drucker getrennte Experimental-Einwilligung.
+        var lightingOptIn: Bool = false
+        var lightingProfile: LightingProfile = .manualPhysical
         /// Profilname in PSMobile, damit Profil und Geraet zusammenfinden.
         var presetName: String = ""
 
@@ -225,7 +235,7 @@ actor PrusaLinkClient {
 extension PrusaLinkClient.Printer {
     private enum CodingKeys: String, CodingKey {
         case id, name, host, hostType, usesApiKey, username, storage,
-             allowInsecureHttp, presetName
+             allowInsecureHttp, presetName, lightingOptIn, lightingProfile
     }
 
     init(from decoder: Decoder) throws {
@@ -240,6 +250,9 @@ extension PrusaLinkClient.Printer {
         storage = try c.decode(String.self, forKey: .storage)
         allowInsecureHttp = try c.decode(Bool.self, forKey: .allowInsecureHttp)
         presetName = try c.decode(String.self, forKey: .presetName)
+        lightingOptIn = try c.decodeIfPresent(Bool.self, forKey: .lightingOptIn) ?? false
+        lightingProfile = try c.decodeIfPresent(PrusaLinkClient.LightingProfile.self,
+                                                forKey: .lightingProfile) ?? .unknown
     }
 
     func encode(to encoder: Encoder) throws {
@@ -253,5 +266,7 @@ extension PrusaLinkClient.Printer {
         try c.encode(storage, forKey: .storage)
         try c.encode(allowInsecureHttp, forKey: .allowInsecureHttp)
         try c.encode(presetName, forKey: .presetName)
+        try c.encode(lightingOptIn, forKey: .lightingOptIn)
+        try c.encode(lightingProfile, forKey: .lightingProfile)
     }
 }
