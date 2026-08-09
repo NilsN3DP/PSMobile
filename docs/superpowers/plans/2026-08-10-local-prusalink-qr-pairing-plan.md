@@ -4,7 +4,7 @@
 
 **Goal:** Add an opt-in, fail-closed QR/manual pairing flow for local physical PrusaLink printers on Android and iOS without changing firmware or enabling cloud fallback.
 
-**Architecture:** A shared Kotlin model/parser owns strict payload validation and capability filtering. Android and iOS adapters own camera/manual input, secure token storage, local probing, and printer-store integration. Existing PrusaLink status/upload paths are reused; no undocumented command endpoint is introduced.
+**Architecture:** A shared Kotlin model/parser owns strict payload validation and capability filtering. Android and iOS adapters own camera/manual input, secure token storage, local probing, and printer-store integration. The CFW pairing contract is now fixed: `POST /api/pair` exchanges the QR token for PrusaLink username/password; normal PrusaLink status/upload paths are reused afterward.
 
 **Tech Stack:** Kotlin Multiplatform shared module, Android Kotlin/Jetpack UI, SwiftUI, Android Keystore-backed storage, iOS Keychain, native camera/QR APIs where available, XCTest/XCUITest and Gradle tests.
 
@@ -16,6 +16,7 @@
 - WLAN passwords, tokens, and other credentials are never logged or placed in user-facing errors.
 - Tokens are stored only in Android Keystore-backed or iOS Keychain-backed storage.
 - Firmware/CFW is not changed in this plan; printer-side expiry/revocation is only claimed when the payload/API provides it.
+- Pairing exchange contract: `POST http://<local-host>:<port>/api/pair` with `{"pairing_token":"..."}`; `401` is reported as invalid/expired/revoked token. Returned host/port must match the validated local endpoint.
 
 ---
 
@@ -30,9 +31,9 @@
 - `sealed interface LocalPairingValidation { data class Valid(val payload: LocalPrusaLinkQrPayload, val endpoint: String): LocalPairingValidation; data class Invalid(val reason: Reason): LocalPairingValidation }`
 - `object LocalPrusaLinkPairing { fun parse(json: String, nowEpochSeconds: Long): LocalPairingValidation; fun validate(payload: LocalPrusaLinkQrPayload, nowEpochSeconds: Long): LocalPairingValidation; fun manual(host: String, port: Int, token: String, model: String, capabilities: Set<String> = emptySet()): LocalPairingValidation }`
 
-- [ ] Write tests for valid payload/default endpoint, wrong type/version/transport, unsupported model, malformed/public/cloud host, invalid ports, missing token, expired `expires_at`, and capability allowlisting.
+- [x] Write tests for valid payload/default endpoint, wrong type/version/transport, malformed/public/cloud host, invalid ports, missing token, expired `expires_at`, response binding, and capability allowlisting.
 - [ ] Run `:shared:testDebugUnitTest --tests de.psmobile.shared.net.LocalPrusaLinkPairingTest`; verify RED.
-- [ ] Implement strict JSON decoding, normalized endpoint generation, no token in reasons, and no public-address/cloud fallback.
+- [x] Implement strict JSON decoding, normalized endpoint generation, no token in reasons, and no public-address/cloud fallback.
 - [ ] Run shared tests; verify GREEN and existing `:shared:allTests` remains green.
 - [ ] Commit `feat(shared): validate experimental local pairing payloads`.
 
@@ -72,7 +73,7 @@
 - Workflow sequence: parse → validate → local status probe → capabilities probe → secure token write → printer-store upsert.
 
 - [ ] Write RED tests for valid local pairing, offline printer, unsupported model, expired token, reset/reconnect, and no cloud fallback.
-- [ ] Implement bounded timeout/reconnect behavior using existing status transport and token headers only where the documented local API accepts them.
+- [x] Implement bounded timeout and the documented `/api/pair` exchange; reconnect/status transport continues through existing PrusaLink client.
 - [ ] Ensure error messages redact host credentials/tokens and remain non-modal for reconnect failures.
 - [ ] Run Android and Mac iOS workflow tests; verify GREEN.
 - [ ] Commit `feat(pairing): add fail-closed local pairing workflow`.
