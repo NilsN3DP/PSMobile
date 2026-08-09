@@ -336,10 +336,11 @@ einen heruntergeladenen G-Code erst frei, nachdem der Kern genau diese
 Revision akzeptiert hat. Ein inzwischen veraltetes Ergebnis landet nicht mehr
 in `gcodeURL` oder `.done`, sondern endet mit einem erneuten Slice-Hinweis.
 
-Auf dem isolierten Mac-Side-Build (iOS-26.3-iPhone-17-Pro-Simulator) liefen
-die zwei neuen `RemoteSliceCompletionTests` mit 0 Fehlern. Dafür wurde der
-Kern per `bash build/scripts/build-ios.sh core` im Side-Build gebündelt; die
-fehlende lokale Testdatei lieferte zuvor den erwarteten RED-Lauf. Der C++-
-Contract-Test lief danach erneut mit `PASS: psm_contract_tests`; die Android-
-Regression `:shared:allTests :app:testDebugUnitTest` lief lokal ebenfalls
-erfolgreich. Der vollständige technische Nachweis steht im Task-1-Bericht.
+Auf dem aus Commit `7b71ee2` geklonten, isolierten Mac-Side-Build
+(iOS-26.3-iPhone-17-Pro-Simulator) liefen die zwei neuen
+`RemoteSliceCompletionTests` mit 0 Fehlern. Dafür wurde der Kern zuvor per
+`bash build/scripts/build-ios.sh core` im Side-Build gebündelt; die fehlende
+lokale Testdatei lieferte zuvor den erwarteten RED-Lauf. Der C++-Contract-Test
+lief danach erneut mit `PASS: psm_contract_tests`; die Android-Regression
+`:shared:allTests :app:testDebugUnitTest` lief lokal ebenfalls erfolgreich.
+Der vollständige technische Nachweis steht im Task-1-Bericht.
