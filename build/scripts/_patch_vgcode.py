@@ -65,6 +65,8 @@ n_sz = s.count("positions.second * sizeof(Vec3)")
 s = s.replace("positions.second * sizeof(Vec3)", "positions.second * sizeof(Vec4)")
 s = s.replace("heights_widths_angles.second * sizeof(Vec3)",
               "heights_widths_angles.second * sizeof(Vec4)")
+s = s.replace("std::vector<Vec3> heights_widths_angles;",
+              "std::vector<Vec4> heights_widths_angles;")
 open(p, "w", encoding="utf-8").write(s)
 print("libvgcode: %d Texturformate, %d Groessenangaben umgestellt" % (n_fmt, n_sz))
 

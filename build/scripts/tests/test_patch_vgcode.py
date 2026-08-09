@@ -38,7 +38,8 @@ class LibVGCodePatchTests(unittest.TestCase):
             "GL_RGB32F 0, GL_RGB, GL_FLOAT GL_RGB, GL_FLOAT, &positions\n"
             "GL_RGB, GL_FLOAT, &heights_widths_angles\n"
             "positions.second * sizeof(Vec3)\n"
-            "heights_widths_angles.second * sizeof(Vec3)\n",
+            "heights_widths_angles.second * sizeof(Vec3)\n"
+            "std::vector<Vec3> heights_widths_angles;\n",
             encoding="utf-8",
         )
         types = prusa / "src/libvgcode/include/Types.hpp"
@@ -116,6 +117,10 @@ class LibVGCodePatchTests(unittest.TestCase):
                 check=False,
             )
             self.assertEqual(patched.returncode, 0, patched.stdout + patched.stderr)
+            patched_viewer = (
+                prusa / "src/libvgcode/src/ViewerImpl.cpp"
+            ).read_text(encoding="utf-8")
+            self.assertIn("std::vector<Vec4> heights_widths_angles;", patched_viewer)
 
             vec4 = self.compile_vec4(root, prusa)
             self.assertEqual(vec4.returncode, 0, vec4.stdout + vec4.stderr)
