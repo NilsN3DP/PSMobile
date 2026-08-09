@@ -47,6 +47,18 @@ android {
         }
     }
 
+    flavorDimensions += "distribution"
+    productFlavors {
+        create("production") {
+            dimension = "distribution"
+        }
+        create("preview") {
+            dimension = "distribution"
+            applicationIdSuffix = ".preview"
+            resValue("string", "app_name", "PSMobile Preview")
+        }
+    }
+
     packaging {
         jniLibs {
             // Die .so wird bereits vom NDK-Build gestrippt und muss

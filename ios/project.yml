@@ -90,6 +90,7 @@ targets:
       base:
         INFOPLIST_FILE: PSMobile/Support/Info.plist
         PRODUCT_BUNDLE_IDENTIFIER: de.psmobile
+        PSM_DISPLAY_NAME: PSMobile
         # 1 = iPhone, 2 = iPad. Ohne beides laeuft die App auf dem iPad im
         # iPhone-Fenster mitten auf schwarzem Grund - sie startet, sieht
         # aber aus wie ein Fehler. Das iPad ist das eigentliche Ziel.
@@ -104,6 +105,35 @@ targets:
           # Kotlin/Native als statisches Framework - dieselbe Ueberlegung
           # wie beim Kern: kein Signieraufwand fuer etwas, das ohnehin
           # nur in dieser App steckt.
+          - -framework
+          - PSMShared
+    dependencies:
+      - sdk: OpenGLES.framework
+      - sdk: Metal.framework
+
+  # Eine eigene Bundle-ID gibt der Vorschau automatisch einen getrennten
+  # Container, UserDefaults- und Keychain-Namensraum. Es gibt bewusst keine
+  # App Group und keine explizite Keychain-Access-Group.
+  PSMobilePreview:
+    type: application
+    platform: iOS
+    sources:
+      - path: PSMobile
+      - path: Resources/psresources
+        type: folder
+        buildPhase: resources
+      - path: Resources/psui
+        type: folder
+        buildPhase: resources
+    settings:
+      base:
+        INFOPLIST_FILE: PSMobile/Support/Info.plist
+        PRODUCT_BUNDLE_IDENTIFIER: de.psmobile.preview
+        PSM_DISPLAY_NAME: PSMobile Preview
+        TARGETED_DEVICE_FAMILY: "1,2"
+        OTHER_LDFLAGS:
+          - -lc++
+          - -lpsmobile_core_all
           - -framework
           - PSMShared
     dependencies:
@@ -181,3 +211,9 @@ schemes:
       targets:
         - PSMobileTests
         - PSMobileUITests
+  PSMobilePreview:
+    build:
+      targets:
+        PSMobilePreview: all
+    run:
+      config: Debug

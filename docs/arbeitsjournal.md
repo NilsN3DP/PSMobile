@@ -355,3 +355,29 @@ dem Mac-Simulator fand die bewusst noch fehlende Zustands-Seam. Danach liefen
 alle drei `RemoteSliceCompletionTests` mit 0 Fehlern bei vollständigem App-
 Compile und Link. C++ und Android blieben unverändert; deren Nachweise aus
 Fix-Runde 2 gelten fort.
+
+### Side-Build-Baseline – Task 2: getrennte Vorschau-Identitaeten
+
+Die Produktions-App bleibt `de.psmobile` mit dem Namen `PSMobile`. Daneben
+stehen die iOS-Scheme `PSMobilePreview` und Androids `previewDebug`, beide mit
+`de.psmobile.preview` und `PSMobile Preview`. Verschiedene Bundle- und
+Paket-IDs geben den Apps getrennte Standard-Sandboxes fuer Einstellungen,
+Zugangsdaten, Cache und Dokumente; es gibt bewusst weder eine gemeinsame
+Preference-Suite, Keychain-Gruppe, App-Gruppe noch Android-`sharedUserId`.
+
+Der erste Artefakttest war rot: Gradle kannte `assemblePreviewDebug` noch
+nicht. Danach baute der Test beide APKs und prüfte sie mit `aapt2 dump
+badging`; Produktions- und Vorschau-ID sowie sichtbare Namen sind getrennt,
+eine gemeinsame UID fehlt. Mit der Android-Studio-JBR liefen dieser Test,
+`:shared:allTests`, die Unit-Tests von `productionDebug` und `previewDebug`
+und alle 15 Python-Buildtests grün.
+
+Für iOS blieb die NAS-Arbeitskopie unberührt. Der Mac baute stattdessen den
+Windows-Stand `07ae94f` in einem isolierten, abgehängten Baum unter
+`/Volumes/Macintosh_HD/Users/user289137/psmobile-task2-identity-build-07ae94f`.
+CMake 3.31.6, Ninja und XcodeGen lagen bereits unter `build-out/mac-tools`,
+nur nicht im SSH-Pfad. Der frische SIMULATORARM64-Kern baute 77 Ziele; danach
+lief der Artefakttest grün: beide `-showBuildSettings`-Abfragen, beide
+Simulator-Builds, die erzeugten `Info.plist`-Dateien und Codesign-Entitlements
+bestätigen die getrennten Identitaeten ohne geteilte Container- oder
+Zugangsdatenrechte.

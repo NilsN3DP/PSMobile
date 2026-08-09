@@ -18,7 +18,7 @@
     <string>APPL</string>
 
     <key>CFBundleDisplayName</key>
-    <string>PSMobile</string>
+    <string>$(PSM_DISPLAY_NAME)</string>
     <key>CFBundleShortVersionString</key>
     <string>0.1.0</string>
     <key>CFBundleVersion</key>
