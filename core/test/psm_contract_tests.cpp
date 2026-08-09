@@ -217,6 +217,43 @@ int main(int argc, char **argv)
 #if defined(PSM_TEST_MULTIPLE_BEDS_STATE)
         require(session->config_revision == config_before + 2,
                 "object config reset increments config revision once");
+
+        const uint64_t undo_design_before = psm_design_revision(session);
+        const uint64_t undo_config_before = session->config_revision;
+        require(psm_history_undo(session) == PSM_OK &&
+                    psm_object_config_is_overridden(session, id, key) == 1 &&
+                    psm_object_config_get(session, id, key, value, sizeof(value)) == PSM_OK &&
+                    std::string(value) == "35%" &&
+                    psm_design_revision(session) == undo_design_before + 1 &&
+                    session->config_revision == undo_config_before + 1,
+                "undo restores object override and advances both revisions");
+        require(psm_history_redo(session) == PSM_OK &&
+                    psm_object_config_is_overridden(session, id, key) == 0 &&
+                    psm_object_config_get(session, id, key, value, sizeof(value)) == PSM_OK &&
+                    std::string(value) == inherited &&
+                    psm_design_revision(session) == undo_design_before + 2 &&
+                    session->config_revision == undo_config_before + 2,
+                "redo restores inherited object config and advances both revisions");
+
+        require(psm_history_clear(session) == PSM_OK,
+                "clear object config history before geometry-only restoration");
+        const uint64_t geometry_design_before = psm_design_revision(session);
+        const uint64_t geometry_config_before = session->config_revision;
+        psm_object_info geometry_info{};
+        require(psm_model_info(session, id, &geometry_info) == PSM_OK &&
+                    psm_model_set_position(session, id,
+                                           geometry_info.position[0] + 0.25f,
+                                           geometry_info.position[1],
+                                           geometry_info.position[2]) == PSM_OK &&
+                    psm_history_undo(session) == PSM_OK &&
+                    psm_history_redo(session) == PSM_OK &&
+                    psm_history_undo(session) == PSM_OK,
+                "restore geometry through undo and redo");
+        require(psm_design_revision(session) == geometry_design_before + 4 &&
+                    session->config_revision == geometry_config_before,
+                "geometry-only history restores invalidate design without config revision");
+        require(psm_history_clear(session) == PSM_OK,
+                "clear geometry-only history after revision contract");
 #endif
     }
 
