@@ -17,6 +17,25 @@ import sys
 PS = os.path.join(os.path.dirname(__file__), "..", "..", "external/PrusaSlicer")
 
 # --- 1. libvgcode: ES-Texturen auf RGBA ------------------------------
+# Der GLES-Pfad arbeitet mit vier Float-Komponenten pro Texel. Upstream
+# definiert nur Vec3; der Alias hält die Signaturen und lokalen Vektoren
+# konsistent, ohne die Desktop-Datenstruktur zu verändern.
+p = os.path.join(PS, "src/libvgcode/include/Types.hpp")
+s = open(p, encoding="utf-8").read()
+types_before = s
+s = s.replace(
+    "using Vec3 = std::array<float, 3>;",
+    "using Vec3 = std::array<float, 3>;\nusing Vec4 = std::array<float, 4>;",
+)
+if s == types_before:
+    if "using Vec4 = std::array<float, 4>;" in s:
+        print("libvgcode: Vec4 bereits definiert")
+    else:
+        print("WARNUNG: Types.hpp unveraendert - Vec3-Alias nicht gefunden")
+else:
+    print("libvgcode: Vec4 fuer GLES-Texturen definiert")
+open(p, "w", encoding="utf-8").write(s)
+
 p = os.path.join(PS, "src/libvgcode/src/ViewerImpl.hpp")
 s = open(p, encoding="utf-8").read()
 before = s

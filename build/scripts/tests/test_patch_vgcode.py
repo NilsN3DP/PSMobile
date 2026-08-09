@@ -41,6 +41,13 @@ class LibVGCodePatchTests(unittest.TestCase):
             "heights_widths_angles.second * sizeof(Vec3)\n",
             encoding="utf-8",
         )
+        types = prusa / "src/libvgcode/include/Types.hpp"
+        types.parent.mkdir(parents=True, exist_ok=True)
+        types.write_text(
+            "#pragma once\n#include <array>\n"
+            "namespace libvgcode { using Vec3 = std::array<float, 3>; }\n",
+            encoding="utf-8",
+        )
 
         wrapper = prusa / "src/slic3r/GUI/LibVGCode/LibVGCodeWrapper.hpp"
         wrapper.parent.mkdir(parents=True)
@@ -77,6 +84,20 @@ class LibVGCodePatchTests(unittest.TestCase):
             check=False,
         )
 
+    def compile_vec4(self, root: pathlib.Path, prusa: pathlib.Path) -> subprocess.CompletedProcess[str]:
+        source = root / "vec4_probe.cpp"
+        source.write_text(
+            "#include \"libvgcode/include/Types.hpp\"\n"
+            "int main() { libvgcode::Vec4 value{}; return static_cast<int>(value.size()); }\n",
+            encoding="utf-8",
+        )
+        return subprocess.run(
+            [COMPILER, "-std=c++17", "-fsyntax-only", "-I", str(prusa / "src"), str(source)],
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+
     @unittest.skipUnless(COMPILER, "requires a C++ compiler for the wx guard proof")
     def test_psm_no_gui_types_removes_wx_panel_header(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -95,6 +116,9 @@ class LibVGCodePatchTests(unittest.TestCase):
                 check=False,
             )
             self.assertEqual(patched.returncode, 0, patched.stdout + patched.stderr)
+
+            vec4 = self.compile_vec4(root, prusa)
+            self.assertEqual(vec4.returncode, 0, vec4.stdout + vec4.stderr)
 
             after = self.compile_wrapper(root, prusa)
             self.assertEqual(after.returncode, 0, after.stdout + after.stderr)
