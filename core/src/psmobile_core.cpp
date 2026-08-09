@@ -1552,6 +1552,19 @@ PSM_API size_t psm_bed_object_count(psm_session *s, size_t index)
         ? s->bed_models[index]->objects.size() : 0;
 }
 
+PSM_API size_t psm_bed_instance_count(psm_session *s, size_t index)
+{
+    if (s == nullptr)
+        return 0;
+    std::lock_guard<std::recursive_mutex> data_lock(s->data_mtx);
+    if (index >= s->bed_models.size())
+        return 0;
+    size_t count = 0;
+    for (const Slic3r::ModelObject *object : s->bed_models[index]->objects)
+        count += object->instances.size();
+    return count;
+}
+
 PSM_API psm_result psm_bed_metadata_get(psm_session *s, size_t index,
                                         psm_bed_metadata *out)
 {

@@ -356,16 +356,44 @@ JNIEXPORT jintArray JNICALL JNI_FN(nativeBeds)(JNIEnv *env, jclass, jlong h)
     const size_t count = psm_bed_count(sess(h));
     if (count > static_cast<size_t>(std::numeric_limits<jsize>::max()))
         return nullptr;
-    std::vector<jint> values(count + 1);
+    std::vector<jint> values(count * 3 + 1);
     values[0] = static_cast<jint>(psm_bed_active(sess(h)));
-    for (size_t i = 0; i < count; ++i)
-        values[i + 1] = static_cast<jint>(psm_bed_object_count(sess(h), i));
+    for (size_t i = 0; i < count; ++i) {
+        psm_bed_metadata metadata{};
+        psm_bed_metadata_get(sess(h), i, &metadata);
+        values[i * 3 + 1] = static_cast<jint>(psm_bed_object_count(sess(h), i));
+        values[i * 3 + 2] = static_cast<jint>(psm_bed_instance_count(sess(h), i));
+        values[i * 3 + 3] = metadata.locked;
+    }
 
     jintArray out = env->NewIntArray(static_cast<jsize>(values.size()));
     if (out != nullptr)
         env->SetIntArrayRegion(out, 0, static_cast<jsize>(values.size()),
                                values.data());
     return out;
+}
+
+JNIEXPORT jstring JNICALL JNI_FN(nativeBedName)(JNIEnv *env, jclass, jlong h, jint index)
+{
+    psm_bed_metadata metadata{};
+    if (index < 0 || psm_bed_metadata_get(sess(h), static_cast<size_t>(index), &metadata) != PSM_OK)
+        return env->NewStringUTF("");
+    return env->NewStringUTF(metadata.name);
+}
+
+JNIEXPORT jint JNICALL JNI_FN(nativeBedMetadataSet)(JNIEnv *env, jclass, jlong h,
+                                                     jint index, jstring name, jboolean locked)
+{
+    if (index < 0 || name == nullptr)
+        return PSM_ERR_INVALID_ARG;
+    const char *chars = env->GetStringUTFChars(name, nullptr);
+    if (chars == nullptr)
+        return PSM_ERR_GENERIC;
+    psm_bed_metadata metadata{};
+    std::snprintf(metadata.name, sizeof(metadata.name), "%s", chars);
+    metadata.locked = locked ? 1 : 0;
+    env->ReleaseStringUTFChars(name, chars);
+    return psm_bed_metadata_set(sess(h), static_cast<size_t>(index), &metadata);
 }
 
 JNIEXPORT jint JNICALL JNI_FN(nativeBedSelect)(JNIEnv *, jclass, jlong h, jint index)

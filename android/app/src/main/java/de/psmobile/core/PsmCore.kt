@@ -17,7 +17,7 @@ class PsmCore private constructor(private var handle: Long) : Closeable {
 
     companion object {
         private const val TAG = "PsmCore"
-        const val ABI_VERSION = 6
+        const val ABI_VERSION = 9
 
         init {
             System.loadLibrary("psmobile_core")
@@ -65,6 +65,8 @@ class PsmCore private constructor(private var handle: Long) : Closeable {
         @JvmStatic private external fun nativeRedo(h: Long): Int
         @JvmStatic private external fun nativeHistoryClear(h: Long): Int
         @JvmStatic private external fun nativeBeds(h: Long): IntArray?
+        @JvmStatic private external fun nativeBedName(h: Long, index: Int): String
+        @JvmStatic private external fun nativeBedMetadataSet(h: Long, index: Int, name: String, locked: Boolean): Int
         @JvmStatic private external fun nativeBedSelect(h: Long, index: Int): Int
         @JvmStatic private external fun nativeBedAdd(h: Long): Int
         @JvmStatic private external fun nativeBedRemove(h: Long, index: Int): Int
@@ -293,7 +295,10 @@ class PsmCore private constructor(private var handle: Long) : Closeable {
     data class Bed(
         val index: Int,
         val objectCount: Int,
+        val instanceCount: Int,
         val active: Boolean,
+        val name: String,
+        val locked: Boolean,
     )
 
     /**
@@ -425,10 +430,14 @@ class PsmCore private constructor(private var handle: Long) : Closeable {
         val values = nativeBeds(requireHandle()) ?: return emptyList()
         if (values.isEmpty()) return emptyList()
         val active = values[0]
-        return values.drop(1).mapIndexed { index, objectCount ->
-            Bed(index, objectCount, index == active)
+        return values.drop(1).chunked(3).mapIndexed { index, fields ->
+            Bed(index, fields[0], fields[1], index == active,
+                nativeBedName(requireHandle(), index), fields[2] != 0)
         }
     }
+
+    fun setBedMetadata(index: Int, name: String, locked: Boolean) =
+        check(nativeBedMetadataSet(requireHandle(), index, name.trim(), locked), "Bett-Metadaten setzen")
 
     fun selectBed(index: Int) =
         check(nativeBedSelect(requireHandle(), index), "Druckbett waehlen")

@@ -110,7 +110,7 @@ fun SimpleModeScreen(
     val progress by service.progress.collectAsState()
     val objects by service.objects.collectAsState()
     val beds by service.beds.collectAsState()
-    val lockedBeds by service.lockedBeds.collectAsState()
+    val toolMessage by service.toolMessage.collectAsState()
     val quick by service.quickSettings.collectAsState()
     val sceneRevision by service.sceneRevision.collectAsState()
     val configuration = LocalConfiguration.current
@@ -231,8 +231,8 @@ fun SimpleModeScreen(
                 onSelect = service::selectBed,
                 onAdd = service::addBed,
                 onRemove = service::removeBed,
-                lockedBeds = lockedBeds,
                 onToggleLock = service::toggleBedLock,
+                onRename = service::renameBed,
                 schmal = compactChrome,
                 modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
             )
@@ -294,6 +294,16 @@ fun SimpleModeScreen(
         }
         if (hinderungsgruende.isNotEmpty()) {
             SimpleSliceBlockers(hinderungsgruende) { hinderungsgruende = emptyList() }
+        }
+        toolMessage?.let { message ->
+            androidx.compose.material3.Surface(
+                modifier = Modifier.align(Alignment.BottomCenter).padding(16.dp),
+                color = PrusaColors.PanelRaised,
+                shape = RoundedCornerShape(8.dp),
+            ) {
+                Text(message, color = PrusaColors.TextPrimary,
+                    modifier = Modifier.padding(14.dp).clickable { service.clearToolMessage() })
+            }
         }
         if (panel != SimplePanel.WORKSPACE) {
             SimpleOverlay(

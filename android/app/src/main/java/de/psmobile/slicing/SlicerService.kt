@@ -27,7 +27,9 @@ import de.psmobile.shared.rules.SimpleModeState
 import de.psmobile.net.DiagnosticsReporter
 import de.psmobile.net.RemoteSliceClient
 import de.psmobile.net.SecretStore
-import de.psmobile.ui.BedLockPolicy
+import de.psmobile.ui.AndroidBedSnapshot
+import de.psmobile.ui.AndroidBedPort
+import de.psmobile.ui.AndroidBedStripActions
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -285,32 +287,60 @@ class SlicerService : Service() {
     val toolMessage: StateFlow<String?> = _toolMessage.asStateFlow()
     private val heavyMutationActive = AtomicBoolean(false)
 
-    /** Persistent per-project bed locks. SAF URIs are stable across reopen. */
-    private val projectKey = MutableStateFlow("current")
-    private val _lockedBeds = MutableStateFlow<Set<Int>>(emptySet())
-    val lockedBeds: StateFlow<Set<Int>> = _lockedBeds.asStateFlow()
-
     fun setProjectKey(key: String?) {
         val normalized = key?.takeIf { it.isNotBlank() } ?: "current"
-        projectKey.value = normalized
-        _lockedBeds.value = prefs.getStringSet("bedLocks:$normalized", emptySet())
-            ?.mapNotNull { it.toIntOrNull() }?.toSet().orEmpty()
+        // Locks now belong to the imported Core session. Retire the legacy
+        // preference without ever applying it over project metadata.
+        prefs.edit().remove("bedLocks:$normalized").apply()
     }
 
-    fun isBedLocked(index: Int): Boolean = index in _lockedBeds.value
+    fun isBedLocked(index: Int): Boolean = _beds.value.firstOrNull { it.index == index }?.locked == true
 
     fun toggleBedLock(index: Int) {
-        val next = BedLockPolicy.toggle(_lockedBeds.value, index)
-        _lockedBeds.value = next
-        prefs.edit().putStringSet("bedLocks:${projectKey.value}", next.map(Int::toString).toSet()).apply()
-        _toolMessage.value = if (index in next) "Bett ${index + 1} gesperrt" else "Bett ${index + 1} entsperrt"
+        val c = core ?: return
+        val bed = _beds.value.firstOrNull { it.index == index } ?: return
+        runCatching { bedActions(c).toggleLock(index) }
+            .onFailure { _toolMessage.value = "Bett-Metadaten fehlgeschlagen: ${it.message}" }
+            .onSuccess {
+                refreshBeds()
+                _toolMessage.value = if (!bed.locked) "${bedLabel(bed)} gesperrt" else "${bedLabel(bed)} entsperrt"
+            }
+    }
+
+    fun renameBed(index: Int, name: String) {
+        val c = core ?: return
+        runCatching { bedActions(c).rename(index, name) }
+            .onFailure { _toolMessage.value = "Bett-Metadaten fehlgeschlagen: ${it.message}" }
+            .onSuccess { refreshBeds() }
     }
 
     private fun checkBedUnlocked(index: Int, action: String): Boolean {
-        if (BedLockPolicy.allows(_lockedBeds.value, index)) return true
-        _toolMessage.value = "Bett ${index + 1} ist gesperrt – $action nicht möglich"
+        val bed = _beds.value.firstOrNull { it.index == index }
+        if (bed?.locked != true) return true
+        _toolMessage.value = "${bedLabel(bed)} ist gesperrt – $action nicht möglich"
         return false
     }
+
+    private fun bedLabel(bed: PsmCore.Bed): String = bed.name.trim().ifEmpty { "Bett ${bed.index + 1}" }
+    private fun bedSnapshots() = _beds.value.map { bed ->
+        AndroidBedSnapshot(bed.index, bed.name, bed.locked, bed.objectCount,
+            bed.instanceCount, bed.active)
+    }
+
+    private fun bedActions(c: PsmCore) = AndroidBedStripActions(
+        object : AndroidBedPort {
+            override fun beds() = bedSnapshots()
+            override fun add() { c.addBed() }
+            override fun select(index: Int) { c.selectBed(index) }
+            override fun setMetadata(index: Int, name: String, locked: Boolean) {
+                c.setBedMetadata(index, name, locked)
+            }
+            override fun remove(index: Int) { c.removeBed(index) }
+            override fun arrange() { c.arrange() }
+        },
+        "Bett",
+        { _toolMessage.value = it },
+    )
 
     private fun activeBedIndex(): Int = _beds.value.firstOrNull { it.active }?.index ?: 0
 
@@ -999,7 +1029,7 @@ class SlicerService : Service() {
 
     fun selectBed(index: Int) {
         val c = core ?: return
-        runCatching { c.selectBed(index) }
+        runCatching { bedActions(c).select(index) }
             .onFailure { Log.w(TAG, "Bett ${index + 1} waehlen", it) }
             .onSuccess {
                 refreshObjects()
@@ -1009,7 +1039,7 @@ class SlicerService : Service() {
 
     fun addBed() {
         val c = core ?: return
-        runCatching { c.addBed() }
+        runCatching { bedActions(c).add() }
             .onFailure { Log.w(TAG, "Bett anlegen", it) }
             .onSuccess {
                 refreshObjects()
@@ -1019,8 +1049,7 @@ class SlicerService : Service() {
 
     fun removeBed(index: Int) {
         val c = core ?: return
-        if (!checkBedUnlocked(index, "Entfernen")) return
-        runCatching { c.removeBed(index) }
+        runCatching { bedActions(c).remove(index) }
             .onFailure { Log.w(TAG, "Bett ${index + 1} entfernen", it) }
             .onSuccess {
                 refreshObjects()
@@ -1041,10 +1070,13 @@ class SlicerService : Service() {
     }
 
     fun arrange() {
-        if (!checkBedUnlocked(activeBedIndex(), "Anordnen")) return
-        runCatching { core?.arrange() }
-            .onFailure { Log.w(TAG, "Anordnen", it) }
-            .onSuccess { refreshObjects(); invalidateSliceResult() }
+        val c = core ?: return
+        runCatching { bedActions(c).arrange() }
+            .onFailure {
+                Log.w(TAG, "Anordnen", it)
+                _toolMessage.value = "Anordnen fehlgeschlagen: ${it.message}"
+            }
+            .onSuccess { arranged -> if (arranged) { refreshObjects(); invalidateSliceResult() } }
     }
 
     fun dropToBed(id: Int) {

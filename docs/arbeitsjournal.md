@@ -532,3 +532,28 @@ alte Filter einen doppelten Katalogschlüssel doppelt ausgab. Nach der
 minimalen gemeinsamen Implementierung liefen `:shared:allTests` samt
 gezieltem Favoriten-Test, beide Android-Debug-Flavor-Unit-Suiten und die 18
 Python-Buildskript-Regressionen grün (ein erwarteter Skip).
+
+#### Task 5 – Fix Round 1
+
+Die Reviewrunde deckte drei echte Adapterfehler auf: Android verwarf
+Core-Namen/-Locks, hielt Locks zusätzlich in Preferences und setzte
+`instanceCount = objectCount`. Test-first kamen ein produktiver
+`AndroidBedStripAdapter` und ein vom Service tatsächlich verwendeter
+`AndroidBedStripActions`-Port hinzu. Die RED-Läufe fehlten zunächst an
+diesen Produktionstypen; danach waren Add/Select/Rename/Lock/Remove,
+Arrange und Moduserhalt grün.
+
+Das C-ABI ist für `psm_bed_instance_count` von 8 auf 9 erhöht. Der
+Simulator-Core-Vertrag prüft 1 Objekt/12 Instanzen sowie ein Objekt ohne
+Instanz und meldete `PASS: psm_contract_tests`. Die Windows-Matrix lief mit
+der tatsächlichen JBR 21.0.10 grün; JVM-Ziel bleibt 17. K/N, Core sowie
+beide Xcode-Schemes waren in der frischen Mac-Worktree grün. Der schmutzige
+Mac-Hauptcheckout blieb bei HEAD `e1e74a0`; sein Status-Fingerprint war
+pre/post identisch (114 Einträge, SHA-256 `73fcc110...89685`).
+
+Der deterministische Swift-Simulatortest `BedModeStateTests` belegt den
+gemeinsamen Produktionsadapter über Simple→Advanced→Simple. Der direkte
+XCUI-Navigationsversuch wurde verworfen, weil iOS 26 SwiftUI-Menü- und
+offscreen Scroll-Children nicht stabil exportiert. Die fünf tatsächlich
+bedienbaren Mehrbett-UI-Tests (inklusive Rename und Empty-Erklärung) liefen
+grün.

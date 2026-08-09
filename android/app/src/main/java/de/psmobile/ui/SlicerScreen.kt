@@ -35,6 +35,7 @@ import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DeleteSweep
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.InsertDriveFile
@@ -228,7 +229,6 @@ private fun SlicerContent(
 
     val objects by service.objects.collectAsState()
     val beds by service.beds.collectAsState()
-    val lockedBeds by service.lockedBeds.collectAsState()
     val progress by service.progress.collectAsState()
     val presets by service.presets.collectAsState()
     val colorMix by service.colorMix.collectAsState()
@@ -470,8 +470,8 @@ private fun SlicerContent(
                     onSelectBed = service::selectBed,
                     onAddBed = service::addBed,
                     onRemoveBed = service::removeBed,
-                    lockedBeds = lockedBeds,
                     onToggleBedLock = service::toggleBedLock,
+                    onRenameBed = service::renameBed,
                     onNew = {
                         if (objects.isNotEmpty() || beds.size > 1)
                             confirmNewProject = true
@@ -1612,8 +1612,8 @@ private fun WorkspaceBar(
     onSelectBed: (Int) -> Unit,
     onAddBed: () -> Unit,
     onRemoveBed: (Int) -> Unit,
-    lockedBeds: Set<Int>,
     onToggleBedLock: (Int) -> Unit,
+    onRenameBed: (Int, String) -> Unit,
     onNew: () -> Unit,
     onSave: () -> Unit,
     onSaveAs: () -> Unit,
@@ -1687,8 +1687,8 @@ private fun WorkspaceBar(
                 onSelect = onSelectBed,
                 onAdd = onAddBed,
                 onRemove = onRemoveBed,
-                lockedBeds = lockedBeds,
                 onToggleLock = onToggleBedLock,
+                onRename = onRenameBed,
                 schmal = tight,
             )
         }
@@ -1753,24 +1753,32 @@ internal fun BedSelector(
     onSelect: (Int) -> Unit,
     onAdd: () -> Unit,
     onRemove: (Int) -> Unit,
-    lockedBeds: Set<Int>,
     onToggleLock: (Int) -> Unit,
+    onRename: (Int, String) -> Unit,
     schmal: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
-    val strip = BedStripContract.state(
-        beds = beds.map { bed ->
-            BedInput(
-                id = bed.index,
-                name = "${advancedText("Bed", "Bett")} ${bed.index + 1}",
-                locked = bed.index in lockedBeds,
-                objectCount = bed.objectCount,
-                instanceCount = bed.objectCount,
-            )
-        },
-        activeIndex = beds.indexOfFirst { it.active },
-    )
+    val strip = AndroidBedStripAdapter.state(beds.map { bed ->
+        AndroidBedSnapshot(bed.index, bed.name, bed.locked, bed.objectCount,
+            bed.instanceCount, bed.active)
+    }, advancedText("Bed", "Bett"))
     val active = strip.items.first { it.active }
+    var renameId by remember { mutableStateOf<Int?>(null) }
+    var renameText by remember { mutableStateOf("") }
+
+    renameId?.let { id ->
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { renameId = null },
+            title = { Text(advancedText("Rename bed", "Bett umbenennen")) },
+            text = { androidx.compose.material3.OutlinedTextField(renameText, { renameText = it }, singleLine = true) },
+            confirmButton = { androidx.compose.material3.TextButton(onClick = {
+                onRename(id, renameText); renameId = null
+            }) { Text(advancedText("Save", "Speichern")) } },
+            dismissButton = { androidx.compose.material3.TextButton(onClick = { renameId = null }) {
+                Text(advancedText("Cancel", "Abbrechen"))
+            } },
+        )
+    }
 
     if (schmal) {
         var zeigeListe by remember { mutableStateOf(false) }
@@ -1854,6 +1862,9 @@ internal fun BedSelector(
                                     tint = if (bett.active) PrusaColors.Background else PrusaColors.TextMuted,
                                 )
                             }
+                            IconButton(onClick = { renameId = bett.id; renameText = bett.name }) {
+                                Icon(Icons.Default.Edit, contentDescription = advancedText("Rename bed", "Bett umbenennen"))
+                            }
                             if (bett.canRemove) {
                                 IconButton(onClick = { onRemove(bett.id) }) {
                                     Icon(
@@ -1889,22 +1900,36 @@ internal fun BedSelector(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         strip.items.forEach { bed ->
+            Row(
+                Modifier.clip(RoundedCornerShape(8.dp))
+                    .background(if (bed.active) PrusaColors.Orange else PrusaColors.PanelRaised),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
             Text(
-                "${if (bed.locked) "🔒 " else ""}${bed.name} · ${bed.objectCount}",
+                "${bed.name} · ${bed.objectCount}",
                 color = if (bed.active) Color.White else PrusaColors.TextPrimary,
                 fontSize = 14.sp,
                 fontWeight = if (bed.active) FontWeight.SemiBold else FontWeight.Normal,
                 modifier = Modifier
                     .height(50.dp)
                     .clip(RoundedCornerShape(8.dp))
-                    .background(if (bed.active) PrusaColors.Orange else PrusaColors.PanelRaised)
                     .combinedClickable(
                         enabled = true,
                         onClick = { if (!bed.active) onSelect(bed.id) },
-                        onLongClick = { onToggleLock(bed.id) },
+                        onLongClick = { renameId = bed.id; renameText = bed.name },
                     )
                     .padding(horizontal = 16.dp, vertical = 14.dp),
             )
+            IconButton(onClick = { onToggleLock(bed.id) }, modifier = Modifier.size(44.dp)) {
+                Icon(if (bed.locked) Icons.Default.Lock else Icons.Default.LockOpen,
+                    contentDescription = advancedText("Toggle bed lock", "Bettsperre umschalten"),
+                    tint = if (bed.active) Color.White else PrusaColors.TextMuted)
+            }
+            IconButton(onClick = { renameId = bed.id; renameText = bed.name }, modifier = Modifier.size(44.dp)) {
+                Icon(Icons.Default.Edit, contentDescription = advancedText("Rename bed", "Bett umbenennen"),
+                    tint = if (bed.active) Color.White else PrusaColors.TextMuted)
+            }
+            }
         }
 
         Box(

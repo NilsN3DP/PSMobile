@@ -17,6 +17,7 @@ extension PsmCore {
     struct Bed {
         let index: Int
         let objectCount: Int
+        let instanceCount: Int
         let active: Bool
         let name: String
         let locked: Bool
@@ -50,6 +51,7 @@ extension PsmCore {
                 : ""
             return Bed(index: Int(i),
                        objectCount: Int(psm_bed_object_count(raw, i)),
+                       instanceCount: Int(psm_bed_instance_count(raw, i)),
                        active: i == aktiv,
                        name: name,
                        locked: hatMetadaten && metadata.locked != 0)

@@ -224,7 +224,9 @@ struct WerkzeugSchiene: View {
         case "undo":      return !model.undoLabel.isEmpty
         case "redo":      return !model.redoLabel.isEmpty
         case "deleteall": return !model.objects.isEmpty
-        case "arrange":   return !model.objects.isEmpty
+        // Auch leer bedienbar: das gemeinsame Arrange-Panel erklärt den
+        // Zustand sichtbar, statt den Befehl kommentarlos zu deaktivieren.
+        case "arrange":   return true
         default:          return true
         }
     }

@@ -159,6 +159,7 @@ targets:
       - path: PSMobile/UI/PSScale.swift
       - path: PSMobile/UI/PreviewRange.swift
       - path: PSMobile/RemoteSliceCompletion.swift
+      - path: PSMobile/BedModeState.swift
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: de.psmobile.tests

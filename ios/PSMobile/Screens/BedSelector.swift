@@ -26,9 +26,10 @@ struct BedSelector: View {
             beds: model.beds.map { bed in
                 BedInput(id: Int32(bed.index), name: model.bedLabel(bed.index),
                          locked: bed.locked, objectCount: Int32(bed.objectCount),
-                         instanceCount: Int32(bed.objectCount))
+                         instanceCount: Int32(bed.instanceCount))
             },
-            activeIndex: model.activeBedIndex)
+            activeIndex: Int32(BedModeState.activeIndex(
+                model.beds.map { BedActivity(index: $0.index, active: $0.active) })))
     }
     private var aktiveItem: BedStripItem? { strip.items.first { $0.active } }
     private func item(for bed: PsmCore.Bed) -> BedStripItem? {
@@ -90,6 +91,23 @@ struct BedSelector: View {
             }
             .buttonStyle(.plain)
             .accessibilityIdentifier("bed.selector.active")
+            if let activeBed = model.beds.first(where: \.active) {
+                Button {
+                    name = activeBed.name
+                    umzubenennen = activeBed.index
+                } label: {
+                    Image(systemName: "pencil")
+                        .frame(width: ps.touch(36), height: ps.touch())
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("bed.rename.\(activeBed.index)")
+                Button { model.toggleBedLock(activeBed.index) } label: {
+                    Image(systemName: activeBed.locked ? "lock.fill" : "lock.open")
+                        .frame(width: ps.touch(36), height: ps.touch())
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("bed.lock.\(activeBed.index)")
+            }
         }
         .padding(.horizontal, ps.pt(8))
         .padding(.vertical, ps.pt(4))
@@ -157,6 +175,7 @@ struct BedSelector: View {
             .buttonStyle(.plain)
             .disabled(!item.canSelect)
             .accessibilityIdentifier("bed.card.\(bett.index)")
+            .accessibilityValue(item.active ? "active" : "inactive")
 
             Button {
                 model.toggleBedLock(bett.index)
@@ -242,9 +261,10 @@ struct BedSelectionSheet: View {
             beds: model.beds.map { bed in
                 BedInput(id: Int32(bed.index), name: model.bedLabel(bed.index),
                          locked: bed.locked, objectCount: Int32(bed.objectCount),
-                         instanceCount: Int32(bed.objectCount))
+                         instanceCount: Int32(bed.instanceCount))
             },
-            activeIndex: model.activeBedIndex)
+            activeIndex: Int32(BedModeState.activeIndex(
+                model.beds.map { BedActivity(index: $0.index, active: $0.active) })))
     }
     private func item(for bed: PsmCore.Bed) -> BedStripItem? {
         strip.items.first { $0.id == Int32(bed.index) }
@@ -255,7 +275,7 @@ struct BedSelectionSheet: View {
             ScrollView {
                 LazyVStack(spacing: ps.pt(10)) {
                     ForEach(model.beds, id: \.index) { bett in
-                        ZStack(alignment: .bottomTrailing) {
+                        HStack(spacing: 0) {
                             Button {
                                 model.selectBed(bett.index)
                                 isPresented = false
@@ -287,6 +307,7 @@ struct BedSelectionSheet: View {
                             }
                             .buttonStyle(.plain)
                             .accessibilityIdentifier("bed.card.\(bett.index)")
+                            .accessibilityValue(item(for: bett)?.active == true ? "active" : "inactive")
 
                             HStack(spacing: 0) {
                                 miniKnopf("pencil", id: "bed.rename.\(bett.index)") {
@@ -304,6 +325,7 @@ struct BedSelectionSheet: View {
                                 }
                             }
                             .padding(ps.pt(4))
+                            .fixedSize()
                         }
                     }
 
@@ -413,7 +435,7 @@ struct ArrangePanel: View {
         model.beds.map { bed in
             BedInput(id: Int32(bed.index), name: model.bedLabel(bed.index),
                      locked: bed.locked, objectCount: Int32(bed.objectCount),
-                     instanceCount: Int32(bed.objectCount))
+                     instanceCount: Int32(bed.instanceCount))
         }
     }
 

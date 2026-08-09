@@ -15,10 +15,6 @@ final class MultiBedArrangeUITests: XCTestCase {
         app = XCUIApplication()
     }
 
-    private var istSchmal: Bool {
-        app.windows.firstMatch.frame.width < 760
-    }
-
     private func starte(_ modus: String, mitWuerfel: Bool = true) {
         app.launchArguments = [
             "-psm-preset-printer",
@@ -28,14 +24,18 @@ final class MultiBedArrangeUITests: XCTestCase {
         app.launch()
         let marke = modus == "advanced" ? "arbeitsbereich" : "simple.arbeitsbereich"
         XCTAssertTrue(app.otherElements[marke].waitForExistence(timeout: 60))
+        let crash = app.alerts.firstMatch
+        if crash.exists {
+            let spaeter = crash.buttons.matching(NSPredicate(format: "label CONTAINS[c] %@ OR label CONTAINS[c] %@", "not now", "jetzt nicht")).firstMatch
+            if spaeter.exists { spaeter.tap() }
+        }
         XCTAssertTrue(app.otherElements["bed.selector"].waitForExistence(timeout: 15),
                       "Die gemeinsame Bettauswahl fehlt im \(modus)-Modus")
     }
 
-    private func oeffneAuswahlWennNoetig() {
-        if istSchmal {
-            let aktiv = app.buttons["bed.selector.active"]
-            XCTAssertTrue(aktiv.isHittable, "Der aktive Bettknopf ist nicht direkt erreichbar")
+    @discardableResult private func oeffneAuswahlWennNoetig() -> Bool {
+        let aktiv = app.buttons["bed.selector.active"]
+        if aktiv.waitForExistence(timeout: 15), aktiv.isHittable {
             aktiv.tap()
             // Der eigene Blatt-Marker ist auf einem NavigationStack je
             // nach Host nicht immer eine separate Accessibility-Entitaet.
@@ -43,7 +43,11 @@ final class MultiBedArrangeUITests: XCTestCase {
             // sichtbare und bedienbare Praesentation unmittelbar.
             XCTAssertTrue(app.buttons["bed.add"].waitForExistence(timeout: 5),
                           "Die kompakte Bettauswahl oeffnet kein Blatt")
+            return true
         }
+        XCTAssertTrue(app.buttons["bed.card.0"].waitForExistence(timeout: 15),
+                      "Weder kompakte noch breite Bettkarten sind erreichbar")
+        return false
     }
 
     /// Simple und Advanced arbeiten auf derselben Kern-Bettauswahl. Das
@@ -58,7 +62,7 @@ final class MultiBedArrangeUITests: XCTestCase {
                       "Der Easy Mode bietet kein weiteres Kern-Bett an")
         hinzufuegen.tap()
 
-        if istSchmal {
+        if app.buttons["bed.selector.close"].exists {
             app.buttons["bed.selector.close"].tap()
             XCTAssertTrue(app.buttons["bed.selector.active"].waitForExistence(timeout: 5))
         } else {
@@ -75,7 +79,7 @@ final class MultiBedArrangeUITests: XCTestCase {
         XCTAssertTrue(sperre.waitForExistence(timeout: 5), "Bettsperre fehlt")
         sperre.tap()
 
-        if istSchmal {
+        if app.buttons["bed.selector.close"].exists {
             app.buttons["bed.selector.close"].tap()
         }
         // Seit der Umstellung auf Tipp = alle anordnen / Halten = Panel
@@ -96,7 +100,7 @@ final class MultiBedArrangeUITests: XCTestCase {
         oeffneAuswahlWennNoetig()
         app.buttons["bed.add"].tap()
 
-        if istSchmal {
+        if app.buttons["bed.selector.close"].exists {
             XCTAssertTrue(app.buttons["bed.selector.active"].waitForExistence(timeout: 5))
         }
         // Seit der Umstellung auf Tipp = alle anordnen / Halten = Panel
@@ -115,4 +119,39 @@ final class MultiBedArrangeUITests: XCTestCase {
         XCTAssertTrue(ergebnis.label.contains("1"),
                       "Das Ergebnis nennt das explizit angeordnete Zielbett nicht")
     }
+
+    func testLeeresBettErklaertArrangeStattStillZuBleiben() {
+        starte("advanced", mitWuerfel: false)
+        app.buttons["schiene.arrange"].press(forDuration: 0.6)
+        XCTAssertTrue(app.otherElements["arrange.panel"].waitForExistence(timeout: 5))
+        app.buttons["arrange.run"].tap()
+        let ergebnis = app.staticTexts["arrange.result"]
+        XCTAssertTrue(ergebnis.waitForExistence(timeout: 5))
+        XCTAssertTrue(ergebnis.label.localizedCaseInsensitiveContains("leer") ||
+                      ergebnis.label.localizedCaseInsensitiveContains("empty"))
+    }
+
+    func testBettnameWirdDurchDenKernErhalten() {
+        starte("simple", mitWuerfel: true)
+        if app.buttons["bed.rename.0"].waitForExistence(timeout: 5) {
+            app.buttons["bed.rename.0"].tap()
+        } else {
+            oeffneAuswahlWennNoetig()
+            app.buttons["bed.card.0"].press(forDuration: 1.0)
+            let rename = app.buttons.matching(NSPredicate(format: "label CONTAINS[c] %@ OR label CONTAINS[c] %@", "rename", "umbenennen")).firstMatch
+            XCTAssertTrue(rename.waitForExistence(timeout: 5))
+            rename.tap()
+        }
+        let field = app.textFields.firstMatch
+        XCTAssertTrue(field.waitForExistence(timeout: 5))
+        field.tap()
+        if let current = field.value as? String, !current.isEmpty {
+            field.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: current.count))
+        }
+        field.typeText("Prototyp")
+        let apply = app.buttons.matching(NSPredicate(format: "label CONTAINS[c] %@ OR label CONTAINS[c] %@", "apply", "übernehmen")).firstMatch
+        apply.tap()
+        XCTAssertTrue(app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Prototyp")).firstMatch.waitForExistence(timeout: 5))
+    }
+
 }

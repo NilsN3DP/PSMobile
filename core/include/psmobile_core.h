@@ -37,7 +37,7 @@ extern "C" {
 /* Version                                                             */
 /* ------------------------------------------------------------------ */
 
-#define PSM_ABI_VERSION 8
+#define PSM_ABI_VERSION 9
 
 /** Gibt die ABI-Version zurueck. Die App prueft sie beim Start gegen
  *  PSM_ABI_VERSION und verweigert den Dienst bei Abweichung. */
@@ -237,6 +237,9 @@ PSM_API psm_result psm_bed_clear(psm_session *s);
 
 /** Zahl der Objekte auf einem Bett. */
 PSM_API size_t psm_bed_object_count(psm_session *s, size_t index);
+
+/** Gesamtzahl der lebenden Instanzen aller Objekte auf einem Bett. */
+PSM_API size_t psm_bed_instance_count(psm_session *s, size_t index);
 
 /** Liest beziehungsweise ersetzt Name und Sperre eines Betts. */
 PSM_API psm_result psm_bed_metadata_get(psm_session *s, size_t index,

@@ -106,8 +106,8 @@ int main(int argc, char **argv)
     require(argc == 6,
             "usage: psm_contract_tests DATADIR RESDIR MODEL PROJECT3MF "
             "INSTALLED_PROFILE_PROJECT3MF");
-    require(PSM_ABI_VERSION == 8, "header ABI version includes object config exports");
-    require(psm_abi_version() == 8, "runtime ABI version includes object config exports");
+    require(PSM_ABI_VERSION == 9, "header ABI version includes bed instance totals");
+    require(psm_abi_version() == 9, "runtime ABI version includes bed instance totals");
 
     std::filesystem::create_directories(argv[1]);
     psm_session *session = psm_session_create(argv[1], argv[2]);
@@ -122,6 +122,8 @@ int main(int argc, char **argv)
     require(psm_bed_count(session) == 1, "one initial bed");
     require(psm_bed_object_count(session, 0) == 1,
             "object belongs to first bed");
+    require(psm_bed_instance_count(session, 0) == 1,
+            "first bed reports its one live instance");
 
     psm_object_info info{};
     require(psm_model_info(session, id, &info) == PSM_OK, "object info");
@@ -1221,6 +1223,24 @@ int main(int argc, char **argv)
             "one object available on second bed");
     require(psm_model_set_instances(session, arrange_ids[0], 12) == PSM_OK,
             "create twelve instances on second bed");
+    require(psm_bed_instance_count(session, 0) == 1 &&
+            psm_bed_instance_count(session, 1) == 12,
+            "bed instance totals differ from object totals and remain bed-local");
+#if defined(PSM_TEST_MULTIPLE_BEDS_STATE)
+    {
+        std::lock_guard<std::recursive_mutex> data_lock(session->data_mtx);
+        session->bed_models[1]->objects.front()->clear_instances();
+    }
+    require(psm_bed_object_count(session, 1) == 1 &&
+            psm_bed_instance_count(session, 1) == 0,
+            "zero-instance object is not fabricated into an instance");
+    {
+        std::lock_guard<std::recursive_mutex> data_lock(session->data_mtx);
+        session->bed_models[1]->objects.front()->add_instance();
+    }
+#endif
+    require(psm_model_set_instances(session, arrange_ids[0], 12) == PSM_OK,
+            "restore instances for arrange regression");
     /*
      * Der alte Fehler sass im bestehenden psm_arrange: Er ersetzte den
      * prozessglobalen Desktop-Mehrbettzustand durch lokale Bett-0-
