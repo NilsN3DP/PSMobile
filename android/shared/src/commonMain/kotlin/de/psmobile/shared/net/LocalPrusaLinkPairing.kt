@@ -16,6 +16,17 @@ enum class NozzleMaterial { BRASS, HARDENED, UNKNOWN }
 
 data class LocalNozzle(val diameter: Double, val material: NozzleMaterial)
 
+data class LocalPrinterIdentity(
+    val id: String,
+    val model: String,
+    val hosts: List<String>,
+) {
+    companion object {
+        fun merge(existing: LocalPrinterIdentity, host: String): LocalPrinterIdentity =
+            existing.copy(hosts = (existing.hosts + host).distinct())
+    }
+}
+
 data class LocalPrusaLinkQrPayload(
     val type: String,
     val version: Int,

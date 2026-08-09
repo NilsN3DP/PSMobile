@@ -56,4 +56,13 @@ class LocalPrusaLinkPairingTest {
             LocalPrusaLinkPairing.manual("8.8.8.8", 80, "token", "MK4"),
         )
     }
+
+    @Test
+    fun `known device id is reused while reachable hosts are merged`() {
+        val existing = LocalPrinterIdentity("device-1", "COREONE", listOf("192.168.4.1"))
+        val merged = LocalPrinterIdentity.merge(existing, "192.168.1.44")
+        assertEquals("device-1", merged.id)
+        assertEquals(listOf("192.168.4.1", "192.168.1.44"), merged.hosts)
+        assertEquals(merged, LocalPrinterIdentity.merge(merged, "192.168.1.44"))
+    }
 }
