@@ -79,4 +79,16 @@ final class PrinterStore: ObservableObject {
         let wert = p.usesApiKey ? secret.apiKey : secret.password
         try? geheim.save(PrinterCredential(host: p.host, mode: modus, secret: wert))
     }
+
+    func localPairingToken(for p: PrusaLinkClient.Printer) -> String? {
+        try? geheim.load(host: p.id, mode: .localPairing)?.secret
+    }
+
+    func setLocalPairingToken(_ token: String?, for p: PrusaLinkClient.Printer) {
+        if let token, !token.isEmpty {
+            try? geheim.save(PrinterCredential(host: p.id, mode: .localPairing, secret: token))
+        } else {
+            try? geheim.remove(host: p.id, mode: .localPairing)
+        }
+    }
 }

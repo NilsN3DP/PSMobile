@@ -65,4 +65,11 @@ class LocalPrusaLinkPairingTest {
         assertEquals(listOf("192.168.4.1", "192.168.1.44"), merged.hosts)
         assertEquals(merged, LocalPrinterIdentity.merge(merged, "192.168.1.44"))
     }
+
+    @Test
+    fun `local pairing is disabled by default and requires explicit experimental opt in`() {
+        assertEquals(false, ExperimentalFeatureFlags.localPrusaLinkPairingDefault)
+        assertEquals(false, ExperimentalFeatureFlags.localPrusaLinkPairingEnabled(false))
+        assertEquals(true, ExperimentalFeatureFlags.localPrusaLinkPairingEnabled(true))
+    }
 }

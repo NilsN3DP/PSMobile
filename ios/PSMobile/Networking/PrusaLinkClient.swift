@@ -42,6 +42,13 @@ actor PrusaLinkClient {
         /// Nicht geheime, pro Drucker getrennte Experimental-Einwilligung.
         var lightingOptIn: Bool = false
         var lightingProfile: LightingProfile = .manualPhysical
+        /// Experimental local-hotspot pairing metadata; token remains in Keychain.
+        var localExperimental: Bool = false
+        var localHosts: [String] = []
+        var localModel: String = ""
+        var localCapabilities: Set<String> = []
+        var localNozzleDiameter: Double? = nil
+        var localNozzleMaterial: String = "unknown"
         /// Profilname in PSMobile, damit Profil und Geraet zusammenfinden.
         var presetName: String = ""
 
@@ -235,7 +242,9 @@ actor PrusaLinkClient {
 extension PrusaLinkClient.Printer {
     private enum CodingKeys: String, CodingKey {
         case id, name, host, hostType, usesApiKey, username, storage,
-             allowInsecureHttp, presetName, lightingOptIn, lightingProfile
+             allowInsecureHttp, presetName, lightingOptIn, lightingProfile,
+             localExperimental, localHosts, localModel, localCapabilities,
+             localNozzleDiameter, localNozzleMaterial
     }
 
     init(from decoder: Decoder) throws {
@@ -253,6 +262,12 @@ extension PrusaLinkClient.Printer {
         lightingOptIn = try c.decodeIfPresent(Bool.self, forKey: .lightingOptIn) ?? false
         lightingProfile = try c.decodeIfPresent(PrusaLinkClient.LightingProfile.self,
                                                 forKey: .lightingProfile) ?? .unknown
+        localExperimental = try c.decodeIfPresent(Bool.self, forKey: .localExperimental) ?? false
+        localHosts = try c.decodeIfPresent([String].self, forKey: .localHosts) ?? []
+        localModel = try c.decodeIfPresent(String.self, forKey: .localModel) ?? ""
+        localCapabilities = try c.decodeIfPresent(Set<String>.self, forKey: .localCapabilities) ?? []
+        localNozzleDiameter = try c.decodeIfPresent(Double.self, forKey: .localNozzleDiameter)
+        localNozzleMaterial = try c.decodeIfPresent(String.self, forKey: .localNozzleMaterial) ?? "unknown"
     }
 
     func encode(to encoder: Encoder) throws {
@@ -268,5 +283,11 @@ extension PrusaLinkClient.Printer {
         try c.encode(presetName, forKey: .presetName)
         try c.encode(lightingOptIn, forKey: .lightingOptIn)
         try c.encode(lightingProfile, forKey: .lightingProfile)
+        try c.encode(localExperimental, forKey: .localExperimental)
+        try c.encode(localHosts, forKey: .localHosts)
+        try c.encode(localModel, forKey: .localModel)
+        try c.encode(localCapabilities, forKey: .localCapabilities)
+        try c.encodeIfPresent(localNozzleDiameter, forKey: .localNozzleDiameter)
+        try c.encode(localNozzleMaterial, forKey: .localNozzleMaterial)
     }
 }

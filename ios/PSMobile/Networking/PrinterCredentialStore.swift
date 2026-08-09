@@ -4,6 +4,7 @@ import Security
 enum PrinterAuthMode: String, Codable, CaseIterable {
     case apiKey
     case digest
+    case localPairing
 }
 
 struct PrinterCredential: Equatable {
