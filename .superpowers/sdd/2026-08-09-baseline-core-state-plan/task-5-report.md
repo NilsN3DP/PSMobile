@@ -126,3 +126,18 @@ Tool-Meldung wie Advanced. Der alte Source-Text-Test wurde entfernt.
   Docker ist auf dem Host nicht verfügbar. Der bestehende `stage-native.sh`
   bleibt der deterministische Gatekeeper (ABI/API/Fingerprint), daher wurden
   keine alten Bibliotheken übernommen und kein Runtime-Smoke-Test behauptet.
+
+### Fix Round 3
+
+- Die Unicode-Konvertierung ist nun als produktiv eingebundener, host-testbarer
+  Codec `android/jni/jni_text_codec.h` ausgeführt. `jni_text_codec_test.cpp`
+  deckt Supplementary-Codepoint, unvollständiges Surrogat und leeren Fehler-
+  ausgang ab; `g++ -std=c++17 ...; jni_text_codec_test` meldet `PASS`.
+  `nativeBedMetadataSet` unterscheidet Konvertierungsfehler von einem gültigen
+  leeren Namen und schreibt bei ungültigem Surrogat keine Metadaten.
+- Unraid Discovery: Docker 29.5.2 und `psmobile-ndk:1` vorhanden. Ein isolierter
+  Build aus exakt `05060e1` wurde unter `/tmp/psmobile-task5-r3` gestartet;
+  die vorhandenen destdir-Abhängigkeiten scheitern jedoch an Boost >=1.83
+  (`Could NOT find Boost ...`). Daher wurden keine alten `.so` übernommen und
+  kein ABI-/APK-Runtime-Nachweis behauptet. Erforderlich bleibt ein frischer
+  Dependency-Build auf Unraid.

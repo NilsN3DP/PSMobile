@@ -22,6 +22,7 @@
 
 #include "psmobile_core.h"
 #include "psm_viewport.h"
+#include "jni_text_codec.h"
 
 #define LOG_TAG "psmobile"
 
@@ -81,44 +82,24 @@ int progress_trampoline(int percent, const char *stage, void *user)
 // JNI's GetStringUTFChars/NewStringUTF use modified UTF-8 (not Unicode UTF-8):
 // supplementary code points are encoded as two surrogate code units.  Core
 // metadata is ordinary UTF-8, so convert explicitly through UTF-16.
-std::string jstr(JNIEnv *env, jstring s)
+bool jstr(JNIEnv *env, jstring s, std::string &out)
 {
-    if (s == nullptr)
-        return {};
+    out.clear();
+    if (s == nullptr) return false;
     const jsize length = env->GetStringLength(s);
     const jchar *chars = env->GetStringChars(s, nullptr);
     if (chars == nullptr)
-        return {};
-    std::string out;
-    out.reserve(static_cast<size_t>(length));
-    for (jsize i = 0; i < length; ++i) {
-        uint32_t cp = chars[i];
-        if (cp >= 0xD800 && cp <= 0xDBFF) {
-            if (i + 1 >= length || chars[i + 1] < 0xDC00 || chars[i + 1] > 0xDFFF) {
-                env->ReleaseStringChars(s, chars);
-                return {};
-            }
-            cp = 0x10000u + ((cp - 0xD800u) << 10) + (chars[++i] - 0xDC00u);
-        } else if (cp >= 0xDC00 && cp <= 0xDFFF) {
-            env->ReleaseStringChars(s, chars);
-            return {};
-        }
-        if (cp <= 0x7F) out.push_back(static_cast<char>(cp));
-        else if (cp <= 0x7FF) {
-            out.push_back(static_cast<char>(0xC0 | (cp >> 6)));
-            out.push_back(static_cast<char>(0x80 | (cp & 0x3F)));
-        } else if (cp <= 0xFFFF) {
-            out.push_back(static_cast<char>(0xE0 | (cp >> 12)));
-            out.push_back(static_cast<char>(0x80 | ((cp >> 6) & 0x3F)));
-            out.push_back(static_cast<char>(0x80 | (cp & 0x3F)));
-        } else {
-            out.push_back(static_cast<char>(0xF0 | (cp >> 18)));
-            out.push_back(static_cast<char>(0x80 | ((cp >> 12) & 0x3F)));
-            out.push_back(static_cast<char>(0x80 | ((cp >> 6) & 0x3F)));
-            out.push_back(static_cast<char>(0x80 | (cp & 0x3F)));
-        }
-    }
+        return false;
+    const bool valid = psm_jni_text::utf16_to_utf8(
+        reinterpret_cast<const uint16_t *>(chars), static_cast<size_t>(length), out);
     env->ReleaseStringChars(s, chars);
+    return valid;
+}
+
+std::string jstr(JNIEnv *env, jstring s)
+{
+    std::string out;
+    jstr(env, s, out);
     return out;
 }
 
@@ -445,14 +426,13 @@ JNIEXPORT jint JNICALL JNI_FN(nativeBedMetadataSet)(JNIEnv *env, jclass, jlong h
 {
     if (index < 0 || name == nullptr)
         return PSM_ERR_INVALID_ARG;
-    const std::string chars = jstr(env, name);
-    if (env->ExceptionCheck())
+    std::string chars;
+    if (!jstr(env, name, chars) || env->ExceptionCheck())
         return PSM_ERR_GENERIC;
     psm_bed_metadata metadata{};
-    size_t n = std::min(chars.size(), sizeof(metadata.name) - 1);
-    while (n > 0 && (static_cast<unsigned char>(chars[n]) & 0xC0) == 0x80)
-        --n; // never split a UTF-8 sequence at the fixed C-ABI boundary
-    std::memcpy(metadata.name, chars.data(), n);
+    const std::string bounded = psm_jni_text::truncate_utf8(chars, sizeof(metadata.name) - 1);
+    const size_t n = bounded.size();
+    std::memcpy(metadata.name, bounded.data(), n);
     metadata.name[n] = '\0';
     metadata.locked = locked ? 1 : 0;
     return psm_bed_metadata_set(sess(h), static_cast<size_t>(index), &metadata);

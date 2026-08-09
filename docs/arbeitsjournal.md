@@ -563,3 +563,9 @@ umgestellt; ergänzender Unicode-Test (`Werkstatt 🛠️ 🔥`) grün. Der foku
 Gradle-Lauf war unter JBR 21.0.10 erfolgreich (JVM-Ziel 17). ABI9-.so-Dateien
 und Fingerprints fehlen im Windows-Worktree; Docker ist nicht verfügbar, daher
 kein Übernehmen alter Artefakte und kein behaupteter Runtime-Smoke.
+
+2026-08-09 Task5 Fix Round3: JNI-Codec als produktive, host-testbare Einheit
+extrahiert; Supplementary-Codepoint und ungültiges Surrogat mit g++ grün.
+Unraid-Docker (29.5.2, psmobile-ndk:1) ist erreichbar; isolierter Exact-HEAD-
+Build scheitert vor Kompilierung an vorhandenen Boost-Abhängigkeiten (<1.83).
+Keine alten .so-Dateien verwendet.
