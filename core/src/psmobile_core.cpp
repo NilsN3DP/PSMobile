@@ -360,6 +360,50 @@ Slic3r::ModelObject *find_object(psm_session *s, psm_object_id id)
     return nullptr;
 }
 
+bool object_config_state_changed(
+    const std::vector<std::unique_ptr<Slic3r::Model>> &current_beds,
+    const std::vector<std::unique_ptr<Slic3r::Model>> &restored_beds)
+{
+    const size_t bed_count = std::max(current_beds.size(), restored_beds.size());
+    for (size_t bed_index = 0; bed_index < bed_count; ++bed_index) {
+        const Slic3r::Model *current =
+            bed_index < current_beds.size() ? current_beds[bed_index].get() : nullptr;
+        const Slic3r::Model *restored =
+            bed_index < restored_beds.size() ? restored_beds[bed_index].get() : nullptr;
+        if (current == nullptr || restored == nullptr) {
+            const Slic3r::Model *present = current != nullptr ? current : restored;
+            for (const Slic3r::ModelObject *object : present->objects)
+                if (! object->config.empty())
+                    return true;
+            continue;
+        }
+
+        for (const Slic3r::ModelObject *object : current->objects) {
+            const auto it = std::find_if(
+                restored->objects.begin(), restored->objects.end(),
+                [object](const Slic3r::ModelObject *candidate) {
+                    return candidate->id() == object->id();
+                });
+            if (it == restored->objects.end()) {
+                if (! object->config.empty())
+                    return true;
+            } else if (object->config.get() != (*it)->config.get()) {
+                return true;
+            }
+        }
+        for (const Slic3r::ModelObject *object : restored->objects) {
+            const auto it = std::find_if(
+                current->objects.begin(), current->objects.end(),
+                [object](const Slic3r::ModelObject *candidate) {
+                    return candidate->id() == object->id();
+                });
+            if (it == current->objects.end() && ! object->config.empty())
+                return true;
+        }
+    }
+    return false;
+}
+
 /*
  * Modell-/Volumen-Extruder bleiben 1-basiert wie in 3MF. Neben den
  * physischen Köpfen darf nur eine im aktiven Modell definierte
@@ -1347,6 +1391,8 @@ PSM_API psm_result psm_history_undo(psm_session *s)
         psm_session::HistorySnapshot target =
             std::move(s->undo_history.back());
         s->undo_history.pop_back();
+        const bool config_changed =
+            object_config_state_changed(s->bed_models, target.beds);
         s->redo_history.emplace_back(
             s->bed_models, s->bed_metadata, s->active_bed, target.label);
         while (s->redo_history.size() > psm_session::HISTORY_LIMIT)
@@ -1355,6 +1401,8 @@ PSM_API psm_result psm_history_undo(psm_session *s)
         s->bed_metadata = std::move(target.bed_metadata);
         s->active_bed = std::min(target.active_bed,
                                  s->bed_models.size() - 1);
+        if (config_changed)
+            ++s->config_revision;
         s->mark_design_changed();
         return PSM_OK;
     PSM_GUARD_END(s)
@@ -1372,6 +1420,8 @@ PSM_API psm_result psm_history_redo(psm_session *s)
         psm_session::HistorySnapshot target =
             std::move(s->redo_history.back());
         s->redo_history.pop_back();
+        const bool config_changed =
+            object_config_state_changed(s->bed_models, target.beds);
         s->undo_history.emplace_back(
             s->bed_models, s->bed_metadata, s->active_bed, target.label);
         while (s->undo_history.size() > psm_session::HISTORY_LIMIT)
@@ -1380,6 +1430,8 @@ PSM_API psm_result psm_history_redo(psm_session *s)
         s->bed_metadata = std::move(target.bed_metadata);
         s->active_bed = std::min(target.active_bed,
                                  s->bed_models.size() - 1);
+        if (config_changed)
+            ++s->config_revision;
         s->mark_design_changed();
         return PSM_OK;
     PSM_GUARD_END(s)
@@ -4420,11 +4472,16 @@ PSM_API int32_t psm_object_config_is_overridden(psm_session *s,
 {
     if (s == nullptr || key == nullptr)
         return -1;
-    std::lock_guard<std::recursive_mutex> data_lock(s->data_mtx);
-    const Slic3r::ModelObject *object = find_object(s, id);
-    if (object == nullptr || ! s->config.has(key))
+    try {
+        std::lock_guard<std::recursive_mutex> data_lock(s->data_mtx);
+        const Slic3r::ModelObject *object = find_object(s, id);
+        if (object == nullptr || ! s->config.has(key))
+            return -1;
+        return object->config.has(key) ? 1 : 0;
+    } catch (...) {
+        /* Getter-Sentinelle dürfen keine C++-Ausnahme über die ABI lassen. */
         return -1;
-    return object->config.has(key) ? 1 : 0;
+    }
 }
 
 PSM_API uint64_t psm_estimate_slice_memory(psm_session *s)

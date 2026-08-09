@@ -445,3 +445,28 @@ Contract-Test. Auf dem iPhone-17-Pro-Simulator ergab der Lauf mit absoluten
 Fixture-Pfaden `PASS: psm_contract_tests`. Zusätzlich lief lokal
 `:shared:allTests :app:testProductionDebugUnitTest` erfolgreich (58 Aufgaben,
 alle up-to-date). Der vollständige Nachweis steht im Task-3-Bericht.
+
+### Side-Build-Baseline – Task 3 Fix-Runde 1: History-Revisionen
+
+Undo und Redo stellten bereits die Objektkonfiguration aus dem
+Modell-Snapshot wieder her, aber sie erhöhten bisher nur die Designrevision.
+Dadurch konnten an `config_revision` gebundene Verbraucher einen
+wiederhergestellten Objekt-Override übersehen. Vor dem Snapshot-Tausch
+vergleicht der Kern deshalb die `ModelConfig`-Wörterbücher gleichartiger
+Objekte je Bett. Nur eine tatsächliche Objektkonfigurationsdifferenz erhöht
+`config_revision`; ein reiner Positions-Undo/Redo bleibt dort bewusst ohne
+Zähleränderung. Jede erfolgreiche Wiederherstellung invalidiert weiterhin
+genau einmal das Design.
+
+Der neue Contract war auf dem Mac zuerst rot: Commit `cf1e122` baute im
+frischen `psmobile-task3-fix1-red-cf1e122`-Worktree und endete gezielt mit
+`FAIL: undo restores object override and advances both revisions`. Der
+Fix-Commit `c6632ce` lief anschließend in einem neuen exakten
+`psmobile-task3-fix1-green-c6632ce`-Worktree: der SIMULATORARM64-Build
+erzeugte 325 Ziele und der iPhone-17-Pro-Simulator meldete
+`PASS: psm_contract_tests`. Der C-`psm_testcli` kompilierte erneut gegen die
+Headerdatei, und die Android-Regression `:shared:allTests
+:app:testProductionDebugUnitTest` lief mit 58 up-to-date Aufgaben grün.
+`psm_object_config_is_overridden` fängt jetzt zudem Ausnahmen aus seiner
+Lock-/Lesestrecke ab und liefert konsistent den `-1`-Sentinel; eine
+öffentliche Mutex-Fehlerinjektion existiert nicht.
