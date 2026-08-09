@@ -569,3 +569,8 @@ extrahiert; Supplementary-Codepoint und ungültiges Surrogat mit g++ grün.
 Unraid-Docker (29.5.2, psmobile-ndk:1) ist erreichbar; isolierter Exact-HEAD-
 Build scheitert vor Kompilierung an vorhandenen Boost-Abhängigkeiten (<1.83).
 Keine alten .so-Dateien verwendet.
+
+Provenienzkorrektur: Der erste temporäre Build war kein Git-Checkout und wurde
+verworfen. Der echte Bundle-Checkout `/tmp/psmobile-task5-r3-git` steht auf
+`f6f5a72`; Docker-Konfiguration scheitert dort reproduzierbar an fehlenden
+Boost-1.83-Komponenten (`system`, `regex`) vor dem Kompilieren.

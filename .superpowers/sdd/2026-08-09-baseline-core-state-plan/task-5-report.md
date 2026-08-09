@@ -141,3 +141,10 @@ Tool-Meldung wie Advanced. Der alte Source-Text-Test wurde entfernt.
   (`Could NOT find Boost ...`). Daher wurden keine alten `.so` übernommen und
   kein ABI-/APK-Runtime-Nachweis behauptet. Erforderlich bleibt ein frischer
   Dependency-Build auf Unraid.
+- Provenienzkorrektur: Der erste `/tmp/psmobile-task5-r3`-Versuch war kein
+  Git-Checkout und wurde verworfen. Ein echter Bundle-Checkout unter
+  `/tmp/psmobile-task5-r3-git` bestätigt `HEAD f6f5a72e91dcb956f09169f329e2016a47888665`
+  und enthält `jni_text_codec.h`. Der erneute Docker-Configure-Lauf scheitert
+  reproduzierbar an fehlenden Boost-Komponenten (`system`, `regex`; vorhandene
+  Header melden 1.83.0), bevor ein Compiler-Lauf startet. Es wurden weiterhin
+  keine alten Native-Artefakte verwendet.
