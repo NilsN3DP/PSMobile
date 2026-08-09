@@ -50,13 +50,43 @@ open(p, "w", encoding="utf-8").write(s)
 print("libvgcode: %d Texturformate, %d Groessenangaben umgestellt" % (n_fmt, n_sz))
 
 # --- 2. Wrapper: GUI-Enum-Umwandlung herausnehmen --------------------
+#
+# Der Header ist Teil des mobilen Viewport-Übersetzungswegs. Wird nur die
+# Implementierung geguardet, zieht der Header weiterhin GUI_Preview.hpp und
+# damit wx/panel.h ein, bevor PSM_NO_GUI_TYPES wirken kann.
+p = os.path.join(PS, "src/slic3r/GUI/LibVGCode/LibVGCodeWrapper.hpp")
+s = open(p, encoding="utf-8").read()
+header_before = s
+s = s.replace(
+    '#include "slic3r/GUI/GUI_Preview.hpp"',
+    '#ifndef PSM_NO_GUI_TYPES\n#include "slic3r/GUI/GUI_Preview.hpp"\n#endif',
+)
+s = s.replace(
+    'extern EOptionType convert(const Slic3r::GUI::Preview::OptionType& type);',
+    '#ifndef PSM_NO_GUI_TYPES\n'
+    'extern EOptionType convert(const Slic3r::GUI::Preview::OptionType& type);\n'
+    '#endif',
+)
+if s == header_before:
+    if "#ifndef PSM_NO_GUI_TYPES\n#include \"slic3r/GUI/GUI_Preview.hpp\"" in s:
+        print("Wrapper-Header: GUI-Enum bereits geguardet")
+    else:
+        print("WARNUNG: LibVGCodeWrapper.hpp unveraendert - GUI-Signaturen nicht gefunden")
+else:
+    print("Wrapper-Header: wx-abhängigen GUI-Enum geguardet")
+open(p, "w", encoding="utf-8").write(s)
+
 p = os.path.join(PS, "src/slic3r/GUI/LibVGCode/LibVGCodeWrapper.cpp")
 s = open(p, encoding="utf-8").read()
 s = s.replace('#include "../GUI_Preview.hpp"',
               '#ifndef PSM_NO_GUI_TYPES\n#include "../GUI_Preview.hpp"\n#endif')
 
-start = s.find("EOptionType convert(const Slic3r::GUI::Preview::OptionType& type)")
-if start > 0:
+signature = "EOptionType convert(const Slic3r::GUI::Preview::OptionType& type)"
+start = s.find(signature)
+already_guarded = "#ifndef PSM_NO_GUI_TYPES\n" + signature in s
+if already_guarded:
+    print("Wrapper: GUI-Enum-Umwandlung bereits ausgeklammert")
+elif start > 0:
     # Funktionsrumpf ueber Klammerzaehlung abgrenzen
     i = s.index("{", start)
     depth, end = 0, len(s)

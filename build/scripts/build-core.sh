@@ -11,6 +11,11 @@ fi
 psm_log "Kern fuer ${ANDROID_ABI} (API ${ANDROID_API})"
 mkdir -p "${CORE_BUILD}"
 
+# Der mobile Viewport verwendet LibVGCode ohne wxWidgets. Der Upstream-Wrapper
+# enthält nur für die Desktop-Vorschau einen GUI-Enum; vor dem CMake-Scan muss
+# auch dessen öffentlicher Header geguardet sein, sonst zieht er wx/panel.h ein.
+python3 "${PSM_ROOT}/build/scripts/_patch_vgcode.py"
+
 docker run --rm -i \
     -v "${PSM_ROOT}:/work" \
     -w /work \
