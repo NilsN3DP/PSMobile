@@ -109,3 +109,20 @@ Tool-Meldung wie Advanced. Der alte Source-Text-Test wurde entfernt.
   plus Core-Rename und sichtbare Empty-Erklärung).
 - Mac-Hauptcheckout pre/post: HEAD `e1e74a062f140e1b0882f149a0e115317a535a64`,
   114 Statuszeilen, SHA-256 `73fcc11096f86c147a58d7937490b2bec455b8e0077c5fda4e77002b55889685`.
+
+### Fix Round 2
+
+- JNI-Bednamen verwenden jetzt explizite UTF-16/UTF-8-Konvertierung; dadurch
+  bleiben ergänzende Unicode-Zeichen (z. B. `🛠️`) erhalten und feste 128-Byte-
+  C-ABI-Namen werden nur an gültigen UTF-8-Grenzen gekürzt. Der Android-
+  Produktionstest `BedStripAdapterTest.supplementary unicode bed names remain
+  intact through production snapshot` ist grün.
+- `gradlew.bat :app:testProductionDebugUnitTest --tests
+  de.psmobile.ui.BedStripAdapterTest --no-daemon` – BUILD SUCCESSFUL unter
+  JBR 21.0.10 (JVM-Ziel 17).
+- ABI9-Native-Artefakte konnten in diesem Windows-Worktree nicht nachgewiesen
+  werden: `build-out/core-arm64-v8a`/`core-x86_64` und
+  `android/app/src/main/jniLibsFixed` enthalten keine `.so`/Fingerprints;
+  Docker ist auf dem Host nicht verfügbar. Der bestehende `stage-native.sh`
+  bleibt der deterministische Gatekeeper (ABI/API/Fingerprint), daher wurden
+  keine alten Bibliotheken übernommen und kein Runtime-Smoke-Test behauptet.

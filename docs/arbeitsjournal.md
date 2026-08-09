@@ -557,3 +557,9 @@ XCUI-Navigationsversuch wurde verworfen, weil iOS 26 SwiftUI-Menü- und
 offscreen Scroll-Children nicht stabil exportiert. Die fünf tatsächlich
 bedienbaren Mehrbett-UI-Tests (inklusive Rename und Empty-Erklärung) liefen
 grün.
+
+2026-08-09 Task5 Fix Round2: JNI-Bednamen auf echte UTF-16/UTF-8-Konvertierung
+umgestellt; ergänzender Unicode-Test (`Werkstatt 🛠️ 🔥`) grün. Der fokussierte
+Gradle-Lauf war unter JBR 21.0.10 erfolgreich (JVM-Ziel 17). ABI9-.so-Dateien
+und Fingerprints fehlen im Windows-Worktree; Docker ist nicht verfügbar, daher
+kein Übernehmen alter Artefakte und kein behaupteter Runtime-Smoke.

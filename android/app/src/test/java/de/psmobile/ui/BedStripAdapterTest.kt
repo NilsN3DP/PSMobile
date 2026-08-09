@@ -47,6 +47,12 @@ class BedStripAdapterTest {
         assertEquals("Prototyp", advanced.items[1].name)
     }
 
+    @Test fun `supplementary unicode bed names remain intact through production snapshot`() {
+        val name = "Werkstatt 🛠️ 🔥"
+        val state = AndroidBedStripAdapter.state(listOf(bed(0, name = name, active = true)), "Bett")
+        assertEquals(name, state.items.single().name)
+    }
+
     @Test fun `production actions roundtrip add select rename lock and removal rules`() {
         val port = FakeBedPort(mutableListOf(bed(0, active = true)))
         val messages = mutableListOf<String>()
