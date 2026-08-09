@@ -28,9 +28,9 @@ fi
 mkdir -p "${CACHE}"
 
 case "${VARIANT}" in
-    debug)   TASK=assembleDebug ;;
-    release) TASK=assembleRelease ;;
-    test)    TASK=testDebugUnitTest ;;
+    debug)   TASK=':app:assembleProductionDebug' ;;
+    release) TASK=':app:assembleProductionRelease' ;;
+    test)    TASK=':app:testProductionDebugUnitTest' ;;
     # Die Regeln aus dem gemeinsamen Modul (E-13). Sie haengen an keiner
     # Plattform und laufen ohne Emulator und ohne NDK. Auf Linux baut nur
     # das Android-Ziel des Moduls; die iOS-Fassung entsteht auf dem Mac.

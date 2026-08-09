@@ -69,7 +69,7 @@ Get-Content docs/qa/sidebuild-baseline-manifest.txt | ForEach-Object {
 
 - [ ] **Step 4: Run existing fast tests before accepting the import.**
 
-Run: `./android/gradlew -p android :shared:allTests :app:testDebugUnitTest`
+Run: `./android/gradlew -p android :shared:allTests :app:testProductionDebugUnitTest`
 
 Expected: all shared and JVM tests pass; failures attributable to the imported snapshot are fixed before commit.
 
@@ -252,7 +252,7 @@ object InspectorContract {
 
 - [ ] **Step 4: Run shared and Android favorite tests.**
 
-Run: `./android/gradlew -p android :shared:allTests :app:testDebugUnitTest --tests de.psmobile.ui.FavoriteSettingsTest`
+Run: `./android/gradlew -p android :shared:allTests :app:testProductionDebugUnitTest --tests de.psmobile.ui.FavoriteSettingsTest`
 
 Expected: all tests pass.
 
@@ -341,7 +341,7 @@ git commit -m "fix: keep project mutations transactional"
 ```powershell
 cmake --build build-out/host --target psm_contract_tests
 & build-out/host/core/test/psm_contract_tests
-./android/gradlew -p android :shared:allTests :app:testDebugUnitTest
+./android/gradlew -p android :shared:allTests :app:testProductionDebugUnitTest
 git diff --check
 git status --short
 ```

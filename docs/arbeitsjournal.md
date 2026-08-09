@@ -381,3 +381,21 @@ lief der Artefakttest grün: beide `-showBuildSettings`-Abfragen, beide
 Simulator-Builds, die erzeugten `Info.plist`-Dateien und Codesign-Entitlements
 bestätigen die getrennten Identitaeten ohne geteilte Container- oder
 Zugangsdatenrechte.
+
+### Side-Build-Baseline – Task 2 Fix-Runde 1: Produktions-Workflows
+
+Die neue Flavor-Dimension machte den alten Aufruf `testDebugUnitTest`
+mehrdeutig. Das betraf den Docker-Helfer fuer APKs und die noch aktive
+Baseline-Checkliste; der Gerätetest suchte ausserdem weiter nach dem alten
+`app-debug.apk`. Der Fix benennt deshalb Debug, Release und Unit-Tests im
+Build-Helfer ausdrücklich als Produktion und installiert im Gerätetest nur
+`production/debug/app-production-debug.apk`, nach einer Existenzprüfung.
+
+Zwei echte Skript-Fallen waren vorher rot: Ein Docker-Double zeichnete den
+tatsächlich an Gradle übergebenen unqualifizierten Task auf; ein Fake-`adb`
+zeichnete die Installation der alten APK auf. Beide Arbeitsabläufe sind nun
+grün. Danach liefen der APK-Identitätstest, `:shared:allTests`, die
+Production- und Preview-Unit-Tests und alle 17 Python-Buildtests mit der
+Android-Studio-JBR. Alte Hinweise in abgeschlossenen Release-Nachweisen und
+älteren beziehungsweise nebenläufigen Planbeispielen bleiben historische
+Evidenz und wurden nicht mechanisch umgeschrieben.

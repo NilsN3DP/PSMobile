@@ -72,7 +72,7 @@ Der aktuelle Stand lässt sich zusätzlich prüfen mit:
 ```bash
 python build/scripts/feature-report.py --check
 python -m unittest discover -s build/scripts/tests -p 'test_*.py'
-./android/gradlew -p android testDebugUnitTest
+./android/gradlew -p android :app:testProductionDebugUnitTest
 ```
 
 iOS ist derzeit nur ein Scaffold. Die Portierung startet nach dem

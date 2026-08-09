@@ -16,13 +16,14 @@
 
 param(
     [switch]$Protokoll,
-    [switch]$Bild
+    [switch]$Bild,
+    [string]$Projektwurzel = (Join-Path $PSScriptRoot '..\..')
 )
 
 $ErrorActionPreference = 'Stop'
 
-$Freigabe = '\\Localunraid\n3dp\KI Projekte\PSMobile'
-$Apk      = Join-Path $Freigabe 'android\app\build\outputs\apk\debug\app-debug.apk'
+$Projektwurzel = (Resolve-Path -LiteralPath $Projektwurzel).Path
+$Apk      = Join-Path $Projektwurzel 'android\app\build\outputs\apk\production\debug\app-production-debug.apk'
 $Paket    = 'de.psmobile'
 $Ablage   = Join-Path $env:USERPROFILE 'PSMobile\Geraetetest'
 
@@ -67,7 +68,7 @@ if ($abi -ne 'arm64-v8a') {
 # --- Installieren ---------------------------------------------------------
 if (-not (Test-Path $Apk)) { Fehler "APK fehlt: $Apk"; exit 1 }
 $groesse = [math]::Round((Get-Item $Apk).Length / 1MB, 1)
-Schritt "Installiere app-debug.apk ($groesse MB, $((Get-Item $Apk).LastWriteTime))"
+Schritt "Installiere $(Split-Path -Leaf $Apk) ($groesse MB, $((Get-Item $Apk).LastWriteTime))"
 & $adb -s $seriennummer install -r $Apk
 
 # --- Protokoll ------------------------------------------------------------
