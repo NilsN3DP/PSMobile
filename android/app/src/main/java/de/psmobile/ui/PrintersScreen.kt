@@ -262,6 +262,19 @@ fun PrintersScreen(
                 printers = PrinterStore.all(context)
                 editing = null
             },
+            onResetLocal = {
+                PrinterStore.setLocalPairingToken(context, p.id, null)
+                PrinterStore.update(context, p.copy(
+                    localExperimental = false,
+                    localHosts = emptyList(),
+                    localCapabilities = emptySet(),
+                    localModel = "",
+                    localNozzleDiameter = null,
+                    localNozzleMaterial = "unknown",
+                ))
+                printers = PrinterStore.all(context)
+                editing = null
+            },
             onDelete = {
                 PrinterStore.remove(context, p.id)
                 printers = PrinterStore.all(context)
@@ -278,6 +291,7 @@ private fun PrinterEditor(
     presetNames: List<String>,
     onTest: suspend (PrusaLink.Printer) -> String,
     onPair: suspend (String) -> String,
+    onResetLocal: () -> Unit,
     onSave: (PrusaLink.Printer) -> Unit,
     onDelete: () -> Unit,
     onCancel: () -> Unit,
@@ -443,6 +457,13 @@ private fun PrinterEditor(
                 Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
+                if (printer.localExperimental) {
+                    OutlinedButton(
+                        onClick = onResetLocal,
+                        modifier = Modifier.weight(1f).height(52.dp),
+                        shape = RoundedCornerShape(10.dp),
+                    ) { Text("Lokale Kopplung zurücksetzen") }
+                }
                 if (printer.name.isNotBlank()) {
                     OutlinedButton(
                         onClick = onDelete,
