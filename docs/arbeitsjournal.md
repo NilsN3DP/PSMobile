@@ -399,3 +399,20 @@ Production- und Preview-Unit-Tests und alle 17 Python-Buildtests mit der
 Android-Studio-JBR. Alte Hinweise in abgeschlossenen Release-Nachweisen und
 älteren beziehungsweise nebenläufigen Planbeispielen bleiben historische
 Evidenz und wurden nicht mechanisch umgeschrieben.
+
+### Side-Build-Baseline – Task 2 Fix-Runde 2: portable Skripte
+
+Der Produktionshelfer war im echten Windows-Checkout trotz grünem Test nicht
+portabel: Die Testkopie entfernte CRLF selbst, während Bash im Arbeitsbaum
+`bash\r` sah und auch `bash -n` scheiterte. Jetzt erzwingt `.gitattributes`
+LF nur für `*.sh`; mechanisch normalisiert wurden genau `build-apk.sh` und das
+dazu gelesene `env.sh`. Der Test kopiert die Helfer unverändert und prüft
+zusätzlich die Syntax des echten Arbeitsbaum-Skripts.
+
+Ein zweiter RED-Fall nutzte einen völlig gültigen Projektpfad mit eckiger
+Klammer. Die wildcard-fähigen PowerShell-Aufrufe sahen dadurch die vorhandene
+Produktions-APK nicht. `Test-Path` und `Get-Item` arbeiten dort jetzt mit
+`-LiteralPath`; der Fake-`adb` belegt weiterhin, dass nur die exakte
+Produktions-APK installiert wird. Danach liefen alle 18 Python-Buildtests,
+beide Android-Flavor-Unit-Suiten, der Identitäts-Artefakttest sowie Bash- und
+PowerShell-Parseprüfungen grün.

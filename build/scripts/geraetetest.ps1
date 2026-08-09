@@ -66,9 +66,10 @@ if ($abi -ne 'arm64-v8a') {
 }
 
 # --- Installieren ---------------------------------------------------------
-if (-not (Test-Path $Apk)) { Fehler "APK fehlt: $Apk"; exit 1 }
-$groesse = [math]::Round((Get-Item $Apk).Length / 1MB, 1)
-Schritt "Installiere $(Split-Path -Leaf $Apk) ($groesse MB, $((Get-Item $Apk).LastWriteTime))"
+if (-not (Test-Path -LiteralPath $Apk)) { Fehler "APK fehlt: $Apk"; exit 1 }
+$apkDatei = Get-Item -LiteralPath $Apk
+$groesse = [math]::Round($apkDatei.Length / 1MB, 1)
+Schritt "Installiere $(Split-Path -Leaf $Apk) ($groesse MB, $($apkDatei.LastWriteTime))"
 & $adb -s $seriennummer install -r $Apk
 
 # --- Protokoll ------------------------------------------------------------

@@ -22,7 +22,6 @@ class ProductionBuildWorkflowTests(unittest.TestCase):
             source = ROOT / "build" / "scripts" / name
             target = scripts / name
             shutil.copy2(source, target)
-            target.write_bytes(target.read_bytes().replace(b"\r\n", b"\n"))
             target.chmod(0o755)
         (root / "android/app/src/main/jniLibs").mkdir(parents=True)
         (root / "android/app/src/main/assets/psresources").mkdir(parents=True)
@@ -79,13 +78,25 @@ class ProductionBuildWorkflowTests(unittest.TestCase):
                 self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
                 self.assertIn(expected_task, capture.read_text(encoding="utf-8"))
 
+    def test_tracked_build_apk_shell_syntax_is_portable(self) -> None:
+        """A CRLF checkout must not make the production helper unparsable by Bash."""
+        result = subprocess.run(
+            ["bash", "-n", self.bash_path(ROOT / "build/scripts/build-apk.sh")],
+            cwd=ROOT,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
     @unittest.skipUnless(os.name == "nt", "requires PowerShell and a .cmd adb fixture")
     def test_device_script_installs_only_the_production_debug_artifact(self) -> None:
         """A preview APK or legacy app-debug.apk path must not be installable here."""
         with tempfile.TemporaryDirectory() as temporary:
             fixture = pathlib.Path(temporary)
-            production = fixture / "android/app/build/outputs/apk/production/debug"
-            preview = fixture / "android/app/build/outputs/apk/preview/debug"
+            project_root = fixture / "project[fixture]"
+            production = project_root / "android/app/build/outputs/apk/production/debug"
+            preview = project_root / "android/app/build/outputs/apk/preview/debug"
             production.mkdir(parents=True)
             preview.mkdir(parents=True)
             apk = production / "app-production-debug.apk"
@@ -118,7 +129,7 @@ class ProductionBuildWorkflowTests(unittest.TestCase):
                     "-File",
                     ROOT / "build/scripts/geraetetest.ps1",
                     "-Projektwurzel",
-                    fixture,
+                    project_root,
                 ],
                 cwd=ROOT,
                 text=True,
