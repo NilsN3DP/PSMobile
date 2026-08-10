@@ -39,6 +39,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import de.psmobile.ui.theme.PSMobileTheme
+import de.psmobile.ui.theme.AlertDialog
 import de.psmobile.ui.theme.PrusaColors
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -393,7 +394,7 @@ class MainActivity : ComponentActivity() {
                     ?: remember { mutableStateOf<de.psmobile.slicing.profileupdate.ProfileUpdateState>(de.psmobile.slicing.profileupdate.ProfileUpdateState.Idle) })
                 when (val update = profileUpdate) {
                     is de.psmobile.slicing.profileupdate.ProfileUpdateState.Offer ->
-                        androidx.compose.material3.AlertDialog(
+                        AlertDialog(
                             onDismissRequest = {},
                             title = { androidx.compose.material3.Text("Neue Drucker- und Materialprofile verfügbar") },
                             text = { androidx.compose.material3.Text(update.manifest.releaseNotes.joinToString("\n• ", prefix = "• ")) },
@@ -404,7 +405,7 @@ class MainActivity : ComponentActivity() {
                             } },
                         )
                     is de.psmobile.slicing.profileupdate.ProfileUpdateState.ReadyToApply ->
-                        androidx.compose.material3.AlertDialog(
+                        AlertDialog(
                             onDismissRequest = {},
                             title = { androidx.compose.material3.Text("Profile aktualisiert") },
                             text = { androidx.compose.material3.Text("Die neuen Profile sind geprüft und können jetzt oder beim nächsten Neustart verwendet werden.") },
@@ -418,7 +419,7 @@ class MainActivity : ComponentActivity() {
                 }
 
                 if (showProfileUpdateSaveWarning) {
-                    androidx.compose.material3.AlertDialog(
+                    AlertDialog(
                         onDismissRequest = { showProfileUpdateSaveWarning = false },
                         title = { androidx.compose.material3.Text("Projekt vor Profilwechsel speichern?") },
                         text = { androidx.compose.material3.Text("Es ist ein Modell geladen oder es gibt ungespeicherte Profiländerungen. Speichere das 3MF-Projekt, bevor die Slicer-Sitzung mit den neuen Profilen neu startet.") },
@@ -435,7 +436,7 @@ class MainActivity : ComponentActivity() {
                 }
 
                 pending3mf?.let { file ->
-                    androidx.compose.material3.AlertDialog(
+                    AlertDialog(
                         onDismissRequest = { pending3mf = null },
                         title = {
                             androidx.compose.material3.Text("3MF importieren")
@@ -469,7 +470,7 @@ class MainActivity : ComponentActivity() {
                 }
 
                 importNotice?.let { message ->
-                    androidx.compose.material3.AlertDialog(
+                    AlertDialog(
                         onDismissRequest = { importNotice = null },
                         title = {
                             androidx.compose.material3.Text(noticeTitle)

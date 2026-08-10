@@ -1,5 +1,6 @@
 package de.psmobile.ui.theme
 
+import androidx.compose.material3.AlertDialogDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
@@ -8,11 +9,15 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.DialogProperties
 import de.psmobile.shared.ui.WindowScale
 
 /**
@@ -164,4 +169,48 @@ fun PSMobileTheme(content: @Composable () -> Unit) {
 @Composable
 fun ScaledOverlay(content: @Composable () -> Unit) {
     CompositionLocalProvider(LocalDensity provides gestauchteDichte(), content = content)
+}
+
+/**
+ * Ersatz fuer `androidx.compose.material3.AlertDialog` mit derselben
+ * Signatur - nur der Name reicht an den Aufrufstellen, die Slots muessen
+ * sich nicht aendern. Ohne das zeigte jeder Dialog ("Bett umbenennen"
+ * und siebzehn weitere) Materials unskalierte Telefon-Vorgabegroessen,
+ * waehrend der Rest der App gestaucht ist - aus demselben Grund wie bei
+ * [ScaledOverlay].
+ */
+@Composable
+fun AlertDialog(
+    onDismissRequest: () -> Unit,
+    confirmButton: @Composable () -> Unit,
+    modifier: Modifier = Modifier,
+    dismissButton: (@Composable () -> Unit)? = null,
+    icon: (@Composable () -> Unit)? = null,
+    title: (@Composable () -> Unit)? = null,
+    text: (@Composable () -> Unit)? = null,
+    shape: Shape = AlertDialogDefaults.shape,
+    containerColor: Color = AlertDialogDefaults.containerColor,
+    iconContentColor: Color = AlertDialogDefaults.iconContentColor,
+    titleContentColor: Color = AlertDialogDefaults.titleContentColor,
+    textContentColor: Color = AlertDialogDefaults.textContentColor,
+    tonalElevation: Dp = AlertDialogDefaults.TonalElevation,
+    properties: DialogProperties = DialogProperties(),
+) {
+    val dichte = gestauchteDichte()
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onDismissRequest,
+        confirmButton = { CompositionLocalProvider(LocalDensity provides dichte, content = confirmButton) },
+        modifier = modifier,
+        dismissButton = dismissButton?.let { { CompositionLocalProvider(LocalDensity provides dichte, content = it) } },
+        icon = icon?.let { { CompositionLocalProvider(LocalDensity provides dichte, content = it) } },
+        title = title?.let { { CompositionLocalProvider(LocalDensity provides dichte, content = it) } },
+        text = text?.let { { CompositionLocalProvider(LocalDensity provides dichte, content = it) } },
+        shape = shape,
+        containerColor = containerColor,
+        iconContentColor = iconContentColor,
+        titleContentColor = titleContentColor,
+        textContentColor = textContentColor,
+        tonalElevation = tonalElevation,
+        properties = properties,
+    )
 }

@@ -58,7 +58,7 @@ import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.AlertDialog
+import de.psmobile.ui.theme.AlertDialog
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.HorizontalDivider
@@ -1768,7 +1768,7 @@ internal fun BedSelector(
     var renameText by remember { mutableStateOf("") }
 
     renameId?.let { id ->
-        androidx.compose.material3.AlertDialog(
+        AlertDialog(
             onDismissRequest = { renameId = null },
             title = { Text(advancedText("Rename bed", "Bett umbenennen")) },
             text = { androidx.compose.material3.OutlinedTextField(renameText, { renameText = it }, singleLine = true) },
