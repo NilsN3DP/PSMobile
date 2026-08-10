@@ -1,12 +1,21 @@
 package de.psmobile.ui.theme
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialogDefaults
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.LocalContentColor
+import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Typography
+import androidx.compose.material3.VerticalDivider
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.Modifier
@@ -14,9 +23,13 @@ import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import de.psmobile.shared.ui.WindowScale
 
@@ -174,10 +187,16 @@ fun ScaledOverlay(content: @Composable () -> Unit) {
 /**
  * Ersatz fuer `androidx.compose.material3.AlertDialog` mit derselben
  * Signatur - nur der Name reicht an den Aufrufstellen, die Slots muessen
- * sich nicht aendern. Ohne das zeigte jeder Dialog ("Bett umbenennen"
- * und siebzehn weitere) Materials unskalierte Telefon-Vorgabegroessen,
- * waehrend der Rest der App gestaucht ist - aus demselben Grund wie bei
- * [ScaledOverlay].
+ * sich nicht aendern.
+ *
+ * Zeichnet die Karte komplett selbst statt an Material zu delegieren:
+ * Materials AlertDialog ist linksbuendig mit Knoepfen unten rechts - das
+ * native iOS-`.alert` daneben ist zentriert mit einer durch Linien
+ * geteilten Knopfleiste ueber die volle Breite. Zwei App-Haelften mit
+ * demselben Inhalt sahen dadurch nach zwei verschiedenen Sprachen aus,
+ * nicht nur nach unterschiedlicher Groesse. Diese Fassung uebernimmt das
+ * iOS-Layout; da alle Aufrufstellen bereits ueber diesen Wrapper laufen,
+ * genuegt die eine Stelle.
  */
 @Composable
 fun AlertDialog(
@@ -188,29 +207,67 @@ fun AlertDialog(
     icon: (@Composable () -> Unit)? = null,
     title: (@Composable () -> Unit)? = null,
     text: (@Composable () -> Unit)? = null,
-    shape: Shape = AlertDialogDefaults.shape,
-    containerColor: Color = AlertDialogDefaults.containerColor,
-    iconContentColor: Color = AlertDialogDefaults.iconContentColor,
-    titleContentColor: Color = AlertDialogDefaults.titleContentColor,
-    textContentColor: Color = AlertDialogDefaults.textContentColor,
+    shape: Shape = RoundedCornerShape(14.dp),
+    containerColor: Color = PrusaColors.Panel,
+    iconContentColor: Color = PrusaColors.Orange,
+    titleContentColor: Color = PrusaColors.TextPrimary,
+    textContentColor: Color = PrusaColors.TextMuted,
     tonalElevation: Dp = AlertDialogDefaults.TonalElevation,
     properties: DialogProperties = DialogProperties(),
 ) {
     val dichte = gestauchteDichte()
-    androidx.compose.material3.AlertDialog(
-        onDismissRequest = onDismissRequest,
-        confirmButton = { CompositionLocalProvider(LocalDensity provides dichte, content = confirmButton) },
-        modifier = modifier,
-        dismissButton = dismissButton?.let { { CompositionLocalProvider(LocalDensity provides dichte, content = it) } },
-        icon = icon?.let { { CompositionLocalProvider(LocalDensity provides dichte, content = it) } },
-        title = title?.let { { CompositionLocalProvider(LocalDensity provides dichte, content = it) } },
-        text = text?.let { { CompositionLocalProvider(LocalDensity provides dichte, content = it) } },
-        shape = shape,
-        containerColor = containerColor,
-        iconContentColor = iconContentColor,
-        titleContentColor = titleContentColor,
-        textContentColor = textContentColor,
-        tonalElevation = tonalElevation,
-        properties = properties,
-    )
+    Dialog(onDismissRequest = onDismissRequest, properties = properties) {
+        CompositionLocalProvider(LocalDensity provides dichte) {
+            Column(
+                modifier
+                    .widthIn(min = 260.dp, max = 340.dp)
+                    .clip(shape)
+                    .background(containerColor)
+                    .padding(top = 20.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                if (icon != null) {
+                    CompositionLocalProvider(LocalContentColor provides iconContentColor) { icon() }
+                    Spacer(Modifier.height(8.dp))
+                }
+                if (title != null) {
+                    CompositionLocalProvider(
+                        LocalContentColor provides titleContentColor,
+                        LocalTextStyle provides LocalTextStyle.current.copy(
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            textAlign = TextAlign.Center,
+                        ),
+                    ) {
+                        Box(Modifier.fillMaxWidth().padding(horizontal = 20.dp), Alignment.Center) { title() }
+                    }
+                    Spacer(Modifier.height(6.dp))
+                }
+                if (text != null) {
+                    CompositionLocalProvider(
+                        LocalContentColor provides textContentColor,
+                        LocalTextStyle provides LocalTextStyle.current.copy(
+                            fontSize = 13.sp,
+                            textAlign = TextAlign.Center,
+                        ),
+                    ) {
+                        Box(Modifier.fillMaxWidth().padding(horizontal = 20.dp), Alignment.Center) { text() }
+                    }
+                }
+                Spacer(Modifier.height(18.dp))
+                HorizontalDivider(color = PrusaColors.Divider)
+                Row(Modifier.fillMaxWidth().height(46.dp)) {
+                    if (dismissButton != null) {
+                        Box(Modifier.weight(1f).fillMaxHeight(), Alignment.Center) {
+                            CompositionLocalProvider(LocalContentColor provides PrusaColors.TextPrimary, content = dismissButton)
+                        }
+                        VerticalDivider(color = PrusaColors.Divider)
+                    }
+                    Box(Modifier.weight(1f).fillMaxHeight(), Alignment.Center) {
+                        CompositionLocalProvider(LocalContentColor provides PrusaColors.Orange, content = confirmButton)
+                    }
+                }
+            }
+        }
+    }
 }
