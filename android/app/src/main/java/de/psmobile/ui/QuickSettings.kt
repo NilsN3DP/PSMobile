@@ -32,6 +32,7 @@ import androidx.compose.ui.unit.sp
 import de.psmobile.core.PsmCore
 import de.psmobile.slicing.SlicerService
 import de.psmobile.ui.theme.PrusaColors
+import de.psmobile.ui.theme.ScaledOverlay
 import kotlin.math.roundToInt
 
 /**
@@ -240,6 +241,7 @@ private fun Picker(
             Text("▾", color = PrusaColors.TextMuted, fontSize = 11.sp)
         }
         DropdownMenu(open, onDismissRequest = { open = false }) {
+            ScaledOverlay {
             options.forEachIndexed { i, opt ->
                 DropdownMenuItem(
                     text = {
@@ -252,6 +254,7 @@ private fun Picker(
                     },
                     onClick = { open = false; onSelect(opt) },
                 )
+            }
             }
         }
     }

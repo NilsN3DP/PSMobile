@@ -52,6 +52,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import de.psmobile.core.PsmCore
 import de.psmobile.ui.theme.PrusaColors
+import de.psmobile.ui.theme.ScaledOverlay
 
 /**
  * Vollstaendige Einstellungen - Seiten, Gruppen und Reihenfolge stammen
@@ -634,11 +635,13 @@ private fun EnumField(
         }
         DropdownMenu(expanded, { expanded = false },
                      Modifier.background(PrusaColors.PanelRaised)) {
+            ScaledOverlay {
             options.forEach { (raw, text) ->
                 DropdownMenuItem(
                     text = { Text(PsUi.tr(text), color = PrusaColors.TextPrimary, fontSize = 13.sp) },
                     onClick = { expanded = false; onSelect(raw) },
                 )
+            }
             }
         }
     }

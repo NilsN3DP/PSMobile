@@ -2488,6 +2488,7 @@ private fun Sidebar(
                     expanded = sendMenu,
                     onDismissRequest = { sendMenu = false },
                 ) {
+                    ScaledOverlay {
                     linkPrinters.forEach { printer ->
                         DropdownMenuItem(
                             text = {
@@ -2505,6 +2506,7 @@ private fun Sidebar(
                                 service.sendToPrinter(printer, false)
                             },
                         )
+                    }
                     }
                 }
             }
@@ -3077,6 +3079,7 @@ private fun ExtruderPicker(
             onDismissRequest = { expanded = false },
             modifier = Modifier.background(PrusaColors.PanelRaised),
         ) {
+            ScaledOverlay {
             DropdownMenuItem(
                 text = { Text(inheritedLabel, color = PrusaColors.TextPrimary) },
                 onClick = {
@@ -3098,6 +3101,7 @@ private fun ExtruderPicker(
                         onSelect(extruder.id)
                     },
                 )
+            }
             }
         }
     }

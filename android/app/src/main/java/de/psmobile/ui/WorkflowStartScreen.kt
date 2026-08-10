@@ -58,6 +58,7 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import de.psmobile.ui.theme.PrusaColors
+import de.psmobile.ui.theme.ScaledOverlay
 import de.psmobile.shared.rules.SimpleModeState
 import de.psmobile.net.RecentProjectsStore
 
@@ -145,6 +146,7 @@ fun WorkflowStartScreen(
                     expanded = languageMenu,
                     onDismissRequest = { languageMenu = false },
                 ) {
+                    ScaledOverlay {
                     PsUi.availableLanguages.forEach { code ->
                         DropdownMenuItem(
                             text = { Text(code.uppercase()) },
@@ -155,6 +157,7 @@ fun WorkflowStartScreen(
                                 onLanguageChange(code)
                             },
                         )
+                    }
                     }
                 }
             }

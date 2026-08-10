@@ -599,11 +599,13 @@ private fun PresetPickerCompact(
             expanded, { expanded = false },
             Modifier.background(PrusaColors.PanelRaised),
         ) {
+            de.psmobile.ui.theme.ScaledOverlay {
             options.forEach { o ->
                 androidx.compose.material3.DropdownMenuItem(
                     text = { Text(o, color = PrusaColors.TextPrimary, fontSize = 13.sp) },
                     onClick = { expanded = false; onSelect(o) },
                 )
+            }
             }
         }
     }

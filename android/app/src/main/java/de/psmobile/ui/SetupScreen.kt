@@ -50,6 +50,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import de.psmobile.core.PsmCore
 import de.psmobile.ui.theme.PrusaColors
+import de.psmobile.ui.theme.ScaledOverlay
 import de.psmobile.shared.rules.PrinterGrouping
 
 /**
@@ -172,6 +173,7 @@ fun SetupScreen(
                     }
                     DropdownMenu(langMenu, { langMenu = false },
                                  Modifier.background(PrusaColors.PanelRaised)) {
+                        ScaledOverlay {
                         PsUi.availableLanguages.forEach { code ->
                             DropdownMenuItem(
                                 text = { Text(code.uppercase(),
@@ -185,6 +187,7 @@ fun SetupScreen(
                                     onLanguageChange(code)
                                 },
                             )
+                        }
                         }
                     }
                 }

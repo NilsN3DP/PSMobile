@@ -76,6 +76,7 @@ import androidx.core.view.WindowCompat
 import de.psmobile.core.PsmCore
 import de.psmobile.slicing.SlicerService
 import de.psmobile.ui.theme.PrusaColors
+import de.psmobile.ui.theme.ScaledOverlay
 import de.psmobile.ui.theme.uiScaleFor
 import de.psmobile.shared.rules.AdhesionAdvice
 import de.psmobile.shared.rules.SimpleModeState
@@ -424,6 +425,7 @@ private fun SimpleHeader(
                 .clickable(onClick = { menuOffen = true }),
         )
         DropdownMenu(menuOffen, onDismissRequest = { menuOffen = false }) {
+            ScaledOverlay {
             DropdownMenuItem(
                 text = { Text(st("Start page", "Startseite")) },
                 onClick = { menuOffen = false; onHome() },
@@ -437,6 +439,7 @@ private fun SimpleHeader(
                 text = { Text(st("Expert mode", "Expertenmodus")) },
                 onClick = { menuOffen = false; onOpenAdvanced() },
             )
+            }
         }
     }
 }

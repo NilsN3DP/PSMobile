@@ -40,6 +40,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import de.psmobile.core.PsmCore
 import de.psmobile.slicing.SlicerService
 import de.psmobile.ui.theme.PrusaColors
+import de.psmobile.ui.theme.ScaledOverlay
 import kotlin.math.roundToInt
 
 /**
@@ -218,6 +219,7 @@ fun ObjectPanel(
                     expanded = moveMenu,
                     onDismissRequest = { moveMenu = false },
                 ) {
+                    ScaledOverlay {
                     beds.filter { it.index != active }.forEach { bed ->
                         DropdownMenuItem(
                             text = {
@@ -231,6 +233,7 @@ fun ObjectPanel(
                                 service.moveObjectToBed(obj.id, bed.index)
                             },
                         )
+                    }
                     }
                 }
             }
