@@ -90,7 +90,8 @@ targets:
       base:
         INFOPLIST_FILE: PSMobile/Support/Info.plist
         PRODUCT_BUNDLE_IDENTIFIER: de.psmobile
-        PSM_DISPLAY_NAME: PSMobile
+        PSM_DISPLAY_NAME: "Unofficial Prusa Slicer Mobile"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         # 1 = iPhone, 2 = iPad. Ohne beides laeuft die App auf dem iPad im
         # iPhone-Fenster mitten auf schwarzem Grund - sie startet, sieht
         # aber aus wie ein Fehler. Das iPad ist das eigentliche Ziel.
@@ -130,6 +131,7 @@ targets:
         INFOPLIST_FILE: PSMobile/Support/Info.plist
         PRODUCT_BUNDLE_IDENTIFIER: de.psmobile.preview
         PSM_DISPLAY_NAME: PSMobile Preview
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         TARGETED_DEVICE_FAMILY: "1,2"
         OTHER_LDFLAGS:
           - -lc++
