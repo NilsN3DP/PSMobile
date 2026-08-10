@@ -309,7 +309,17 @@ private fun PrinterEditor(
     var testing by remember { mutableStateOf(false) }
     var pairingJson by remember { mutableStateOf("") }
     var pairingResult by remember { mutableStateOf<String?>(null) }
+    var showScanner by remember { mutableStateOf(false) }
     val scope = androidx.compose.runtime.rememberCoroutineScope()
+
+    fun runPairing(jsonText: String) {
+        testing = true
+        pairingResult = null
+        scope.launch {
+            pairingResult = onPair(jsonText)
+            testing = false
+        }
+    }
 
     Box(Modifier.fillMaxSize().background(PrusaColors.Background.copy(alpha = 0.94f)),
         Alignment.Center) {
@@ -329,22 +339,23 @@ private fun PrinterEditor(
 
             if (printer.localExperimental) {
                 Text("Experimental · Lokaler Drucker", color = PrusaColors.Orange, fontSize = 13.sp)
-                Text("QR-Scanner-Adapter folgt; bis dahin kann der vom Drucker angezeigte JSON-Inhalt manuell eingefügt werden.", color = PrusaColors.TextMuted, fontSize = 11.sp)
+                Text("QR-Code des Druckers scannen, oder den angezeigten JSON-Inhalt manuell einfügen.", color = PrusaColors.TextMuted, fontSize = 11.sp)
+                OutlinedButton(
+                    enabled = !testing,
+                    onClick = { showScanner = true },
+                    modifier = Modifier.fillMaxWidth().height(52.dp),
+                ) { Text("QR-Code scannen") }
                 Field("QR-Payload (manuelle Fallback-Eingabe)", pairingJson) { pairingJson = it }
                 OutlinedButton(
                     enabled = pairingJson.isNotBlank() && !testing,
-                    onClick = {
-                        testing = true
-                        pairingResult = null
-                        scope.launch {
-                            pairingResult = onPair(pairingJson)
-                            testing = false
-                        }
-                    },
+                    onClick = { runPairing(pairingJson) },
                     modifier = Modifier.fillMaxWidth().height(52.dp),
                 ) { Text(if (testing) "Kopplung läuft…" else "QR-Payload koppeln") }
                 pairingResult?.let {
                     Text(it.removePrefix("!"), color = if (it.startsWith("!")) PrusaColors.Danger else PrusaColors.Ok, fontSize = 13.sp)
+                }
+                if (printer.localModel.isNotBlank() || printer.localHosts.isNotEmpty()) {
+                    LocalPairingDetail(printer)
                 }
             }
 
@@ -499,6 +510,45 @@ private fun PrinterEditor(
                 ) { Text("Speichern") }
             }
         }
+    }
+
+    if (showScanner) {
+        QrScanSheet(
+            onCode = { code ->
+                showScanner = false
+                pairingJson = code
+                runPairing(code)
+            },
+            onCancel = { showScanner = false },
+        )
+    }
+}
+
+@Composable
+private fun LocalPairingDetail(printer: PrusaLink.Printer) {
+    Column(
+        Modifier.fillMaxWidth()
+            .clip(RoundedCornerShape(10.dp))
+            .background(PrusaColors.PanelRaised)
+            .padding(12.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        Text("Gekoppelter Drucker", color = PrusaColors.TextPrimary, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+        DetailRow("Modell", printer.localModel.ifBlank { "–" })
+        DetailRow("IP-Adresse", printer.localHosts.firstOrNull() ?: "–")
+        DetailRow("Düse", printer.localNozzleDiameter?.let { "${it} mm · ${printer.localNozzleMaterial}" } ?: "–")
+        DetailRow(
+            "Fähigkeiten",
+            if (printer.localCapabilities.isEmpty()) "–" else printer.localCapabilities.sorted().joinToString(", "),
+        )
+    }
+}
+
+@Composable
+private fun DetailRow(label: String, value: String) {
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+        Text(label, color = PrusaColors.TextMuted, fontSize = 11.sp)
+        Text(value, color = PrusaColors.TextPrimary, fontSize = 11.sp)
     }
 }
 

@@ -11,6 +11,8 @@ coil = "2.7.0"
 junit = "4.13.2"
 serializationJson = "1.7.3"
 coroutinesTest = "1.9.0"
+camerax = "1.4.1"
+mlkitBarcode = "17.3.0"
 
 [libraries]
 androidx-core-ktx           = { group = "androidx.core",              name = "core-ktx",                 version.ref = "coreKtx" }
@@ -33,6 +35,12 @@ kotlin-test                 = { group = "org.jetbrains.kotlin",     name = "kotl
 junit                       = { group = "junit",                      name = "junit",                    version.ref = "junit" }
 kotlinx-serialization-json = { group = "org.jetbrains.kotlinx",      name = "kotlinx-serialization-json", version.ref = "serializationJson" }
 kotlinx-coroutines-test    = { group = "org.jetbrains.kotlinx",      name = "kotlinx-coroutines-test",    version.ref = "coroutinesTest" }
+# QR-Scanner fuer die experimentelle lokale PrusaLink-Kopplung (nur Kamera-Vorschau + Barcode-Erkennung, keine Cloud-Anbindung).
+androidx-camera-core        = { group = "androidx.camera",           name = "camera-core",              version.ref = "camerax" }
+androidx-camera-camera2     = { group = "androidx.camera",           name = "camera-camera2",           version.ref = "camerax" }
+androidx-camera-lifecycle   = { group = "androidx.camera",           name = "camera-lifecycle",         version.ref = "camerax" }
+androidx-camera-view        = { group = "androidx.camera",           name = "camera-view",              version.ref = "camerax" }
+mlkit-barcode-scanning      = { group = "com.google.mlkit",          name = "barcode-scanning",         version.ref = "mlkitBarcode" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

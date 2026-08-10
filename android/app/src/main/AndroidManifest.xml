@@ -9,6 +9,11 @@
          siehe docs/entscheidungen.md, E-09. -->
     <uses-permission android:name="android.permission.INTERNET" />
 
+    <!-- Nur fuer den QR-Scanner der experimentellen lokalen PrusaLink-Kopplung.
+         Kein Geraet, das keine Kamera hat, wird dadurch ausgeschlossen. -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-feature android:name="android.hardware.camera.any" android:required="false" />
+
     <!-- OpenGL ES 3.0 ist die Basis fuer den Viewport (M4). -->
     <uses-feature android:glEsVersion="0x00030000" android:required="true" />
 

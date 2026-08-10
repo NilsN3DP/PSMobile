@@ -53,6 +53,12 @@ struct PrintersView: View {
     private let client = PrusaLinkClient()
     private let octoClient = OctoPrintClient()
 
+    /// Experimentelle lokale PrusaLink-Kopplung: standardmaessig aus,
+    /// genau wie unter Android (PrinterStore.localPairingOptIn), damit
+    /// niemand versehentlich in einen fremden Drucker-Hotspot koppelt.
+    private static let localPairingOptInKey = "prusalink.localPairingOptIn"
+    @State private var localPairingOptIn = UserDefaults.standard.bool(forKey: PrintersView.localPairingOptInKey)
+
     /// Ergebnis unabhaengig vom tatsaechlichen Client - beide melden
     /// dieselbe Zweiheit (ok/fehler), nur mit eigenem Typ, weil
     /// OctoPrintClient nichts von PrusaLinkClient wissen muss.
@@ -115,6 +121,9 @@ struct PrintersView: View {
                             .font(.system(size: ps.font(13)))
                             .foregroundStyle(PrusaColors.textMuted)
                     }
+                    if senden == nil {
+                        lokaleKopplungOptIn
+                    }
                     if unpassendeAnzahl > 0 && !passende.isEmpty {
                         Button { zeigeAlleDrucker.toggle() } label: {
                             HStack(spacing: ps.pt(5)) {
@@ -142,6 +151,16 @@ struct PrintersView: View {
                           kennung: "drucker.neu") {
                         bearbeitet = PrusaLinkClient.Printer()
                     }
+                    if senden == nil && localPairingOptIn {
+                        knopf("Experimental: QR koppeln",
+                              kennung: "drucker.lokal.neu") {
+                            var neu = PrusaLinkClient.Printer()
+                            neu.host = "http://192.168.4.1"
+                            neu.localExperimental = true
+                            neu.allowInsecureHttp = true
+                            bearbeitet = neu
+                        }
+                    }
                 }
                 .padding(ps.pt(16))
                 .frame(maxWidth: ps.pt(760))
@@ -154,6 +173,36 @@ struct PrintersView: View {
             PrinterEditView(store: store, printer: drucker) { bearbeitet = nil }
         }
         .task(id: store.printers.map(\.id)) { await alleAutomatischPruefen() }
+    }
+
+    /// Standardmaessig aus. Akzeptiert im Kopplungsschritt nur lokale
+    /// Drucker-Hotspots (siehe PrusaLinkClient.isLocalHost); kein
+    /// automatisches Entdecken fremder Geraete.
+    private var lokaleKopplungOptIn: some View {
+        HStack(alignment: .top, spacing: ps.pt(10)) {
+            VStack(alignment: .leading, spacing: ps.pt(2)) {
+                Text(st("Experimental local PrusaLink pairing",
+                        "Experimentelle lokale PrusaLink-Kopplung"))
+                    .font(.system(size: ps.font(13)))
+                    .foregroundStyle(PrusaColors.textPrimary)
+                Text(st("Off by default. Only accepts local printer hotspots; QR scan or manual JSON entry.",
+                        "Standardmäßig aus. Akzeptiert nur lokale Drucker-Hotspots; QR-Scan oder manuelle JSON-Eingabe."))
+                    .font(.system(size: ps.font(11)))
+                    .foregroundStyle(PrusaColors.textMuted)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer()
+            Toggle("", isOn: Binding(
+                get: { localPairingOptIn },
+                set: { neu in
+                    localPairingOptIn = neu
+                    UserDefaults.standard.set(neu, forKey: Self.localPairingOptInKey)
+                }
+            ))
+            .labelsHidden()
+            .tint(PrusaColors.orange)
+            .accessibilityIdentifier("drucker.lokal.optin")
+        }
     }
 
     /// Alle eingerichteten Drucker gleichzeitig anfragen - nur im
@@ -327,6 +376,13 @@ struct PrinterEditView: View {
     @Environment(\.psScale) private var ps
     @State private var apiKey = ""
     @State private var password = ""
+    @State private var pairingJson = ""
+    @State private var pairingLaeuft = false
+    @State private var pairingMeldung: String?
+    @State private var pairingFehler = false
+    @State private var zeigeScanner = false
+
+    private let localClient = PrusaLinkClient()
 
     var body: some View {
         ScrollView {
@@ -334,6 +390,10 @@ struct PrinterEditView: View {
                 Text(st("Printer", "Drucker"))
                     .font(.system(size: ps.font(20)))
                     .foregroundStyle(PrusaColors.textPrimary)
+
+                if printer.localExperimental {
+                    lokaleKopplung
+                }
 
                 feld(st("Name", "Name"), text: $printer.name, kennung: "drucker.name")
 
@@ -425,6 +485,21 @@ struct PrinterEditView: View {
                     }
                     .foregroundStyle(PrusaColors.danger)
                     .accessibilityIdentifier("drucker.loeschen")
+                    if printer.localExperimental {
+                        Button(st("Reset local pairing", "Lokale Kopplung zurücksetzen")) {
+                            store.setLocalPairingToken(nil, for: printer)
+                            printer.localExperimental = false
+                            printer.localHosts = []
+                            printer.localCapabilities = []
+                            printer.localModel = ""
+                            printer.localNozzleDiameter = nil
+                            printer.localNozzleMaterial = "unknown"
+                            store.upsert(printer)
+                            onClose()
+                        }
+                        .foregroundStyle(PrusaColors.textMuted)
+                        .accessibilityIdentifier("drucker.lokal.zuruecksetzen")
+                    }
                     Spacer()
                     Button(st("Cancel", "Abbrechen"), action: onClose)
                         .foregroundStyle(PrusaColors.textMuted)
@@ -455,6 +530,138 @@ struct PrinterEditView: View {
             let vorhanden = store.secret(for: printer)
             apiKey = vorhanden.apiKey
             password = vorhanden.password
+        }
+    }
+
+    /// Scannen, koppeln, Ergebnis anzeigen - Gegenstueck zum onPair-Callback
+    /// in PrintersScreen.kt. Speichert bei Erfolg sofort und schliesst den
+    /// Editor, statt auf den separaten Sichern-Knopf zu warten: das
+    /// Kopplungsergebnis (Benutzername/Passwort vom Drucker) waere sonst
+    /// verloren, wenn jemand den Editor stattdessen abbricht.
+    private func kopple(_ text: String) {
+        pairingFehler = false
+        guard let daten = text.data(using: .utf8),
+              let payload = try? JSONDecoder().decode(PrusaLinkClient.LocalPairingPayload.self, from: daten)
+        else {
+            pairingFehler = true
+            pairingMeldung = st("Invalid QR code", "QR-Code ungültig")
+            return
+        }
+        pairingLaeuft = true
+        pairingMeldung = nil
+        Task {
+            do {
+                let ergebnis = try await localClient.pairLocal(payload)
+                await MainActor.run {
+                    pairingLaeuft = false
+                    var gekoppelt = ergebnis.printer
+                    gekoppelt.id = printer.id
+                    gekoppelt.presetName = printer.presetName
+                    gekoppelt.lightingOptIn = printer.lightingOptIn
+                    store.upsert(gekoppelt)
+                    store.setSecret(ergebnis.secret, for: gekoppelt)
+                    store.setLocalPairingToken(payload.pairingToken, for: gekoppelt)
+                    onClose()
+                }
+            } catch {
+                await MainActor.run {
+                    pairingLaeuft = false
+                    pairingFehler = true
+                    switch error as? PrusaLinkClient.LocalPairError {
+                    case .invalidPayload: pairingMeldung = st("Invalid QR code", "QR-Code ungültig")
+                    case .unauthorized: pairingMeldung = st("Pairing token rejected", "Kopplungs-Token abgelehnt")
+                    case .invalidResponse: pairingMeldung = st("Printer response invalid", "Antwort des Druckers ungültig")
+                    case nil: pairingMeldung = st("Pairing failed", "Kopplung fehlgeschlagen")
+                    }
+                }
+            }
+        }
+    }
+
+    private var lokaleKopplung: some View {
+        VStack(alignment: .leading, spacing: ps.pt(8)) {
+            Text(st("Experimental · Local printer", "Experimental · Lokaler Drucker"))
+                .font(.system(size: ps.font(13)))
+                .foregroundStyle(PrusaColors.orange)
+            Text(st("Scan the printer's QR code, or paste the shown JSON manually.",
+                    "QR-Code des Druckers scannen, oder den angezeigten JSON-Inhalt manuell einfügen."))
+                .font(.system(size: ps.font(11)))
+                .foregroundStyle(PrusaColors.textMuted)
+
+            Button { zeigeScanner = true } label: {
+                Text(st("Scan QR code", "QR-Code scannen"))
+                    .font(.system(size: ps.font(13)))
+                    .foregroundStyle(.white)
+                    .frame(maxWidth: .infinity, minHeight: ps.touch(48))
+                    .background(PrusaColors.orange)
+                    .clipShape(RoundedRectangle(cornerRadius: ps.pt(3)))
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("drucker.lokal.scan")
+
+            feld(st("QR payload (manual fallback)", "QR-Payload (manuelle Fallback-Eingabe)"),
+                 text: $pairingJson, kennung: "drucker.lokal.json")
+
+            Button { kopple(pairingJson) } label: {
+                Text(pairingLaeuft
+                     ? st("Pairing…", "Kopplung läuft…")
+                     : st("Pair QR payload", "QR-Payload koppeln"))
+                    .font(.system(size: ps.font(13)))
+                    .foregroundStyle(PrusaColors.orange)
+                    .frame(maxWidth: .infinity, minHeight: ps.touch(48))
+                    .overlay(RoundedRectangle(cornerRadius: ps.pt(3))
+                        .stroke(PrusaColors.divider, lineWidth: 1))
+            }
+            .buttonStyle(.plain)
+            .disabled(pairingJson.isEmpty || pairingLaeuft)
+            .accessibilityIdentifier("drucker.lokal.koppeln")
+
+            if let pairingMeldung {
+                Text(pairingMeldung)
+                    .font(.system(size: ps.font(13)))
+                    .foregroundStyle(pairingFehler ? PrusaColors.danger : PrusaColors.ok)
+            }
+
+            if !printer.localModel.isEmpty || !printer.localHosts.isEmpty {
+                lokalesDetail
+            }
+        }
+        .padding(ps.pt(12))
+        .background(PrusaColors.panelRaised)
+        .clipShape(RoundedRectangle(cornerRadius: ps.pt(8)))
+        .fullScreenCover(isPresented: $zeigeScanner) {
+            QRScanSheet(
+                onCode: { code in
+                    zeigeScanner = false
+                    pairingJson = code
+                    kopple(code)
+                },
+                onCancel: { zeigeScanner = false }
+            )
+        }
+    }
+
+    private var lokalesDetail: some View {
+        VStack(alignment: .leading, spacing: ps.pt(4)) {
+            Text(st("Paired printer", "Gekoppelter Drucker"))
+                .font(.system(size: ps.font(12)))
+                .fontWeight(.semibold)
+                .foregroundStyle(PrusaColors.textPrimary)
+            detailZeile(st("Model", "Modell"), printer.localModel.isEmpty ? "–" : printer.localModel)
+            detailZeile(st("IP address", "IP-Adresse"), printer.localHosts.first ?? "–")
+            detailZeile(st("Nozzle", "Düse"),
+                        printer.localNozzleDiameter.map { "\($0) mm · \(printer.localNozzleMaterial)" } ?? "–")
+            detailZeile(st("Capabilities", "Fähigkeiten"),
+                        printer.localCapabilities.isEmpty
+                        ? "–" : printer.localCapabilities.sorted().joined(separator: ", "))
+        }
+    }
+
+    private func detailZeile(_ label: String, _ value: String) -> some View {
+        HStack {
+            Text(label).font(.system(size: ps.font(11))).foregroundStyle(PrusaColors.textMuted)
+            Spacer()
+            Text(value).font(.system(size: ps.font(11))).foregroundStyle(PrusaColors.textPrimary)
         }
     }
 
