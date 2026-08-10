@@ -88,12 +88,14 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
@@ -103,6 +105,7 @@ import de.psmobile.core.PsmCore
 import de.psmobile.shared.rules.BedInput
 import de.psmobile.shared.rules.BedStripContract
 import de.psmobile.slicing.SlicerService
+import de.psmobile.ui.theme.FONT_FOLLOW
 import de.psmobile.ui.theme.PrusaColors
 import de.psmobile.ui.theme.uiScaleFor
 import kotlin.math.roundToInt
@@ -1816,6 +1819,21 @@ internal fun BedSelector(
         }
         if (zeigeListe) {
             ModalBottomSheet(onDismissRequest = { zeigeListe = false }, containerColor = PrusaColors.Background) {
+                // ModalBottomSheet haengt sein Fenster ausserhalb der
+                // Compose-Hierarchie ein - die in PSMobileTheme gestauchte
+                // LocalDensity kommt hier nicht an, und ohne sie zeichnet
+                // Material seine Vorgabegroessen: ein Blatt, das neben dem
+                // Rest der App aufgeblasen wirkt. Deshalb hier dieselbe
+                // Rechnung wie dort noch einmal, statt sich auf Vererbung
+                // zu verlassen, die bei einem eigenen Fenster nicht greift.
+                val konfiguration = LocalConfiguration.current
+                val basis = LocalDensity.current
+                val faktor = uiScaleFor(konfiguration.screenWidthDp, konfiguration.screenHeightDp)
+                val gestaucht = Density(
+                    density = basis.density * faktor,
+                    fontScale = basis.fontScale * (1f - (1f - faktor) * FONT_FOLLOW),
+                )
+                CompositionLocalProvider(LocalDensity provides gestaucht) {
                 Column(
                     Modifier.padding(horizontal = 16.dp).padding(bottom = 24.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp),
@@ -1885,6 +1903,7 @@ internal fun BedSelector(
                         Spacer(Modifier.width(6.dp))
                         Text(advancedText("Add bed", "Bett hinzufügen"))
                     }
+                }
                 }
             }
         }
