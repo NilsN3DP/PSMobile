@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">PSMobile</string>
+    <string name="app_name">Unofficial Prusa Slicer Mobile</string>
     <string name="slicing">Slicen</string>
     <string name="slice_starting">wird vorbereitet</string>
     <string name="cancel_slice">Abbrechen</string>
