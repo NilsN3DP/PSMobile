@@ -48,6 +48,7 @@ import androidx.core.view.WindowCompat
 import de.psmobile.core.PsmCore
 import de.psmobile.slicing.SlicerService
 import de.psmobile.ui.theme.PrusaColors
+import de.psmobile.ui.theme.ScaledOverlay
 import de.psmobile.shared.rules.EasyModeState
 import de.psmobile.shared.rules.EasyPanel
 import de.psmobile.shared.rules.EasyReadiness
@@ -464,7 +465,13 @@ private fun EasySelectionSheet(
         modifier = if (isShortScreen) Modifier.fillMaxHeight() else Modifier,
         containerColor = PrusaColors.Panel,
     ) {
-        EasySelectionContent(panel, service, presets, queries, onProfileQueryChange, onDismiss, onOpenAdvanced, onOpenPrinterSetup, onPickFile)
+        // Siehe SlicerScreen.kt (Bettauswahl): ModalBottomSheet traegt die
+        // in PSMobileTheme gestauchte Dichte nicht automatisch weiter,
+        // ohne das hier waeren Drucker-/Filament-/Profilauswahl neben dem
+        // Rest der App aufgeblasen.
+        ScaledOverlay {
+            EasySelectionContent(panel, service, presets, queries, onProfileQueryChange, onDismiss, onOpenAdvanced, onOpenPrinterSetup, onPickFile)
+        }
     }
 }
 

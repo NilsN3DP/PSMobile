@@ -129,25 +129,39 @@ private fun psTypography(): Typography {
     )
 }
 
+/** Dieselbe Rechnung wie in [PSMobileTheme] - siehe [ScaledOverlay]. */
 @Composable
-fun PSMobileTheme(content: @Composable () -> Unit) {
+private fun gestauchteDichte(): Density {
     val configuration = LocalConfiguration.current
     val base = LocalDensity.current
     val scale = uiScaleFor(configuration.screenWidthDp, configuration.screenHeightDp)
-
-    val scaled = Density(
+    return Density(
         density = base.density * scale,
-        // Schrift folgt gedaempft: Text darf nicht so stark schrumpfen
-        // wie Kaesten, sonst wird er unleserlich, bevor der Platz
-        // wirklich knapp ist.
         fontScale = base.fontScale * (1f - (1f - scale) * FONT_FOLLOW),
     )
+}
 
-    CompositionLocalProvider(LocalDensity provides scaled) {
+@Composable
+fun PSMobileTheme(content: @Composable () -> Unit) {
+    CompositionLocalProvider(LocalDensity provides gestauchteDichte()) {
         MaterialTheme(
             colorScheme = Scheme,
             typography = remember { psTypography() },
             content = content,
         )
     }
+}
+
+/**
+ * Fuer Inhalte in einem eigenen Fenster - ModalBottomSheet, Dialog,
+ * Popup. Die tragen [PSMobileTheme]s gestauchte Dichte nicht automatisch
+ * weiter, weil sie ausserhalb des normalen Kompositionspfads haengen:
+ * ohne dies zeichnet Material seine Telefon-Vorgabegroessen, und das
+ * betroffene Blatt wirkt neben dem Rest der App aufgeblasen. Um jede
+ * Fundstelle einzeln dieselbe Rechnung nachzutragen, statt sie zu
+ * kopieren, einmal hier.
+ */
+@Composable
+fun ScaledOverlay(content: @Composable () -> Unit) {
+    CompositionLocalProvider(LocalDensity provides gestauchteDichte(), content = content)
 }
