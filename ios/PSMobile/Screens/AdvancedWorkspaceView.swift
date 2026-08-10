@@ -218,13 +218,23 @@ struct AdvancedWorkspaceView: View {
             }
             if seiteOffen && schmal && !leisteUnten { schmaleSeite }
             if seiteOffen && leisteUnten { unteneSeite }
-            if schmal {
+            // Nicht gleichzeitig mit der offenen Seite: die deckt auf
+            // schmalen Geraeten (schmaleSeite) ohnehin fast den ganzen
+            // Bildschirm ab, und zwei schwebende Ebenen uebereinander
+            // ergaben nur eine Kollision aus Stift/Schloss-Knoepfen und
+            // Panel - kein sauberer Zustand wie am iPad, wo beide nebeneinander
+            // Platz haben, weil die Seite dort inline liegt statt zu schweben.
+            if schmal && !seiteOffen {
                 VStack {
                     BedSelector(model: model,
                                 onArrange: { zeigeArrange = true },
                                 onOpenSelection: { zeigeBettwahl = true })
                         .padding(.leading, ps.pt(74))
-                        .padding(.top, ps.pt(52))
+                        // touch(), nicht pt(): derselbe Massstab wie der
+                        // Platzhalter oben (Zeile 202), sonst klafft je
+                        // nach Skalierung ein Ueberlapp mit der
+                        // Werkzeugleiste oder eine zu grosse Luecke.
+                        .padding(.top, ps.touch(52))
                     Spacer()
                 }
                 .zIndex(80)
