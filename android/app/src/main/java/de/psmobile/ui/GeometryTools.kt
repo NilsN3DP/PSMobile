@@ -152,6 +152,15 @@ internal enum class CutResult(val label: String) {
     BOTH("Beide"),
     UPPER("Nur oben"),
     LOWER("Nur unten"),
+    ;
+
+    /** Der Enum-Wert bleibt deutsch (er wird gespeichert/verglichen),
+     *  angezeigt wird die uebersetzte Fassung. */
+    fun anzeige(): String = when (this) {
+        BOTH -> PsUi.appText("Both", label)
+        UPPER -> PsUi.appText("Upper only", label)
+        LOWER -> PsUi.appText("Lower only", label)
+    }
 }
 
 internal fun retainedCutParts(result: CutResult): Pair<Boolean, Boolean> = when (result) {
@@ -182,7 +191,7 @@ internal fun GeometryTools(
 ) {
     if (selected == null) {
         Text(
-            "Für Modellwerkzeuge zuerst ein Objekt auswählen.",
+            PsUi.appText("Select an object first to use the model tools.", "Für Modellwerkzeuge zuerst ein Objekt auswählen."),
             color = PrusaColors.TextMuted,
             modifier = Modifier.padding(vertical = 18.dp),
         )
@@ -459,12 +468,12 @@ internal fun GeometryTools(
             colors = ButtonDefaults.buttonColors(
                 containerColor = PrusaColors.PanelRaised,
             ),
-        ) { Text("Farbe übernehmen") }
+        ) { Text(PsUi.appText("Apply colour", "Farbe übernehmen")) }
         ToggleRow("In Infill wischen", wipeInfill) {
             wipeInfill = it
             service.setObjectWipe(selected.id, wipeInfill, wipeObjects)
         }
-        ToggleRow("In andere Objekte wischen", wipeObjects) {
+        ToggleRow(PsUi.appText("Wipe into other objects", "In andere Objekte wischen"), wipeObjects) {
             wipeObjects = it
             service.setObjectWipe(selected.id, wipeInfill, wipeObjects)
         }
@@ -768,7 +777,7 @@ private fun ActiveSurfaceToolCard(
             Text(instruction, color = PrusaColors.TextPrimary, fontSize = 12.sp)
         }
         OutlinedButton(onClick = onCancel, modifier = Modifier.height(44.dp)) {
-            Text("Beenden")
+            Text(PsUi.appText("Finish", "Beenden"))
         }
     }
 }
@@ -800,16 +809,16 @@ private fun CutDialog(
         containerColor = PrusaColors.Panel,
         titleContentColor = PrusaColors.TextPrimary,
         textContentColor = PrusaColors.TextPrimary,
-        title = { Text("Horizontal schneiden") },
+        title = { Text(PsUi.appText("Cut horizontally", "Horizontal schneiden")) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedTextField(
                     value = z,
                     onValueChange = { z = it },
-                    label = { Text("Höhe über Bett · mm") },
+                    label = { Text(PsUi.appText("Height above bed · mm", "Höhe über Bett · mm")) },
                     singleLine = true,
                 )
-                Text("Teile behalten", color = PrusaColors.TextMuted, fontSize = 12.sp)
+                Text(PsUi.appText("Keep parts", "Teile behalten"), color = PrusaColors.TextMuted, fontSize = 12.sp)
                 Row(
                     Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -818,7 +827,7 @@ private fun CutDialog(
                         FilterChip(
                             selected = cutResult == option,
                             onClick = { cutResult = option },
-                            label = { Text(option.label) },
+                            label = { Text(option.anzeige()) },
                             modifier = Modifier.height(48.dp),
                             colors = FilterChipDefaults.filterChipColors(
                                 containerColor = PrusaColors.PanelRaised,
@@ -835,17 +844,17 @@ private fun CutDialog(
                         )
                     }
                 }
-                CheckRow("Als Teile eines Objekts", asParts) { asParts = it }
+                CheckRow(PsUi.appText("As parts of one object", "Als Teile eines Objekts"), asParts) { asParts = it }
             }
         },
         confirmButton = {
             TextButton(
                 enabled = parsed != null && parsed > 0f && (upper || lower),
                 onClick = { parsed?.let { onApply(it, upper, lower, asParts) } },
-            ) { Text("Schneiden") }
+            ) { Text(PsUi.appText("Cut", "Schneiden")) }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Abbrechen") }
+            TextButton(onClick = onDismiss) { Text(PsUi.appText("Cancel", "Abbrechen")) }
         },
     )
 }
@@ -877,7 +886,7 @@ private fun SimplifyDialog(
                     singleLine = true,
                 )
                 Text(
-                    "Die Änderung ist über Rückgängig vollständig umkehrbar.",
+                    PsUi.appText("The change can be fully undone.", "Die Änderung ist über Rückgängig vollständig umkehrbar."),
                     color = PrusaColors.TextMuted,
                     fontSize = 12.sp,
                 )
@@ -890,7 +899,7 @@ private fun SimplifyDialog(
             ) { Text("Vereinfachen") }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Abbrechen") }
+            TextButton(onClick = onDismiss) { Text(PsUi.appText("Cancel", "Abbrechen")) }
         },
     )
 }
@@ -927,7 +936,7 @@ private fun AddVolumeDialog(
         containerColor = PrusaColors.Panel,
         titleContentColor = PrusaColors.TextPrimary,
         textContentColor = PrusaColors.TextPrimary,
-        title = { Text("Modifier hinzufügen") },
+        title = { Text(PsUi.appText("Add modifier", "Modifier hinzufügen")) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedButton(
@@ -969,10 +978,10 @@ private fun AddVolumeDialog(
                     if (px != null && py != null && pz != null)
                         onApply(role, shape, px, py, pz)
                 },
-            ) { Text("Hinzufügen") }
+            ) { Text(PsUi.appText("Add", "Hinzufügen")) }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Abbrechen") }
+            TextButton(onClick = onDismiss) { Text(PsUi.appText("Cancel", "Abbrechen")) }
         },
     )
 
@@ -982,7 +991,7 @@ private fun AddVolumeDialog(
             containerColor = PrusaColors.Panel,
             titleContentColor = PrusaColors.TextPrimary,
             textContentColor = PrusaColors.TextPrimary,
-            title = { Text("Modifier-Rolle wählen") },
+            title = { Text(PsUi.appText("Choose modifier role", "Modifier-Rolle wählen")) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     roles.forEach { option ->
@@ -1057,23 +1066,23 @@ private fun CheckRow(label: String, checked: Boolean, onChange: (Boolean) -> Uni
 }
 
 private fun PsmCore.VolumeType.displayName(): String = when (this) {
-    PsmCore.VolumeType.MODEL_PART -> "Modellteil"
-    PsmCore.VolumeType.NEGATIVE -> "Negativvolumen"
-    PsmCore.VolumeType.MODIFIER -> "Modifier"
-    PsmCore.VolumeType.SUPPORT_BLOCKER -> "Support-Blocker"
-    PsmCore.VolumeType.SUPPORT_ENFORCER -> "Support-Erzwinger"
-    PsmCore.VolumeType.UNKNOWN -> "Unbekannt"
+    PsmCore.VolumeType.MODEL_PART -> PsUi.appText("Model part", "Modellteil")
+    PsmCore.VolumeType.NEGATIVE -> PsUi.appText("Negative volume", "Negativvolumen")
+    PsmCore.VolumeType.MODIFIER -> PsUi.appText("Modifier", "Modifier")
+    PsmCore.VolumeType.SUPPORT_BLOCKER -> PsUi.appText("Support blocker", "Support-Blocker")
+    PsmCore.VolumeType.SUPPORT_ENFORCER -> PsUi.appText("Support enforcer", "Support-Erzwinger")
+    PsmCore.VolumeType.UNKNOWN -> PsUi.appText("Unknown", "Unbekannt")
 }
 
 private fun PsmCore.PrimitiveShape.displayName(): String = when (this) {
-    PsmCore.PrimitiveShape.BOX -> "Quader"
-    PsmCore.PrimitiveShape.CYLINDER -> "Zylinder"
-    PsmCore.PrimitiveShape.SPHERE -> "Kugel"
+    PsmCore.PrimitiveShape.BOX -> PsUi.appText("Box", "Quader")
+    PsmCore.PrimitiveShape.CYLINDER -> PsUi.appText("Cylinder", "Zylinder")
+    PsmCore.PrimitiveShape.SPHERE -> PsUi.appText("Sphere", "Kugel")
 }
 
 private fun PsmCore.PaintTool.displayName(): String = when (this) {
-    PsmCore.PaintTool.SUPPORT -> "Support"
-    PsmCore.PaintTool.SEAM -> "Naht"
+    PsmCore.PaintTool.SUPPORT -> PsUi.appText("Support", "Support")
+    PsmCore.PaintTool.SEAM -> PsUi.appText("Seam", "Naht")
     PsmCore.PaintTool.FUZZY -> "Fuzzy"
     PsmCore.PaintTool.MMU -> "MMU"
 }
@@ -1094,7 +1103,7 @@ private fun TextEmbossDialog(
         containerColor = PrusaColors.Panel,
         titleContentColor = PrusaColors.TextPrimary,
         textContentColor = PrusaColors.TextPrimary,
-        title = { Text("Text prägen") },
+        title = { Text(PsUi.appText("Emboss text", "Text prägen")) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedTextField(
@@ -1107,13 +1116,13 @@ private fun TextEmbossDialog(
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     SizeField(
-                        "Texthöhe",
+                        PsUi.appText("Text height", "Texthöhe"),
                         size,
                         { size = it },
                         Modifier.weight(1f),
                     )
                     SizeField(
-                        "Prägetiefe",
+                        PsUi.appText("Emboss depth", "Prägetiefe"),
                         depth,
                         { depth = it },
                         Modifier.weight(1f),
@@ -1133,10 +1142,10 @@ private fun TextEmbossDialog(
                             text.trim(), parsedSize, parsedDepth, type
                         )
                 },
-            ) { Text("Hinzufügen") }
+            ) { Text(PsUi.appText("Add", "Hinzufügen")) }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Abbrechen") }
+            TextButton(onClick = onDismiss) { Text(PsUi.appText("Cancel", "Abbrechen")) }
         },
     )
 }
@@ -1154,7 +1163,7 @@ private fun SvgEmbossDialog(
         containerColor = PrusaColors.Panel,
         titleContentColor = PrusaColors.TextPrimary,
         textContentColor = PrusaColors.TextPrimary,
-        title = { Text("SVG prägen") },
+        title = { Text(PsUi.appText("Emboss SVG", "SVG prägen")) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(
@@ -1163,7 +1172,7 @@ private fun SvgEmbossDialog(
                     color = PrusaColors.TextMuted,
                 )
                 SizeField(
-                    "Prägetiefe",
+                    PsUi.appText("Emboss depth", "Prägetiefe"),
                     depth,
                     { depth = it },
                     Modifier.fillMaxWidth(),
@@ -1177,10 +1186,10 @@ private fun SvgEmbossDialog(
                 onClick = {
                     parsedDepth?.let { onApply(it, type) }
                 },
-            ) { Text("SVG auswählen") }
+            ) { Text(PsUi.appText("Choose SVG", "SVG auswählen")) }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Abbrechen") }
+            TextButton(onClick = onDismiss) { Text(PsUi.appText("Cancel", "Abbrechen")) }
         },
     )
 }

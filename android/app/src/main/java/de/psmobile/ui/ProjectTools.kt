@@ -57,7 +57,7 @@ internal fun ProjectTools(
             ProjectNumberField("X · mm", wipeX, { wipeX = it }, Modifier.weight(1f))
             ProjectNumberField("Y · mm", wipeY, { wipeY = it }, Modifier.weight(1f))
             ProjectNumberField(
-                "Drehung · °",
+                PsUi.appText("Rotation · °", "Drehung · °"),
                 wipeRotation,
                 { wipeRotation = it },
                 Modifier.weight(1f),
@@ -78,13 +78,13 @@ internal fun ProjectTools(
             colors = ButtonDefaults.buttonColors(
                 containerColor = PrusaColors.PanelRaised,
             ),
-        ) { Text("Wipe-Tower übernehmen") }
+        ) { Text(PsUi.appText("Apply wipe tower", "Wipe-Tower übernehmen")) }
 
         HorizontalDivider(color = PrusaColors.Divider)
-        ProjectHeading("Custom G-Code nach Höhe")
+        ProjectHeading(PsUi.appText("Custom G-code by height", "Custom G-Code nach Höhe"))
         if (gcodes.isEmpty()) {
             Text(
-                "Noch keine Farbwechsel, Pausen oder eigenen Befehle.",
+                PsUi.appText("No colour changes, pauses or custom commands yet.", "Noch keine Farbwechsel, Pausen oder eigenen Befehle."),
                 color = PrusaColors.TextMuted,
                 fontSize = 12.sp,
             )
@@ -114,7 +114,7 @@ internal fun ProjectTools(
                 TextButton(
                     onClick = { editIndex = index },
                     modifier = Modifier.height(48.dp),
-                ) { Text("Ändern") }
+                ) { Text(PsUi.appText("Edit", "Ändern")) }
                 TextButton(
                     onClick = {
                         gcodes = gcodes.toMutableList().also {
@@ -123,17 +123,17 @@ internal fun ProjectTools(
                         service.replaceCustomGcodes(gcodes)
                     },
                     modifier = Modifier.height(48.dp),
-                ) { Text("Löschen", color = PrusaColors.Danger) }
+                ) { Text(PsUi.appText("Delete", "Löschen"), color = PrusaColors.Danger) }
             }
         }
         OutlinedButton(
             onClick = { addingGcode = true },
             modifier = Modifier.fillMaxWidth().height(50.dp),
             shape = RoundedCornerShape(10.dp),
-        ) { Text("Höhenbefehl hinzufügen") }
+        ) { Text(PsUi.appText("Add height command", "Höhenbefehl hinzufügen")) }
 
         HorizontalDivider(color = PrusaColors.Divider)
-        ProjectHeading("Dateiwerkzeuge")
+        ProjectHeading(PsUi.appText("File tools", "Dateiwerkzeuge"))
         Row(
             Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -141,11 +141,11 @@ internal fun ProjectTools(
             OutlinedButton(
                 onClick = { onExportPlate(PsmCore.PlateFormat.STL) },
                 modifier = Modifier.weight(1f).height(54.dp),
-            ) { Text("Bett als STL", fontSize = 12.sp) }
+            ) { Text(PsUi.appText("Bed as STL", "Bett als STL"), fontSize = 12.sp) }
             OutlinedButton(
                 onClick = { onExportPlate(PsmCore.PlateFormat.OBJ) },
                 modifier = Modifier.weight(1f).height(54.dp),
-            ) { Text("Bett als OBJ", fontSize = 12.sp) }
+            ) { Text(PsUi.appText("Bed as OBJ", "Bett als OBJ"), fontSize = 12.sp) }
         }
         Row(
             Modifier.fillMaxWidth(),
@@ -154,14 +154,14 @@ internal fun ProjectTools(
             OutlinedButton(
                 onClick = onRepairStl,
                 modifier = Modifier.weight(1f).height(54.dp),
-            ) { Text("STL reparieren", fontSize = 12.sp) }
+            ) { Text(PsUi.appText("Repair STL", "STL reparieren"), fontSize = 12.sp) }
             OutlinedButton(
                 onClick = onConvertGcode,
                 modifier = Modifier.weight(1f).height(54.dp),
-            ) { Text("G-Code wandeln", fontSize = 12.sp) }
+            ) { Text(PsUi.appText("Convert G-code", "G-Code wandeln"), fontSize = 12.sp) }
         }
         Text(
-            "ZIP-Import ist in diesem Paket bewusst nicht enthalten.",
+            PsUi.appText("ZIP import is deliberately not part of this package.", "ZIP-Import ist in diesem Paket bewusst nicht enthalten."),
             color = PrusaColors.TextMuted,
             fontSize = 11.sp,
         )
@@ -220,7 +220,7 @@ private fun CustomGcodeDialog(
                 OutlinedTextField(
                     value = z,
                     onValueChange = { z = it },
-                    label = { Text("Druckhöhe · mm") },
+                    label = { Text(PsUi.appText("Print height · mm", "Druckhöhe · mm")) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                 )
@@ -242,7 +242,7 @@ private fun CustomGcodeDialog(
                     OutlinedTextField(
                         value = extruder,
                         onValueChange = { extruder = it },
-                        label = { Text("Extruder · 0 = Standard") },
+                        label = { Text(PsUi.appText("Extruder · 0 = default", "Extruder · 0 = Standard")) },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
                     )
@@ -251,7 +251,7 @@ private fun CustomGcodeDialog(
                     OutlinedTextField(
                         value = colour,
                         onValueChange = { colour = it },
-                        label = { Text("Farbe · #RRGGBB") },
+                        label = { Text(PsUi.appText("Colour · #RRGGBB", "Farbe · #RRGGBB")) },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
                     )
@@ -259,7 +259,7 @@ private fun CustomGcodeDialog(
                 OutlinedTextField(
                     value = extra,
                     onValueChange = { extra = it },
-                    label = { Text("G-Code oder Notiz") },
+                    label = { Text(PsUi.appText("G-code or note", "G-Code oder Notiz")) },
                     minLines = 2,
                     maxLines = 5,
                     modifier = Modifier.fillMaxWidth(),
@@ -283,10 +283,10 @@ private fun CustomGcodeDialog(
                         )
                     }
                 },
-            ) { Text("Übernehmen") }
+            ) { Text(PsUi.appText("Apply", "Übernehmen")) }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Abbrechen") }
+            TextButton(onClick = onDismiss) { Text(PsUi.appText("Cancel", "Abbrechen")) }
         },
     )
 }
@@ -318,9 +318,9 @@ private fun ProjectNumberField(
 }
 
 private fun PsmCore.CustomGcodeType.displayName(): String = when (this) {
-    PsmCore.CustomGcodeType.COLOR_CHANGE -> "Farbwechsel"
+    PsmCore.CustomGcodeType.COLOR_CHANGE -> PsUi.appText("Colour change", "Farbwechsel")
     PsmCore.CustomGcodeType.PAUSE -> "Pause"
-    PsmCore.CustomGcodeType.TOOL_CHANGE -> "Werkzeugwechsel"
-    PsmCore.CustomGcodeType.TEMPLATE -> "Vorlage"
-    PsmCore.CustomGcodeType.CUSTOM -> "Eigener Code"
+    PsmCore.CustomGcodeType.TOOL_CHANGE -> PsUi.appText("Tool change", "Werkzeugwechsel")
+    PsmCore.CustomGcodeType.TEMPLATE -> PsUi.appText("Template", "Vorlage")
+    PsmCore.CustomGcodeType.CUSTOM -> PsUi.appText("Custom code", "Eigener Code")
 }
