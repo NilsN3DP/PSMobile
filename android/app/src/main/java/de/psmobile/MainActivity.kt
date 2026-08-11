@@ -88,7 +88,7 @@ class MainActivity : ComponentActivity() {
     private var pending3mf by mutableStateOf<File?>(null)
     private var pending3mfUri: Uri? = null
     private var importNotice by mutableStateOf<String?>(null)
-    private var noticeTitle by mutableStateOf("Projekt importiert")
+    private var noticeTitle by mutableStateOf(de.psmobile.ui.PsUi.appText("Project imported", "Projekt importiert"))
     private var currentProjectUri by mutableStateOf<Uri?>(null)
     private var pendingFileOutput: File? = null
     private var pendingFileName: String = "PSMobile-Datei"
@@ -383,8 +383,8 @@ class MainActivity : ComponentActivity() {
                         onNewProject = {
                             svc?.newProject()
                             currentProjectUri = null
-                            noticeTitle = "Neues Projekt"
-                            importNotice = "Ein leeres Projekt mit einem Druckbett wurde angelegt."
+                            noticeTitle = de.psmobile.ui.PsUi.appText("New project", "Neues Projekt")
+                            importNotice = de.psmobile.ui.PsUi.appText("An empty project with one bed was created.", "Ein leeres Projekt mit einem Druckbett wurde angelegt.")
                         },
                         onSaveProject = { saveProject(saveAs = false) },
                         onSaveProjectAs = { saveProject(saveAs = true) },
@@ -419,24 +419,24 @@ class MainActivity : ComponentActivity() {
                     is de.psmobile.slicing.profileupdate.ProfileUpdateState.Offer ->
                         AlertDialog(
                             onDismissRequest = {},
-                            title = { androidx.compose.material3.Text("Neue Drucker- und Materialprofile verfügbar") },
+                            title = { androidx.compose.material3.Text(de.psmobile.ui.PsUi.appText("New printer and material profiles available", "Neue Drucker- und Materialprofile verfügbar")) },
                             text = { androidx.compose.material3.Text(update.manifest.releaseNotes.joinToString("\n• ", prefix = "• ")) },
-                            confirmButton = { androidx.compose.material3.TextButton(onClick = { svc?.downloadProfileUpdate() }) { androidx.compose.material3.Text("Jetzt aktualisieren") } },
+                            confirmButton = { androidx.compose.material3.TextButton(onClick = { svc?.downloadProfileUpdate() }) { androidx.compose.material3.Text(de.psmobile.ui.PsUi.appText("Update now", "Jetzt aktualisieren")) } },
                             dismissButton = { androidx.compose.foundation.layout.Row {
-                                androidx.compose.material3.TextButton(onClick = { svc?.deferProfileUpdate() }) { androidx.compose.material3.Text("Später") }
-                                androidx.compose.material3.TextButton(onClick = { svc?.skipProfileUpdate() }) { androidx.compose.material3.Text("Erst beim nächsten Update fragen") }
+                                androidx.compose.material3.TextButton(onClick = { svc?.deferProfileUpdate() }) { androidx.compose.material3.Text(de.psmobile.ui.PsUi.appText("Later", "Später")) }
+                                androidx.compose.material3.TextButton(onClick = { svc?.skipProfileUpdate() }) { androidx.compose.material3.Text(de.psmobile.ui.PsUi.appText("Ask again at the next update", "Erst beim nächsten Update fragen")) }
                             } },
                         )
                     is de.psmobile.slicing.profileupdate.ProfileUpdateState.ReadyToApply ->
                         AlertDialog(
                             onDismissRequest = {},
-                            title = { androidx.compose.material3.Text("Profile aktualisiert") },
-                            text = { androidx.compose.material3.Text("Die neuen Profile sind geprüft und können jetzt oder beim nächsten Neustart verwendet werden.") },
+                            title = { androidx.compose.material3.Text(de.psmobile.ui.PsUi.appText("Profiles updated", "Profile aktualisiert")) },
+                            text = { androidx.compose.material3.Text(de.psmobile.ui.PsUi.appText("The new profiles are checked and can be used now or at the next restart.", "Die neuen Profile sind geprüft und können jetzt oder beim nächsten Neustart verwendet werden.")) },
                             confirmButton = { androidx.compose.material3.TextButton(onClick = {
                                 if (svc?.profileUpdateNeedsSave() == true) showProfileUpdateSaveWarning = true
                                 else svc?.applyStagedProfileUpdate()
-                            }) { androidx.compose.material3.Text("Jetzt verwenden") } },
-                            dismissButton = { androidx.compose.material3.TextButton(onClick = { svc?.deferProfileUpdate() }) { androidx.compose.material3.Text("Beim Neustart") } },
+                            }) { androidx.compose.material3.Text(de.psmobile.ui.PsUi.appText("Use now", "Jetzt verwenden")) } },
+                            dismissButton = { androidx.compose.material3.TextButton(onClick = { svc?.deferProfileUpdate() }) { androidx.compose.material3.Text(de.psmobile.ui.PsUi.appText("At restart", "Beim Neustart")) } },
                         )
                     else -> Unit
                 }
@@ -444,17 +444,17 @@ class MainActivity : ComponentActivity() {
                 if (showProfileUpdateSaveWarning) {
                     AlertDialog(
                         onDismissRequest = { showProfileUpdateSaveWarning = false },
-                        title = { androidx.compose.material3.Text("Projekt vor Profilwechsel speichern?") },
-                        text = { androidx.compose.material3.Text("Es ist ein Modell geladen oder es gibt ungespeicherte Profiländerungen. Speichere das 3MF-Projekt, bevor die Slicer-Sitzung mit den neuen Profilen neu startet.") },
+                        title = { androidx.compose.material3.Text(de.psmobile.ui.PsUi.appText("Save project before switching profiles?", "Projekt vor Profilwechsel speichern?")) },
+                        text = { androidx.compose.material3.Text(de.psmobile.ui.PsUi.appText("A model is loaded or there are unsaved profile changes. Save the 3MF project before the slicer session restarts with the new profiles.", "Es ist ein Modell geladen oder es gibt ungespeicherte Profiländerungen. Speichere das 3MF-Projekt, bevor die Slicer-Sitzung mit den neuen Profilen neu startet.")) },
                         confirmButton = { androidx.compose.material3.TextButton(onClick = {
                             showProfileUpdateSaveWarning = false
                             applyProfileUpdateWhenProjectSaved = true
                             saveProject(saveAs = false)
-                        }) { androidx.compose.material3.Text("Projekt speichern & aktualisieren") } },
+                        }) { androidx.compose.material3.Text(de.psmobile.ui.PsUi.appText("Save project & update", "Projekt speichern & aktualisieren")) } },
                         dismissButton = { androidx.compose.material3.TextButton(onClick = {
                             showProfileUpdateSaveWarning = false
                             svc?.deferProfileUpdate()
-                        }) { androidx.compose.material3.Text("Beim Neustart") } },
+                        }) { androidx.compose.material3.Text(de.psmobile.ui.PsUi.appText("At restart", "Beim Neustart")) } },
                     )
                 }
 
@@ -462,13 +462,18 @@ class MainActivity : ComponentActivity() {
                     AlertDialog(
                         onDismissRequest = { pending3mf = null },
                         title = {
-                            androidx.compose.material3.Text("3MF importieren")
+                            androidx.compose.material3.Text(de.psmobile.ui.PsUi.appText("Import 3MF", "3MF importieren"))
                         },
                         text = {
                             androidx.compose.material3.Text(
-                                "Soll „${file.name.substringAfter('-', file.name)}“ nur seine " +
-                                    "3D-Objekte zum aktuellen Bett hinzufügen oder als vollständiges " +
-                                    "Projekt mit Positionen und Druckprofil geöffnet werden?"
+                                de.psmobile.ui.PsUi.appText(
+                                    "Should „${file.name.substringAfter('-', file.name)}“ add only its " +
+                                        "3D objects to the current bed, or open as a full project " +
+                                        "with positions and print profile?",
+                                    "Soll „${file.name.substringAfter('-', file.name)}“ nur seine " +
+                                        "3D-Objekte zum aktuellen Bett hinzufügen oder als vollständiges " +
+                                        "Projekt mit Positionen und Druckprofil geöffnet werden?",
+                                )
                             )
                         },
                         confirmButton = {
@@ -477,7 +482,7 @@ class MainActivity : ComponentActivity() {
                                     import3mf(file, SlicerService.ImportMode.PROJECT)
                                 },
                             ) {
-                                androidx.compose.material3.Text("Als Projekt")
+                                androidx.compose.material3.Text(de.psmobile.ui.PsUi.appText("As project", "Als Projekt"))
                             }
                         },
                         dismissButton = {
@@ -486,7 +491,7 @@ class MainActivity : ComponentActivity() {
                                     import3mf(file, SlicerService.ImportMode.OBJECTS)
                                 },
                             ) {
-                                androidx.compose.material3.Text("Nur 3D-Objekte")
+                                androidx.compose.material3.Text(de.psmobile.ui.PsUi.appText("3D objects only", "Nur 3D-Objekte"))
                             }
                         },
                     )
@@ -643,7 +648,7 @@ class MainActivity : ComponentActivity() {
                     .resolve(safeName)
                 contentResolver.openInputStream(uri)?.use { input ->
                     dest.outputStream().use { input.copyTo(it) }
-                } ?: error("Datei nicht lesbar: $uri")
+                } ?: error(de.psmobile.ui.PsUi.appText("File not readable: $uri", "Datei nicht lesbar: $uri"))
                 dest
             }
         }
@@ -764,10 +769,10 @@ class MainActivity : ComponentActivity() {
                     svc.loadModel(source.absolutePath, SlicerService.ImportMode.PROJECT)
                 }
             }
-            result.onFailure { showFileError("Projekt neu laden", it) }
+            result.onFailure { showFileError(de.psmobile.ui.PsUi.appText("Reload project", "Projekt neu laden"), it) }
                 .onSuccess { project ->
                     svc.setProjectKey(uri.toString())
-                    noticeTitle = "Projekt neu geladen"
+                    noticeTitle = de.psmobile.ui.PsUi.appText("Project reloaded", "Projekt neu geladen")
                     val name = queryDisplayName(uri) ?: "Projekt"
                     importNotice = "„$name“ wurde erneut vom Datenträger geladen" +
                         if (project?.bedCount ?: 1 > 1) {
@@ -794,7 +799,7 @@ class MainActivity : ComponentActivity() {
                     }.getOrNull() ?: contentResolver.openOutputStream(uri, "w")
                     output?.use { out ->
                         source.inputStream().use { input -> input.copyTo(out) }
-                    } ?: error("Projektziel ist nicht beschreibbar: $uri")
+                    } ?: error(de.psmobile.ui.PsUi.appText("Project target is not writable: $uri", "Projektziel ist nicht beschreibbar: $uri"))
                     source.length()
                 }
             }
@@ -803,7 +808,7 @@ class MainActivity : ComponentActivity() {
                 .onSuccess { bytes ->
                     currentProjectUri = uri
                     svc.setProjectKey(uri.toString())
-                    noticeTitle = "Projekt gespeichert"
+                    noticeTitle = de.psmobile.ui.PsUi.appText("Project saved", "Projekt gespeichert")
                     val name = queryDisplayName(uri) ?: svc.suggestedProjectName()
                     importNotice = "„$name“ wurde als vollständiges 3MF-Projekt " +
                         "mit allen belegten Druckbetten gespeichert " +
@@ -901,7 +906,7 @@ class MainActivity : ComponentActivity() {
                 runCatching { svc.exportPlateFile(format) }
             }
             result
-                .onFailure { showFileError("Bettexport", it) }
+                .onFailure { showFileError(de.psmobile.ui.PsUi.appText("Bed export", "Bettexport"), it) }
                 .onSuccess { file ->
                     pendingFileOutput = file
                     pendingFileName =
@@ -910,8 +915,8 @@ class MainActivity : ComponentActivity() {
                         else "PSMobile-Druckbett.obj"
                     pendingFileDescription =
                         if (format == PsmCore.PlateFormat.STL)
-                            "STL-Bettexport"
-                        else "OBJ-Bettexport"
+                            de.psmobile.ui.PsUi.appText("STL bed export", "STL-Bettexport")
+                        else de.psmobile.ui.PsUi.appText("OBJ bed export", "OBJ-Bettexport")
                     fileCreator.launch(pendingFileName)
                 }
         }
@@ -962,7 +967,7 @@ class MainActivity : ComponentActivity() {
                     pendingFileName =
                         "$stem.${if (toBinary) "bgcode" else "gcode"}"
                     pendingFileDescription =
-                        if (toBinary) "binärer BGCode" else "ASCII-G-Code"
+                        if (toBinary) de.psmobile.ui.PsUi.appText("binary BGCode", "binärer BGCode") else "ASCII-G-Code"
                     fileCreator.launch(pendingFileName)
                 }
         }
@@ -985,11 +990,11 @@ class MainActivity : ComponentActivity() {
                 }
             }
             result
-                .onFailure { showFileError("SVG prägen", it) }
+                .onFailure { showFileError(de.psmobile.ui.PsUi.appText("Emboss SVG", "SVG prägen"), it) }
                 .onSuccess {
-                    noticeTitle = "SVG hinzugefügt"
+                    noticeTitle = de.psmobile.ui.PsUi.appText("SVG added", "SVG hinzugefügt")
                     importNotice =
-                        "Die SVG-Kontur wurde als Volumen in das ausgewählte Objekt eingefügt."
+                        de.psmobile.ui.PsUi.appText("The SVG outline was inserted as a volume into the selected object.", "Die SVG-Kontur wurde als Volumen in das ausgewählte Objekt eingefügt.")
                 }
         }
     }
@@ -1004,7 +1009,7 @@ class MainActivity : ComponentActivity() {
         val output = File(dir, "${System.nanoTime()}-$name")
         contentResolver.openInputStream(uri)?.use { input ->
             output.outputStream().use { out -> input.copyTo(out) }
-        } ?: error("Datei nicht lesbar: $uri")
+        } ?: error(de.psmobile.ui.PsUi.appText("File not readable: $uri", "Datei nicht lesbar: $uri"))
         return output
     }
 
@@ -1015,14 +1020,14 @@ class MainActivity : ComponentActivity() {
                 runCatching {
                     contentResolver.openOutputStream(uri, "wt")?.use { output ->
                         source.inputStream().use { input -> input.copyTo(output) }
-                    } ?: error("Dateiziel ist nicht beschreibbar: $uri")
+                    } ?: error(de.psmobile.ui.PsUi.appText("File target is not writable: $uri", "Dateiziel ist nicht beschreibbar: $uri"))
                     source.length()
                 }
             }
             result
                 .onFailure { showFileError(pendingFileDescription, it) }
                 .onSuccess { bytes ->
-                    noticeTitle = "Datei gespeichert"
+                    noticeTitle = de.psmobile.ui.PsUi.appText("File saved", "Datei gespeichert")
                     importNotice =
                         "$pendingFileDescription wurde gespeichert (${bytes / 1024} KiB)."
                 }
@@ -1031,8 +1036,8 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun showFileError(action: String, error: Throwable) {
-        noticeTitle = "$action fehlgeschlagen"
-        importNotice = error.message ?: "Unbekannter Dateifehler"
+        noticeTitle = de.psmobile.ui.PsUi.appText("$action failed", "$action fehlgeschlagen")
+        importNotice = error.message ?: de.psmobile.ui.PsUi.appText("Unknown file error", "Unbekannter Dateifehler")
     }
 
     /** G-Code an Files, Drive, PrusaLink-Apps o. ae. weiterreichen. */
@@ -1049,7 +1054,7 @@ class MainActivity : ComponentActivity() {
         val (volume, root) = removableTarget() ?: run {
             showFileError(
                 "USB-Export",
-                IllegalStateException("Kein Wechselspeicher angeschlossen."),
+                IllegalStateException(de.psmobile.ui.PsUi.appText("No removable storage connected.", "Kein Wechselspeicher angeschlossen.")),
             )
             return
         }
@@ -1075,7 +1080,7 @@ class MainActivity : ComponentActivity() {
             putExtra(Intent.EXTRA_STREAM, uri)
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
-        startActivity(Intent.createChooser(send, "G-Code teilen"))
+        startActivity(Intent.createChooser(send, de.psmobile.ui.PsUi.appText("Share G-code", "G-Code teilen")))
     }
 
     private fun queryDisplayName(uri: Uri): String? =

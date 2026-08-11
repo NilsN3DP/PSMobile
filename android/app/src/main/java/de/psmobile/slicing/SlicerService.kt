@@ -135,7 +135,7 @@ class SlicerService : Service() {
         if (_progress.value is Progress.Running) {
             _profileUpdates.value = ProfileUpdateState.Deferred(
                 ready.manifest,
-                "Der laufende Slice wird nicht unterbrochen. Das Update wird beim Neustart aktiv.",
+                SimpleModeState.text("The running slice is not interrupted. The update takes effect on restart.", "Der laufende Slice wird nicht unterbrochen. Das Update wird beim Neustart aktiv."),
             )
             return
         }
@@ -175,7 +175,7 @@ class SlicerService : Service() {
             }
             _profileUpdates.value = result.fold(
                 onSuccess = { ProfileUpdateState.Idle },
-                onFailure = { ProfileUpdateState.Failed(it.message ?: "Profile konnten nicht aktiviert werden") },
+                onFailure = { ProfileUpdateState.Failed(it.message ?: SimpleModeState.text("Profiles could not be activated", "Profile konnten nicht aktiviert werden")) },
             )
         }
     }
@@ -300,28 +300,28 @@ class SlicerService : Service() {
         val c = core ?: return
         val bed = _beds.value.firstOrNull { it.index == index } ?: return
         runCatching { bedActions(c).toggleLock(index) }
-            .onFailure { _toolMessage.value = "Bett-Metadaten fehlgeschlagen: ${it.message}" }
+            .onFailure { _toolMessage.value = SimpleModeState.text("Bed metadata failed: ${it.message}", "Bett-Metadaten fehlgeschlagen: ${it.message}") }
             .onSuccess {
                 refreshBeds()
-                _toolMessage.value = if (!bed.locked) "${bedLabel(bed)} gesperrt" else "${bedLabel(bed)} entsperrt"
+                _toolMessage.value = if (!bed.locked) SimpleModeState.text("${bedLabel(bed)} locked", "${bedLabel(bed)} gesperrt") else SimpleModeState.text("${bedLabel(bed)} unlocked", "${bedLabel(bed)} entsperrt")
             }
     }
 
     fun renameBed(index: Int, name: String) {
         val c = core ?: return
         runCatching { bedActions(c).rename(index, name) }
-            .onFailure { _toolMessage.value = "Bett-Metadaten fehlgeschlagen: ${it.message}" }
+            .onFailure { _toolMessage.value = SimpleModeState.text("Bed metadata failed: ${it.message}", "Bett-Metadaten fehlgeschlagen: ${it.message}") }
             .onSuccess { refreshBeds() }
     }
 
     private fun checkBedUnlocked(index: Int, action: String): Boolean {
         val bed = _beds.value.firstOrNull { it.index == index }
         if (bed?.locked != true) return true
-        _toolMessage.value = "${bedLabel(bed)} ist gesperrt – $action nicht möglich"
+        _toolMessage.value = SimpleModeState.text("${bedLabel(bed)} is locked – $action not possible", "${bedLabel(bed)} ist gesperrt – $action nicht möglich")
         return false
     }
 
-    private fun bedLabel(bed: PsmCore.Bed): String = bed.name.trim().ifEmpty { "Bett ${bed.index + 1}" }
+    private fun bedLabel(bed: PsmCore.Bed): String = bed.name.trim().ifEmpty { SimpleModeState.text("Bed ${bed.index + 1}", "Bett ${bed.index + 1}") }
     private fun bedSnapshots() = _beds.value.map { bed ->
         AndroidBedSnapshot(bed.index, bed.name, bed.locked, bed.objectCount,
             bed.instanceCount, bed.active)
@@ -571,7 +571,7 @@ class SlicerService : Service() {
                 _setupNeeded.value = false
             } catch (t: Throwable) {
                 Log.e(TAG, "Ersteinrichtung fehlgeschlagen", t)
-                _progress.value = Progress.Failed(t.message ?: "Einrichtung fehlgeschlagen")
+                _progress.value = Progress.Failed(t.message ?: SimpleModeState.text("Setup failed", "Einrichtung fehlgeschlagen"))
             } finally {
                 _setupBusy.value = false
             }
@@ -626,7 +626,7 @@ class SlicerService : Service() {
      * Export auf einen Wechselspeicher.
      */
     fun gcodeFileForExport(): File {
-        val src = lastGcode ?: error("Es liegt noch kein G-Code vor.")
+        val src = lastGcode ?: error(SimpleModeState.text("There is no G-code yet.", "Es liegt noch kein G-Code vor."))
         val outDir = File(cacheDir, "usb-export").apply { mkdirs() }
         val dst = File(outDir, suggestedGcodeName())
         outDir.listFiles()?.forEach { if (it != dst) it.delete() }
@@ -721,11 +721,11 @@ class SlicerService : Service() {
         val c = core ?: return
         val physicalColors = _presets.value.extruders.map { it.color.ifBlank { "#808080" } }
         runCatching { c.setColorMixJson(ColorMixCodec.encode(physicalColors, recipes)) }
-            .onFailure { _toolMessage.value = "ColorMix konnte nicht gespeichert werden: ${it.message}" }
+            .onFailure { _toolMessage.value = SimpleModeState.text("ColorMix could not be saved: ${it.message}", "ColorMix konnte nicht gespeichert werden: ${it.message}") }
             .onSuccess {
                 refreshColorMix()
                 invalidateSliceResult()
-                _toolMessage.value = "ColorMix aktualisiert"
+                _toolMessage.value = SimpleModeState.text("ColorMix updated", "ColorMix aktualisiert")
             }
     }
 
@@ -1103,13 +1103,13 @@ class SlicerService : Service() {
         runCatching { bedActions(c).arrange() }
             .onFailure {
                 Log.w(TAG, "Anordnen", it)
-                _toolMessage.value = "Anordnen fehlgeschlagen: ${it.message}"
+                _toolMessage.value = SimpleModeState.text("Arrange failed: ${it.message}", "Anordnen fehlgeschlagen: ${it.message}")
             }
             .onSuccess { arranged -> if (arranged) { refreshObjects(); invalidateSliceResult() } }
     }
 
     fun dropToBed(id: Int) {
-        if (!checkBedUnlocked(activeBedIndex(), "Aufs Bett legen")) return
+        if (!checkBedUnlocked(activeBedIndex(), SimpleModeState.text("Drop to bed", "Aufs Bett legen"))) return
         runCatching { core?.dropToBed(id) }
             .onFailure { Log.w(TAG, "Aufs Bett legen", it) }
             .onSuccess { refreshObjects(); invalidateSliceResult() }
@@ -1156,7 +1156,7 @@ class SlicerService : Service() {
         val gcode = lastGcode
         if (core?.sliceState() != PsmCore.SliceState.DONE ||
             gcode == null || !gcode.exists()) {
-            _sendState.value = "Kein aktueller G-Code vorhanden – erneut slicen"
+            _sendState.value = SimpleModeState.text("No current G-code – slice again", "Kein aktueller G-Code vorhanden – erneut slicen")
             return
         }
 
@@ -1174,7 +1174,7 @@ class SlicerService : Service() {
             }
             var msg = when (r) {
                 is de.psmobile.net.PrusaLink.Result.Ok -> r.message
-                is de.psmobile.net.PrusaLink.Result.Error -> "Fehler: ${r.message}"
+                is de.psmobile.net.PrusaLink.Result.Error -> SimpleModeState.text("Error: ${r.message}", "Fehler: ${r.message}")
             }
 
             if (de.psmobile.net.BackupStore.isConfigured(this@SlicerService)) {
@@ -1195,7 +1195,7 @@ class SlicerService : Service() {
     /** Import-Fehler in die Oberflaeche durchreichen statt verschlucken. */
     fun reportImportError(t: Throwable) {
         Log.e(TAG, "Import fehlgeschlagen", t)
-        _progress.value = Progress.Failed(t.message ?: "Import fehlgeschlagen")
+        _progress.value = Progress.Failed(t.message ?: SimpleModeState.text("Import failed", "Import fehlgeschlagen"))
     }
 
     /**
@@ -1245,16 +1245,16 @@ class SlicerService : Service() {
                 // PsmCore liefert bereits „<Werkzeug> fehlgeschlagen: …“.
                 // Nicht noch einmal voranstellen, sonst wird die Meldung
                 // auf dem schmalen sichtbaren Arbeitsbereich unnötig lang.
-                val prefix = "$what fehlgeschlagen: "
+                val prefix = SimpleModeState.text("$what failed: ", "$what fehlgeschlagen: ")
                 val reason = it.message.orEmpty().removePrefix(prefix)
-                    .ifBlank { "Unbekannter Fehler" }
+                    .ifBlank { SimpleModeState.text("Unknown error", "Unbekannter Fehler") }
                 _toolMessage.value = "$prefix$reason"
             }
             .onSuccess {
                 refreshObjects()
                 invalidateSliceResult()
                 if (_toolMessage.value == null ||
-                    _toolMessage.value == "$what läuft …")
+                    _toolMessage.value == SimpleModeState.text("$what running …", "$what läuft …"))
                     _toolMessage.value = what
             }
     }
@@ -1270,10 +1270,10 @@ class SlicerService : Service() {
         block: (PsmCore) -> Unit,
     ) {
         if (!heavyMutationActive.compareAndSet(false, true)) {
-            _toolMessage.value = "Bitte warten – eine Geometrieoperation läuft bereits."
+            _toolMessage.value = SimpleModeState.text("Please wait – a geometry operation is already running.", "Bitte warten – eine Geometrieoperation läuft bereits.")
             return
         }
-        _toolMessage.value = "$what läuft …"
+        _toolMessage.value = SimpleModeState.text("$what running …", "$what läuft …")
         scope.launch {
             try {
                 withObject(id, what, clearMessage = false, block = block)
@@ -1307,7 +1307,7 @@ class SlicerService : Service() {
                 }
                 refreshObjects()
                 Log.w(TAG, "$what: ${it.message}")
-                _toolMessage.value = "$what fehlgeschlagen: ${it.message}"
+                _toolMessage.value = SimpleModeState.text("$what failed: ${it.message}", "$what fehlgeschlagen: ${it.message}")
             }
             .onSuccess {
                 refreshObjects()
@@ -1318,16 +1318,16 @@ class SlicerService : Service() {
     }
 
     fun removeObjects(ids: Collection<Int>) =
-        withObjects(ids, "Auswahl löschen") { c, id -> c.removeModel(id) }
+        withObjects(ids, SimpleModeState.text("Delete selection", "Auswahl löschen")) { c, id -> c.removeModel(id) }
 
     fun dropToBed(ids: Collection<Int>) =
-        withObjects(ids, "Auswahl aufs Bett legen") { c, id -> c.dropToBed(id) }
+        withObjects(ids, SimpleModeState.text("Drop selection to bed", "Auswahl aufs Bett legen")) { c, id -> c.dropToBed(id) }
 
     fun mirror(ids: Collection<Int>, axis: PsmCore.Axis) =
-        withObjects(ids, "Auswahl spiegeln") { c, id -> c.mirror(id, axis) }
+        withObjects(ids, SimpleModeState.text("Mirror selection", "Auswahl spiegeln")) { c, id -> c.mirror(id, axis) }
 
     fun duplicateObjects(ids: Collection<Int>, targetBed: Int? = null) =
-        withObjects(ids, "Auswahl duplizieren") { c, id ->
+        withObjects(ids, SimpleModeState.text("Duplicate selection", "Auswahl duplizieren")) { c, id ->
             val copy = c.duplicate(id)
             if (targetBed != null)
                 c.moveObjectToBed(copy, targetBed)
@@ -1335,18 +1335,18 @@ class SlicerService : Service() {
 
     /** Gleichmaessig auf einen Faktor setzen (1.0 = Originalgroesse). */
     fun setUniformScale(id: Int, factor: Float) =
-        withObject(id, "Skalieren") { it.setScale(id, factor, factor, factor); it.dropToBed(id) }
+        withObject(id, SimpleModeState.text("Scale", "Skalieren")) { it.setScale(id, factor, factor, factor); it.dropToBed(id) }
 
     /** Laengste Kante auf ein Mass bringen. */
     fun scaleToSize(id: Int, mm: Float) =
-        withObject(id, "Auf Mass skalieren") { it.scaleToFit(id, mm); it.dropToBed(id) }
+        withObject(id, SimpleModeState.text("Scale to size", "Auf Mass skalieren")) { it.scaleToFit(id, mm); it.dropToBed(id) }
 
     /** So gross wie das Bett es zulaesst. */
     fun scaleToBed(id: Int) =
-        withObject(id, "Aufs Bett einpassen") { it.fitToBed(id, 0.9f) }
+        withObject(id, SimpleModeState.text("Fit to bed", "Aufs Bett einpassen")) { it.fitToBed(id, 0.9f) }
 
     fun setRotationAxis(id: Int, axis: Int, degrees: Float) =
-        withObject(id, "Drehen") { c ->
+        withObject(id, SimpleModeState.text("Rotate", "Drehen")) { c ->
             val o = c.objectInfo(id) ?: return@withObject
             val r = o.rotation
             val x = if (axis == 0) degrees else r.first
@@ -1358,7 +1358,7 @@ class SlicerService : Service() {
 
     /** Um einen Betrag weiterdrehen, fuer die Vierteldrehungen. */
     fun rotateBy(id: Int, axis: Int, degrees: Float) =
-        withObject(id, "Weiterdrehen") { c ->
+        withObject(id, SimpleModeState.text("Rotate further", "Weiterdrehen")) { c ->
             val o = c.objectInfo(id) ?: return@withObject
             val r = o.rotation
             val cur = when (axis) { 0 -> r.first; 1 -> r.second; else -> r.third }
@@ -1370,13 +1370,13 @@ class SlicerService : Service() {
             c.dropToBed(id)
         }
 
-    fun mirror(id: Int, axis: PsmCore.Axis) = withObject(id, "Spiegeln") { it.mirror(id, axis) }
+    fun mirror(id: Int, axis: PsmCore.Axis) = withObject(id, SimpleModeState.text("Mirror", "Spiegeln")) { it.mirror(id, axis) }
 
     fun setInstances(id: Int, count: Int) =
-        withObject(id, "Kopien") { it.setInstances(id, count) }
+        withObject(id, SimpleModeState.text("Copies", "Kopien")) { it.setInstances(id, count) }
 
     fun setObjectExtruder(id: Int, extruder: Int) =
-        withObject(id, "Objekt-Extruder") {
+        withObject(id, SimpleModeState.text("Object extruder", "Objekt-Extruder")) {
             it.setObjectExtruder(id, extruder)
         }
 
@@ -1386,10 +1386,10 @@ class SlicerService : Service() {
         }
 
     fun splitIntoObjects(id: Int) =
-        withObjectAsync(id, "In Objekte teilen") { it.splitObjects(id) }
+        withObjectAsync(id, SimpleModeState.text("Split into objects", "In Objekte teilen")) { it.splitObjects(id) }
 
     fun splitIntoVolumes(id: Int) =
-        withObjectAsync(id, "In Volumen teilen") { it.splitVolumes(id) }
+        withObjectAsync(id, SimpleModeState.text("Split into volumes", "In Volumen teilen")) { it.splitVolumes(id) }
 
     fun cutObject(
         id: Int,
@@ -1397,7 +1397,7 @@ class SlicerService : Service() {
         keepUpper: Boolean,
         keepLower: Boolean,
         keepAsParts: Boolean,
-    ) = withObjectAsync(id, "Schneiden") {
+    ) = withObjectAsync(id, SimpleModeState.text("Cut", "Schneiden")) {
         it.cutZ(id, zMm, keepUpper, keepLower, keepAsParts)
     }
 
@@ -1415,12 +1415,12 @@ class SlicerService : Service() {
         x: Float,
         y: Float,
         z: Float,
-    ) = withObject(id, "Volumen hinzufügen") {
+    ) = withObject(id, SimpleModeState.text("Add volume", "Volumen hinzufügen")) {
         it.addPrimitiveVolume(id, type, shape, x, y, z)
     }
 
     fun removeVolume(id: Int, volume: Int) =
-        withObject(id, "Volumen entfernen") { it.removeVolume(id, volume) }
+        withObject(id, SimpleModeState.text("Remove volume", "Volumen entfernen")) { it.removeVolume(id, volume) }
 
     fun addTextVolume(
         id: Int,
@@ -1428,7 +1428,7 @@ class SlicerService : Service() {
         sizeMm: Float,
         depthMm: Float,
         type: PsmCore.VolumeType,
-    ) = withObjectAsync(id, "Text prägen") {
+    ) = withObjectAsync(id, SimpleModeState.text("Emboss text", "Text prägen")) {
         it.addTextVolume(
             id = id,
             text = text,
@@ -1444,12 +1444,12 @@ class SlicerService : Service() {
         svg: File,
         depthMm: Float,
         type: PsmCore.VolumeType,
-    ) = withObjectAsync(id, "SVG prägen") {
+    ) = withObjectAsync(id, SimpleModeState.text("Emboss SVG", "SVG prägen")) {
         it.addSvgVolume(id, svg.absolutePath, depthMm, type)
     }
 
     fun layOnFacet(hit: de.psmobile.core.PsmViewport.SurfaceHit) =
-        withObject(hit.objectId, "Auf Fläche legen") {
+        withObject(hit.objectId, SimpleModeState.text("Place on face", "Auf Fläche legen")) {
             it.layOnFacet(hit.objectId, hit.volumeIndex, hit.facetIndex)
         }
 
@@ -1458,7 +1458,7 @@ class SlicerService : Service() {
         tool: PsmCore.PaintTool,
         state: Int,
         radiusMm: Float,
-    ) = withObjectAsync(hit.objectId, "Fläche bemalen") {
+    ) = withObjectAsync(hit.objectId, SimpleModeState.text("Paint face", "Fläche bemalen")) {
         it.paintFacet(
             hit.objectId, hit.volumeIndex, hit.facetIndex,
             tool, state, radiusMm,
@@ -1466,18 +1466,18 @@ class SlicerService : Service() {
     }
 
     fun clearPaint(id: Int, tool: PsmCore.PaintTool) =
-        withObject(id, "Bemalung löschen") { it.clearPaint(id, tool) }
+        withObject(id, SimpleModeState.text("Clear painting", "Bemalung löschen")) { it.clearPaint(id, tool) }
 
     fun layerProfile(id: Int): List<Pair<Double, Double>> =
         core?.layerProfile(id).orEmpty()
 
     fun setLayerProfile(id: Int, values: List<Pair<Double, Double>>) =
-        withObject(id, "Variable Schichthöhe") {
+        withObject(id, SimpleModeState.text("Variable layer height", "Variable Schichthöhe")) {
             it.setLayerProfile(id, values)
         }
 
     fun setObjectColour(id: Int, colour: String) =
-        withObject(id, "Objektfarbe") { it.setObjectColour(id, colour) }
+        withObject(id, SimpleModeState.text("Object colour", "Objektfarbe")) { it.setObjectColour(id, colour) }
 
     fun setObjectWipe(id: Int, intoInfill: Boolean, intoObjects: Boolean) =
         withObject(id, "Wischoptionen") {
@@ -1500,7 +1500,7 @@ class SlicerService : Service() {
         }
             .onFailure {
                 Log.w(TAG, "Custom G-Code: ${it.message}")
-                _toolMessage.value = "Custom G-Code fehlgeschlagen: ${it.message}"
+                _toolMessage.value = SimpleModeState.text("Custom G-code failed: ${it.message}", "Custom G-Code fehlgeschlagen: ${it.message}")
             }
             .onSuccess {
                 refreshObjects()
@@ -1517,7 +1517,7 @@ class SlicerService : Service() {
         runCatching { c.setWipeTower(value) }
             .onFailure {
                 Log.w(TAG, "Wipe-Tower: ${it.message}")
-                _toolMessage.value = "Wipe-Tower fehlgeschlagen: ${it.message}"
+                _toolMessage.value = SimpleModeState.text("Wipe tower failed: ${it.message}", "Wipe-Tower fehlgeschlagen: ${it.message}")
             }
             .onSuccess {
                 refreshObjects()
@@ -1579,7 +1579,7 @@ class SlicerService : Service() {
     }
 
     fun removeObject(id: Int) {
-        if (!checkBedUnlocked(activeBedIndex(), "Löschen")) return
+        if (!checkBedUnlocked(activeBedIndex(), SimpleModeState.text("Delete", "Löschen"))) return
         core?.removeModel(id)
         refreshObjects()
         invalidateSliceResult()
@@ -1644,7 +1644,7 @@ class SlicerService : Service() {
                     }
                 }
             } catch (t: Throwable) {
-                val fehler = t.message ?: "unbekannter Fehler"
+                val fehler = t.message ?: SimpleModeState.text("unknown error", "unbekannter Fehler")
                 _progress.value = Progress.Failed(fehler)
                 meldeDiagnose(
                     erfolgreich = false,
@@ -1713,7 +1713,7 @@ class SlicerService : Service() {
                 }
                 pollRemoteJob(jobId, baseUrl, token, t0, standBeimAbschicken)
             } catch (t: Throwable) {
-                val fehler = t.message ?: "unbekannter Fehler"
+                val fehler = t.message ?: SimpleModeState.text("unknown error", "unbekannter Fehler")
                 _progress.value = Progress.Failed(fehler)
                 meldeDiagnose(
                     erfolgreich = false,
