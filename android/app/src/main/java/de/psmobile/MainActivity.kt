@@ -67,6 +67,13 @@ internal fun importDisplayName(value: String): String =
  * gescheitert, siehe android-parity-plan.md). Ohne den dritten Typ zeigt
  * der Systemdateiwaehler manche echten STL-Dateien ausgegraut an.
  */
+/**
+ * Was der Kern wirklich lesen kann - dieselbe Liste wie in
+ * psmobile_zip.cpp und in SlicerModel.unterstuetzteModellendungen (iOS).
+ * STEP fehlt bewusst: gebaut wird ohne OCCT.
+ */
+internal val MODEL_EXTENSIONS = setOf("stl", "obj", "3mf", "amf")
+
 internal val MODEL_MIME_TYPES = arrayOf(
     "model/3mf",
     "model/stl",
@@ -645,6 +652,24 @@ class MainActivity : ComponentActivity() {
         // nichts - der schlimmste Fehlerzustand ueberhaupt.
         val file = result.getOrElse {
             svc.reportImportError(it)
+            return ImportOutcome.FAILED
+        }
+        // Der Waehler laesst application/octet-stream zu, weil eine
+        // engere Liste echte STL-Dateien ausgraut (siehe
+        // MODEL_MIME_TYPES) - damit kommt hier aber auch alles andere an.
+        // Was der Kern nicht lesen kann, gehoert mit klarer Ansage
+        // abgewiesen: eine STEP-Datei landete sonst in libslic3rs
+        // STEP-Pfad, der den OCCT-Wrapper nachladen will, den dieser
+        // Build gar nicht enthaelt (SLIC3R_ENABLE_FORMAT_STEP=OFF).
+        if (!file.extension.lowercase().let { it in MODEL_EXTENSIONS }) {
+            svc.reportImportError(IllegalArgumentException(
+                de.psmobile.ui.PsUi.appText(
+                    "${file.extension.uppercase()} files are not supported. Use " +
+                        "${MODEL_EXTENSIONS.sorted().joinToString(", ") { it.uppercase() }}.",
+                    "${file.extension.uppercase()}-Dateien werden nicht unterstützt. Möglich sind " +
+                        "${MODEL_EXTENSIONS.sorted().joinToString(", ") { it.uppercase() }}.",
+                )
+            ))
             return ImportOutcome.FAILED
         }
         val mime = contentResolver.getType(uri).orEmpty()

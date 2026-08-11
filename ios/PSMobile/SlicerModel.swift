@@ -259,8 +259,34 @@ final class SlicerModel: ObservableObject {
         refresh()
     }
 
+    /// Was der Kern wirklich lesen kann - dieselbe Liste wie in
+    /// psmobile_zip.cpp. STEP steht bewusst nicht dabei: dieser Build
+    /// wird ohne OCCT gebaut (SLIC3R_ENABLE_FORMAT_STEP=OFF).
+    static let unterstuetzteModellendungen: Set<String> = ["stl", "obj", "3mf", "amf"]
+
     func load(url: URL) {
         guard let core else { return }
+
+        // Der Dateiwaehler laesst jeden Typ zu (allowedContentTypes:
+        // [.item]), weil Dateien aus der Cloud oft ohne brauchbare
+        // Typkennung ankommen und eine strengere Liste echte STL-Dateien
+        // ausgraut. Deshalb hier pruefen, was der Kern kann.
+        //
+        // Ohne das landete z. B. eine STEP-Datei in libslic3rs
+        // STEP-Pfad, der den OCCT-Wrapper nachladen will. Den gibt es in
+        // diesem Build nicht, und auf dem Geraet stand statt einer
+        // Erklaerung die rohe dlopen-Ausgabe im Fehlerdialog:
+        // "Cannot load OCCTWrapper.so: dlopen(...) (no such file)".
+        let endung = url.pathExtension.lowercased()
+        guard Self.unterstuetzteModellendungen.contains(endung) else {
+            let liste = Self.unterstuetzteModellendungen
+                .sorted().map { $0.uppercased() }.joined(separator: ", ")
+            progress = .failed(SimpleModeState.shared.text(
+                english: "\(endung.uppercased()) files are not supported. Use \(liste).",
+                german: "\(endung.uppercased())-Dateien werden nicht unterstützt. Möglich sind \(liste)."))
+            return
+        }
+
         // Aus der Files-App kommen sicherheitsbeschraenkte URLs.
         let scoped = url.startAccessingSecurityScopedResource()
         defer { if scoped { url.stopAccessingSecurityScopedResource() } }
