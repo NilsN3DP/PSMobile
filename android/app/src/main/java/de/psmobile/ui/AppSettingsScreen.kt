@@ -33,6 +33,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -73,6 +74,15 @@ fun AppSettingsScreen(
         mutableStateOf(prefs.getString(AppSettings.KEY_START_MODE, AppSettings.START_ASK)
             ?: AppSettings.START_ASK)
     }
+    // svc.uiLanguage (der Ursprung von `language`) ist eine reine
+    // SharedPreferences-Property, kein Compose State - ein Tap auf
+    // "Deutsch" rief onLanguageChange zwar auf, aber ohne eigenen
+    // State loeste das keine Neuzeichnung aus, und ohne
+    // PsUi.setLanguage lud sich der Sprachkatalog erst beim naechsten
+    // App-Start neu. Gegenstueck zum Sprachwaehler in
+    // WorkflowStartScreen.kt, der beides schon richtig macht.
+    val context = LocalContext.current
+    var currentLanguage by remember { mutableStateOf(language) }
 
     Box(
         modifier.fillMaxSize().background(PrusaColors.Background),
@@ -122,9 +132,13 @@ fun AppSettingsScreen(
                                 "Die Beschriftungen stammen aus PrusaSlicers eigenem Katalog.",
                             ),
                             options = listOf("en", "de"),
-                            selected = language,
+                            selected = currentLanguage,
                             label = { if (it == "de") "Deutsch" else "English" },
-                            onSelect = onLanguageChange,
+                            onSelect = {
+                                currentLanguage = it
+                                PsUi.setLanguage(context, it)
+                                onLanguageChange(it)
+                            },
                         )
                         ChoiceRow(
                             title = t("On start", "Beim Start"),
