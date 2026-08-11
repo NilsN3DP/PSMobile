@@ -88,6 +88,11 @@ internal fun SpecialSettingsPanel(
         mutableStateOf<Pair<PsmCore.PresetType, String>?>(null)
     }
     var status by remember { mutableStateOf<String?>(null) }
+    // Ob die Meldung ein Fehler ist, gehoert ausdruecklich hierher.
+    // Vorher entschied das eine Textsuche nach "konnte"/"ungültig" -
+    // die haette nach der Uebersetzung jeden englischen Fehler als
+    // Erfolg eingefaerbt.
+    var statusIstFehler by remember { mutableStateOf(false) }
     var pendingBedAsset by remember { mutableStateOf<String?>(null) }
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -96,9 +101,14 @@ internal fun SpecialSettingsPanel(
         runCatching(action)
             .onSuccess {
                 status = success
+                statusIstFehler = false
                 onChanged()
             }
-            .onFailure { status = it.message ?: "Wert konnte nicht gespeichert werden." }
+            .onFailure {
+                status = it.message ?: PsUi.appText(
+                    "The value could not be saved.", "Wert konnte nicht gespeichert werden.")
+                statusIstFehler = true
+            }
     }
 
     val bedAssetPicker = rememberLauncherForActivityResult(
@@ -121,17 +131,22 @@ internal fun SpecialSettingsPanel(
                     val target = File(folder, "${key.substringAfterLast('_')}-$safeName")
                     withContext(Dispatchers.IO) {
                         context.contentResolver.openInputStream(uri).use { input ->
-                            requireNotNull(input) { "Datei ist nicht lesbar." }
+                            requireNotNull(input) { PsUi.appText("The file is not readable.", "Datei ist nicht lesbar.") }
                             target.outputStream().use(input::copyTo)
                         }
                     }
                     core.setPresetValue(PsmCore.PresetType.PRINTER, key, target.absolutePath)
                     target
                 }.onSuccess {
-                    status = "Bettdatei übernommen: ${it.name}"
+                    status = PsUi.appText(
+                        "Bed file applied: ${it.name}", "Bettdatei übernommen: ${it.name}")
+                    statusIstFehler = false
                     onChanged()
                 }.onFailure {
-                    status = it.message ?: "Bettdatei konnte nicht übernommen werden."
+                    status = it.message ?: PsUi.appText(
+                        "The bed file could not be applied.",
+                        "Bettdatei konnte nicht übernommen werden.")
+                    statusIstFehler = true
                 }
             }
         }
@@ -143,15 +158,19 @@ internal fun SpecialSettingsPanel(
     ) {
         item {
             Text(
-                "Spezialdialoge",
+                PsUi.appText("Special dialogs", "Spezialdialoge"),
                 color = PrusaColors.TextPrimary,
                 fontSize = 20.sp,
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier.padding(top = 18.dp),
             )
             Text(
-                "Strukturierte PrusaSlicer-Werte werden hier als Punkte, Zeilen " +
-                    "und Matrizen bearbeitet.",
+                PsUi.appText(
+                    "Structured PrusaSlicer values are edited here as points, " +
+                        "rows and matrices.",
+                    "Strukturierte PrusaSlicer-Werte werden hier als Punkte, Zeilen " +
+                        "und Matrizen bearbeitet.",
+                ),
                 color = PrusaColors.TextMuted,
                 fontSize = 13.sp,
                 modifier = Modifier.padding(top = 4.dp, bottom = 6.dp),
@@ -161,18 +180,18 @@ internal fun SpecialSettingsPanel(
         if (tab == "printer") {
             item {
                 SpecialAction(
-                    "Druckbett-Form",
-                    "Polygonpunkte in Millimetern; ungültige oder flächenlose Formen werden abgewiesen.",
-                    "Punkte bearbeiten",
+                    PsUi.appText("Bed shape", "Druckbett-Form"),
+                    PsUi.appText("Polygon points in millimetres; invalid or zero-area shapes are rejected.", "Polygonpunkte in Millimetern; ungültige oder flächenlose Formen werden abgewiesen."),
+                    PsUi.appText("Edit points", "Punkte bearbeiten"),
                 ) { editBed = true }
             }
             item {
                 BedAssetAction(
-                    title = "Eigene Betttextur",
+                    title = PsUi.appText("Custom bed texture", "Eigene Betttextur"),
                     current = remember(configRevision) {
                         core.presetValue(PsmCore.PresetType.PRINTER, "bed_custom_texture").orEmpty()
                     },
-                    selectLabel = "Bild auswählen",
+                    selectLabel = PsUi.appText("Choose image", "Bild auswählen"),
                     onSelect = {
                         pendingBedAsset = "bed_custom_texture"
                         bedAssetPicker.launch(arrayOf("image/png", "image/jpeg", "image/*"))
@@ -186,18 +205,18 @@ internal fun SpecialSettingsPanel(
                                     "",
                                 )
                             },
-                            "Eigene Betttextur entfernt.",
+                            PsUi.appText("Custom bed texture removed.", "Eigene Betttextur entfernt."),
                         )
                     },
                 )
             }
             item {
                 BedAssetAction(
-                    title = "Eigenes Bettmodell",
+                    title = PsUi.appText("Custom bed model", "Eigenes Bettmodell"),
                     current = remember(configRevision) {
                         core.presetValue(PsmCore.PresetType.PRINTER, "bed_custom_model").orEmpty()
                     },
-                    selectLabel = "STL auswählen",
+                    selectLabel = PsUi.appText("Choose STL", "STL auswählen"),
                     onSelect = {
                         pendingBedAsset = "bed_custom_model"
                         bedAssetPicker.launch(
@@ -213,7 +232,7 @@ internal fun SpecialSettingsPanel(
                                     "",
                                 )
                             },
-                            "Eigenes Bettmodell entfernt.",
+                            PsUi.appText("Custom bed model removed.", "Eigenes Bettmodell entfernt."),
                         )
                     },
                 )
@@ -224,7 +243,7 @@ internal fun SpecialSettingsPanel(
             item {
                 SpecialAction(
                     "G-Code-Ersetzungen",
-                    "Suchen/Ersetzen mit Regex, Groß-/Kleinschreibung, ganzem Wort und Einzelzeilenmodus.",
+                    PsUi.appText("Search/replace with regex, case sensitivity, whole word and single-line mode.", "Suchen/Ersetzen mit Regex, Groß-/Kleinschreibung, ganzem Wort und Einzelzeilenmodus."),
                     "Ersetzungen bearbeiten",
                 ) { editSubstitutions = true }
             }
@@ -237,9 +256,9 @@ internal fun SpecialSettingsPanel(
             }
             item {
                 SpecialAction(
-                    "Kompatible Drucker",
-                    "Druckprofil auf konkrete Druckerprofile begrenzen.",
-                    "Profile auswählen",
+                    PsUi.appText("Compatible printers", "Kompatible Drucker"),
+                    PsUi.appText("Limit the print profile to specific printer profiles.", "Druckprofil auf konkrete Druckerprofile begrenzen."),
+                    PsUi.appText("Choose profiles", "Profile auswählen"),
                 ) {
                     compatibility = PsmCore.PresetType.PRINT to "compatible_printers"
                 }
@@ -250,24 +269,24 @@ internal fun SpecialSettingsPanel(
             item {
                 SpecialAction(
                     "Ramming-Kurve",
-                    "Linienbreite, Linienabstand sowie Zeit-/Fluss-Kontrollpunkte für den MMU-Filamentwechsel.",
+                    PsUi.appText("Line width, line spacing and time/flow control points for the MMU filament change.", "Linienbreite, Linienabstand sowie Zeit-/Fluss-Kontrollpunkte für den MMU-Filamentwechsel."),
                     "Kurve bearbeiten",
                 ) { editRamming = true }
             }
             item {
                 SpecialAction(
-                    "Kompatible Druckprofile",
-                    "Filament auf ausgewählte Druckprofile begrenzen.",
-                    "Profile auswählen",
+                    PsUi.appText("Compatible print profiles", "Kompatible Druckprofile"),
+                    PsUi.appText("Limit the filament to selected print profiles.", "Filament auf ausgewählte Druckprofile begrenzen."),
+                    PsUi.appText("Choose profiles", "Profile auswählen"),
                 ) {
                     compatibility = PsmCore.PresetType.FILAMENT to "compatible_prints"
                 }
             }
             item {
                 SpecialAction(
-                    "Kompatible Drucker",
-                    "Filament auf ausgewählte Druckerprofile begrenzen.",
-                    "Profile auswählen",
+                    PsUi.appText("Compatible printers", "Kompatible Drucker"),
+                    PsUi.appText("Limit the filament to selected printer profiles.", "Filament auf ausgewählte Druckerprofile begrenzen."),
+                    PsUi.appText("Choose profiles", "Profile auswählen"),
                 ) {
                     compatibility = PsmCore.PresetType.FILAMENT to "compatible_printers"
                 }
@@ -278,8 +297,7 @@ internal fun SpecialSettingsPanel(
             item {
                 Text(
                     message,
-                    color = if (message.contains("konnte") || message.contains("ungültig"))
-                        PrusaColors.Danger else PrusaColors.Orange,
+                    color = if (statusIstFehler) PrusaColors.Danger else PrusaColors.Orange,
                     fontSize = 13.sp,
                     modifier = Modifier.padding(vertical = 8.dp),
                 )
@@ -301,7 +319,7 @@ internal fun SpecialSettingsPanel(
                             encoded,
                         )
                     },
-                    "Druckbett-Form übernommen.",
+                    PsUi.appText("Bed shape applied.", "Druckbett-Form übernommen."),
                 )
                 editBed = false
             },
@@ -319,7 +337,7 @@ internal fun SpecialSettingsPanel(
                         core["wiping_volumes_matrix"] = encoded
                         core["wiping_volumes_use_custom_matrix"] = if (custom) "1" else "0"
                     },
-                    "Purge-Matrix übernommen.",
+                    PsUi.appText("Purge matrix applied.", "Purge-Matrix übernommen."),
                 )
                 editMatrix = false
             },
@@ -341,7 +359,7 @@ internal fun SpecialSettingsPanel(
                             encoded,
                         )
                     },
-                    "Ramming-Kurve übernommen.",
+                    PsUi.appText("Ramming curve applied.", "Ramming-Kurve übernommen."),
                 )
                 editRamming = false
             },
@@ -363,7 +381,7 @@ internal fun SpecialSettingsPanel(
                             encoded,
                         )
                     },
-                    "G-Code-Ersetzungen übernommen.",
+                    PsUi.appText("G-code substitutions applied.", "G-Code-Ersetzungen übernommen."),
                 )
                 editSubstitutions = false
             },
@@ -372,7 +390,7 @@ internal fun SpecialSettingsPanel(
     compatibility?.let { (type, key) ->
         CompatibilityDialog(
             title = if (key == "compatible_prints")
-                "Kompatible Druckprofile" else "Kompatible Drucker",
+                PsUi.appText("Compatible print profiles", "Kompatible Druckprofile") else PsUi.appText("Compatible printers", "Kompatible Drucker"),
             initial = core.presetValue(type, key).orEmpty(),
             available = remember(type, key, configRevision) {
                 core.presetNames(
@@ -386,7 +404,7 @@ internal fun SpecialSettingsPanel(
             onApply = { encoded ->
                 apply(
                     { core.setPresetValue(type, key, encoded) },
-                    "Profilkompatibilität übernommen.",
+                    PsUi.appText("Profile compatibility applied.", "Profilkompatibilität übernommen."),
                 )
                 compatibility = null
             },
@@ -449,7 +467,7 @@ private fun BedAssetAction(
                 }
                 if (current.isNotBlank()) {
                     TextButton(onClick = onClear, modifier = Modifier.height(50.dp)) {
-                        Text("Zurücksetzen", color = PrusaColors.Danger)
+                        Text(PsUi.appText("Reset", "Zurücksetzen"), color = PrusaColors.Danger)
                     }
                 }
             }
@@ -482,9 +500,9 @@ private fun BedShapeDialog(
     val valid = points.size == fields.size && points.size >= 3 &&
         SpecialValueCodec.polygonArea(points) > 0.0001
 
-    LargeDialog(onDismiss, "Druckbett-Form") {
+    LargeDialog(onDismiss, PsUi.appText("Bed shape", "Druckbett-Form")) {
         Text(
-            "Punkte laufen der Reihe nach um das Bett. Mindestens drei Punkte, Einheit mm.",
+            PsUi.appText("Points run around the bed in order. At least three points, unit mm.", "Punkte laufen der Reihe nach um das Bett. Mindestens drei Punkte, Einheit mm."),
             color = PrusaColors.TextMuted,
             fontSize = 13.sp,
         )
@@ -524,7 +542,7 @@ private fun BedShapeDialog(
                         },
                         enabled = fields.size > 3,
                         modifier = Modifier.height(50.dp),
-                    ) { Text("Löschen") }
+                    ) { Text(PsUi.appText("Delete", "Löschen")) }
                 }
             }
         }
@@ -534,7 +552,7 @@ private fun BedShapeDialog(
                 fields = fields + last
             },
             modifier = Modifier.fillMaxWidth().height(50.dp),
-        ) { Text("Punkt hinzufügen") }
+        ) { Text(PsUi.appText("Add point", "Punkt hinzufügen")) }
         DialogButtons(
             valid = valid,
             onDismiss = onDismiss,
@@ -577,7 +595,7 @@ private fun WipeMatrixDialog(
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
             Column(Modifier.weight(1f)) {
-                Text("Eigene projektbezogene Werte", color = PrusaColors.TextPrimary)
+                Text(PsUi.appText("Custom project values", "Eigene projektbezogene Werte"), color = PrusaColors.TextPrimary)
                 Text("Von Zeile → Spalte, jeweils mm³", color = PrusaColors.TextMuted, fontSize = 12.sp)
             }
             Switch(checked = custom, onCheckedChange = { custom = it })
@@ -662,13 +680,13 @@ private fun RammingSettingsDialog(
 
     LargeDialog(onDismiss, "Ramming-Kurve") {
         Text(
-            "Achtung: falsche Werte können beim MMU-Filamentwechsel zu Stau führen.",
+            PsUi.appText("Careful: wrong values can jam the MMU filament change.", "Achtung: falsche Werte können beim MMU-Filamentwechsel zu Stau führen."),
             color = PrusaColors.Danger,
             fontSize = 13.sp,
         )
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedTextField(
-                width, { width = it }, label = { Text("Linienbreite · %") },
+                width, { width = it }, label = { Text(PsUi.appText("Line width · %", "Linienbreite · %")) },
                 singleLine = true, modifier = Modifier.weight(1f),
             )
             OutlinedTextField(
@@ -676,7 +694,7 @@ private fun RammingSettingsDialog(
                 singleLine = true, modifier = Modifier.weight(1f),
             )
         }
-        Text("Kurvenpunkte", color = PrusaColors.TextPrimary, fontWeight = FontWeight.SemiBold)
+        Text(PsUi.appText("Curve points", "Kurvenpunkte"), color = PrusaColors.TextPrimary, fontWeight = FontWeight.SemiBold)
         LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             items(controls.size) { index ->
                 Row(
@@ -692,7 +710,7 @@ private fun RammingSettingsDialog(
                             }
                             controlsChanged = true
                         },
-                        label = { Text("Zeit · s") },
+                        label = { Text(PsUi.appText("Time · s", "Zeit · s")) },
                         singleLine = true,
                         modifier = Modifier.weight(1f),
                     )
@@ -704,7 +722,7 @@ private fun RammingSettingsDialog(
                             }
                             controlsChanged = true
                         },
-                        label = { Text("Fluss · mm³/s") },
+                        label = { Text(PsUi.appText("Flow · mm³/s", "Fluss · mm³/s")) },
                         singleLine = true,
                         modifier = Modifier.weight(1f),
                     )
@@ -715,7 +733,7 @@ private fun RammingSettingsDialog(
                         },
                         enabled = controls.size > 2,
                         modifier = Modifier.height(50.dp),
-                    ) { Text("Löschen") }
+                    ) { Text(PsUi.appText("Delete", "Löschen")) }
                 }
             }
         }
@@ -728,7 +746,7 @@ private fun RammingSettingsDialog(
                 controlsChanged = true
             },
             modifier = Modifier.fillMaxWidth().height(50.dp),
-        ) { Text("Kurvenpunkt hinzufügen") }
+        ) { Text(PsUi.appText("Add curve point", "Kurvenpunkt hinzufügen")) }
         DialogButtons(
             valid = valid,
             onDismiss = onDismiss,
@@ -768,7 +786,7 @@ private fun SubstitutionsDialog(
 
     LargeDialog(onDismiss, "G-Code-Ersetzungen") {
         Text(
-            "Ersetzungen werden der Reihe nach auf jede erzeugte G-Code-Zeile angewendet.",
+            PsUi.appText("Substitutions are applied in order to every generated G-code line.", "Ersetzungen werden der Reihe nach auf jede erzeugte G-Code-Zeile angewendet."),
             color = PrusaColors.TextMuted,
             fontSize = 13.sp,
         )
@@ -797,14 +815,14 @@ private fun SubstitutionsDialog(
                             )
                         }
                         TextButton(onClick = { edit = index }, modifier = Modifier.height(50.dp)) {
-                            Text("Ändern")
+                            Text(PsUi.appText("Edit", "Ändern"))
                         }
                         TextButton(
                             onClick = {
                                 rows = rows.toMutableList().also { it.removeAt(index) }
                             },
                             modifier = Modifier.height(50.dp),
-                        ) { Text("Löschen", color = PrusaColors.Danger) }
+                        ) { Text(PsUi.appText("Delete", "Löschen"), color = PrusaColors.Danger) }
                     }
                 }
             }
@@ -815,7 +833,7 @@ private fun SubstitutionsDialog(
                 edit = rows.lastIndex
             },
             modifier = Modifier.fillMaxWidth().height(50.dp),
-        ) { Text("Ersetzung hinzufügen") }
+        ) { Text(PsUi.appText("Add substitution", "Ersetzung hinzufügen")) }
         DialogButtons(
             valid = true,
             onDismiss = onDismiss,
@@ -867,19 +885,19 @@ private fun SubstitutionEditDialog(
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedTextField(
-                    find, { find = it }, label = { Text("Suchen") },
+                    find, { find = it }, label = { Text(PsUi.appText("Search", "Suchen")) },
                     minLines = 2, maxLines = 4, modifier = Modifier.fillMaxWidth(),
                 )
                 OutlinedTextField(
-                    replace, { replace = it }, label = { Text("Ersetzen durch") },
+                    replace, { replace = it }, label = { Text(PsUi.appText("Replace with", "Ersetzen durch")) },
                     minLines = 2, maxLines = 4, modifier = Modifier.fillMaxWidth(),
                 )
-                CheckLine("Regulärer Ausdruck", regex) { regex = it }
-                CheckLine("Groß-/Kleinschreibung ignorieren", insensitive) { insensitive = it }
+                CheckLine(PsUi.appText("Regular expression", "Regulärer Ausdruck"), regex) { regex = it }
+                CheckLine(PsUi.appText("Ignore case", "Groß-/Kleinschreibung ignorieren"), insensitive) { insensitive = it }
                 CheckLine("Ganzes Wort", wholeWord) { wholeWord = it }
                 if (regex) CheckLine("Einzelne Zeile abgleichen", singleLine) { singleLine = it }
                 OutlinedTextField(
-                    notes, { notes = it }, label = { Text("Notiz") },
+                    notes, { notes = it }, label = { Text(PsUi.appText("Note", "Notiz")) },
                     modifier = Modifier.fillMaxWidth(),
                 )
             }
@@ -896,9 +914,9 @@ private fun SubstitutionEditDialog(
                     }
                     onApply(SubstitutionRow(find, replace, params, notes))
                 },
-            ) { Text("Übernehmen") }
+            ) { Text(PsUi.appText("Apply", "Übernehmen")) }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Abbrechen") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(PsUi.appText("Cancel", "Abbrechen")) } },
     )
 }
 
@@ -920,15 +938,19 @@ private fun CompatibilityDialog(
     }
     LargeDialog(onDismiss, title) {
         Text(
-            "Leer bedeutet keine Einschränkung. Bereits gespeicherte, aktuell " +
-                "nicht installierte Namen bleiben erhalten.",
+            PsUi.appText(
+                "Empty means no restriction. Names already saved but not " +
+                    "currently installed are kept.",
+                "Leer bedeutet keine Einschränkung. Bereits gespeicherte, aktuell " +
+                    "nicht installierte Namen bleiben erhalten.",
+            ),
             color = PrusaColors.TextMuted,
             fontSize = 13.sp,
         )
         OutlinedTextField(
             value = query,
             onValueChange = { query = it },
-            label = { Text("Profile suchen") },
+            label = { Text(PsUi.appText("Search profiles", "Profile suchen")) },
             singleLine = true,
             modifier = Modifier.fillMaxWidth(),
         )
@@ -941,14 +963,14 @@ private fun CompatibilityDialog(
                     selected = LinkedHashSet(selected).also { it.addAll(visible) }
                 },
                 modifier = Modifier.height(48.dp),
-            ) { Text("Treffer auswählen") }
+            ) { Text(PsUi.appText("Select matches", "Treffer auswählen")) }
             TextButton(
                 onClick = { selected = linkedSetOf() },
                 modifier = Modifier.height(48.dp),
-            ) { Text("Keine Einschränkung") }
+            ) { Text(PsUi.appText("No restriction", "Keine Einschränkung")) }
             Spacer(Modifier.weight(1f))
             Text(
-                "${selected.size} gewählt",
+                PsUi.appText("${selected.size} selected", "${selected.size} gewählt"),
                 color = PrusaColors.TextMuted,
                 fontSize = 12.sp,
                 modifier = Modifier.align(Alignment.CenterVertically),
@@ -988,7 +1010,7 @@ private fun CompatibilityDialog(
             if (unavailable.isNotEmpty()) {
                 item {
                     Text(
-                        "Nicht installiert",
+                        PsUi.appText("Not installed", "Nicht installiert"),
                         color = PrusaColors.TextMuted,
                         fontSize = 12.sp,
                         fontWeight = FontWeight.SemiBold,
@@ -1085,7 +1107,7 @@ private fun DialogButtons(
     ) {
         if (!valid) {
             Text(
-                "Bitte Eingaben prüfen.",
+                PsUi.appText("Please check your input.", "Bitte Eingaben prüfen."),
                 color = PrusaColors.Danger,
                 fontSize = 12.sp,
                 modifier = Modifier.weight(1f),
@@ -1094,14 +1116,14 @@ private fun DialogButtons(
             Spacer(Modifier.weight(1f))
         }
         TextButton(onClick = onDismiss, modifier = Modifier.height(50.dp)) {
-            Text("Abbrechen")
+            Text(PsUi.appText("Cancel", "Abbrechen"))
         }
         Button(
             onClick = onApply,
             enabled = valid,
             modifier = Modifier.height(50.dp),
             colors = ButtonDefaults.buttonColors(containerColor = PrusaColors.Orange),
-        ) { Text("Übernehmen") }
+        ) { Text(PsUi.appText("Apply", "Übernehmen")) }
     }
 }
 
