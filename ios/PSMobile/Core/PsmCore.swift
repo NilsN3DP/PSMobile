@@ -1,5 +1,6 @@
 import Foundation
 import os
+import PSMShared
 
 /// Swift-Seite der Bruecke zu psmobile_core.
 ///
