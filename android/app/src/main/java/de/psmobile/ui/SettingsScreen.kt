@@ -745,7 +745,7 @@ private fun GcodeField(
             )
             if (text != value) {
                 Text(
-                    "Übernehmen",
+                    PsUi.appText("Apply", "Übernehmen"),
                     color = PrusaColors.Orange,
                     fontSize = 12.sp,
                     fontWeight = FontWeight.SemiBold,
@@ -858,7 +858,7 @@ private fun FavoritesPanel(
                 Text(
                     PsUi.appText(
                         "$hiddenByMode more are hidden by the current mode.",
-                        "$hiddenByMode weitere sind in dieser Stufe ausgeblendet.",
+                        PsUi.appText("$hiddenByMode more are hidden at this level.", "$hiddenByMode weitere sind in dieser Stufe ausgeblendet."),
                     ),
                     color = PrusaColors.TextMuted,
                     fontSize = 12.sp,

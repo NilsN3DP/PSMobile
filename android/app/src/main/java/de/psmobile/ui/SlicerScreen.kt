@@ -519,7 +519,7 @@ private fun SlicerContent(
                                         if (start == null) {
                                             measureStart = hit
                                             measureText =
-                                                "Erster Messpunkt gesetzt · zweiten Punkt antippen"
+                                                advancedText("First measuring point set · tap the second point", "Erster Messpunkt gesetzt · zweiten Punkt antippen")
                                         } else {
                                             val dx = hit.x - start.x
                                             val dy = hit.y - start.y
@@ -1410,7 +1410,7 @@ private fun LayerProfileSceneOverlay(
     ) {
         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(
-                "Schichthöhen aktiv",
+                advancedText("Layer heights active", "Schichthöhen aktiv"),
                 color = PrusaColors.TextPrimary,
                 style = MaterialTheme.typography.labelLarge,
             )
@@ -1432,7 +1432,7 @@ private fun LayerProfileSceneOverlay(
                 }
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     Text(
-                        "am ausgewählten Modell",
+                        advancedText("on the selected model", "am ausgewählten Modell"),
                         color = PrusaColors.TextMuted,
                         style = MaterialTheme.typography.labelSmall,
                         maxLines = 2,
@@ -2293,7 +2293,7 @@ private fun Sidebar(
                                 Text(
                                     PsUi.appText(
                                         "Import with + in the tool rail",
-                                        "Über + in der Werkzeugleiste importieren",
+                                        advancedText("Import via + in the toolbar", "Über + in der Werkzeugleiste importieren"),
                                     ),
                                     color = PrusaColors.TextMuted,
                                     fontSize = 13.sp,
@@ -2337,7 +2337,7 @@ private fun Sidebar(
                         }
                         if (visibleObjects.isEmpty()) {
                             Text(
-                                "Keine Treffer",
+                                advancedText("No matches", "Keine Treffer"),
                                 color = PrusaColors.TextMuted,
                                 modifier = Modifier.padding(vertical = 18.dp),
                             )
@@ -2400,7 +2400,7 @@ private fun Sidebar(
 
                 InspectorSection.TRANSFORM -> selected?.let { obj ->
                     Text(
-                        obj.name.ifBlank { "Objekt ${obj.id}" },
+                        obj.name.ifBlank { advancedText("Object ${obj.id}", "Objekt ${obj.id}") },
                         color = PrusaColors.TextPrimary,
                         fontSize = 16.sp,
                         fontWeight = FontWeight.SemiBold,
@@ -2549,12 +2549,16 @@ private fun Sidebar(
             containerColor = PrusaColors.Panel,
             titleContentColor = PrusaColors.TextPrimary,
             textContentColor = PrusaColors.TextPrimary,
-            title = { Text("Ungespeicherte Profiländerungen") },
+            title = { Text(advancedText("Unsaved profile changes", "Ungespeicherte Profiländerungen")) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(
-                        "${pending.changes.size} Werte wurden geändert. " +
-                            "Was soll beim Wechsel zu „${pending.target}“ passieren?"
+                        advancedText(
+                            "${pending.changes.size} values were changed. " +
+                                "What should happen when switching to „${pending.target}“?",
+                            "${pending.changes.size} Werte wurden geändert. " +
+                                "Was soll beim Wechsel zu „${pending.target}“ passieren?",
+                        )
                     )
                     pending.changes.take(5).forEach { change ->
                         Text(
@@ -2568,7 +2572,10 @@ private fun Sidebar(
                     }
                     if (pending.changes.size > 5) {
                         Text(
-                            "… und ${pending.changes.size - 5} weitere",
+                            advancedText(
+                                "… and ${pending.changes.size - 5} more",
+                                "… und ${pending.changes.size - 5} weitere",
+                            ),
                             color = PrusaColors.TextMuted,
                             fontSize = 12.sp,
                         )
@@ -2585,7 +2592,7 @@ private fun Sidebar(
                         )
                         pendingPresetSwitch = null
                     },
-                ) { Text("Auf Ziel übertragen") }
+                ) { Text(advancedText("Transfer to target", "Auf Ziel übertragen")) }
             },
             dismissButton = {
                 Row {
@@ -2599,7 +2606,7 @@ private fun Sidebar(
                             } + " – Eigen"
                             pendingPresetSwitch = null
                         },
-                    ) { Text("Speichern unter…") }
+                    ) { Text(advancedText("Save as…", "Speichern unter…")) }
                     TextButton(
                         onClick = {
                             service.discardPresetChangesAndSelect(
@@ -2622,13 +2629,13 @@ private fun Sidebar(
             containerColor = PrusaColors.Panel,
             titleContentColor = PrusaColors.TextPrimary,
             textContentColor = PrusaColors.TextPrimary,
-            title = { Text("Eigenes Profil speichern") },
+            title = { Text(advancedText("Save custom profile", "Eigenes Profil speichern")) },
             text = {
                 OutlinedTextField(
                     value = savePresetName,
                     onValueChange = { savePresetName = it },
                     singleLine = true,
-                    label = { Text("Profilname") },
+                    label = { Text(advancedText("Profile name", "Profilname")) },
                     modifier = Modifier.fillMaxWidth(),
                 )
             },
@@ -2639,11 +2646,11 @@ private fun Sidebar(
                         service.savePresetAs(type, savePresetName)
                         savePresetFor = null
                     },
-                ) { Text("Speichern") }
+                ) { Text(advancedText("Save", "Speichern")) }
             },
             dismissButton = {
                 TextButton(onClick = { savePresetFor = null }) {
-                    Text("Abbrechen")
+                    Text(advancedText("Cancel", "Abbrechen"))
                 }
             },
         )
@@ -2933,7 +2940,7 @@ private fun ObjectTreeRow(
             )
             Column(Modifier.weight(1f)) {
                 Text(
-                    obj.name.ifBlank { "Objekt ${obj.id}" },
+                    obj.name.ifBlank { advancedText("Object ${obj.id}", "Objekt ${obj.id}") },
                     color = PrusaColors.TextPrimary,
                     fontSize = 14.sp,
                     fontWeight = FontWeight.SemiBold,
@@ -2948,7 +2955,7 @@ private fun ObjectTreeRow(
                     fontSize = 12.sp,
                 )
                 if (obj.outsideBed) {
-                    Text("außerhalb des Bettes", color = PrusaColors.Danger, fontSize = 11.sp)
+                    Text(advancedText("outside the bed", "außerhalb des Bettes"), color = PrusaColors.Danger, fontSize = 11.sp)
                 }
             }
             if (extruderOptions.size > 1 || obj.extruder > 0) {
@@ -2968,7 +2975,7 @@ private fun ObjectTreeRow(
             ) {
                 Icon(
                     Icons.Default.Delete,
-                    "Entfernen",
+                    advancedText("Remove", "Entfernen"),
                     tint = PrusaColors.TextMuted,
                     modifier = Modifier.size(21.dp),
                 )
@@ -2998,8 +3005,8 @@ private fun VolumeTreeRow(
         PsmCore.VolumeType.MODEL_PART -> "Bauteil"
         PsmCore.VolumeType.NEGATIVE -> "Negativvolumen"
         PsmCore.VolumeType.MODIFIER -> "Modifikator"
-        PsmCore.VolumeType.SUPPORT_BLOCKER -> "Stützblocker"
-        PsmCore.VolumeType.SUPPORT_ENFORCER -> "Stützverstärker"
+        PsmCore.VolumeType.SUPPORT_BLOCKER -> advancedText("Support blocker", "Stützblocker")
+        PsmCore.VolumeType.SUPPORT_ENFORCER -> advancedText("Support enforcer", "Stützverstärker")
         PsmCore.VolumeType.UNKNOWN -> "Volumen"
     }
 
@@ -3040,7 +3047,7 @@ private fun VolumeTreeRow(
             ExtruderPicker(
                 selected = volume.explicitExtruder,
                 options = extruderOptions,
-                inheritedLabel = "Vom Objekt",
+                inheritedLabel = advancedText("From object", "Vom Objekt"),
                 onSelect = onExtruder,
             )
         }
@@ -3155,7 +3162,7 @@ private fun ProgressBlock(progress: SlicerService.Progress) {
         )
 
         is SlicerService.Progress.Stale -> Text(
-            "Projekt wurde während des Slicens geändert – erneut slicen",
+            advancedText("Project changed while slicing – slice again", "Projekt wurde während des Slicens geändert – erneut slicen"),
             color = PrusaColors.Orange, fontSize = 12.sp, maxLines = 2,
         )
     }

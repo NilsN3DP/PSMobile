@@ -80,7 +80,7 @@ fun QrScanSheet(
             ScannerOverlay()
         } else {
             Text(
-                "Kamera-Zugriff wird benötigt, um den QR-Code des Druckers zu scannen.",
+                PsUi.appText("Camera access is needed to scan the printer’s QR code.", "Kamera-Zugriff wird benötigt, um den QR-Code des Druckers zu scannen."),
                 color = PrusaColors.TextPrimary, fontSize = 14.sp,
                 modifier = Modifier.padding(24.dp),
             )
@@ -89,7 +89,7 @@ fun QrScanSheet(
             Modifier.fillMaxSize().padding(20.dp),
             verticalArrangement = Arrangement.Top,
         ) {
-            OutlinedButton(onClick = onCancel) { Text("Abbrechen") }
+            OutlinedButton(onClick = onCancel) { Text(PsUi.appText("Cancel", "Abbrechen")) }
         }
     }
 }
@@ -102,7 +102,7 @@ private fun ScannerOverlay() {
             .background(Color.Transparent),
     )
     Text(
-        "QR-Code des Druckers in den Rahmen halten",
+        PsUi.appText("Hold the printer’s QR code inside the frame", "QR-Code des Druckers in den Rahmen halten"),
         color = Color.White, fontSize = 13.sp,
         modifier = Modifier.padding(top = 320.dp),
     )

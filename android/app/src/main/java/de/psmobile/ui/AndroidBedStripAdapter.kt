@@ -4,6 +4,7 @@ import de.psmobile.shared.rules.ArrangeAvailability
 import de.psmobile.shared.rules.BedInput
 import de.psmobile.shared.rules.BedStripContract
 import de.psmobile.shared.rules.BedStripState
+import de.psmobile.shared.rules.SimpleModeState
 
 data class AndroidBedSnapshot(
     val index: Int,
@@ -36,8 +37,8 @@ object AndroidBedStripAdapter {
         val name = state.items[state.activeIndex].name
         return when (state.arrange) {
             ArrangeAvailability.AVAILABLE -> ArrangeDecision(true)
-            ArrangeAvailability.LOCKED -> ArrangeDecision(false, "$name ist gesperrt – Anordnen nicht möglich")
-            ArrangeAvailability.EMPTY -> ArrangeDecision(false, "$name ist leer. Es gibt nichts anzuordnen.")
+            ArrangeAvailability.LOCKED -> ArrangeDecision(false, SimpleModeState.text("$name is locked – arranging not possible", "$name ist gesperrt – Anordnen nicht möglich"))
+            ArrangeAvailability.EMPTY -> ArrangeDecision(false, SimpleModeState.text("$name is empty. There is nothing to arrange.", "$name ist leer. Es gibt nichts anzuordnen."))
         }
     }
 }
@@ -74,13 +75,13 @@ class AndroidBedStripActions(
         val state = AndroidBedStripAdapter.state(port.beds(), fallback)
         val item = state.items.firstOrNull { it.id == index } ?: return false
         if (item.locked) {
-            showMessage("${item.name} ist gesperrt – Entfernen nicht möglich")
+            showMessage(SimpleModeState.text("${item.name} is locked – removing not possible", "${item.name} ist gesperrt – Entfernen nicht möglich"))
             return false
         }
         if (!item.canRemove) {
             showMessage(if (state.items.size == 1)
-                "Das einzige Druckbett kann nicht entfernt werden."
-            else "${item.name} ist nicht leer und kann nicht entfernt werden.")
+                SimpleModeState.text("The only print bed cannot be removed.", "Das einzige Druckbett kann nicht entfernt werden.")
+            else SimpleModeState.text("${item.name} is not empty and cannot be removed.", "${item.name} ist nicht leer und kann nicht entfernt werden."))
             return false
         }
         port.remove(index)

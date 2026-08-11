@@ -8,6 +8,7 @@ import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import de.psmobile.shared.rules.SimpleModeState
 
 /**
  * Sichert jede an einen Drucker gesendete Datei in einen frei waehlbaren
@@ -42,29 +43,29 @@ object BackupStore {
      */
     fun archive(context: Context, source: File, printerName: String): Result {
         val treeUri = PrinterStore.backupTree(context)
-            ?: return Result(false, "Kein Sicherungsordner festgelegt")
+            ?: return Result(false, SimpleModeState.text("No backup folder set", "Kein Sicherungsordner festgelegt"))
 
         return runCatching {
             val tree = DocumentFile.fromTreeUri(context, Uri.parse(treeUri))
-                ?: return Result(false, "Sicherungsordner nicht erreichbar")
+                ?: return Result(false, SimpleModeState.text("Backup folder not reachable", "Sicherungsordner nicht erreichbar"))
             if (!tree.canWrite())
-                return Result(false, "Kein Schreibrecht im Sicherungsordner")
+                return Result(false, SimpleModeState.text("No write permission in the backup folder", "Kein Schreibrecht im Sicherungsordner"))
 
             val stamp = SimpleDateFormat("yyyy-MM-dd_HHmm", Locale.US).format(Date())
             val safePrinter = printerName.replace(Regex("[^A-Za-z0-9._-]"), "_")
             val name = "${stamp}_${safePrinter}_${source.name}"
 
             val target = tree.createFile("text/plain", name)
-                ?: return Result(false, "Datei konnte nicht angelegt werden")
+                ?: return Result(false, SimpleModeState.text("File could not be created", "Datei konnte nicht angelegt werden"))
 
             context.contentResolver.openOutputStream(target.uri)?.use { out ->
                 source.inputStream().use { it.copyTo(out) }
-            } ?: return Result(false, "Zieldatei nicht beschreibbar")
+            } ?: return Result(false, SimpleModeState.text("Target file not writable", "Zieldatei nicht beschreibbar"))
 
-            Result(true, "Gesichert als $name")
+            Result(true, SimpleModeState.text("Saved as $name", "Gesichert als $name"))
         }.getOrElse {
             Log.w(TAG, "Sicherung fehlgeschlagen", it)
-            Result(false, it.message ?: "Sicherung fehlgeschlagen")
+            Result(false, it.message ?: SimpleModeState.text("Backup failed", "Sicherung fehlgeschlagen"))
         }
     }
 }

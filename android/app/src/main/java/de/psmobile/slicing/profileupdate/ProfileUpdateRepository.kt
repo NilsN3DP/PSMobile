@@ -8,6 +8,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import de.psmobile.shared.rules.SimpleModeState
 
 fun interface ProfileUpdateHttp {
     suspend fun get(uri: URI): ByteArray
@@ -15,7 +16,7 @@ fun interface ProfileUpdateHttp {
 
 class HttpUrlConnectionProfileUpdateHttp : ProfileUpdateHttp {
     override suspend fun get(uri: URI): ByteArray {
-        require(uri.scheme.equals("https", ignoreCase = true)) { "Nur HTTPS ist erlaubt" }
+        require(uri.scheme.equals(SimpleModeState.text("Only HTTPS is allowed", "https"), ignoreCase = true)) { "Nur HTTPS ist erlaubt" }
         val connection = (uri.toURL().openConnection() as HttpURLConnection).apply {
             instanceFollowRedirects = false
             connectTimeout = 3_000
@@ -23,7 +24,7 @@ class HttpUrlConnectionProfileUpdateHttp : ProfileUpdateHttp {
         }
         try {
             require(connection.responseCode == HttpURLConnection.HTTP_OK) { "HTTP ${connection.responseCode}" }
-            require(connection.contentLengthLong <= 20L * 1024 * 1024) { "Profilpaket ist zu groß" }
+            require(connection.contentLengthLong <= 20L * 1024 * 1024) { SimpleModeState.text("Profile package is too large", "Profilpaket ist zu groß") }
             return connection.inputStream.use { input ->
                 input.readBytes().also { bytes -> require(bytes.size <= 20 * 1024 * 1024) }
             }
@@ -85,7 +86,7 @@ class ProfileUpdateRepository(
             }
             mutableState.value = staged.fold(
                 onSuccess = { ProfileUpdateState.ReadyToApply(offer.manifest) },
-                onFailure = { ProfileUpdateState.Failed(it.message ?: "Profilupdate fehlgeschlagen") },
+                onFailure = { ProfileUpdateState.Failed(it.message ?: SimpleModeState.text("Profile update failed", "Profilupdate fehlgeschlagen")) },
             )
         }
     }

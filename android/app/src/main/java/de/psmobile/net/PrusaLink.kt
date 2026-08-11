@@ -102,7 +102,7 @@ object PrusaLink {
     fun pairLocal(payload: LocalPrusaLinkQrPayload, nowEpochSeconds: Long = System.currentTimeMillis() / 1000): LocalPairResult {
         val validation = LocalPrusaLinkPairing.validate(payload, nowEpochSeconds)
         if (validation !is de.psmobile.shared.net.LocalPairingValidation.Valid)
-            return LocalPairResult.Error("QR-Code ungültig oder abgelaufen")
+            return LocalPairResult.Error(SimpleModeState.text("QR code invalid or expired", "QR-Code ungültig oder abgelaufen"))
         return try {
             val url = URL(validation.endpoint + "/api/pair")
             val c = (url.openConnection() as HttpURLConnection).apply {
@@ -119,8 +119,8 @@ object PrusaLink {
             val response = (if (code in 200..299) c.inputStream else c.errorStream)
                 ?.bufferedReader()?.use { it.readText() }.orEmpty()
             c.disconnect()
-            if (code == 401) return LocalPairResult.Error("Pairing-Token ungültig, abgelaufen oder widerrufen")
-            if (code !in 200..299) return LocalPairResult.Error("Lokale Kopplung fehlgeschlagen ($code)")
+            if (code == 401) return LocalPairResult.Error(SimpleModeState.text("Pairing token invalid, expired or revoked", "Pairing-Token ungültig, abgelaufen oder widerrufen"))
+            if (code !in 200..299) return LocalPairResult.Error(SimpleModeState.text("Local pairing failed ($code)", "Lokale Kopplung fehlgeschlagen ($code)"))
             when (val parsed = LocalPairingExchange.parseResponse(response, payload)) {
                 is LocalPairingExchangeResult.Success -> {
                     val credentials = parsed.credentials
@@ -143,10 +143,10 @@ object PrusaLink {
                         ), credentials.nozzleDiameter, material,
                     )
                 }
-                else -> LocalPairResult.Error("Antwort der lokalen Kopplung ist ungültig")
+                else -> LocalPairResult.Error(SimpleModeState.text("The local pairing response is invalid", "Antwort der lokalen Kopplung ist ungültig"))
             }
         } catch (_: Throwable) {
-            LocalPairResult.Error("Drucker-Hotspot nicht erreichbar")
+            LocalPairResult.Error(SimpleModeState.text("Printer hotspot not reachable", "Drucker-Hotspot nicht erreichbar"))
         }
     }
 
