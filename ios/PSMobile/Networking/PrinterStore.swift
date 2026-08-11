@@ -74,10 +74,21 @@ final class PrinterStore: ObservableObject {
             : PrusaLinkClient.Secret(apiKey: "", password: wert)
     }
 
-    func setSecret(_ secret: PrusaLinkClient.Secret, for p: PrusaLinkClient.Printer) {
+    /// Liefert `false`, wenn das Schreiben in den Schluesselbund
+    /// fehlschlug - vorher verschluckte `try?` das stillschweigend, und
+    /// ein Aufrufer wie die QR-Kopplung meldete Erfolg, obwohl das
+    /// Passwort nie ankam.
+    @discardableResult
+    func setSecret(_ secret: PrusaLinkClient.Secret, for p: PrusaLinkClient.Printer) -> Bool {
         let modus: PrinterAuthMode = p.usesApiKey ? .apiKey : .digest
         let wert = p.usesApiKey ? secret.apiKey : secret.password
-        try? geheim.save(PrinterCredential(host: p.host, mode: modus, secret: wert))
+        do {
+            try geheim.save(PrinterCredential(host: p.host, mode: modus, secret: wert))
+            return true
+        } catch {
+            print("PrinterStore.setSecret: Schluesselbund-Schreibfehler fuer \(p.host): \(error)")
+            return false
+        }
     }
 
     func localPairingToken(for p: PrusaLinkClient.Printer) -> String? {

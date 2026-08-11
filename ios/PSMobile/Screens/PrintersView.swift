@@ -559,8 +559,19 @@ struct PrinterEditView: View {
                     gekoppelt.presetName = printer.presetName
                     gekoppelt.lightingOptIn = printer.lightingOptIn
                     store.upsert(gekoppelt)
-                    store.setSecret(ergebnis.secret, for: gekoppelt)
+                    let gesichert = store.setSecret(ergebnis.secret, for: gekoppelt)
                     store.setLocalPairingToken(payload.pairingToken, for: gekoppelt)
+                    guard gesichert else {
+                        // Ohne das wirkte die Kopplung erfolgreich - der
+                        // Drucker stand in der Liste -, aber ein spaeterer
+                        // Verbindungsversuch scheiterte unerklaerlich an
+                        // "Anmeldedaten unvollstaendig", weil das Passwort
+                        // nie im Schluesselbund ankam.
+                        pairingFehler = true
+                        pairingMeldung = st("Could not store the password securely. Please try again.",
+                                             "Das Passwort konnte nicht sicher gespeichert werden. Bitte erneut versuchen.")
+                        return
+                    }
                     onClose()
                 }
             } catch {
