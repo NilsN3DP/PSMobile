@@ -1,5 +1,6 @@
 import Foundation
 import Security
+import PSMShared
 
 enum PrinterAuthMode: String, Codable, CaseIterable {
     case apiKey
@@ -72,7 +73,9 @@ enum CredentialStoreError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .status(let status): return SecCopyErrorMessageString(status, nil) as String? ?? "Keychain error \(status)"
-        case .invalidData: return "Ungültige Zugangsdaten im Keychain"
+        case .invalidData: return SimpleModeState.shared.text(
+            english: "Invalid credentials in the keychain",
+            german: "Ungültige Zugangsdaten im Keychain")
         }
     }
 }

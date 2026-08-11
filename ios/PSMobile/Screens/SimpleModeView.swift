@@ -1105,7 +1105,7 @@ struct SimpleModeView: View {
                     : st("Outline around the model", "Rand um das Modell"),
                 zeichen: "▱", an: brim != "0", ziel: .adhesion)
             einstellKarte(
-                titel: "Print Settings",
+                titel: st("Print Settings", "Druckeinstellungen"),
                 detail: st("Quality, infill and shell thickness",
                            "Qualität, Infill und Wandstärke"),
                 zeichen: "☷", an: true, ziel: .printSettings)

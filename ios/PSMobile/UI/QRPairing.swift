@@ -70,7 +70,8 @@ struct QRCodeView: View {
                 .scaledToFit()
                 .accessibilityIdentifier("remote.qr.anzeige")
         } else {
-            Text("QR-Code lässt sich nicht erzeugen")
+            Text(SimpleModeState.shared.text(english: "Cannot create QR code",
+                                             german: "QR-Code lässt sich nicht erzeugen"))
                 .foregroundStyle(.secondary)
         }
     }

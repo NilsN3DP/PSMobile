@@ -170,7 +170,9 @@ struct SimpleModelSheetView: View {
                 .buttonStyle(.plain)
 
                 VStack(alignment: .leading, spacing: ps.pt(2)) {
-                    Text(objekt.name.isEmpty ? "Objekt \(objekt.id)" : objekt.name)
+                    Text(objekt.name.isEmpty
+                         ? st("Object \(objekt.id)", "Objekt \(objekt.id)")
+                         : objekt.name)
                         .font(.system(size: ps.font(13)))
                         .foregroundStyle(PrusaColors.textPrimary)
                         .lineLimit(1)

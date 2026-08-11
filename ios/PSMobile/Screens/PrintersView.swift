@@ -152,7 +152,7 @@ struct PrintersView: View {
                         bearbeitet = PrusaLinkClient.Printer()
                     }
                     if senden == nil && localPairingOptIn {
-                        knopf("Experimental: QR koppeln",
+                        knopf(st("Experimental: pair via QR", "Experimental: QR koppeln"),
                               kennung: "drucker.lokal.neu") {
                             var neu = PrusaLinkClient.Printer()
                             neu.host = "http://192.168.4.1"

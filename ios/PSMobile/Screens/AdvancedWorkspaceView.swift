@@ -1716,7 +1716,9 @@ struct AdvancedWorkspaceView: View {
                         .accessibilityIdentifier("objekte.haken.\(objekt.id)")
                         ObjektMasse(objekt: objekt)
                         VStack(alignment: .leading, spacing: 0) {
-                            Text(objekt.name.isEmpty ? "Objekt \(objekt.id)" : objekt.name)
+                            Text(objekt.name.isEmpty
+                                 ? st("Object \(objekt.id)", "Objekt \(objekt.id)")
+                                 : objekt.name)
                                 .font(.system(size: ps.font(13)))
                                 .foregroundStyle(PrusaColors.textPrimary)
                                 .lineLimit(1)
