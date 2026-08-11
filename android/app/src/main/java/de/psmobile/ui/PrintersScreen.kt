@@ -116,7 +116,7 @@ fun PrintersScreen(
                             )
                         },
                         modifier = Modifier.height(52.dp),
-                    ) { Text("Experimental: QR koppeln") }
+                    ) { Text(PsUi.appText("Experimental: pair via QR", "Experimental: QR koppeln")) }
                 }
             }
 
@@ -124,7 +124,10 @@ fun PrintersScreen(
                  fontSize = 22.sp, fontWeight = FontWeight.SemiBold,
                  modifier = Modifier.padding(top = 12.dp))
             Text(
-                "Geräte im Netzwerk. Benutzername und Passwort stehen auf dem Drucker unter Einstellungen › Netzwerk › PrusaLink.",
+                PsUi.appText(
+                    "Devices on the network. Username and password are shown on the printer under Settings \u203a Network \u203a PrusaLink.",
+                    "Ger\u00e4te im Netzwerk. Benutzername und Passwort stehen auf dem Drucker unter Einstellungen \u203a Netzwerk \u203a PrusaLink.",
+                ),
                 color = PrusaColors.TextMuted, fontSize = 13.sp,
             )
             Row(
@@ -132,8 +135,11 @@ fun PrintersScreen(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Column(Modifier.weight(1f)) {
-                    Text("Experimentelle lokale PrusaLink-Kopplung", color = PrusaColors.TextPrimary, fontSize = 13.sp)
-                    Text("Standardmäßig aus. Akzeptiert nur lokale Drucker-Hotspots; QR-Scan oder manuelle JSON-Eingabe.", color = PrusaColors.TextMuted, fontSize = 11.sp)
+                    Text(PsUi.appText("Experimental local PrusaLink pairing", "Experimentelle lokale PrusaLink-Kopplung"), color = PrusaColors.TextPrimary, fontSize = 13.sp)
+                    Text(PsUi.appText(
+                        "Off by default. Only accepts local printer hotspots; QR scan or manual JSON entry.",
+                        "Standardm\u00e4\u00dfig aus. Akzeptiert nur lokale Drucker-Hotspots; QR-Scan oder manuelle JSON-Eingabe.",
+                    ), color = PrusaColors.TextMuted, fontSize = 11.sp)
                 }
                 Switch(
                     checked = localPairingOptIn,
@@ -180,9 +186,12 @@ fun PrintersScreen(
             Row(verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
                 Column(Modifier.weight(1f)) {
-                    Text("Nur eingerichtete Drucker zeigen",
+                    Text(PsUi.appText("Show only configured printers", "Nur eingerichtete Drucker zeigen"),
                          color = PrusaColors.TextPrimary, fontSize = 14.sp)
-                    Text("Blendet Druckerprofile aus, zu denen kein PrusaLink-Gerät eingerichtet ist.",
+                    Text(PsUi.appText(
+                        "Hides printer profiles that have no PrusaLink device set up.",
+                        "Blendet Druckerprofile aus, zu denen kein PrusaLink-Ger\u00e4t eingerichtet ist.",
+                    ),
                          color = PrusaColors.TextMuted, fontSize = 11.sp)
                 }
                 Switch(
@@ -200,28 +209,35 @@ fun PrintersScreen(
             Row(verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
                 Column(Modifier.weight(1f)) {
-                    Text("Druckermodelle ändern",
+                    Text(PsUi.appText("Change printer models", "Druckermodelle \u00e4ndern"),
                          color = PrusaColors.TextPrimary, fontSize = 14.sp)
-                    Text("Legt fest, welche Prusa-Modelle und Düsengrößen in den Profilen erscheinen.",
+                    Text(PsUi.appText(
+                        "Decides which Prusa models and nozzle sizes appear in the profiles.",
+                        "Legt fest, welche Prusa-Modelle und D\u00fcsengr\u00f6\u00dfen in den Profilen erscheinen.",
+                    ),
                          color = PrusaColors.TextMuted, fontSize = 11.sp)
                 }
-                OutlinedButton(onClick = onReopenSetup) { Text("Auswahl öffnen") }
+                OutlinedButton(onClick = onReopenSetup) { Text(PsUi.appText("Open selection", "Auswahl \u00f6ffnen")) }
             }
 
             // Sicherung gesendeter Dateien
             Row(verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
                 Column(Modifier.weight(1f)) {
-                    Text("Gesendete Dateien sichern",
+                    Text(PsUi.appText("Back up sent files", "Gesendete Dateien sichern"),
                          color = PrusaColors.TextPrimary, fontSize = 14.sp)
                     Text(
-                        backupName?.let { "Ordner: $it" }
-                            ?: "Kein Ordner gewählt. Funktioniert auch mit eingebundenen Netzlaufwerken.",
+                        backupName?.let { PsUi.appText("Folder: $it", "Ordner: $it") }
+                            ?: PsUi.appText(
+                                "No folder selected. Works with mounted network drives too.",
+                                "Kein Ordner gew\u00e4hlt. Funktioniert auch mit eingebundenen Netzlaufwerken.",
+                            ),
                         color = PrusaColors.TextMuted, fontSize = 11.sp,
                     )
                 }
                 OutlinedButton(onClick = onPickBackupFolder) {
-                    Text(if (backupName == null) "Ordner wählen" else "Ändern")
+                    Text(if (backupName == null) PsUi.appText("Choose folder", "Ordner w\u00e4hlen")
+                         else PsUi.appText("Change", "\u00c4ndern"))
                 }
             }
         }
@@ -242,14 +258,17 @@ fun PrintersScreen(
             onPair = { jsonText ->
                 withContext(Dispatchers.IO) {
                     when (val validation = LocalPrusaLinkPairing.parse(jsonText, System.currentTimeMillis() / 1000)) {
-                        is LocalPairingValidation.Invalid -> "!QR-Code ungültig: ${validation.reason}"
+                        is LocalPairingValidation.Invalid -> PsUi.appText(
+                            "!Invalid QR code: ${validation.reason}",
+                            "!QR-Code ung\u00fcltig: ${validation.reason}",
+                        )
                         is LocalPairingValidation.Valid -> when (val result = PrusaLink.pairLocal(validation.payload)) {
                             is PrusaLink.LocalPairResult.Error -> "!${result.message}"
                             is PrusaLink.LocalPairResult.Success -> {
                                 PrinterStore.upsertLocal(context, result.printer, validation.payload.pairingToken)
                                 printers = PrinterStore.all(context)
                                 editing = null
-                                "Lokaler Drucker gekoppelt"
+                                PsUi.appText("Local printer paired", "Lokaler Drucker gekoppelt")
                             }
                         }
                     }
@@ -333,24 +352,29 @@ private fun PrinterEditor(
                 .padding(22.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Text(if (printer.name.isBlank()) "Drucker hinzufügen" else "Drucker bearbeiten",
+            Text(if (printer.name.isBlank()) PsUi.appText("Add printer", "Drucker hinzuf\u00fcgen")
+                 else PsUi.appText("Edit printer", "Drucker bearbeiten"),
                  color = PrusaColors.TextPrimary, fontSize = 18.sp,
                  fontWeight = FontWeight.SemiBold)
 
             if (printer.localExperimental) {
-                Text("Experimental · Lokaler Drucker", color = PrusaColors.Orange, fontSize = 13.sp)
-                Text("QR-Code des Druckers scannen, oder den angezeigten JSON-Inhalt manuell einfügen.", color = PrusaColors.TextMuted, fontSize = 11.sp)
+                Text(PsUi.appText("Experimental \u00b7 local printer", "Experimental \u00b7 Lokaler Drucker"), color = PrusaColors.Orange, fontSize = 13.sp)
+                Text(PsUi.appText(
+                    "Scan the printer's QR code, or paste the JSON it shows.",
+                    "QR-Code des Druckers scannen, oder den angezeigten JSON-Inhalt manuell einf\u00fcgen.",
+                ), color = PrusaColors.TextMuted, fontSize = 11.sp)
                 OutlinedButton(
                     enabled = !testing,
                     onClick = { showScanner = true },
                     modifier = Modifier.fillMaxWidth().height(52.dp),
-                ) { Text("QR-Code scannen") }
-                Field("QR-Payload (manuelle Fallback-Eingabe)", pairingJson) { pairingJson = it }
+                ) { Text(PsUi.appText("Scan QR code", "QR-Code scannen")) }
+                Field(PsUi.appText("QR payload (manual fallback)", "QR-Payload (manuelle Fallback-Eingabe)"), pairingJson) { pairingJson = it }
                 OutlinedButton(
                     enabled = pairingJson.isNotBlank() && !testing,
                     onClick = { runPairing(pairingJson) },
                     modifier = Modifier.fillMaxWidth().height(52.dp),
-                ) { Text(if (testing) "Kopplung läuft…" else "QR-Payload koppeln") }
+                ) { Text(if (testing) PsUi.appText("Pairing\u2026", "Kopplung l\u00e4uft\u2026")
+                       else PsUi.appText("Pair QR payload", "QR-Payload koppeln")) }
                 pairingResult?.let {
                     Text(it.removePrefix("!"), color = if (it.startsWith("!")) PrusaColors.Danger else PrusaColors.Ok, fontSize = 13.sp)
                 }
@@ -359,8 +383,8 @@ private fun PrinterEditor(
                 }
             }
 
-            Field("Name", name) { name = it }
-            Field("Adresse (HTTPS-URL oder Hostname)", host) { host = it }
+            Field(PsUi.appText("Name", "Name"), name) { name = it }
+            Field(PsUi.appText("Address (HTTPS URL or hostname)", "Adresse (HTTPS-URL oder Hostname)"), host) { host = it }
             Row(
                 Modifier.fillMaxWidth()
                     .clip(RoundedCornerShape(10.dp))
@@ -373,12 +397,15 @@ private fun PrinterEditor(
             ) {
                 Column(Modifier.weight(1f)) {
                     Text(
-                        "Unsicheres HTTP erlauben",
+                        PsUi.appText("Allow insecure HTTP", "Unsicheres HTTP erlauben"),
                         color = PrusaColors.TextPrimary,
                         fontSize = 13.sp,
                     )
                     Text(
-                        "Nur für lokale Drucker ohne HTTPS. Zugangsdaten werden dabei unverschlüsselt übertragen.",
+                        PsUi.appText(
+                            "Only for local printers without HTTPS. Credentials travel unencrypted.",
+                            "Nur f\u00fcr lokale Drucker ohne HTTPS. Zugangsdaten werden dabei unverschl\u00fcsselt \u00fcbertragen.",
+                        ),
                         color = PrusaColors.TextMuted,
                         fontSize = 10.sp,
                     )
@@ -393,11 +420,11 @@ private fun PrinterEditor(
             }
             // PrusaLink ab 0.7 nutzt Benutzername und Passwort ueber
             // HTTP-Digest; aeltere Firmware einen API-Schluessel.
-            Text("Anmeldung", color = PrusaColors.TextMuted, fontSize = 12.sp)
+            Text(PsUi.appText("Sign-in", "Anmeldung"), color = PrusaColors.TextMuted, fontSize = 12.sp)
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 listOf(
-                    Auth.USER_PASSWORD to "Benutzer + Passwort",
-                    Auth.API_KEY to "API-Schlüssel",
+                    Auth.USER_PASSWORD to PsUi.appText("User + password", "Benutzer + Passwort"),
+                    Auth.API_KEY to PsUi.appText("API key", "API-Schl\u00fcssel"),
                 ).forEach { (mode, label) ->
                     val active = mode == auth
                     Box(
@@ -412,14 +439,14 @@ private fun PrinterEditor(
             }
 
             if (auth == Auth.USER_PASSWORD) {
-                Field("Benutzername", user) { user = it }
-                Field("Passwort", pass) { pass = it }
+                Field(PsUi.appText("Username", "Benutzername"), user) { user = it }
+                Field(PsUi.appText("Password", "Passwort"), pass) { pass = it }
             } else {
-                Field("API-Schlüssel", key) { key = it }
+                Field(PsUi.appText("API key", "API-Schl\u00fcssel"), key) { key = it }
             }
 
             if (presetNames.isNotEmpty()) {
-                Text("Zugehöriges Druckerprofil", color = PrusaColors.TextMuted, fontSize = 12.sp)
+                Text(PsUi.appText("Matching printer profile", "Zugeh\u00f6riges Druckerprofil"), color = PrusaColors.TextMuted, fontSize = 12.sp)
                 PresetPickerCompact(presetNames, preset) { preset = it }
             }
 
@@ -431,9 +458,12 @@ private fun PrinterEditor(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Column(Modifier.weight(1f)) {
-                    Text("Experimentelle Beleuchtung", color = PrusaColors.TextPrimary, fontSize = 13.sp)
+                    Text(PsUi.appText("Experimental lighting", "Experimentelle Beleuchtung"), color = PrusaColors.TextPrimary, fontSize = 13.sp)
                     Text(
-                        "Pro Drucker deaktiviert. Erst aktivieren, wenn dieses lokale Gerät unterstützt ist.",
+                        PsUi.appText(
+                            "Off per printer. Only switch on once this local device is supported.",
+                            "Pro Drucker deaktiviert. Erst aktivieren, wenn dieses lokale Ger\u00e4t unterst\u00fctzt ist.",
+                        ),
                         color = PrusaColors.TextMuted, fontSize = 10.sp,
                     )
                 }
@@ -462,7 +492,8 @@ private fun PrinterEditor(
                 },
                 modifier = Modifier.fillMaxWidth().height(52.dp),
                 shape = RoundedCornerShape(10.dp),
-            ) { Text(if (testing) "Prüfe…" else "Verbindung testen") }
+            ) { Text(if (testing) PsUi.appText("Checking\u2026", "Pr\u00fcfe\u2026")
+                       else PsUi.appText("Test connection", "Verbindung testen")) }
 
             Row(
                 Modifier.fillMaxWidth(),
@@ -473,20 +504,20 @@ private fun PrinterEditor(
                         onClick = onResetLocal,
                         modifier = Modifier.weight(1f).height(52.dp),
                         shape = RoundedCornerShape(10.dp),
-                    ) { Text("Lokale Kopplung zurücksetzen") }
+                    ) { Text(PsUi.appText("Reset local pairing", "Lokale Kopplung zur\u00fccksetzen")) }
                 }
                 if (printer.name.isNotBlank()) {
                     OutlinedButton(
                         onClick = onDelete,
                         modifier = Modifier.weight(1f).height(52.dp),
                         shape = RoundedCornerShape(10.dp),
-                    ) { Text("Löschen") }
+                    ) { Text(PsUi.appText("Delete", "L\u00f6schen")) }
                 }
                 OutlinedButton(
                     onClick = onCancel,
                     modifier = Modifier.weight(1f).height(52.dp),
                     shape = RoundedCornerShape(10.dp),
-                ) { Text("Abbrechen") }
+                ) { Text(PsUi.appText("Cancel", "Abbrechen")) }
                 Button(
                     enabled = host.isNotBlank() && (
                         if (auth == Auth.API_KEY) key.isNotBlank()
@@ -507,7 +538,7 @@ private fun PrinterEditor(
                         containerColor = PrusaColors.Orange,
                         contentColor = PrusaColors.TextPrimary,
                     ),
-                ) { Text("Speichern") }
+                ) { Text(PsUi.appText("Save", "Speichern")) }
             }
         }
     }
@@ -533,12 +564,12 @@ private fun LocalPairingDetail(printer: PrusaLink.Printer) {
             .padding(12.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
-        Text("Gekoppelter Drucker", color = PrusaColors.TextPrimary, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
-        DetailRow("Modell", printer.localModel.ifBlank { "–" })
-        DetailRow("IP-Adresse", printer.localHosts.firstOrNull() ?: "–")
-        DetailRow("Düse", printer.localNozzleDiameter?.let { "${it} mm · ${printer.localNozzleMaterial}" } ?: "–")
+        Text(PsUi.appText("Paired printer", "Gekoppelter Drucker"), color = PrusaColors.TextPrimary, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+        DetailRow(PsUi.appText("Model", "Modell"), printer.localModel.ifBlank { "–" })
+        DetailRow(PsUi.appText("IP address", "IP-Adresse"), printer.localHosts.firstOrNull() ?: "–")
+        DetailRow(PsUi.appText("Nozzle", "D\u00fcse"), printer.localNozzleDiameter?.let { "${it} mm · ${printer.localNozzleMaterial}" } ?: "–")
         DetailRow(
-            "Fähigkeiten",
+            PsUi.appText("Capabilities", "F\u00e4higkeiten"),
             if (printer.localCapabilities.isEmpty()) "–" else printer.localCapabilities.sorted().joinToString(", "),
         )
     }
