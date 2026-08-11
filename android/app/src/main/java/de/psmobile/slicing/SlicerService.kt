@@ -897,11 +897,29 @@ class SlicerService : Service() {
      * Versand fuer einen veralteten Job anbietet.
      */
     private fun invalidateSliceResult() {
+        entwurfsstand++
         lastGcode = null
         _sendState.value = null
         if (_progress.value !is Progress.Running)
             _progress.value = Progress.Idle
     }
+
+    /**
+     * Zaehlt jede Aenderung am Entwurf mit - Gegenstueck zu iOS'
+     * `PsmCore.designRevision()`.
+     *
+     * Beim Remote-Schnitt liegen Hochladen, Rechnen und Herunterladen
+     * Sekunden auseinander, und der Viewport bleibt in dieser Zeit
+     * bedienbar (SimpleModeScreen gibt ihn im Arbeitsbereich frei, und
+     * die native GLSurfaceView bekommt Beruehrungen ohnehin zuerst).
+     * Wer waehrenddessen ein Objekt verschiebt, bekam bisher trotzdem
+     * das fertige Ergebnis der *alten* Anordnung untergeschoben, mit
+     * "Fertig zum Drucken" daneben - gedruckt haette das daneben
+     * gelegen. iOS faengt genau das ueber
+     * `acceptRemoteGcode(path:requestRevision:)` ab; Android hat diese
+     * ABI-Funktion nicht, also derselbe Schutz eine Ebene hoeher.
+     */
+    private var entwurfsstand: Int = 0
 
     /**
      * Rueckmeldung fuer Einstellungsseiten, die direkt ueber PsmCore
@@ -1687,10 +1705,13 @@ class SlicerService : Service() {
         scope.launch {
             try {
                 val projectFile = withContext(Dispatchers.IO) { saveProjectFile() }
+                // Erst nach dem Export festhalten: was der Server zu sehen
+                // bekommt, steht genau ab hier fest.
+                val standBeimAbschicken = entwurfsstand
                 val jobId = withContext(Dispatchers.IO) {
                     RemoteSliceClient.submitJob(projectFile, baseUrl, token)
                 }
-                pollRemoteJob(jobId, baseUrl, token, t0)
+                pollRemoteJob(jobId, baseUrl, token, t0, standBeimAbschicken)
             } catch (t: Throwable) {
                 val fehler = t.message ?: "unbekannter Fehler"
                 _progress.value = Progress.Failed(fehler)
@@ -1707,7 +1728,13 @@ class SlicerService : Service() {
         }
     }
 
-    private suspend fun pollRemoteJob(jobId: String, baseUrl: String, token: String?, t0: Long) {
+    private suspend fun pollRemoteJob(
+        jobId: String,
+        baseUrl: String,
+        token: String?,
+        t0: Long,
+        standBeimAbschicken: Int,
+    ) {
         while (true) {
             if (cancelRequestedByCommand) {
                 _progress.value = Progress.Cancelled
@@ -1721,6 +1748,20 @@ class SlicerService : Service() {
                     "waiting in queue", "wartet in der Warteschlange"))
                 "running" -> _progress.value = Progress.Running(state.percent ?: 0, state.stage ?: "")
                 "done" -> {
+                    // Der Entwurf darf sich seit dem Abschicken nicht
+                    // geaendert haben, sonst gehoert dieses Ergebnis zu
+                    // einer Anordnung, die es nicht mehr gibt. Ohne diese
+                    // Pruefung setzte der Fund lastGcode trotzdem und
+                    // meldete "Fertig zum Drucken" - der gespeicherte
+                    // G-Code haette das alte Layout gedruckt. Gegenstueck
+                    // zu iOS' acceptRemoteGcode(path:requestRevision:).
+                    if (entwurfsstand != standBeimAbschicken) {
+                        _progress.value = Progress.Failed(SimpleModeState.text(
+                            "The design changed while remote slicing - slice again.",
+                            "Der Entwurf wurde während des Remote-Schnitts geändert - bitte erneut schneiden.",
+                        ))
+                        return
+                    }
                     val out = File(filesDir, "last.gcode")
                     withContext(Dispatchers.IO) {
                         RemoteSliceClient.downloadGcode(jobId, baseUrl, token, out)

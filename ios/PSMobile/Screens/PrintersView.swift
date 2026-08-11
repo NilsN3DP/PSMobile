@@ -560,7 +560,7 @@ struct PrinterEditView: View {
                     gekoppelt.lightingOptIn = printer.lightingOptIn
                     store.upsert(gekoppelt)
                     let gesichert = store.setSecret(ergebnis.secret, for: gekoppelt)
-                    store.setLocalPairingToken(payload.pairingToken, for: gekoppelt)
+                        && store.setLocalPairingToken(payload.pairingToken, for: gekoppelt)
                     guard gesichert else {
                         // Ohne das wirkte die Kopplung erfolgreich - der
                         // Drucker stand in der Liste -, aber ein spaeterer

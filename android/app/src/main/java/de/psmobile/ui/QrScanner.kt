@@ -115,16 +115,32 @@ private fun QrCameraPreview(onFound: (String) -> Unit) {
     val onFoundState = rememberUpdatedState(onFound)
     var found by remember { mutableStateOf(false) }
 
+    // Kamera, Analyse-Thread und ML-Kit-Client haengen am Lebenslauf
+    // dieser Composable, nicht an dem der Activity. Ohne das lief nach
+    // dem Schliessen des Scanners die Kamera weiter (Kontrollleuchte an,
+    // Bilder in eine laengst abgehaengte Vorschau), und jeder erneute
+    // Aufruf legte einen weiteren Executor samt Scanner-Client oben
+    // drauf. Das iOS-Gegenstueck raeumt in viewWillDisappear auf.
+    val executor = remember { Executors.newSingleThreadExecutor() }
+    val scanner = remember { BarcodeScanning.getClient() }
+    val provider = remember { mutableStateOf<ProcessCameraProvider?>(null) }
+    DisposableEffect(Unit) {
+        onDispose {
+            runCatching { provider.value?.unbindAll() }
+            runCatching { scanner.close() }
+            executor.shutdown()
+        }
+    }
+
     AndroidView(
         modifier = Modifier.fillMaxSize(),
         factory = { ctx ->
             val previewView = PreviewView(ctx)
             val cameraProviderFuture = ProcessCameraProvider.getInstance(ctx)
-            val executor = Executors.newSingleThreadExecutor()
-            val scanner = BarcodeScanning.getClient()
 
             cameraProviderFuture.addListener({
                 val cameraProvider = cameraProviderFuture.get()
+                provider.value = cameraProvider
                 val preview = Preview.Builder().build().also {
                     it.surfaceProvider = previewView.surfaceProvider
                 }

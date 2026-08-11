@@ -22,6 +22,8 @@ struct RemoteSliceView: View {
 
     @State private var token: String = ""
     @State private var tokenGeladen = false
+    /// Der Schluesselbund hat den Token nicht angenommen - siehe tokenSichern().
+    @State private var tokenFehler = false
     @State private var pruefung: Pruefung = .unbekannt
     @State private var zeigeScanner = false
     @State private var zeigeEigenerCode = false
@@ -290,11 +292,23 @@ struct RemoteSliceView: View {
         token = (try? credentials.load()) ?? ""
     }
 
+    /// Schreibfehler duerfen hier nicht verschwinden: ohne Token im
+    /// Schluesselbund laedt der naechste Start ein leeres Feld, der
+    /// Upload geht ohne Authorization-Kopfzeile raus, und der Server
+    /// antwortet mit "Token abgelehnt" - ohne dass irgendwo stuende,
+    /// woran es wirklich lag. Gleiche Ursache wie beim schon behobenen
+    /// PrinterStore.setSecret.
     private func tokenSichern() {
-        if token.isEmpty {
-            try? credentials.remove()
-        } else {
-            try? credentials.save(token)
+        do {
+            if token.isEmpty {
+                try credentials.remove()
+            } else {
+                try credentials.save(token)
+            }
+            tokenFehler = false
+        } catch {
+            print("RemoteSliceView.tokenSichern: Schluesselbund-Fehler: \(error)")
+            tokenFehler = true
         }
     }
 

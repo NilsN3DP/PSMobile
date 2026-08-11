@@ -152,6 +152,18 @@ object PrinterStore {
                 localCapabilities = incoming.localCapabilities.ifEmpty { existing.localCapabilities },
                 localNozzleDiameter = incoming.localNozzleDiameter ?: existing.localNozzleDiameter,
                 localNozzleMaterial = incoming.localNozzleMaterial.ifBlank { existing.localNozzleMaterial },
+                // Die Anmeldedaten sind der Grund, warum ueberhaupt neu
+                // gekoppelt wird: der Drucker hat sie gerade frisch
+                // ausgegeben (siehe PrusaLink.pairLocal). Vorher hielt
+                // existing.copy hier die alten fest - nach einem
+                // Werksreset oder einer Anmeldedaten-Rotation meldete
+                // die App "gekoppelt", und jeder spaetere Zugriff
+                // scheiterte still mit 401. iOS macht es richtig
+                // (PrintersView.kopple uebernimmt ergebnis.printer ganz).
+                auth = incoming.auth,
+                username = incoming.username,
+                password = incoming.password,
+                allowInsecureHttp = incoming.allowInsecureHttp,
             ), incoming.host)
         } else incoming.copy(localExperimental = true, localHosts = (incoming.localHosts + incoming.host).distinct())
         if (match >= 0) current[match] = merged else current += merged

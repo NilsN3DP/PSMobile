@@ -181,9 +181,26 @@ actor PrusaLinkClient {
                                nozzleMaterial: material)
     }
 
+    /// Nur echte private IPv4-Adressen, kein Hostname.
+    ///
+    /// Vorher stand hier `compactMap { Int($0) }` - das *verwirft* jedes
+    /// nicht-numerische Label stillschweigend, statt die Zeichenkette
+    /// abzulehnen. "192.168.1.1.attacker.com" zerfaellt zu
+    /// ["192","168","1","1","attacker","com"], compactMap macht daraus
+    /// [192,168,1,1], und die Pruefung sagte "lokal" zu einem Namen, der
+    /// per DNS irgendwohin zeigt. Der Kopplungs-Token waere im Klartext
+    /// dorthin gegangen. Deshalb wie im gemeinsamen Kotlin-Modul
+    /// (LocalPrusaLinkPairing.isLocalHost): jedes Label muss eine Zahl
+    /// sein, sonst raus.
     private static func isLocalHost(_ host: String) -> Bool {
-        let parts = host.split(separator: ".").compactMap { Int($0) }
-        guard parts.count == 4, parts.allSatisfy({ (0...255).contains($0) }) else { return false }
+        let labels = host.trimmingCharacters(in: .whitespaces).split(separator: ".",
+                                                                     omittingEmptySubsequences: false)
+        guard labels.count == 4 else { return false }
+        var parts: [Int] = []
+        for label in labels {
+            guard let n = Int(label), (0...255).contains(n) else { return false }
+            parts.append(n)
+        }
         return parts[0] == 10 || (parts[0] == 172 && (16...31).contains(parts[1])) ||
             (parts[0] == 192 && parts[1] == 168)
     }

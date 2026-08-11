@@ -19,6 +19,18 @@ struct SettingField: View {
     @State private var meta: PsmCore.ConfigMeta?
     @State private var auswahl: [PsmCore.EnumValue] = []
     @State private var gesperrt: (enabled: Bool, reason: String) = (true, "")
+    /// Schreiben beim Verlassen des Feldes.
+    ///
+    /// Vorher hing das ausschliesslich an `.onSubmit`. Bei einem
+    /// `TextEditor` gibt es aber gar kein Submit - Return setzt dort eine
+    /// neue Zeile -, weshalb sich kein einziges der als `code` markierten
+    /// Felder (Start-/End-G-Code, Schichtwechsel, Werkzeugwechsel, ...)
+    /// je speichern liess: der Text blieb im @State stehen und sah
+    /// uebernommen aus, kam aber nie im Kern an. Und auch beim
+    /// einzeiligen Feld ging eine Eingabe verloren, sobald jemand
+    /// weitertippte statt Return zu druecken. Android schreibt an dieser
+    /// Stelle beim Fokusverlust (SettingsScreen.kt).
+    @FocusState private var imFeld: Bool
 
     /// Nur echte Laengen (Einheit "mm") werden umgerechnet - eine
     /// Prozentzahl oder ein Grad-Wert hat mit Zoll nichts zu tun, und
@@ -64,6 +76,7 @@ struct SettingField: View {
         }
         .opacity(gesperrt.enabled ? 1 : 0.55)
         .onAppear(perform: laden)
+        .onChange(of: zollEinheiten) { _ in einheitGewechselt() }
     }
 
     @ViewBuilder private var feld: some View {
@@ -119,6 +132,8 @@ struct SettingField: View {
                     .scrollContentBackground(.hidden)
                     .background(PrusaColors.panelRaised)
                     .clipShape(RoundedRectangle(cornerRadius: ps.pt(4)))
+                    .focused($imFeld)
+                    .onChange(of: imFeld) { drin in if !drin { schreiben(wert) } }
                     .onSubmit { schreiben(wert) }
                     .disabled(!gesperrt.enabled)
             } else {
@@ -130,10 +145,27 @@ struct SettingField: View {
                     .frame(height: ps.touch(40))
                     .background(PrusaColors.panelRaised)
                     .clipShape(RoundedRectangle(cornerRadius: ps.pt(4)))
+                    .focused($imFeld)
+                    .onChange(of: imFeld) { drin in if !drin { schreiben(wert) } }
                     .onSubmit { schreiben(wert) }
                     .disabled(!gesperrt.enabled)
             }
         }
+    }
+
+    /// Wechselt die Zoll-Einstellung, waehrend dieses Feld schon steht,
+    /// muss der angezeigte Wert mit umgerechnet werden. Die Einheit
+    /// daneben folgte sofort (sie haengt direkt an @AppStorage), die Zahl
+    /// aber kam nur aus `laden()` in `.onAppear` - bei einem Feld, das
+    /// mounted bleibt (App-Einstellungen liegen als Overlay ueber dem
+    /// Simple Mode), stand danach ein Millimeterwert unter dem Etikett
+    /// "in", und ein anschliessendes Speichern haette ihn nochmals mit
+    /// 25,4 multipliziert.
+    private func einheitGewechselt() {
+        guard let core = model.core, meta?.unit == "mm" else { return }
+        let mm = core.config(option.key) ?? ""
+        guard let roh = Double(mm) else { return }
+        wert = zollEinheiten ? Self.formatiert(roh / 25.4) : Self.formatiert(roh)
     }
 
     private func beschriftung(fuer wert: String) -> String {

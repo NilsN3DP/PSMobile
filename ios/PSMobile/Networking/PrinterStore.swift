@@ -95,11 +95,21 @@ final class PrinterStore: ObservableObject {
         try? geheim.load(host: p.id, mode: .localPairing)?.secret
     }
 
-    func setLocalPairingToken(_ token: String?, for p: PrusaLinkClient.Printer) {
-        if let token, !token.isEmpty {
-            try? geheim.save(PrinterCredential(host: p.id, mode: .localPairing, secret: token))
-        } else {
-            try? geheim.remove(host: p.id, mode: .localPairing)
+    /// Liefert wie [setSecret] `false`, wenn der Schluesselbund den
+    /// Token nicht aufnehmen konnte - sonst meldete die Kopplung Erfolg,
+    /// waehrend der Token nie ankam.
+    @discardableResult
+    func setLocalPairingToken(_ token: String?, for p: PrusaLinkClient.Printer) -> Bool {
+        do {
+            if let token, !token.isEmpty {
+                try geheim.save(PrinterCredential(host: p.id, mode: .localPairing, secret: token))
+            } else {
+                try geheim.remove(host: p.id, mode: .localPairing)
+            }
+            return true
+        } catch {
+            print("PrinterStore.setLocalPairingToken: Schluesselbund-Fehler fuer \(p.id): \(error)")
+            return false
         }
     }
 }

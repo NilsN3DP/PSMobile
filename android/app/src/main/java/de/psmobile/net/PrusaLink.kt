@@ -278,19 +278,27 @@ object PrusaLink {
 
     private fun put(p: Printer, path: String, file: File, printAfter: Boolean): Pair<Int, String> {
         val c = open(p, path, "PUT")
-        c.doOutput = true
-        c.setRequestProperty("Content-Type", "application/octet-stream")
-        c.setRequestProperty("Print-After-Upload", PrusaLinkRules.printAfterHeader(printAfter))
-        c.setRequestProperty("Overwrite", "?1")
-        c.setFixedLengthStreamingMode(file.length())
+        // finally, nicht nur am Ende des Erfolgspfads: put() streamt die
+        // ganze Datei, bevor responseCode ueberhaupt gelesen wird - bricht
+        // die Verbindung mittendrin weg, blieb sie vorher undisponiert
+        // liegen. Auf einer wackligen Funkstrecke summiert sich das ueber
+        // wiederholte Versuche. RemoteSliceClient macht es schon so.
+        try {
+            c.doOutput = true
+            c.setRequestProperty("Content-Type", "application/octet-stream")
+            c.setRequestProperty("Print-After-Upload", PrusaLinkRules.printAfterHeader(printAfter))
+            c.setRequestProperty("Overwrite", "?1")
+            c.setFixedLengthStreamingMode(file.length())
 
-        file.inputStream().use { input -> c.outputStream.use { out -> input.copyTo(out) } }
+            file.inputStream().use { input -> c.outputStream.use { out -> input.copyTo(out) } }
 
-        val code = c.responseCode
-        val body = (if (code in 200..299) c.inputStream else c.errorStream)
-            ?.bufferedReader()?.use { it.readText() }.orEmpty()
-        c.disconnect()
-        return code to body
+            val code = c.responseCode
+            val body = (if (code in 200..299) c.inputStream else c.errorStream)
+                ?.bufferedReader()?.use { it.readText() }.orEmpty()
+            return code to body
+        } finally {
+            c.disconnect()
+        }
     }
 
     private fun open(p: Printer, path: String, method: String): HttpURLConnection =

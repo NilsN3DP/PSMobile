@@ -54,6 +54,24 @@ private fun t(english: String, german: String) = SimpleModeState.text(english, g
  * Einstellung, deren Wirkung man erraten muss, wird entweder nie
  * angefasst oder einmal falsch.
  */
+/**
+ * Schalter, die die gemeinsame Liste zwar kennt, die auf Android aber
+ * (noch) niemand liest - siehe android-parity-plan.md.
+ *
+ * KEY_UNITS_IMPERIAL wertet nur ios/Screens/SettingField.swift aus,
+ * KEY_MULTI_BED_RENDER und KEY_PORTRAIT_BOTTOM_BAR nur
+ * ios/Screens/AdvancedWorkspaceView.swift. Sie trotzdem anzuzeigen war
+ * schlimmer als sie wegzulassen: "Längen in Zoll anzeigen" liess sich
+ * umlegen, und in den Druckeinstellungen stand danach unveraendert
+ * 0.2 mm. Ein Schalter, der nichts tut, kostet den Nutzer mehr Zeit als
+ * ein fehlender. Wieder hereinnehmen, sobald Android sie umsetzt.
+ */
+private val nurIOS = setOf(
+    AppSettings.KEY_UNITS_IMPERIAL,
+    AppSettings.KEY_MULTI_BED_RENDER,
+    AppSettings.KEY_PORTRAIT_BOTTOM_BAR,
+)
+
 @Composable
 fun AppSettingsScreen(
     prefs: SharedPreferences,
@@ -116,7 +134,7 @@ fun AppSettingsScreen(
                     .padding(bottom = 24.dp),
             ) {
                 AppSettings.groupsInOrder.forEach { group ->
-                    val items = AppSettings.group(group)
+                    val items = AppSettings.group(group).filterNot { it.key in nurIOS }
                     val isAppearance = group == AppSettings.Group.APPEARANCE
                     if (items.isEmpty() && !isAppearance) return@forEach
 

@@ -55,7 +55,16 @@ internal object SecretStore {
         packed[0] = cipher.iv.size.toByte()
         cipher.iv.copyInto(packed, 1)
         ciphertext.copyInto(packed, 1 + cipher.iv.size)
-        prefs(context).edit(commit = true) {
+        // apply() statt commit(): commit() schreibt synchron auf die
+        // Platte, und put() haengt am Tokenfeld in RemoteSliceScreen, das
+        // bei *jedem* Tastendruck schreibt. Ein eingefuegtes 40-Zeichen-
+        // Token ergab so vierzig blockierende fsyncs auf dem UI-Thread -
+        // sichtbares Ruckeln beim Tippen, unter Speicherdruck ein ANR.
+        // apply() legt den Wert sofort im Speicher ab und schreibt im
+        // Hintergrund; Android leert die Warteschlange spaetestens beim
+        // Pausieren der Activity, also ueberlebt der Token den normalen
+        // Weg aus der App.
+        prefs(context).edit {
             putString(ref, Base64.encodeToString(packed, Base64.NO_WRAP))
         }
     }
@@ -78,6 +87,6 @@ internal object SecretStore {
     }.getOrNull()
 
     fun remove(context: Context, ref: String) {
-        prefs(context).edit(commit = true) { remove(ref) }
+        prefs(context).edit { remove(ref) }
     }
 }

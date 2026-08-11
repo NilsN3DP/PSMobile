@@ -197,9 +197,19 @@ fun SceneView(
 
     DisposableEffect(Unit) {
         onDispose {
+            val glView = controller.view
             controller.view = null
             controller.holder = null
-            holder.release()
+            // release() endet in nativeDestroy, das GL-Objekte freigibt
+            // und dafuer den GL-Thread mit gueltigem Kontext braucht
+            // (siehe PsmViewport: "Alle Methoden ausser den Gesten
+            // muessen auf dem GL-Thread laufen"). onDispose laeuft auf
+            // dem Hauptthread - dort ist kein Kontext aktuell, jedes
+            // glDelete verpufft, und Puffer, Texturen und Shader bleiben
+            // auf der GPU liegen. Bei jedem Wechsel Simple <-> Start
+            // kam ein Satz obendrauf. onSurfaceCreated macht es an der
+            // Stelle schon richtig.
+            if (glView != null) glView.queueEvent { holder.release() } else holder.release()
         }
     }
 }
