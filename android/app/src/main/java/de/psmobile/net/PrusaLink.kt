@@ -11,6 +11,7 @@ import de.psmobile.shared.net.LightingEndpointResult
 import de.psmobile.shared.net.LightingSettings
 import de.psmobile.shared.net.PendingDocumentedLightingEndpointAdapter
 import de.psmobile.shared.net.PrusaLinkLighting
+import de.psmobile.shared.rules.SimpleModeState
 import java.io.File
 import de.psmobile.shared.net.LocalPrusaLinkPairing
 import de.psmobile.shared.net.LocalPairingExchange
@@ -208,7 +209,12 @@ object PrusaLink {
             ?.let { Result.Error(it) }
             ?: Result.Ok(PrusaLinkRules.describeStatus(body))
     } catch (t: Throwable) {
-        Result.Error(t.message ?: "nicht erreichbar")
+        // Die rohe Ausnahme taugt fuer das Protokoll, nicht fuer den
+        // Bildschirm: "failed to connect to /192.168.99.250 (port 443)
+        // from /10.0.2.16 (port 40534) after 15000ms" nennt dem Nutzer
+        // nichts, was er nicht schon weiss, und ist zudem unuebersetzt.
+        Log.w(TAG, "Drucker nicht erreichbar", t)
+        Result.Error(SimpleModeState.text("Printer not reachable", "Drucker nicht erreichbar"))
     }
 
     /**
@@ -242,7 +248,7 @@ object PrusaLink {
             ?: Result.Ok(PrusaLinkRules.uploadOk(printAfter))
     } catch (t: Throwable) {
         Log.w(TAG, "Upload fehlgeschlagen", t)
-        Result.Error(t.message ?: "Übertragung fehlgeschlagen")
+        Result.Error(SimpleModeState.text("Transfer failed", "Übertragung fehlgeschlagen"))
     }
 
     // --- Innereien --------------------------------------------------------

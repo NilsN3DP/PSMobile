@@ -241,7 +241,7 @@ fun ObjectPanel(
 
         // --- Kopien ----------------------------------------------------
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("Kopien", color = PrusaColors.TextMuted,
+            Text(PsUi.appText("Copies", "Kopien"), color = PrusaColors.TextMuted,
                  fontSize = 12.sp, modifier = Modifier.width(64.dp))
             SmallButton("−", Modifier.width(52.dp)) {
                 if (obj.instances > 1) service.setInstances(obj.id, obj.instances - 1)
