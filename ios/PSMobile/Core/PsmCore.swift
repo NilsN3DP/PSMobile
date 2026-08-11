@@ -17,8 +17,13 @@ final class PsmCore {
 
         var errorDescription: String? {
             switch self {
-            case .createFailed(let m):        return "Session liess sich nicht anlegen: \(m)"
-            case .call(let what, let c, let m): return "\(what) fehlgeschlagen (\(c)): \(m)"
+            case .createFailed(let m):
+                return SimpleModeState.shared.text(
+                    english: "Could not create session: \(m)",
+                    german: "Session liess sich nicht anlegen: \(m)")
+            // Dieselbe Tabelle wie auf Android (shared/rules/CoreLabels).
+            case .call(let what, let c, let m):
+                return CoreLabels.shared.failed(german: what, code: Int32(c), detail: m)
             }
         }
     }

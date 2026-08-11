@@ -2,6 +2,7 @@ package de.psmobile.core
 
 import android.util.Log
 import java.io.Closeable
+import de.psmobile.shared.rules.CoreLabels
 
 /**
  * Kotlin-Seite der Bruecke zu libpsmobile_core.so.
@@ -265,7 +266,10 @@ class PsmCore private constructor(private var handle: Long) : Closeable {
     }
 
     private fun check(code: Int, what: String) {
-        if (code != 0) throw PsmException("$what fehlgeschlagen (${code}): ${lastError()}")
+        // Die Meldung landet ungefiltert in der Oberflaeche, also muss
+        // sie der eingestellten Sprache folgen. Der deutsche Name bleibt
+        // hier der Schluessel - siehe CoreLabels.
+        if (code != 0) throw PsmException(CoreLabels.failed(what, code, lastError()))
     }
 
     fun lastError(): String = if (handle == 0L) "" else nativeLastError(handle)
