@@ -199,7 +199,8 @@ struct PSMobileApp: App {
                 onAdvanced: { self.route = .advanced },
                 onAppSettings: {},
                 onPrinterSetup: { model.reopenSetup() },
-                onRemote: { self.route = .remote }
+                onRemote: { self.route = .remote },
+                onManagePrinters: { zurueckVon = .start; self.route = .drucker(nil) }
             )
         case .start:
             WorkflowStartView(
@@ -207,7 +208,8 @@ struct PSMobileApp: App {
                 onAdvanced: { self.route = .advanced },
                 onAppSettings: { zurueckVon = .start; self.route = .appEinstellungen },
                 onPrinterSetup: { model.reopenSetup() },
-                onRemote: { self.route = .remote }
+                onRemote: { self.route = .remote },
+                onManagePrinters: { zurueckVon = .start; self.route = .drucker(nil) }
             )
         case .simple:
             SimpleModeView(

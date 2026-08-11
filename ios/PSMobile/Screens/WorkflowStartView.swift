@@ -22,6 +22,7 @@ struct WorkflowStartView: View {
     var onAppSettings: () -> Void
     var onPrinterSetup: () -> Void = {}
     var onRemote: () -> Void = {}
+    var onManagePrinters: () -> Void = {}
 
     @Environment(\.psScale) private var ps
     @State private var alleProjekteZeigen = false
@@ -206,6 +207,9 @@ struct WorkflowStartView: View {
             fusszeilenKnopf(st("Printer setup", "Ersteinrichtung"),
                            symbol: "printer", kennung: "start.einrichtung",
                            aktion: onPrinterSetup)
+            fusszeilenKnopf(st("Manage printers", "Drucker verwalten"),
+                           symbol: "wifi", kennung: "start.drucker",
+                           aktion: onManagePrinters)
             if remoteSlicePluginAn {
                 fusszeilenKnopf(st("Remote Slicing", "Remote Slicing"),
                                symbol: "cloud", kennung: "start.remote",

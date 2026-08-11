@@ -30,6 +30,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.Print
+import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.ViewInAr
@@ -70,6 +71,7 @@ fun WorkflowStartScreen(
     onAppSettings: () -> Unit,
     onLanguageChange: (String) -> Unit,
     onRemote: () -> Unit = {},
+    onManagePrinters: () -> Unit = {},
     onOpenRecent: (String, Boolean) -> Unit = { _, _ -> },
 ) {
     val context = LocalContext.current
@@ -254,6 +256,7 @@ fun WorkflowStartScreen(
             ) {
                 FusszeilenKnopf(SimpleModeState.text("App settings", "App-Einstellungen"), Icons.Filled.Settings, onAppSettings)
                 FusszeilenKnopf(SimpleModeState.text("Printer setup", "Ersteinrichtung"), Icons.Filled.Print, onAdvancedWizard)
+                FusszeilenKnopf(SimpleModeState.text("Manage printers", "Drucker verwalten"), Icons.Filled.Wifi, onManagePrinters)
                 if (remoteSlicePluginAn) {
                     FusszeilenKnopf(SimpleModeState.text("Remote Slicing", "Remote Slicing"), Icons.Filled.Cloud, onRemote)
                 }

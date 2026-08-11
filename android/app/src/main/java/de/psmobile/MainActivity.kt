@@ -90,6 +90,7 @@ class MainActivity : ComponentActivity() {
     private var appMode by mutableStateOf<AppMode?>(null)
     private var showAppSettings by mutableStateOf(false)
     private var showRemoteSlice by mutableStateOf(false)
+    private var showPrinters by mutableStateOf(false)
     // Fuer die Momentaufnahmen der "Zuletzt"-Kacheln - siehe
     // merkeAlsZuletzt(). Reine Plain-Felder statt mutableStateOf: eine
     // neue Ansicht traegt sich per LaunchedEffect selbst ein, niemand
@@ -306,6 +307,18 @@ class MainActivity : ComponentActivity() {
                         service = svc,
                         onHome = { showRemoteSlice = false },
                     )
+                } else if (showPrinters && svc != null) {
+                    // Von der Startseite aus, ohne erst ein Projekt im
+                    // Advanced Mode oeffnen zu muessen - vorher war die
+                    // Druckerverwaltung (und damit die QR-Kopplung) nur
+                    // ueber dessen Seitenleiste erreichbar.
+                    val presets by svc.presets.collectAsState()
+                    de.psmobile.ui.PrintersScreen(
+                        presetNames = presets.printers,
+                        onClose = { showPrinters = false },
+                        onPickBackupFolder = { backupPicker.launch(null) },
+                        onReopenSetup = { svc.reopenSetup() },
+                    )
                 } else if (appMode == null) {
                     WorkflowStartScreen(
                         onSimple = { appMode = AppMode.SIMPLE },
@@ -317,6 +330,7 @@ class MainActivity : ComponentActivity() {
                         onAppSettings = { showAppSettings = true },
                         onLanguageChange = { svc?.uiLanguage = it },
                         onRemote = { showRemoteSlice = true },
+                        onManagePrinters = { showPrinters = true },
                         onOpenRecent = { uri, advanced -> openRecentProject(uri, advanced) },
                     )
                 } else if (appMode == AppMode.SIMPLE && svc == null) {
