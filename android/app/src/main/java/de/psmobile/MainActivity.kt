@@ -293,6 +293,8 @@ class MainActivity : ComponentActivity() {
                         onConfirm = { svc.completeSetup(it) },
                         onLanguageChange = { svc.uiLanguage = it },
                         preselected = svc.installedPrinters(),
+                        onClose = if (svc.installedPrinters().isEmpty()) null
+                                  else { { svc.dismissSetup() } },
                     )
                 } else if (showAppSettings) {
                     AppSettingsScreen(

@@ -174,6 +174,7 @@ struct PSMobileApp: App {
                     busy: model.setupBusy,
                     preselected: model.installedPrinters,
                     onConfirm: { model.completeSetup($0) },
+                    currentLanguage: einstellungen.language,
                     onLanguageChange: { einstellungen.language = $0 },
                     onClose: model.installedPrinters.isEmpty ? nil : { model.dismissSetup() }
                 )

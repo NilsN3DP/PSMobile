@@ -578,6 +578,17 @@ class SlicerService : Service() {
         }
     }
 
+    /**
+     * Bricht ein erneut geoeffnetes Setup ohne Aenderung ab. Gegenstueck
+     * zu iOS' SlicerModel.dismissSetup - nur sinnvoll, wenn schon
+     * mindestens ein Drucker eingerichtet ist (siehe onClose in
+     * SetupScreen/MainActivity), sonst gaebe es nichts, wohin man
+     * zurueckkehren koennte.
+     */
+    fun dismissSetup() {
+        _setupNeeded.value = false
+    }
+
     /** Druckerauswahl erneut oeffnen. */
     fun reopenSetup() {
         // Easy Mode kann sichtbar werden, waehrend die native Session noch

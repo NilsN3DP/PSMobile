@@ -134,7 +134,11 @@ fun RemoteSliceScreen(
             Text(t("Server address", "Serveradresse"), color = PrusaColors.TextMuted, fontSize = 11.sp)
             OutlinedTextField(
                 value = serverAdresse,
-                onValueChange = { serverAdresse = it; pruefung = Pruefung.UNBEKANNT },
+                onValueChange = {
+                    serverAdresse = it
+                    service.remoteSliceHost = it
+                    pruefung = Pruefung.UNBEKANNT
+                },
                 placeholder = { Text("192.168.1.50:8420") },
                 singleLine = true,
                 colors = OutlinedTextFieldDefaults.colors(

@@ -68,6 +68,13 @@ fun SetupScreen(
     onLanguageChange: (String) -> Unit,
     /** Bisher installierte Modelle, Format "vendor:model:variant". */
     preselected: Set<String> = emptySet(),
+    /**
+     * Nur gesetzt, wenn der Assistent erneut geoeffnet wurde (z. B. aus
+     * "Drucker verwalten"), nicht beim allerersten Start - dort gibt es
+     * noch nichts, wohin man abbrechen koennte. Gegenstueck zu iOS'
+     * SetupView.onClose.
+     */
+    onClose: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -122,6 +129,16 @@ fun SetupScreen(
         ) {
 
             Row(verticalAlignment = Alignment.CenterVertically) {
+                onClose?.let { close ->
+                    Text(
+                        "‹  ${PsUi.tr("Back")}",
+                        color = PrusaColors.Orange,
+                        fontSize = 15.sp,
+                        modifier = Modifier
+                            .clickable(onClick = close)
+                            .padding(end = 12.dp, top = 15.dp, bottom = 15.dp),
+                    )
+                }
                 Column(Modifier.weight(1f)) {
                     Text(
                         PsUi.tr("Configuration Assistant"),

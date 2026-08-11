@@ -19,6 +19,9 @@ struct SetupView: View {
     /// Bisher installierte Modelle, Format "vendor:model:variant".
     let preselected: Set<String>
     let onConfirm: ([String]) -> Void
+    /// Nur fuer die Anzeige im Sprachmenue - die eigentliche Sprache
+    /// der App liegt in AppSettingsStore, das hier nicht vorliegt.
+    var currentLanguage: String = "en"
     let onLanguageChange: (String) -> Void
     var onClose: (() -> Void)? = nil
 
@@ -135,7 +138,28 @@ struct SetupView: View {
                 }
             }
             Spacer()
+            sprachmenue
         }
+    }
+
+    /// Gegenstueck zum DropdownMenu in SetupScreen.kt (Android) - dort
+    /// gibt es diese Wahl schon lange, hier war onLanguageChange bisher
+    /// mit keinem Bedienelement verdrahtet.
+    private var sprachmenue: some View {
+        Menu {
+            ForEach(["en", "de"], id: \.self) { code in
+                Button(code == "de" ? "Deutsch" : "English") { onLanguageChange(code) }
+            }
+        } label: {
+            Text(currentLanguage.uppercased() + "  ▾")
+                .font(.system(size: ps.font(13)))
+                .foregroundStyle(PrusaColors.textPrimary)
+                .padding(.horizontal, ps.pt(12))
+                .frame(minHeight: ps.touch(40))
+                .background(PrusaColors.panelRaised)
+                .clipShape(Capsule())
+        }
+        .accessibilityIdentifier("einrichtung.sprache")
     }
 
     private var suchfeld: some View {
