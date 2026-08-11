@@ -100,6 +100,19 @@ actor PrusaLinkClient {
         struct Nozzle: Codable {
             var diameter: Double
             var material: String?
+
+            /// `true`/`false` fuer gehaertet - so sendet es die
+            /// CFW-Gegenstelle (`build_prusalink_payload` in
+            /// local_prusalink_qr.cpp, pfw653-farm-mini). `material`
+            /// bleibt fuer manuelle Eingabe/Tests erhalten, ist bei
+            /// echten Firmware-QR-Codes aber nie gesetzt.
+            var hardened: Bool?
+
+            var materialOrDerived: String {
+                if let material { return material }
+                if let hardened { return hardened ? "hardened" : "brass" }
+                return "unknown"
+            }
         }
 
         enum CodingKeys: String, CodingKey {
@@ -108,14 +121,16 @@ actor PrusaLinkClient {
         }
     }
 
+    /// Die CFW-Gegenstelle (`lib/WUI/link_content/local_pairing.cpp` in
+    /// pfw653-farm-mini) antwortet auf `/api/pair` ausschliesslich mit
+    /// `{"username":"...","password":"..."}` - Modell, Duese, Host und
+    /// Port kannte der Drucker bereits aus dem eigenen QR-Code, den diese
+    /// App gerade gescannt und validiert hat. Die zusaetzlichen Felder
+    /// hier zu verlangen hiess: jede echte Kopplung schlug als
+    /// "invalidResponse" fehl, obwohl der Token-Austausch selbst erfolgreich war.
     private struct LocalPairResponse: Codable {
         var username: String
         var password: String
-        var model: String
-        var nozzle: Nozzle
-        var host: String
-        var port: Int
-        struct Nozzle: Codable { var diameter: Double; var hardened: Bool }
     }
 
     struct LocalPairResult {
@@ -151,20 +166,18 @@ actor PrusaLinkClient {
         let code = (response as? HTTPURLResponse)?.statusCode ?? 0
         guard code != 401 else { throw LocalPairError.unauthorized }
         guard (200...299).contains(code), let result = try? JSONDecoder().decode(LocalPairResponse.self, from: data),
-              result.host == payload.host, result.port == payload.port,
-              !result.username.isEmpty, !result.password.isEmpty,
-              result.nozzle.diameter > 0 else { throw LocalPairError.invalidResponse }
-        let material = result.nozzle.hardened ? "hardened" : "brass"
+              !result.username.isEmpty, !result.password.isEmpty else { throw LocalPairError.invalidResponse }
+        let material = payload.nozzle.materialOrDerived
         let printer = Printer(
-            name: result.model, host: "http://\(result.host):\(result.port)",
+            name: payload.model, host: "http://\(payload.host):\(payload.port)",
             username: result.username, allowInsecureHttp: true,
-            localExperimental: true, localHosts: [result.host],
-            localModel: result.model, localCapabilities: payload.capabilities,
-            localNozzleDiameter: result.nozzle.diameter, localNozzleMaterial: material,
+            localExperimental: true, localHosts: [payload.host],
+            localModel: payload.model, localCapabilities: payload.capabilities,
+            localNozzleDiameter: payload.nozzle.diameter, localNozzleMaterial: material,
         )
         return LocalPairResult(printer: printer,
                                secret: Secret(password: result.password),
-                               nozzleDiameter: result.nozzle.diameter,
+                               nozzleDiameter: payload.nozzle.diameter,
                                nozzleMaterial: material)
     }
 

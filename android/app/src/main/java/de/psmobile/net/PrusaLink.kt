@@ -120,7 +120,7 @@ object PrusaLink {
             c.disconnect()
             if (code == 401) return LocalPairResult.Error("Pairing-Token ungültig, abgelaufen oder widerrufen")
             if (code !in 200..299) return LocalPairResult.Error("Lokale Kopplung fehlgeschlagen ($code)")
-            when (val parsed = LocalPairingExchange.parseResponse(response, payload.host, payload.port)) {
+            when (val parsed = LocalPairingExchange.parseResponse(response, payload)) {
                 is LocalPairingExchangeResult.Success -> {
                     val credentials = parsed.credentials
                     val material = if (credentials.nozzleHardened) "hardened" else "brass"

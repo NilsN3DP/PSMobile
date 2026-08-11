@@ -4,6 +4,7 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.doubleOrNull
 import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.longOrNull
@@ -101,10 +102,20 @@ object LocalPrusaLinkPairing {
             nozzle = LocalNozzle(
                 diameter = nozzle["diameter"]?.jsonPrimitive?.doubleOrNull
                     ?: return LocalPairingValidation.Invalid(LocalPairingValidation.Reason.MALFORMED),
-                material = when (nozzle["material"]?.jsonPrimitive?.content?.lowercase()) {
-                    "brass" -> NozzleMaterial.BRASS
-                    "hardened" -> NozzleMaterial.HARDENED
-                    "unknown", null -> NozzleMaterial.UNKNOWN
+                // Die CFW-Gegenstelle (build_prusalink_payload in
+                // local_prusalink_qr.cpp, pfw653-farm-mini) sendet ein
+                // "hardened"-Bool, kein "material"-String - der String
+                // bleibt als Weg fuer manuelle Eingabe/Tests erhalten,
+                // die Boole'sche Form ist bei echten Firmware-QR-Codes
+                // massgeblich.
+                material = when {
+                    nozzle["material"] != null -> when (nozzle["material"]?.jsonPrimitive?.content?.lowercase()) {
+                        "brass" -> NozzleMaterial.BRASS
+                        "hardened" -> NozzleMaterial.HARDENED
+                        else -> NozzleMaterial.UNKNOWN
+                    }
+                    nozzle["hardened"]?.jsonPrimitive?.booleanOrNull == true -> NozzleMaterial.HARDENED
+                    nozzle["hardened"]?.jsonPrimitive?.booleanOrNull == false -> NozzleMaterial.BRASS
                     else -> NozzleMaterial.UNKNOWN
                 },
             ),
@@ -166,21 +177,28 @@ object LocalPrusaLinkPairing {
 object LocalPairingExchange {
     private val json = Json { ignoreUnknownKeys = true }
 
-    fun parseResponse(jsonText: String, expectedHost: String, expectedPort: Int): LocalPairingExchangeResult {
+    /**
+     * Die CFW-Gegenstelle (`lib/WUI/link_content/local_pairing.cpp` in
+     * pfw653-farm-mini) antwortet auf `/api/pair` ausschliesslich mit
+     * `{"username":"...","password":"..."}` - Modell, Duese, Host und
+     * Port kannte der Drucker zum Zeitpunkt der Antwort bereits aus dem
+     * eigenen QR-Code, den diese App gerade gescannt und validiert hat.
+     * Diese Felder hier zusaetzlich in der Antwort zu verlangen hiess:
+     * jede echte Kopplung schlug als "Antwort ungueltig" fehl, obwohl
+     * der Token-Austausch selbst erfolgreich war.
+     */
+    fun parseResponse(jsonText: String, payload: LocalPrusaLinkQrPayload): LocalPairingExchangeResult {
         return try {
         val root = json.parseToJsonElement(jsonText).jsonObject
         val username = root["username"]?.jsonPrimitive?.contentOrNull.orEmpty()
         val password = root["password"]?.jsonPrimitive?.contentOrNull.orEmpty()
-        val model = root["model"]?.jsonPrimitive?.contentOrNull.orEmpty()
-        val host = root["host"]?.jsonPrimitive?.contentOrNull.orEmpty()
-        val port = root["port"]?.jsonPrimitive?.intOrNull ?: -1
-        val nozzle = root["nozzle"]?.jsonObject ?: return LocalPairingExchangeResult.Malformed
-        val diameter = nozzle["diameter"]?.jsonPrimitive?.doubleOrNull ?: return LocalPairingExchangeResult.Malformed
-        val hardened = nozzle["hardened"]?.jsonPrimitive?.contentOrNull?.toBooleanStrictOrNull()
-            ?: return LocalPairingExchangeResult.Malformed
-        if (username.isBlank() || password.isBlank() || model.isBlank() || host != expectedHost || port != expectedPort || diameter <= 0.0)
-            return LocalPairingExchangeResult.Malformed
-        LocalPairingExchangeResult.Success(LocalPrusaLinkCredentials(username, password, model, diameter, hardened, host, port))
+        if (username.isBlank() || password.isBlank()) return LocalPairingExchangeResult.Malformed
+        val hardened = payload.nozzle.material == NozzleMaterial.HARDENED
+        LocalPairingExchangeResult.Success(
+            LocalPrusaLinkCredentials(
+                username, password, payload.model, payload.nozzle.diameter, hardened, payload.host, payload.port,
+            )
+        )
         } catch (_: Throwable) {
             LocalPairingExchangeResult.Malformed
         }

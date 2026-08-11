@@ -8,21 +8,36 @@ import kotlin.test.assertFalse
 
 class LocalPrusaLinkPairingTest {
 
+    private val pairedPayload = LocalPrusaLinkQrPayload(
+        type = "prusalink-local", version = 1, model = "COREONE",
+        host = "192.168.4.1", port = 80, transport = "http",
+        pairingToken = "secret-token", capabilities = setOf("status", "files", "upload", "pause"),
+        nozzle = LocalNozzle(0.4, NozzleMaterial.HARDENED),
+    )
+
     @Test
-    fun `pair response accepts credentials only for the validated local endpoint`() {
+    fun `pair response accepts the CFW's minimal username-password reply`() {
+        // lib/WUI/link_content/local_pairing.cpp (pfw653-farm-mini) antwortet
+        // ausschliesslich mit username+password - Modell, Duese, Host und
+        // Port stammen aus dem bereits validierten QR-Payload.
         val result = LocalPairingExchange.parseResponse(
-            """{"username":"maker","password":"secret","model":"COREONE","host":"192.168.4.1","port":80,"nozzle":{"diameter":0.4,"hardened":true}}""",
-            "192.168.4.1", 80,
+            """{"username":"maker","password":"secret"}""",
+            pairedPayload,
         )
         assertTrue(result is LocalPairingExchangeResult.Success)
-        assertEquals("maker", (result as LocalPairingExchangeResult.Success).credentials.username)
+        val credentials = (result as LocalPairingExchangeResult.Success).credentials
+        assertEquals("maker", credentials.username)
+        assertEquals("COREONE", credentials.model)
+        assertEquals("192.168.4.1", credentials.host)
+        assertEquals(0.4, credentials.nozzleDiameter)
+        assertTrue(credentials.nozzleHardened)
     }
 
     @Test
-    fun `pair response rejects mismatched host and incomplete secrets`() {
+    fun `pair response rejects incomplete secrets`() {
         val result = LocalPairingExchange.parseResponse(
-            """{"username":"maker","password":"secret","model":"COREONE","host":"10.0.0.2","port":80,"nozzle":{"diameter":0.4,"hardened":false}}""",
-            "192.168.4.1", 80,
+            """{"username":"maker","password":""}""",
+            pairedPayload,
         )
         assertTrue(result is LocalPairingExchangeResult.Malformed)
     }
