@@ -32,7 +32,6 @@ export PSM_IMAGE="${PSM_IMAGE:-psmobile-ndk:1}"
 # Begruendung siehe docs/entscheidungen.md, E-08.
 #   wxWidgets  - keine Desktop-GUI
 #   GLEW       - GLES nutzt die nativen Header
-#   OCCT       - STEP-Import ist fuer v1 aus
 #   OpenCSG    - nur Desktop-Rendering
 #   Catch2     - Unit-Tests werden auf dem Host gefahren
 #   CURL/OpenSSL - libslic3r hat 0 curl-Referenzen; Netzwerk macht die
@@ -41,7 +40,10 @@ export PSM_IMAGE="${PSM_IMAGE:-psmobile-ndk:1}"
 # OpenVDB/OpenEXR/Blosc bleiben DRIN, obwohl v1 kein SLA kann:
 # SLA/Hollowing.cpp ist fest an OpenVDBUtils gekoppelt, das Herauspatchen
 # waere invasiver als das Mitbauen. Siehe E-10.
-export DEP_EXCLUDES='wxWidgets|GLEW|OCCT|OpenCSG|Catch2|CURL|OpenSSL'
+# OCCT ist DRIN: ohne die Bibliothek laesst sich keine STEP-Datei lesen,
+# und ein Nachladen zur Laufzeit gibt es auf iOS nicht (siehe
+# patches/0003 und die dlopen-Fehlermeldung, die genau daher kam).
+export DEP_EXCLUDES='wxWidgets|GLEW|OpenCSG|Catch2|CURL|OpenSSL'
 
 # --- Parallelitaet --------------------------------------------------------
 export NPROC="${NPROC:-$(nproc)}"

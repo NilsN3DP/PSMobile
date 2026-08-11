@@ -38,7 +38,10 @@ option(PSM_BUILD_TESTS "C-ABI-Vertragstests bauen" ON)
 set(SLIC3R_GUI                OFF CACHE BOOL "" FORCE)  # wxWidgets faellt weg
 set(SLIC3R_BUILD_TESTS        OFF CACHE BOOL "" FORCE)
 set(SLIC3R_BUILD_SANDBOXES    OFF CACHE BOOL "" FORCE)
-set(SLIC3R_ENABLE_FORMAT_STEP OFF CACHE BOOL "" FORCE)  # kein OCCT
+# STEP-Import ueber OCCT. Der Zuschnitt in deps/+OCCT baut nur den
+# DataExchange-Teil statisch (kein TK, TBB, FreeType, VTK) - das ist
+# genau das, was das Lesen einer STEP-Datei braucht.
+set(SLIC3R_ENABLE_FORMAT_STEP ON CACHE BOOL "" FORCE)
 set(SLIC3R_STATIC             ON  CACHE BOOL "" FORCE)
 set(SLIC3R_PCH                OFF CACHE BOOL "" FORCE)  # PCH + NDK vertragen sich schlecht
 

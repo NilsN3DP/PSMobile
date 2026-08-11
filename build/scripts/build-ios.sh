@@ -21,7 +21,7 @@ CORE_BUILD="${PSM_ROOT}/build-out/ios-core-${PLATFORM}"
 DL_CACHE="${PSM_ROOT}/build-out/dl-cache"
 
 # Gleicher Zuschnitt wie Android, siehe build/scripts/env.sh
-DEP_EXCLUDES='wxWidgets|GLEW|OCCT|OpenCSG|Catch2|CURL|OpenSSL'
+DEP_EXCLUDES='wxWidgets|GLEW|OpenCSG|Catch2|CURL|OpenSSL'
 
 log() { printf '\n\033[1;36m==> %s\033[0m\n' "$*"; }
 
