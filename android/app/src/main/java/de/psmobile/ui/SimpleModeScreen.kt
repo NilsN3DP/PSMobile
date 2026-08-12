@@ -141,6 +141,10 @@ fun SimpleModeScreen(
     // Der Advanced Mode springt immer hinein; im Simple Mode nur, wenn man
     // wirklich die Vorschau wollte und nicht bloss G-Code.
     var nachDemSchnittZeigen by remember { mutableStateOf(false) }
+    // "Auf Flaeche": der naechste Tipp im Viewport waehlt die
+    // Flaeche, die nach unten soll. Ein Modus und kein Knopf, weil
+    // die Auswahl im Viewport passiert und nicht in der Leiste.
+    var flaechenwahl by remember { mutableStateOf(false) }
     var zeigeVerlassenNachfrage by remember { mutableStateOf(false) }
     // Dieselbe Nachfrage wie im Advanced Mode - ein zweites Tippen auf
     // einen Modus oder die Startseite verwirft sonst stillschweigend
@@ -264,6 +268,12 @@ fun SimpleModeScreen(
         onBlockedInput = {
             if (panel != SimplePanel.WORKSPACE) panel = SimplePanel.WORKSPACE
         },
+        // Nur solange der Modus laeuft. Danach ist ein Tipp wieder ein
+        // Tipp und dreht nicht versehentlich das Objekt.
+        onSurfaceTap = if (flaechenwahl) { hit: de.psmobile.core.PsmViewport.SurfaceHit ->
+            service.layOnFacet(hit)
+            flaechenwahl = false
+        } else null,
         modifier = Modifier.fillMaxSize(),
         )
         Column(
@@ -336,6 +346,8 @@ fun SimpleModeScreen(
                 obj = selectedObject,
                 beds = beds,
                 onClearSelection = { selectedId = null },
+                flaechenwahl = flaechenwahl,
+                onFlaechenwahl = { flaechenwahl = it },
                 modifier = Modifier
                     .align(Alignment.TopCenter)
                     .padding(top = statusTop + if (compactChrome) 116.dp else 148.dp),
@@ -491,6 +503,7 @@ private fun SimpleSceneWorkspace(
     controller: SceneController,
     inputEnabled: Boolean,
     onBlockedInput: () -> Unit,
+    onSurfaceTap: ((de.psmobile.core.PsmViewport.SurfaceHit) -> Unit)?,
     modifier: Modifier,
 ) = SceneView(
     core = service.coreOrNull,
@@ -498,6 +511,7 @@ private fun SimpleSceneWorkspace(
     selectedId = selectedId,
     onSelect = onSelect,
     invalidateKey = SimpleWorkspaceState.invalidateKey(sceneRevision),
+    onSurfaceTap = onSurfaceTap,
     controller = controller,
     inputEnabled = inputEnabled,
     onBlockedInput = onBlockedInput,

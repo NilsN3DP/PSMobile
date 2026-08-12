@@ -31,11 +31,6 @@ struct PSMobileApp: App {
     /// anderen elf.
     enum Route {
         case start, simple, advanced, druckEinstellungen, appEinstellungen, remote
-        /// Der Advanced-Assistent - Drucker, Filament und Print
-        /// Settings direkt waehlen, ohne die Einrichtung noch
-        /// einmal durchzugehen. Gegenstueck zu Androids
-        /// AdvancedWizardScreen.
-        case assistent
         /// Drucker einrichten - oder, mit einer Datei, den G-Code
         /// hinschicken. Derselbe Bildschirm, zwei Anlaesse.
         case drucker(URL?)
@@ -219,7 +214,7 @@ struct PSMobileApp: App {
                 onSimple: { self.route = .simple },
                 onAdvanced: { self.route = .advanced },
                 onAppSettings: {},
-                onPrinterSetup: { self.route = .assistent },
+                onPrinterSetup: { model.reopenSetup() },
                 onRemote: { self.route = .remote },
                 onManagePrinters: { zurueckVon = .start; self.route = .drucker(nil) }
             )
@@ -228,12 +223,10 @@ struct PSMobileApp: App {
                 onSimple: { self.route = .simple },
                 onAdvanced: { self.route = .advanced },
                 onAppSettings: { zurueckVon = .start; self.route = .appEinstellungen },
-                onPrinterSetup: { self.route = .assistent },
+                onPrinterSetup: { model.reopenSetup() },
                 onRemote: { self.route = .remote },
                 onManagePrinters: { zurueckVon = .start; self.route = .drucker(nil) }
             )
-        case .assistent:
-            AdvancedWizardView(model: model) { self.route = .advanced }
         case .simple:
             SimpleModeView(
                 onHome: { self.route = .start },
@@ -259,7 +252,7 @@ struct PSMobileApp: App {
                     zurueckVon = .advanced
                     self.route = .drucker(datei)
                 },
-                onPrinterSetup: { self.route = .assistent },
+                onPrinterSetup: { model.reopenSetup() },
                 onSettings: { reiter in
                     einstellungsReiter = reiter
                     self.route = .druckEinstellungen

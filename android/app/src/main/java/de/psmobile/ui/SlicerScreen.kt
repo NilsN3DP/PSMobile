@@ -258,7 +258,6 @@ private fun SlicerContent(
     val settingsTab = (screen as? SlicerService.Screen.Settings)?.tab
     var settingsMode by remember { mutableStateOf(PsmCore.Mode.SIMPLE) }
     val showPrinters = screen is SlicerService.Screen.Printers
-    val showWizard = screen is SlicerService.Screen.Wizard
     val showColorMix = screen is SlicerService.Screen.ColorMix
     val ctx = androidx.compose.ui.platform.LocalContext.current
     val sendState by service.sendState.collectAsState()
@@ -266,11 +265,6 @@ private fun SlicerContent(
     var confirmNewProject by remember { mutableStateOf(false) }
     var confirmReloadProject by remember { mutableStateOf(false) }
     var confirmLeaveProject by remember { mutableStateOf(false) }
-
-    if (showWizard) {
-        AdvancedWizardScreen(service = service, onClose = service::showBed)
-        return
-    }
 
     if (showColorMix) {
         ColorMixScreen(service = service, onClose = service::showBed)

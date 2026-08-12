@@ -53,6 +53,8 @@ internal fun SimpleObjectBar(
     obj: PsmCore.ObjectInfo,
     beds: List<PsmCore.Bed>,
     onClearSelection: () -> Unit,
+    flaechenwahl: Boolean = false,
+    onFlaechenwahl: (Boolean) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     var cutOpen by remember { mutableStateOf(false) }
@@ -71,6 +73,17 @@ internal fun SimpleObjectBar(
         BarAction("⧅", t("Split", "Teilen")) { service.splitIntoObjects(obj.id) }
         BarAction("⧉", t("Clone", "Klonen")) { service.duplicate(obj.id) }
         BarAction("➜", t("Move to", "Ziehen zu")) { moveOpen = true }
+        // Platzieren - dieselben vier wie in SimpleObjectBarView.swift.
+        BarAction("⭳", t("Drop", "Ablegen")) { service.dropToBed(obj.id) }
+        // Ein Tippen, kein Nachdenken: die groesste ebene Flaeche kommt
+        // nach unten.
+        BarAction("⬓", t("Lay flat", "Hinlegen")) { service.layFlatAuto(obj.id) }
+        // Und fuer die Faelle, in denen die groesste Flaeche nicht die
+        // gemeinte ist: eine antippen.
+        BarAction("◈", t("On face", "Auf Fläche"), aktiv = flaechenwahl) {
+            onFlaechenwahl(!flaechenwahl)
+        }
+        BarAction("⇔", t("Fit", "Einpassen")) { service.fitToBed(obj.id) }
         BarAction("✖", t("Remove", "Entfernen")) {
             service.removeObject(obj.id)
             onClearSelection()
@@ -163,7 +176,16 @@ private fun CutDialog(
 }
 
 @Composable
-private fun BarAction(glyph: String, label: String, onClick: () -> Unit) {
+private fun BarAction(
+    glyph: String,
+    label: String,
+    /** Fuer Werkzeuge, die eingeschaltet bleiben, bis man sie wieder
+     *  ausschaltet - "Auf Flaeche" wartet auf den naechsten Tipp im
+     *  Viewport und muss das sichtbar machen. */
+    aktiv: Boolean = false,
+    onClick: () -> Unit,
+) {
+    val farbe = if (aktiv) PrusaColors.Orange else PrusaColors.TextPrimary
     Column(
         Modifier
             .widthIn(min = 60.dp)
@@ -173,10 +195,10 @@ private fun BarAction(glyph: String, label: String, onClick: () -> Unit) {
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
-        Text(glyph, color = PrusaColors.TextPrimary, fontSize = 17.sp)
+        Text(glyph, color = farbe, fontSize = 17.sp)
         Text(
             label,
-            color = PrusaColors.TextMuted,
+            color = if (aktiv) PrusaColors.Orange else PrusaColors.TextMuted,
             style = MaterialTheme.typography.labelSmall,
             maxLines = 1,
         )

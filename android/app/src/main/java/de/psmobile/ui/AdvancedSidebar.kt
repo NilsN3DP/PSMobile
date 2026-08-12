@@ -408,17 +408,6 @@ internal fun Sidebar(
                             fontSize = 14.sp,
                         )
                     }
-                    OutlinedButton(
-                        onClick = { service.showScreen(SlicerService.Screen.Wizard) },
-                        modifier = Modifier.fillMaxWidth().height(52.dp),
-                        shape = RoundedCornerShape(10.dp),
-                    ) {
-                        Text(
-                            PsUi.appText("Open Advanced wizard", "Advanced-Assistent öffnen"),
-                            color = PrusaColors.TextPrimary,
-                            fontSize = 14.sp,
-                        )
-                    }
                     if (presets.extruders.size >= 2) {
                         OutlinedButton(
                             onClick = { service.showScreen(SlicerService.Screen.ColorMix) },

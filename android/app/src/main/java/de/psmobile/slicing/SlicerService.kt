@@ -844,7 +844,6 @@ class SlicerService : Service() {
         data object Bed : Screen
         data class Settings(val tab: String) : Screen
         data object Printers : Screen
-        data object Wizard : Screen
         data object ColorMix : Screen
     }
 
@@ -1112,6 +1111,28 @@ class SlicerService : Service() {
         if (!checkBedUnlocked(activeBedIndex(), SimpleModeState.text("Drop to bed", "Aufs Bett legen"))) return
         runCatching { core?.dropToBed(id) }
             .onFailure { Log.w(TAG, "Aufs Bett legen", it) }
+            .onSuccess { refreshObjects(); invalidateSliceResult() }
+    }
+
+    /**
+     * Die groesste ebene Flaeche kommt nach unten - ein Tippen statt
+     * Drehen von Hand.
+     */
+    fun layFlatAuto(id: Int) {
+        if (!checkBedUnlocked(activeBedIndex(), SimpleModeState.text("Lay flat", "Flach hinlegen"))) return
+        runCatching { core?.layFlatAuto(id) }
+            .onFailure { Log.w(TAG, "Flach hinlegen", it) }
+            .onSuccess { refreshObjects(); invalidateSliceResult() }
+    }
+
+    /**
+     * So gross, wie das Bett es zulaesst - mit etwas Luft am Rand, damit
+     * das Ergebnis nicht sofort als "ragt hinaus" markiert ist.
+     */
+    fun fitToBed(id: Int) {
+        if (!checkBedUnlocked(activeBedIndex(), SimpleModeState.text("Fit to bed", "Aufs Bett einpassen"))) return
+        runCatching { core?.fitToBed(id) }
+            .onFailure { Log.w(TAG, "Einpassen", it) }
             .onSuccess { refreshObjects(); invalidateSliceResult() }
     }
 

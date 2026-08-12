@@ -336,10 +336,11 @@ class MainActivity : ComponentActivity() {
                     WorkflowStartScreen(
                         onSimple = { appMode = AppMode.SIMPLE },
                         onAdvanced = { appMode = AppMode.ADVANCED },
-                        onAdvancedWizard = {
-                            appMode = AppMode.ADVANCED
-                            svc?.showScreen(SlicerService.Screen.Wizard)
-                        },
+                        // Direkt in die Einrichtung, wie auf iOS. Der
+                        // Assistent dazwischen war eine dritte Stelle zum
+                        // Waehlen von Drucker, Filament und Print Settings -
+                        // beide Modi koennen das laengst mit Suche.
+                        onAdvancedWizard = { svc?.reopenSetup() },
                         onAppSettings = { showAppSettings = true },
                         onLanguageChange = { svc?.uiLanguage = it },
                         onRemote = { showRemoteSlice = true },
