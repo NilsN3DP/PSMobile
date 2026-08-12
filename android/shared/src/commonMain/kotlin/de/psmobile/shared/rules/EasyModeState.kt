@@ -57,24 +57,31 @@ object EasyModeState {
     fun panelTitle(panel: EasyPanel): String = when (panel) {
         EasyPanel.HOME -> "Easy Print"
         EasyPanel.PROJECTS -> "Projekt"
-        EasyPanel.PRINTER -> "Druckermodell"
+        EasyPanel.PRINTER -> SimpleModeState.text("Printer model", "Druckermodell")
         EasyPanel.FILAMENT -> "Filament"
         EasyPanel.SUPPORTS -> "Supports"
-        EasyPanel.ADHESION -> "Haftung"
+        EasyPanel.ADHESION -> SimpleModeState.text("Adhesion", "Haftung")
         EasyPanel.PRINT_SETTINGS -> "Print Settings"
     }
 
     fun emptySearchMessage(panel: EasyPanel): String = when (panel) {
-        EasyPanel.PRINTER -> "Keine Druckerprofile gefunden."
-        EasyPanel.FILAMENT -> "Keine Filamentprofile gefunden."
-        EasyPanel.PRINT_SETTINGS -> "Keine Print-Settings-Profile gefunden."
-        else -> "Keine Auswahl verfügbar."
+        EasyPanel.PRINTER -> SimpleModeState.text(
+            "No printer profiles found.", "Keine Druckerprofile gefunden.")
+        EasyPanel.FILAMENT -> SimpleModeState.text(
+            "No filament profiles found.", "Keine Filamentprofile gefunden.")
+        EasyPanel.PRINT_SETTINGS -> SimpleModeState.text(
+            "No print settings profiles found.", "Keine Print-Settings-Profile gefunden.")
+        else -> SimpleModeState.text(
+            "Nothing to choose from.", "Keine Auswahl verfügbar.")
     }
 
     fun profileSetupAction(kind: EasyProfileKind): String = when (kind) {
-        EasyProfileKind.PRINTER -> "Drucker einrichten"
-        EasyProfileKind.FILAMENT -> "Filament einrichten"
-        EasyProfileKind.PRINT_SETTINGS -> "Print Settings einrichten"
+        EasyProfileKind.PRINTER -> SimpleModeState.text(
+            "Set up printer", "Drucker einrichten")
+        EasyProfileKind.FILAMENT -> SimpleModeState.text(
+            "Set up filament", "Filament einrichten")
+        EasyProfileKind.PRINT_SETTINGS -> SimpleModeState.text(
+            "Set up print settings", "Print Settings einrichten")
     }
 
     fun profileSetupHint(
@@ -84,9 +91,13 @@ object EasyModeState {
         if (options.isNotEmpty()) return null
 
         val message = when (kind) {
-            EasyProfileKind.PRINTER -> "Kein Druckerprofil eingerichtet."
-            EasyProfileKind.FILAMENT -> "Keine Filamentprofile verfügbar."
-            EasyProfileKind.PRINT_SETTINGS -> "Keine Print-Settings-Profile verfügbar."
+            EasyProfileKind.PRINTER -> SimpleModeState.text(
+                "No printer profile set up.", "Kein Druckerprofil eingerichtet.")
+            EasyProfileKind.FILAMENT -> SimpleModeState.text(
+                "No filament profiles available.", "Keine Filamentprofile verfügbar.")
+            EasyProfileKind.PRINT_SETTINGS -> SimpleModeState.text(
+                "No print settings profiles available.",
+                "Keine Print-Settings-Profile verfügbar.")
         }
         return EasyProfileSetupHint(message)
     }

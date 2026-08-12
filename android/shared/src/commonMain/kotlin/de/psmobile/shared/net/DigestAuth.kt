@@ -1,5 +1,7 @@
 package de.psmobile.shared.net
 
+import de.psmobile.shared.rules.SimpleModeState
+
 /**
  * HTTP-Digest-Authentifizierung nach RFC 7616.
  *
@@ -96,7 +98,11 @@ object DigestAuth {
         uri: String,
         cnonce: String,
     ): String {
-        require(c.algorithm == "MD5") { "Nicht unterstützter Digest-Algorithmus: ${c.algorithm}" }
+        require(c.algorithm == "MD5") {
+        SimpleModeState.text(
+            "Unsupported digest algorithm: ${c.algorithm}",
+            "Nicht unterstützter Digest-Algorithmus: ${c.algorithm}")
+    }
         val nc = nc(c.naechsteZahl())
 
         val ha1 = Md5.hex("$username:${c.realm}:$password")

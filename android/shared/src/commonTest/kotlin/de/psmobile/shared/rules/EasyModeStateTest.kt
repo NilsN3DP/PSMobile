@@ -3,9 +3,21 @@ package de.psmobile.shared.rules
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
+import kotlin.test.AfterTest
 import kotlin.test.Test
 
 class EasyModeStateTest {
+
+    /**
+     * Die geprueften Texte laufen ueber [SimpleModeState] und haengen
+     * damit an [Lang]. Jeder Test, der einen Wortlaut vergleicht, setzt
+     * die Sprache deshalb selbst - sonst prueft er in Wahrheit nur,
+     * welcher Test vorher lief.
+     */
+    @AfterTest
+    fun zuruecksetzen() {
+        Lang.current = "en"
+    }
     @Test
     fun printerQuerySurvivesAResponsiveBranchChange() {
         val entered = EasyModeState.profileQueryAfterChange(emptyMap(), EasyPanel.PRINTER, "core")
@@ -31,12 +43,18 @@ class EasyModeStateTest {
 
     @Test
     fun printerPanelHasClearTitle() {
+        Lang.current = "de"
         assertEquals("Druckermodell", EasyModeState.panelTitle(EasyPanel.PRINTER))
+        Lang.current = "en"
+        assertEquals("Printer model", EasyModeState.panelTitle(EasyPanel.PRINTER))
     }
 
     @Test
     fun emptyFilamentFilterShowsNoProfilesMessage() {
+        Lang.current = "de"
         assertTrue(EasyModeState.emptySearchMessage(EasyPanel.FILAMENT).contains("Keine"))
+        Lang.current = "en"
+        assertTrue(EasyModeState.emptySearchMessage(EasyPanel.FILAMENT).contains("No filament"))
     }
 
     @Test
@@ -74,6 +92,7 @@ class EasyModeStateTest {
 
     @Test
     fun emptyProfileListsOfferTheExistingPrinterSetupFlow() {
+        Lang.current = "de"
         assertEquals(
             EasyProfileSetupHint("Kein Druckerprofil eingerichtet."),
             EasyModeState.profileSetupHint(EasyProfileKind.PRINTER, emptyList()),
@@ -97,6 +116,7 @@ class EasyModeStateTest {
 
     @Test
     fun emptyProfileListsExposeContextualNextActions() {
+        Lang.current = "de"
         assertEquals(
             "Drucker einrichten",
             EasyModeState.profileSetupAction(EasyProfileKind.PRINTER),

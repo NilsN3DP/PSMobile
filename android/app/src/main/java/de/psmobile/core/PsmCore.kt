@@ -638,7 +638,7 @@ class PsmCore private constructor(private var handle: Long) : Closeable {
             sizeMm, depthMm, volumeTypeRaw(type),
         )
         if (index < 0)
-            throw PsmException("Text prägen fehlgeschlagen: ${lastError()}")
+            throw PsmException(CoreLabels.failed("Text prägen", index, lastError()))
         return index
     }
 
@@ -652,7 +652,7 @@ class PsmCore private constructor(private var handle: Long) : Closeable {
             requireHandle(), id, path, depthMm, volumeTypeRaw(type)
         )
         if (index < 0)
-            throw PsmException("SVG prägen fehlgeschlagen: ${lastError()}")
+            throw PsmException(CoreLabels.failed("SVG prägen", index, lastError()))
         return index
     }
 

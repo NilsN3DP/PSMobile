@@ -1,5 +1,7 @@
 package de.psmobile.shared.rules
 
+import de.psmobile.shared.rules.SimpleModeState
+
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
@@ -85,12 +87,15 @@ object ColorMixCodec {
         recipes: List<ColorMixRecipe>,
     ): String {
         val validated = recipes.map { recipe ->
-            require(recipe.id > physicalColors.size) { "Virtuelle ID muss hinter den physischen Köpfen liegen" }
+            require(recipe.id > physicalColors.size) { SimpleModeState.text(
+            "Virtual ID must be higher than the physical tools",
+            "Virtuelle ID muss hinter den physischen Köpfen liegen") }
             recipe.copy(components = normalize(recipe.components).also { components ->
                 require(components.all { it.head in physicalColors.indices }) { "ColorMix-Kopf existiert nicht" }
             })
         }
-        require(validated.map(ColorMixRecipe::id).distinct().size == validated.size) { "Virtuelle IDs müssen eindeutig sein" }
+        require(validated.map(ColorMixRecipe::id).distinct().size == validated.size) { SimpleModeState.text(
+            "Virtual IDs must be unique", "Virtuelle IDs müssen eindeutig sein") }
 
         val root = buildJsonObject {
             put("version", 1)
@@ -126,15 +131,18 @@ object ColorMixCodec {
             .groupBy(ColorMixComponent::head)
             .map { (head, values) -> ColorMixComponent(head, values.sumOf(ColorMixComponent::ratio)) }
             .sortedBy(ColorMixComponent::head)
-        require(merged.size in 2..3) { "ColorMix benötigt zwei oder drei verschiedene Köpfe" }
+        require(merged.size in 2..3) { SimpleModeState.text(
+            "ColorMix needs two or three different tools",
+            "ColorMix benötigt zwei oder drei verschiedene Köpfe") }
         val total = merged.sumOf(ColorMixComponent::ratio)
-        require(total > 0.0) { "ColorMix-Anteile müssen positiv sein" }
+        require(total > 0.0) { SimpleModeState.text(
+            "ColorMix shares must be positive", "ColorMix-Anteile müssen positiv sein") }
         return merged.map { it.copy(ratio = it.ratio / total) }
     }
 
     private fun parseRgb(raw: String): Triple<Int, Int, Int> {
-        require(raw.length == 7 && raw.firstOrNull() == '#') { "Ungültige RGB-Farbe" }
-        val value = raw.drop(1).toLongOrNull(16) ?: error("Ungültige RGB-Farbe")
+        require(raw.length == 7 && raw.firstOrNull() == '#') { SimpleModeState.text("Invalid RGB colour", "Ungültige RGB-Farbe") }
+        val value = raw.drop(1).toLongOrNull(16) ?: error(SimpleModeState.text("Invalid RGB colour", "Ungültige RGB-Farbe"))
         return Triple(
             ((value shr 16) and 0xFF).toInt(),
             ((value shr 8) and 0xFF).toInt(),
