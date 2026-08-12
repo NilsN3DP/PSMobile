@@ -4,10 +4,7 @@ import android.content.Context
 import android.util.Log
 import org.json.JSONObject
 import de.psmobile.shared.rules.Lang
-
-/** Copy owned by PSMobile rather than PrusaSlicer's PO catalog. */
-internal fun applicationText(language: String, english: String, german: String): String =
-    if (language.startsWith("de")) german else english
+import de.psmobile.shared.rules.SimpleModeState
 
 /**
  * Zugriff auf die aus PrusaSlicer uebernommene Oberflaechen-Definition.
@@ -106,9 +103,20 @@ object PsUi {
      */
     fun tr(source: String): String = strings[source] ?: source
 
-    /** Localizes application-specific copy that is not present in the PO catalog. */
+    /**
+     * Text, den PSMobile selbst besitzt - er steht nicht im
+     * PO-Katalog von PrusaSlicer.
+     *
+     * Die Entscheidung, welche Sprache gilt, faellt bewusst nicht
+     * hier, sondern im gemeinsamen Modul. Vorher gab es zwei
+     * Fassungen davon: diese pruefte language.startsWith("de"),
+     * SimpleModeState.text prueft Lang.current == "de". Solange nur
+     * zweibuchstabige Codes vorkommen, sind beide einig - bei einem
+     * Code wie "de_DE" waere die halbe App deutsch und die andere
+     * Haelfte englisch gewesen, ohne dass etwas dabei gemeldet haette.
+     */
     fun appText(english: String, german: String): String =
-        applicationText(language, english, german)
+        SimpleModeState.text(english, german)
 
     // --- Lesen ------------------------------------------------------------
 

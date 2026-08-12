@@ -1414,6 +1414,16 @@ int main(int argc, char **argv)
             project_id_count == 1,
             "locate first project object");
     const psm_object_id annotated_id = project_ids[0];
+    // Die Farbannotationen brauchen paint_options_for, und das steht im
+    // selben Block wie test_object: beide greifen ueber session->model()
+    // auf libslic3r zu, und die dafuer noetigen Kopfdateien liegen nur
+    // beim iOS-Ziel im Suchpfad (siehe CMakeLists.txt, PSM_BUILD_TESTS).
+    //
+    // Ohne diese Klammer verwendeten drei Stellen eine Funktion, die es
+    // ausserhalb von iOS gar nicht gibt. Aufgefallen ist das nie, weil
+    // ein alter CMake-Cache die Vertragstests auf Android nicht gebaut
+    // hat - beim ersten frischen Konfigurieren brach der Build sofort.
+#if defined(PSM_TEST_MULTIPLE_BEDS_STATE)
     psm_paint_options project_support = paint_options_for(
         session, annotated_id, 0, 0,
         PSM_PAINT_MODE_SMART_FILL, PSM_PAINT_SHAPE_CIRCLE, 3.f, 30.f);
@@ -1441,6 +1451,7 @@ int main(int argc, char **argv)
             psm_model_paint_count(
                 session, annotated_id, PSM_PAINT_MMU) > 0,
             "project object keeps an MMU annotation from Bucket Fill");
+#endif
     size_t project_text_volume = 0;
     require(psm_model_add_text_volume(
                 session, annotated_id, "3MF",

@@ -1,12 +1,19 @@
 package de.psmobile.ui
 
 import de.psmobile.shared.rules.ArrangeAvailability
+import de.psmobile.shared.rules.Lang
+import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class BedStripAdapterTest {
+
+    @After fun zuruecksetzen() {
+        Lang.current = "en"
+    }
+
     private fun bed(
         id: Int,
         name: String = "",
@@ -30,12 +37,26 @@ class BedStripAdapterTest {
     }
 
     @Test fun `empty locked and populated arrange decisions are visible or executable`() {
+        // Die Meldungen laufen ueber SimpleModeState und haengen damit an
+        // Lang.current. Der Test setzt die Sprache deshalb selbst, statt
+        // sich auf einen Standardwert zu verlassen: als die Meldungen
+        // uebersetzbar wurden, blieben hier die deutschen Literale stehen
+        // und der Test lief still rot.
+        Lang.current = "de"
         assertEquals("Bett 1 ist gesperrt – Anordnen nicht möglich",
             AndroidBedStripAdapter.arrange(listOf(bed(0, locked = true, active = true)), "Bett").message)
         assertEquals("Bett 1 ist leer. Es gibt nichts anzuordnen.",
             AndroidBedStripAdapter.arrange(listOf(bed(0, active = true)), "Bett").message)
         assertTrue(AndroidBedStripAdapter.arrange(
             listOf(bed(0, objects = 1, instances = 2, active = true)), "Bett").execute)
+    }
+
+    @Test fun `dieselben Entscheidungen auf Englisch`() {
+        Lang.current = "en"
+        assertEquals("Bed 1 is locked – arranging not possible",
+            AndroidBedStripAdapter.arrange(listOf(bed(0, locked = true, active = true)), "Bed").message)
+        assertEquals("Bed 1 is empty. There is nothing to arrange.",
+            AndroidBedStripAdapter.arrange(listOf(bed(0, active = true)), "Bed").message)
     }
 
     @Test fun `same core snapshot preserves selection across simple and advanced modes`() {
