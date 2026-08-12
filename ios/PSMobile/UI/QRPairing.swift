@@ -1,6 +1,10 @@
 import AVFoundation
 import CoreImage.CIFilterBuiltins
 import PSMShared
+
+/// Der Typ aus dem gemeinsamen Modul heisst genauso wie die Huelle
+/// hier - ohne diesen zweiten Namen verdeckt die eine die andere.
+private typealias SharedRemotePairing = PSMShared.RemotePairing
 import SwiftUI
 
 /// QR-Pairing fuer Remote Slicing.
@@ -14,32 +18,24 @@ import SwiftUI
 /// URLComponents robust parsen (Kodierung von Sonderzeichen im Token
 /// eingeschlossen) und ist genauso kompakt.
 ///   psmobile-remote://pair?host=<Adresse>&token=<Token>
+/// Beides reicht nur noch an das gemeinsame Modul weiter.
+///
+/// Das Format stand frueher hier - in Swift, mit URLComponents - und
+/// seit der Android-Seite ein zweites Mal in Kotlin. Zwei Fassungen
+/// derselben Verabredung zwischen zwei Geraeten sind eine zu viel: laeuft
+/// eine davon weg, merkt es niemand, bis jemand vor dem falschen Geraet
+/// steht und der Code nicht angenommen wird.
 enum RemotePairing {
     static func url(host: String, token: String) -> URL? {
-        var teile = URLComponents()
-        teile.scheme = "psmobile-remote"
-        teile.host = "pair"
-        var abfragen = [URLQueryItem(name: "host", value: host)]
-        if !token.isEmpty {
-            abfragen.append(URLQueryItem(name: "token", value: token))
-        }
-        teile.queryItems = abfragen
-        return teile.url
+        URL(string: SharedRemotePairing.shared.url(host: host, token: token))
     }
 
     /// - Returns: (Serveradresse, Token oder leer) oder nil, wenn der
     ///   gescannte Code kein PSMobile-Pairing-Code ist - ein QR-Scanner
     ///   liest schliesslich jeden QR-Code, nicht nur eigene.
     static func parse(_ text: String) -> (host: String, token: String)? {
-        guard let url = URL(string: text),
-              url.scheme == "psmobile-remote",
-              let teile = URLComponents(url: url, resolvingAgainstBaseURL: false)
-        else { return nil }
-        guard let host = teile.queryItems?.first(where: { $0.name == "host" })?.value,
-              !host.isEmpty
-        else { return nil }
-        let token = teile.queryItems?.first(where: { $0.name == "token" })?.value ?? ""
-        return (host, token)
+        guard let paar = SharedRemotePairing.shared.parse(text: text) else { return nil }
+        return (paar.host, paar.token)
     }
 }
 

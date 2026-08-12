@@ -11,15 +11,16 @@ struct PSMobileApp: App {
     init() {
         // Ob dieser Kern STEP lesen kann.
         //
-        // Auf Android steht hier true: dort ist OCCT gebaut und
-        // OCCTWrapper statisch eingebunden. Fuer iOS laeuft derselbe
-        // Umbau noch - bis die Bibliothek fuer OS64 und SIMULATORARM64
-        // uebersetzt ist, wuerde eine STEP-Datei wieder im dlopen-Pfad
-        // landen und mit "Cannot load OCCTWrapper.so" enden. Genau
-        // dieser Fehler stand schon einmal auf dem Geraet.
+        // Der Kern fuer das Geraet (OS64) ist mit OCCT gebaut und bindet
+        // OCCTWrapper statisch ein - in libpsmobile_core_all.a stecken
+        // 1661 OCCT-Objekte, load_step_internal und STEPControl. Damit
+        // nimmt STEP.cpp den direkten Weg statt des dlopen-Pfads, an dem
+        // frueher "Cannot load OCCTWrapper.so" auf dem Geraet stand.
         //
-        // Eine Zeile, wenn der iOS-Kern nachzieht.
-        ModelFormats.shared.stepVerfuegbar = false
+        // Wichtig beim Aendern: der Wert beschreibt DIESEN Kern. Wird die
+        // Bibliothek einmal ohne OCCT gebaut, gehoert die Zeile mit
+        // zurueckgedreht, sonst kommt der Absturz wieder.
+        ModelFormats.shared.stepVerfuegbar = true
     }
 
     /// Welcher Bildschirm gerade oben liegt.
@@ -30,6 +31,11 @@ struct PSMobileApp: App {
     /// anderen elf.
     enum Route {
         case start, simple, advanced, druckEinstellungen, appEinstellungen, remote
+        /// Der Advanced-Assistent - Drucker, Filament und Print
+        /// Settings direkt waehlen, ohne die Einrichtung noch
+        /// einmal durchzugehen. Gegenstueck zu Androids
+        /// AdvancedWizardScreen.
+        case assistent
         /// Drucker einrichten - oder, mit einer Datei, den G-Code
         /// hinschicken. Derselbe Bildschirm, zwei Anlaesse.
         case drucker(URL?)
@@ -213,7 +219,7 @@ struct PSMobileApp: App {
                 onSimple: { self.route = .simple },
                 onAdvanced: { self.route = .advanced },
                 onAppSettings: {},
-                onPrinterSetup: { model.reopenSetup() },
+                onPrinterSetup: { self.route = .assistent },
                 onRemote: { self.route = .remote },
                 onManagePrinters: { zurueckVon = .start; self.route = .drucker(nil) }
             )
@@ -222,10 +228,12 @@ struct PSMobileApp: App {
                 onSimple: { self.route = .simple },
                 onAdvanced: { self.route = .advanced },
                 onAppSettings: { zurueckVon = .start; self.route = .appEinstellungen },
-                onPrinterSetup: { model.reopenSetup() },
+                onPrinterSetup: { self.route = .assistent },
                 onRemote: { self.route = .remote },
                 onManagePrinters: { zurueckVon = .start; self.route = .drucker(nil) }
             )
+        case .assistent:
+            AdvancedWizardView(model: model) { self.route = .advanced }
         case .simple:
             SimpleModeView(
                 onHome: { self.route = .start },
@@ -251,7 +259,7 @@ struct PSMobileApp: App {
                     zurueckVon = .advanced
                     self.route = .drucker(datei)
                 },
-                onPrinterSetup: { model.reopenSetup() },
+                onPrinterSetup: { self.route = .assistent },
                 onSettings: { reiter in
                     einstellungsReiter = reiter
                     self.route = .druckEinstellungen
