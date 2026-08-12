@@ -52,6 +52,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import de.psmobile.core.PsmCore
 import de.psmobile.ui.theme.PrusaColors
+import de.psmobile.ui.theme.ScaledOverlay
 import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -1072,23 +1073,31 @@ private fun LargeDialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false),
     ) {
-        Surface(
-            color = PrusaColors.Background,
-            shape = RoundedCornerShape(18.dp),
-            modifier = Modifier.fillMaxWidth(0.92f).fillMaxHeight(0.90f).widthIn(max = 980.dp),
-        ) {
-            Column(
-                Modifier.fillMaxSize().padding(20.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
+        // Ohne diese Umhuellung zeichnet der Dialog in der Dichte des
+        // Geraets statt in der der App: 22 sp Ueberschrift und 980 dp
+        // Breite blieben auf einem kleinen Bildschirm stehen, waehrend
+        // alles dahinter gestaucht ist. Dieser Rahmen traegt saemtliche
+        // Spezialeinstellungs-Dialoge, der Fehler waere also ueberall
+        // sichtbar gewesen.
+        ScaledOverlay {
+            Surface(
+                color = PrusaColors.Background,
+                shape = RoundedCornerShape(18.dp),
+                modifier = Modifier.fillMaxWidth(0.92f).fillMaxHeight(0.90f).widthIn(max = 980.dp),
             ) {
-                Text(
-                    title,
-                    color = PrusaColors.TextPrimary,
-                    fontSize = 22.sp,
-                    fontWeight = FontWeight.Bold,
-                )
-                HorizontalDivider(color = PrusaColors.Divider)
-                content()
+                Column(
+                    Modifier.fillMaxSize().padding(20.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    Text(
+                        title,
+                        color = PrusaColors.TextPrimary,
+                        fontSize = 22.sp,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    HorizontalDivider(color = PrusaColors.Divider)
+                    content()
+                }
             }
         }
     }

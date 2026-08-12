@@ -220,8 +220,4 @@ struct LayerProfileView: View {
         let vorhanden = model.layerProfile(objekt.id)
         zeilen = LayerProfile.shared.fromPoints(objectHeight: hoehe, points: vorhanden)
     }
-
-    private func st(_ english: String, _ german: String) -> String {
-        SimpleModeState.shared.text(english: english, german: german)
-    }
 }

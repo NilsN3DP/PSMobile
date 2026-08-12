@@ -1246,99 +1246,101 @@ private fun ColorPickerDialog(
     var manual by remember { mutableStateOf(current) }
 
     Dialog(onDismissRequest = onDismiss) {
-        Surface(
-            modifier = Modifier
-                .fillMaxWidth()
-                .heightIn(max = 620.dp)
-                .padding(18.dp),
-            shape = RoundedCornerShape(18.dp),
-            color = PrusaColors.Panel,
-        ) {
-            Column(
-                Modifier
+        ScaledOverlay {
+            Surface(
+                modifier = Modifier
                     .fillMaxWidth()
-                    .padding(18.dp)
-                    .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
+                    .heightIn(max = 620.dp)
+                    .padding(18.dp),
+                shape = RoundedCornerShape(18.dp),
+                color = PrusaColors.Panel,
             ) {
-                Text(
-                    advancedText("Extruder colour", "Farbe des Extruders"),
-                    color = PrusaColors.TextPrimary,
-                    fontSize = 20.sp,
-                    fontWeight = FontWeight.SemiBold,
-                )
-                Text(
-                    advancedText(
-                        "Choose a colour for this tool or enter your own hex value.",
-                        "Farbe für dieses Werkzeug wählen oder einen eigenen Hex-Wert eingeben.",
-                    ),
-                    color = PrusaColors.TextMuted,
-                    fontSize = 12.sp,
-                )
-                // Fünf klare Spalten behalten eine mindestens 44-dp große
-                // Trefferfläche auch bei der schmalen Seitenansicht.
-                swatches.chunked(5).forEach { row ->
+                Column(
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(18.dp)
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    Text(
+                        advancedText("Extruder colour", "Farbe des Extruders"),
+                        color = PrusaColors.TextPrimary,
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    Text(
+                        advancedText(
+                            "Choose a colour for this tool or enter your own hex value.",
+                            "Farbe für dieses Werkzeug wählen oder einen eigenen Hex-Wert eingeben.",
+                        ),
+                        color = PrusaColors.TextMuted,
+                        fontSize = 12.sp,
+                    )
+                    // Fünf klare Spalten behalten eine mindestens 44-dp große
+                    // Trefferfläche auch bei der schmalen Seitenansicht.
+                    swatches.chunked(5).forEach { row ->
+                        Row(
+                            Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            row.forEach { hex ->
+                                Box(
+                                    Modifier
+                                        .weight(1f)
+                                        .height(48.dp)
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(parseColor(hex) ?: Color.Gray)
+                                        .border(
+                                            if (hex.equals(current, true)) 3.dp else 1.dp,
+                                            if (hex.equals(current, true)) PrusaColors.Orange
+                                            else PrusaColors.Divider,
+                                            RoundedCornerShape(8.dp),
+                                        )
+                                        .clickable { onPick(hex) },
+                                )
+                            }
+                            repeat(5 - row.size) { Spacer(Modifier.weight(1f)) }
+                        }
+                    }
+
+                    OutlinedTextField(
+                        value = manual,
+                        onValueChange = { manual = it },
+                        label = { Text(advancedText("Custom value, e.g. #3399FF", "Eigener Wert, z. B. #3399FF")) },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = TextFieldDefaults.colors(
+                            focusedTextColor = PrusaColors.TextPrimary,
+                            unfocusedTextColor = PrusaColors.TextPrimary,
+                            focusedLabelColor = PrusaColors.Orange,
+                            unfocusedLabelColor = PrusaColors.TextMuted,
+                            focusedContainerColor = PrusaColors.PanelRaised,
+                            unfocusedContainerColor = PrusaColors.PanelRaised,
+                        ),
+                    )
+                    HorizontalDivider(color = PrusaColors.Divider)
+                    Button(
+                        onClick = { onPick(manual.trim()) },
+                        enabled = manual.isBlank() || parseColor(manual.trim()) != null,
+                        modifier = Modifier.fillMaxWidth().height(48.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = PrusaColors.Orange,
+                            contentColor = PrusaColors.TextPrimary,
+                        ),
+                    ) { Text(advancedText("Apply", "Übernehmen")) }
                     Row(
                         Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
-                        row.forEach { hex ->
-                            Box(
-                                Modifier
-                                    .weight(1f)
-                                    .height(48.dp)
-                                    .clip(RoundedCornerShape(8.dp))
-                                    .background(parseColor(hex) ?: Color.Gray)
-                                    .border(
-                                        if (hex.equals(current, true)) 3.dp else 1.dp,
-                                        if (hex.equals(current, true)) PrusaColors.Orange
-                                        else PrusaColors.Divider,
-                                        RoundedCornerShape(8.dp),
-                                    )
-                                    .clickable { onPick(hex) },
-                            )
-                        }
-                        repeat(5 - row.size) { Spacer(Modifier.weight(1f)) }
+                        TextButton(
+                            onClick = { onPick("") },
+                            modifier = Modifier.weight(1f).height(44.dp),
+                        ) { Text(advancedText("Use filament", "Vom Filament"), maxLines = 1) }
+                        TextButton(
+                            onClick = onDismiss,
+                            modifier = Modifier.weight(1f).height(44.dp),
+                        ) { Text(advancedText("Cancel", "Abbrechen"), maxLines = 1) }
                     }
-                }
-
-                OutlinedTextField(
-                    value = manual,
-                    onValueChange = { manual = it },
-                    label = { Text(advancedText("Custom value, e.g. #3399FF", "Eigener Wert, z. B. #3399FF")) },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = TextFieldDefaults.colors(
-                        focusedTextColor = PrusaColors.TextPrimary,
-                        unfocusedTextColor = PrusaColors.TextPrimary,
-                        focusedLabelColor = PrusaColors.Orange,
-                        unfocusedLabelColor = PrusaColors.TextMuted,
-                        focusedContainerColor = PrusaColors.PanelRaised,
-                        unfocusedContainerColor = PrusaColors.PanelRaised,
-                    ),
-                )
-                HorizontalDivider(color = PrusaColors.Divider)
-                Button(
-                    onClick = { onPick(manual.trim()) },
-                    enabled = manual.isBlank() || parseColor(manual.trim()) != null,
-                    modifier = Modifier.fillMaxWidth().height(48.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = PrusaColors.Orange,
-                        contentColor = PrusaColors.TextPrimary,
-                    ),
-                ) { Text(advancedText("Apply", "Übernehmen")) }
-                Row(
-                    Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    TextButton(
-                        onClick = { onPick("") },
-                        modifier = Modifier.weight(1f).height(44.dp),
-                    ) { Text(advancedText("Use filament", "Vom Filament"), maxLines = 1) }
-                    TextButton(
-                        onClick = onDismiss,
-                        modifier = Modifier.weight(1f).height(44.dp),
-                    ) { Text(advancedText("Cancel", "Abbrechen"), maxLines = 1) }
                 }
             }
         }

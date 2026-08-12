@@ -234,10 +234,6 @@ struct SliceSheet: View {
         .buttonStyle(.plain)
         .accessibilityIdentifier(kennung)
     }
-
-    private func st(_ english: String, _ german: String) -> String {
-        SimpleModeState.shared.text(english: english, german: german)
-    }
 }
 
 /// Warum gerade nicht geschnitten werden kann - als Blatt, wenn jemand

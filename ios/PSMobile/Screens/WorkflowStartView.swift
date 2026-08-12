@@ -250,10 +250,6 @@ struct WorkflowStartView: View {
         model.load(url: url)
         if inAdvanced { onAdvanced() } else { onSimple() }
     }
-
-    private func st(_ english: String, _ german: String) -> String {
-        SimpleModeState.shared.text(english: english, german: german)
-    }
 }
 
 /// Alle gesicherten Projekte, nicht nur die vier auf der Startseite -
@@ -303,10 +299,6 @@ struct AllProjectsSheet: View {
             }
         }
         .overlay(alignment: .topLeading) { PSMarke(name: "projekte.alle") }
-    }
-
-    private func st(_ english: String, _ german: String) -> String {
-        SimpleModeState.shared.text(english: english, german: german)
     }
 }
 

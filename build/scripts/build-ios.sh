@@ -20,8 +20,10 @@ PREFIX="${DESTDIR}/usr/local"
 CORE_BUILD="${PSM_ROOT}/build-out/ios-core-${PLATFORM}"
 DL_CACHE="${PSM_ROOT}/build-out/dl-cache"
 
-# Gleicher Zuschnitt wie Android, siehe build/scripts/env.sh
-DEP_EXCLUDES='wxWidgets|GLEW|OpenCSG|Catch2|CURL|OpenSSL'
+# Gleicher Zuschnitt wie Android - eine Liste fuer beide Plattformen.
+# env.sh laesst sich hier nicht einbinden: es setzt Android-NDK-Pfade und
+# ruft nproc auf, das es auf macOS nicht gibt.
+source "$(dirname "${BASH_SOURCE[0]}")/dep-excludes.sh"
 
 log() { printf '\n\033[1;36m==> %s\033[0m\n' "$*"; }
 

@@ -471,10 +471,6 @@ struct SimpleModeView: View {
         }
     }
 
-    private func st(_ english: String, _ german: String) -> String {
-        SimpleModeState.shared.text(english: english, german: german)
-    }
-
     // MARK: - Modell hinzufuegen
 
     /// Auf leerem Bett ein einzelner Knopf, sonst das Modelle-Blatt:

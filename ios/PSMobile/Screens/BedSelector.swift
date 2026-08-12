@@ -235,10 +235,6 @@ struct BedSelector: View {
             }
         }
     }
-
-    private func st(_ english: String, _ german: String) -> String {
-        SimpleModeState.shared.text(english: english, german: german)
-    }
 }
 
 /// Das vom jeweiligen Arbeitsmodus präsentierte iPhone-Blatt.
@@ -382,10 +378,6 @@ struct BedSelectionSheet: View {
         .buttonStyle(.plain)
         .foregroundStyle(PrusaColors.textPrimary)
         .accessibilityIdentifier(id)
-    }
-
-    private func st(_ english: String, _ german: String) -> String {
-        SimpleModeState.shared.text(english: english, german: german)
     }
 }
 
@@ -634,9 +626,5 @@ struct ArrangePanel: View {
         } catch {
             ergebnis = error.localizedDescription
         }
-    }
-
-    private func st(_ english: String, _ german: String) -> String {
-        SimpleModeState.shared.text(english: english, german: german)
     }
 }

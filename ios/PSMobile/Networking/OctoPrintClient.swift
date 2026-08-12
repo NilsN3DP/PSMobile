@@ -116,8 +116,4 @@ actor OctoPrintClient {
             return .fehler(error.localizedDescription)
         }
     }
-
-    private func st(_ english: String, _ german: String) -> String {
-        SimpleModeState.shared.text(english: english, german: german)
-    }
 }

@@ -29,21 +29,8 @@ export DL_CACHE="${PSM_ROOT}/build-out/dl-cache"
 export PSM_IMAGE="${PSM_IMAGE:-psmobile-ndk:1}"
 
 # --- Pakete, die fuer den mobilen FDM-Zuschnitt entfallen -----------------
-# Begruendung siehe docs/entscheidungen.md, E-08.
-#   wxWidgets  - keine Desktop-GUI
-#   GLEW       - GLES nutzt die nativen Header
-#   OpenCSG    - nur Desktop-Rendering
-#   Catch2     - Unit-Tests werden auf dem Host gefahren
-#   CURL/OpenSSL - libslic3r hat 0 curl-Referenzen; Netzwerk macht die
-#                  native Schicht (OkHttp / URLSession). Siehe E-09.
-#
-# OpenVDB/OpenEXR/Blosc bleiben DRIN, obwohl v1 kein SLA kann:
-# SLA/Hollowing.cpp ist fest an OpenVDBUtils gekoppelt, das Herauspatchen
-# waere invasiver als das Mitbauen. Siehe E-10.
-# OCCT ist DRIN: ohne die Bibliothek laesst sich keine STEP-Datei lesen,
-# und ein Nachladen zur Laufzeit gibt es auf iOS nicht (siehe
-# patches/0003 und die dlopen-Fehlermeldung, die genau daher kam).
-export DEP_EXCLUDES='wxWidgets|GLEW|OpenCSG|Catch2|CURL|OpenSSL'
+# Die Liste selbst steht in dep-excludes.sh, weil iOS sie genauso braucht.
+source "$(dirname "${BASH_SOURCE[0]}")/dep-excludes.sh"
 
 # --- Parallelitaet --------------------------------------------------------
 export NPROC="${NPROC:-$(nproc)}"

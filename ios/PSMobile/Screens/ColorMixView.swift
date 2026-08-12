@@ -13,10 +13,6 @@ struct ColorMixView: View {
     @State private var recipes: [ColorMixRecipe] = []
     @State private var saveFailed = false
 
-    private func st(_ english: String, _ german: String) -> String {
-        SimpleModeState.shared.text(english: english, german: german)
-    }
-
     private var positions: [ExtruderPosition] {
         ExtruderPresentation.shared.positions(count: Int32(model.extruderCount))
     }

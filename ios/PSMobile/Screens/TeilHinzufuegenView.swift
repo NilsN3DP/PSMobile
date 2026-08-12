@@ -177,8 +177,4 @@ struct TeilHinzufuegenView: View {
             onClose()
         }
     }
-
-    private func st(_ english: String, _ german: String) -> String {
-        SimpleModeState.shared.text(english: english, german: german)
-    }
 }

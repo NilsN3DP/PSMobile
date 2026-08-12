@@ -78,10 +78,6 @@ struct SettingsView: View {
         model.profilaenderungen()
     }
 
-    private func st(_ english: String, _ german: String) -> String {
-        SimpleModeState.shared.text(english: english, german: german)
-    }
-
     private var kopfzeile: some View {
         HStack {
             Button(action: onClose) {
@@ -381,8 +377,4 @@ private struct Schluessel: Identifiable {
     let wert: String
     var id: String { wert }
     init(_ wert: String) { self.wert = wert }
-
-    private func st(_ english: String, _ german: String) -> String {
-        SimpleModeState.shared.text(english: english, german: german)
-    }
 }

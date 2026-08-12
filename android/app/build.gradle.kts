@@ -14,13 +14,27 @@ android {
         // die Sonderfaelle von std::filesystem und Foreground-Services.
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.1.0-m3"
+        // Eine Stelle fuer die Version, von aussen ueberschreibbar:
+        //   ./gradlew :app:assembleProductionRelease -PpsmVersionCode=7
+        //
+        // versionName ist gleich mit CFBundleShortVersionString in
+        // ios/PSMobile/Support/Info.plist - beide Apps sollen sich als
+        // dieselbe Version melden. Vorher stand hier "0.1.0-m3" gegen
+        // "0.1.0" auf iOS.
+        //
+        // versionCode MUSS bei jedem Build steigen, der das Haus
+        // verlaesst. Android verweigert die Installation eines APK ueber
+        // eine vorhandene App mit gleicher oder hoeherer Nummer - die
+        // dauerhafte 1 haette jedes Beta-Update blockiert.
+        versionCode = providers.gradleProperty("psmVersionCode").getOrElse("2").toInt()
+        versionName = providers.gradleProperty("psmVersionName").getOrElse("0.1.0")
 
         val manifestUrl = providers.gradleProperty("profileManifestUrl").orNull.orEmpty()
         val allowedHosts = providers.gradleProperty("profileUpdateAllowedHosts").orNull.orEmpty()
         buildConfigField("String", "PROFILE_UPDATE_MANIFEST_URL", "\"$manifestUrl\"")
         buildConfigField("String", "PROFILE_UPDATE_ALLOWED_HOSTS", "\"$allowedHosts\"")
+
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         ndk {
             // arm64 ist das Hauptziel, x86_64 nur fuer den Emulator.
@@ -39,11 +53,38 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            // R8 an. proguard-rules.pro war hier schon eingetragen, die
+            // Datei gab es aber gar nicht - mit isMinifyEnabled = false
+            // hat das nie jemand gemerkt. Was gehalten werden muss und
+            // warum, steht jetzt dort; entscheidend ist die JNI-Bruecke,
+            // die allein ueber Symbolnamen funktioniert.
+            isMinifyEnabled = true
+            // Ungenutzte Bilder und Layouts fallen mit weg. Gefahrlos,
+            // weil die App keine Ressource ueber getIdentifier() sucht
+            // und die PrusaSlicer-Daten in assets/ liegen, nicht in res/.
+            isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
         debug {
             isJniDebuggable = true
+        }
+    }
+
+    // Getrennte APKs je Architektur.
+    //
+    // Bisher steckten arm64 und x86_64 in derselben Datei: rund 21 MB
+    // Emulator-Bibliotheken in jedem APK, das an Testerinnen und Tester
+    // geht, obwohl kein Telefon sie ausfuehren kann.
+    //
+    // Das universelle APK bleibt zusaetzlich erhalten - eine Datei, die
+    // auf Geraet und Emulator laeuft, ist beim Entwickeln zu praktisch,
+    // um sie aufzugeben. Zum Verteilen nimmt man die arm64-Fassung.
+    splits {
+        abi {
+            isEnable = true
+            reset()
+            include("arm64-v8a", "x86_64")
+            isUniversalApk = true
         }
     }
 
@@ -112,4 +153,15 @@ dependencies {
     debugImplementation(libs.androidx.ui.tooling)
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
+
+    // Oberflaechentests. Bis hierher gab es unter app/src/test nur
+    // reine Logiktests - kein einziger Test hat je einen Bildschirm
+    // gezeichnet, waehrend iOS 26 XCUITest-Dateien hat. Genau deshalb
+    // sind der Dichtefehler in den Popups und die unuebersetzten
+    // Beschriftungen so lange unentdeckt geblieben.
+    androidTestImplementation(platform(libs.androidx.compose.bom))
+    androidTestImplementation(libs.androidx.test.ext.junit)
+    androidTestImplementation(libs.androidx.test.runner)
+    androidTestImplementation(libs.androidx.ui.test.junit4)
+    debugImplementation(libs.androidx.ui.test.manifest)
 }

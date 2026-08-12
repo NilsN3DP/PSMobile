@@ -275,8 +275,4 @@ struct ProfilWechselDialog: View {
         let eine = text.split(separator: "\n").first.map(String.init) ?? text
         return eine.count > 12 ? String(eine.prefix(11)) + "…" : eine
     }
-
-    private func st(_ english: String, _ german: String) -> String {
-        SimpleModeState.shared.text(english: english, german: german)
-    }
 }

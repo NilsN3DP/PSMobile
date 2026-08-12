@@ -208,10 +208,6 @@ struct LayerProfileViewportLegend: View {
     private func mm(_ value: Double) -> String {
         String(format: "%.2f mm", value)
     }
-
-    private func st(_ english: String, _ german: String) -> String {
-        SimpleModeState.shared.text(english: english, german: german)
-    }
 }
 
 /// Haelt den GL-Kontext und die Puffer.

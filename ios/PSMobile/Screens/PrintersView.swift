@@ -356,10 +356,6 @@ struct PrintersView: View {
         .buttonStyle(.plain)
         .accessibilityIdentifier(kennung)
     }
-
-    private func st(_ english: String, _ german: String) -> String {
-        SimpleModeState.shared.text(english: english, german: german)
-    }
 }
 
 /// Einen Drucker anlegen oder aendern.
@@ -714,9 +710,5 @@ struct PrinterEditView: View {
                 .clipShape(RoundedRectangle(cornerRadius: ps.pt(3)))
                 .accessibilityIdentifier(kennung)
         }
-    }
-
-    private func st(_ english: String, _ german: String) -> String {
-        SimpleModeState.shared.text(english: english, german: german)
     }
 }

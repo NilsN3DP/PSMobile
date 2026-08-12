@@ -41,8 +41,4 @@ struct AbsturzProtokollSheet: View {
         .padding(ps.pt(24))
         .background(PrusaColors.background)
     }
-
-    private func st(_ english: String, _ german: String) -> String {
-        SimpleModeState.shared.text(english: english, german: german)
-    }
 }

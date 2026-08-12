@@ -164,10 +164,6 @@ struct BedShapeEditor: View {
                 .accessibilityIdentifier(kennung)
         }
     }
-
-    private func st(_ english: String, _ german: String) -> String {
-        SimpleModeState.shared.text(english: english, german: german)
-    }
 }
 
 /// Die Reinigungsmengen einer MMU.
@@ -294,9 +290,5 @@ struct WipingVolumesEditor: View {
             values: werte.map { KotlinDouble(double: $0) })
         model.setConfig("wiping_volumes_matrix", text)
         onClose()
-    }
-
-    private func st(_ english: String, _ german: String) -> String {
-        SimpleModeState.shared.text(english: english, german: german)
     }
 }

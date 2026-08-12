@@ -216,8 +216,4 @@ struct PaintView: View {
         .accessibilityIdentifier(kennung)
         .accessibilityValue(an ? st("Selected", "Ausgewählt") : "")
     }
-
-    private func st(_ english: String, _ german: String) -> String {
-        SimpleModeState.shared.text(english: english, german: german)
-    }
 }

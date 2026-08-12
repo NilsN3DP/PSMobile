@@ -270,10 +270,6 @@ struct AppSettingsView: View {
         .clipShape(RoundedRectangle(cornerRadius: ps.pt(10)))
         .padding(.bottom, ps.pt(6))
     }
-
-    private func st(_ english: String, _ german: String) -> String {
-        SimpleModeState.shared.text(english: english, german: german)
-    }
 }
 
 /// Die Werte hinter den App-Einstellungen.

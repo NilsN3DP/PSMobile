@@ -121,10 +121,6 @@ struct FinalPreviewOverlay: View {
                 .accessibilityIdentifier("vorschau.layer.oben")
         }
     }
-
-    private func st(_ english: String, _ german: String) -> String {
-        SimpleModeState.shared.text(english: english, german: german)
-    }
 }
 
 /// Zeit/Filament/Hoehenbereich fuer den aktuell gewaehlten Schichtbereich.
@@ -312,9 +308,5 @@ struct PreviewLegendPicker: View {
         case .custom: return st("Custom", "Benutzerdefiniert")
         case .none: return ""
         }
-    }
-
-    private func st(_ english: String, _ german: String) -> String {
-        SimpleModeState.shared.text(english: english, german: german)
     }
 }

@@ -240,8 +240,4 @@ struct CustomGcodeView: View {
         let erste = text.split(separator: "\n").first.map(String.init) ?? text
         return erste.count > 28 ? String(erste.prefix(27)) + "…" : erste
     }
-
-    private func st(_ english: String, _ german: String) -> String {
-        SimpleModeState.shared.text(english: english, german: german)
-    }
 }

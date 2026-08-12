@@ -416,10 +416,6 @@ struct AdvancedObjectInspectorView: View {
         ZahlenFeld(wert: wert, einheit: einheit, uebernehmen: uebernehmen)
             .accessibilityIdentifier(kennung)
     }
-
-    private func st(_ english: String, _ german: String) -> String {
-        SimpleModeState.shared.text(english: english, german: german)
-    }
 }
 
 /// Ein Zahlenfeld, das erst beim Verlassen uebernimmt.

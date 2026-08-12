@@ -33,10 +33,6 @@ struct MaterialAuswahlView: View {
     /// trugen. Ein Umschalter zeigt sie nur auf Wunsch.
     @State private var zeigeInkompatible = false
 
-    private func st(_ english: String, _ german: String) -> String {
-        SimpleModeState.shared.text(english: english, german: german)
-    }
-
     private var alle: [FilamentCatalog.Entry] { model.filamentCatalog() }
     /// Einmal pro Aufruf gelesen statt je Karte: bei vierhundert
     /// Profilen waeren das sonst vierhundert Kernaufrufe je Redraw.

@@ -170,8 +170,4 @@ struct SelbsttestView: View {
         case .angabe:  return PrusaColors.textMuted
         }
     }
-
-    private func st(_ english: String, _ german: String) -> String {
-        SimpleModeState.shared.text(english: english, german: german)
-    }
 }

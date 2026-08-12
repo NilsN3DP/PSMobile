@@ -326,8 +326,4 @@ struct RemoteSliceView: View {
                 : .fehler(st("Server not reachable.", "Server nicht erreichbar."))
         }
     }
-
-    private func st(_ english: String, _ german: String) -> String {
-        SimpleModeState.shared.text(english: english, german: german)
-    }
 }

@@ -1787,8 +1787,4 @@ struct AdvancedWorkspaceView: View {
     private func scrollKennungFuerObjekt(_ id: Int32) -> String {
         "advanced.objekt.scroll.\(id)"
     }
-
-    private func st(_ english: String, _ german: String) -> String {
-        SimpleModeState.shared.text(english: english, german: german)
-    }
 }
