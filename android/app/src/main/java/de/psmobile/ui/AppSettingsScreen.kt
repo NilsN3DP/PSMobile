@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.widthIn
@@ -187,12 +188,34 @@ fun AppSettingsScreen(
                         )
                     }
                 }
-                // Selbsttest- und Protokoll-Export-Eintraege (siehe iOS'
-                // "Diagnose"-Abschnitt) fehlen hier noch bewusst - beide
-                // Ziele existieren auf Android noch nicht (Selbsttest.kt,
-                // PsmLog-Portierung), ein Knopf ohne Ziel waere nur ein
-                // neuer toter Knopf. Nachtragen sobald Feature 2
-                // (android-parity-plan.md) so weit ist.
+                // Diagnose - Gegenstueck zum gleichnamigen Abschnitt in
+                // AppSettingsView.swift. Kein Schalter, sondern Werkzeug,
+                // deshalb ganz unten und nicht zwischen den Vorlieben.
+                SectionHeader(t("Diagnostics", "Diagnose"))
+                ActionRow(
+                    title = t("Share log", "Protokoll teilen"),
+                    why = t(
+                        "The last messages from the core and the app - device and version, " +
+                            "no account data and no network addresses.",
+                        "Die letzten Meldungen von Kern und App - Gerät und Version, " +
+                            "keine Kontodaten und keine Netzwerkadressen.",
+                    ),
+                    onClick = {
+                        runCatching {
+                            val ziel = de.psmobile.core.LogExport.uri(context)
+                            context.startActivity(
+                                android.content.Intent.createChooser(
+                                    android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                                        type = "text/plain"
+                                        putExtra(android.content.Intent.EXTRA_STREAM, ziel)
+                                        addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                    },
+                                    t("Share log", "Protokoll teilen"),
+                                )
+                            )
+                        }
+                    },
+                )
                 Text(
                     "PSMobile ${de.psmobile.BuildConfig.VERSION_NAME} (${de.psmobile.BuildConfig.VERSION_CODE})",
                     color = PrusaColors.TextMuted,
@@ -242,6 +265,38 @@ private fun ToggleRow(
         )
     }
     Box(Modifier.height(6.dp))
+}
+
+/**
+ * Ein Eintrag, der etwas tut, statt etwas umzuschalten.
+ *
+ * Gegenstueck zu den Knoepfen im iOS-Diagnosebereich: Titel, eine Zeile
+ * Begruendung, ein Winkel nach rechts. Bewusst dieselbe Hoehe wie die
+ * Schalterzeilen daneben - ein Bereich, der aussieht wie ein anderer,
+ * verwirrt mehr als er ordnet.
+ */
+@Composable
+private fun ActionRow(
+    title: String,
+    why: String,
+    onClick: () -> Unit,
+) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp)
+            .background(PrusaColors.PanelRaised, RoundedCornerShape(10.dp))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 10.dp)
+            .heightIn(min = 56.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(title, color = PrusaColors.TextPrimary, fontSize = 14.sp)
+            Text(why, color = PrusaColors.TextMuted, fontSize = 11.sp)
+        }
+        Text("›", color = PrusaColors.Orange, fontSize = 18.sp)
+    }
 }
 
 @Composable
