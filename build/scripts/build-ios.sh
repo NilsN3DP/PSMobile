@@ -40,12 +40,11 @@ export PSM_IOS_PLATFORM="${PLATFORM}"
 export PSM_DEPS_PREFIX="${PREFIX}"
 
 build_deps() {
-    # DEP_CMAKE_OPTS geht an jede einzelne Abhaengigkeit weiter (siehe
-    # cmake/modules/AddCMakeProject.cmake, ${DEP_CMAKE_OPTS} in den
-    # CMAKE_ARGS). Mehrere Pakete - OCCT, Blosc und weitere - verlangen
-    # cmake_minimum_required(VERSION 3.0), was CMake 4 rundweg ablehnt.
-    # Auf dem Android-Build-Host faellt das nicht auf: dessen Container
-    # bringt noch eine aeltere Fassung mit.
+    # Anmerkung zu CMake 4: mehrere Pakete (OCCT, Blosc, ...) verlangen
+    # cmake_minimum_required(VERSION 3.0), was CMake 4 ablehnt. Der
+    # naheliegende Weg - DEP_CMAKE_OPTS hier von aussen zu setzen - nuetzt
+    # nichts: deps/CMakeLists.txt setzt die Liste selbst, im Apple-Zweig
+    # sogar vollstaendig neu. Die Regel steht deshalb in patches/0005.
     log "iOS-Dependencies (${PLATFORM})"
     cmake -S "${PS_SRC}/deps" -B "${DEPS_BUILD}" -G Ninja \
         -DCMAKE_TOOLCHAIN_FILE="${PSM_ROOT}/cmake/toolchains/ios.cmake" \
@@ -54,7 +53,6 @@ build_deps() {
         -DDESTDIR="${DESTDIR}" \
         -DDEP_DOWNLOAD_DIR="${DL_CACHE}" \
         -DPrusaSlicer_deps_PACKAGE_EXCLUDES="${DEP_EXCLUDES}" \
-        -DDEP_CMAKE_OPTS="-DCMAKE_POLICY_VERSION_MINIMUM=3.5" \
         -DBUILD_SHARED_LIBS=OFF
     cmake --build "${DEPS_BUILD}" -- -j 1
 }
