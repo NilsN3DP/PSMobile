@@ -74,6 +74,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 import androidx.core.view.WindowCompat
 import de.psmobile.core.PsmCore
+import de.psmobile.core.PsmViewport
 import de.psmobile.slicing.SlicerService
 import de.psmobile.ui.theme.PrusaColors
 import de.psmobile.ui.theme.ScaledOverlay
@@ -120,6 +121,13 @@ fun SimpleModeScreen(
     // losgehen.
     var hinderungsgruende by remember { mutableStateOf(emptyList<String>()) }
     var selectedId by remember { mutableStateOf<Int?>(null) }
+    // Welche Griffe am ausgewaehlten Objekt haengen.
+    //
+    // Der Viewport kennt die drei Gizmos seit langem (PsmViewport.Gizmo,
+    // setGizmo/gizmoPick/gizmoDrag) - im Simple Mode waren sie nur nie
+    // umschaltbar. Man konnte ein Objekt also ziehen, aber weder drehen
+    // noch skalieren, waehrend iOS genau das anbietet.
+    var gizmo by remember { mutableStateOf(PsmViewport.Gizmo.NONE) }
     var zeigeVerlassenNachfrage by remember { mutableStateOf(false) }
     // Dieselbe Nachfrage wie im Advanced Mode - ein zweites Tippen auf
     // einen Modus oder die Startseite verwirft sonst stillschweigend
@@ -258,6 +266,25 @@ fun SimpleModeScreen(
             onRedo = service::redo,
             modifier = Modifier.align(Alignment.BottomStart).padding(start = 12.dp, bottom = workspaceActionBottom + 12.dp),
         )
+        // Werkzeuge am rechten Rand, wie auf iOS. Rechts und nicht unten,
+        // weil unten schon Rueckgaengig/Wiederholen und das Modelle-Blatt
+        // liegen.
+        if (panel == SimplePanel.WORKSPACE) {
+            SimpleWerkzeugSpalte(
+                gizmo = gizmo,
+                zeigeGriffe = selectedId != null,
+                onGizmo = { g ->
+                    // Zweites Tippen auf dasselbe Werkzeug legt es wieder
+                    // weg - sonst gibt es keinen Weg zurueck zum blossen
+                    // Ziehen ohne die Auswahl aufzugeben.
+                    val neu = if (gizmo == g) PsmViewport.Gizmo.NONE else g
+                    gizmo = neu
+                    controller.setGizmo(neu)
+                },
+                onAnsicht = { controller.resetView() },
+                modifier = Modifier.align(Alignment.CenterEnd).padding(end = 12.dp),
+            )
+        }
         if (objects.isEmpty()) {
             Button(
                 onClick = onPickFile,
@@ -547,6 +574,52 @@ private fun SimpleUndoRedo(onUndo: () -> Unit, onRedo: () -> Unit, modifier: Mod
 ) {
     TextButton(onClick = onUndo, modifier = Modifier.height(52.dp).width(72.dp)) { Text("↶\n" + st("Undo", "Rückgängig")) }
     TextButton(onClick = onRedo, modifier = Modifier.height(52.dp).width(72.dp)) { Text("↷\n" + st("Redo", "Wiederholen")) }
+}
+
+/**
+ * Verschieben, Drehen, Skalieren und die Ansicht zuruecksetzen.
+ *
+ * Gegenstueck zu `werkzeugspalte` in SimpleModeView.swift. Die Griffe
+ * erscheinen nur, wenn etwas ausgewaehlt ist - ohne Objekt haetten sie
+ * nichts, woran sie haengen koennten. Das Zuruecksetzen der Ansicht steht
+ * immer da, gerade wenn man sich verdreht hat.
+ */
+@Composable
+private fun SimpleWerkzeugSpalte(
+    gizmo: PsmViewport.Gizmo,
+    zeigeGriffe: Boolean,
+    onGizmo: (PsmViewport.Gizmo) -> Unit,
+    onAnsicht: () -> Unit,
+    modifier: Modifier = Modifier,
+) = Column(
+    modifier.background(PrusaColors.Panel, RoundedCornerShape(4.dp)),
+    horizontalAlignment = Alignment.CenterHorizontally,
+) {
+    if (zeigeGriffe) {
+        SimpleWerkzeugKnopf("↔", st("Move", "Verschieben"),
+            aktiv = gizmo == PsmViewport.Gizmo.MOVE) { onGizmo(PsmViewport.Gizmo.MOVE) }
+        SimpleWerkzeugKnopf("⟳", st("Rotate", "Drehen"),
+            aktiv = gizmo == PsmViewport.Gizmo.ROTATE) { onGizmo(PsmViewport.Gizmo.ROTATE) }
+        SimpleWerkzeugKnopf("⤢", st("Scale", "Skalieren"),
+            aktiv = gizmo == PsmViewport.Gizmo.SCALE) { onGizmo(PsmViewport.Gizmo.SCALE) }
+    }
+    SimpleWerkzeugKnopf("⌂", st("View", "Ansicht"), aktiv = false, onClick = onAnsicht)
+}
+
+@Composable
+private fun SimpleWerkzeugKnopf(
+    zeichen: String,
+    beschriftung: String,
+    aktiv: Boolean,
+    onClick: () -> Unit,
+) = TextButton(
+    onClick = onClick,
+    modifier = Modifier.height(52.dp).width(72.dp),
+    colors = ButtonDefaults.textButtonColors(
+        contentColor = if (aktiv) PrusaColors.Orange else PrusaColors.TextPrimary,
+    ),
+) {
+    Text("$zeichen\n$beschriftung", fontSize = 11.sp, lineHeight = 13.sp, maxLines = 2)
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
