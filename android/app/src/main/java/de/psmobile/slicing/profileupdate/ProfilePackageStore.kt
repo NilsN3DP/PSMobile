@@ -1,5 +1,6 @@
 package de.psmobile.slicing.profileupdate
 
+import de.psmobile.shared.rules.SimpleModeState
 import java.io.File
 import java.io.FileInputStream
 import java.nio.file.AtomicMoveNotSupportedException
@@ -28,7 +29,9 @@ class ProfilePackageStore(
 
     fun stage(zip: File, manifest: ProfileManifest): Result<File> = runCatching {
         require(zip.isFile) { "Profilpaket fehlt" }
-        require(sha256(zip) == manifest.sha256) { "Profilpaket-Prüfsumme stimmt nicht" }
+        require(sha256(zip) == manifest.sha256) { SimpleModeState.text(
+            "Profile package checksum does not match",
+            "Profilpaket-Prüfsumme stimmt nicht") }
         root.mkdirs()
         val incoming = File(root, "incoming-${System.nanoTime()}")
         try {
@@ -64,7 +67,9 @@ class ProfilePackageStore(
     }
 
     fun rollback(): Result<Unit> = runCatching {
-        require(previous.isDirectory) { "Kein vorheriger Profilstand verfügbar" }
+        require(previous.isDirectory) { SimpleModeState.text(
+            "No previous profile state available",
+            "Kein vorheriger Profilstand verfügbar") }
         active.takeIf(File::exists)?.deleteRecursively()
         move(previous, active)
     }
@@ -78,7 +83,7 @@ class ProfilePackageStore(
                     "Absoluter ZIP-Pfad ist nicht erlaubt"
                 }
                 val output = File(destination, entry.name).canonicalFile
-                require(output.toPath().startsWith(rootPath)) { "ZIP-Pfad verlässt das Paket" }
+                require(output.toPath().startsWith(rootPath)) { SimpleModeState.text("ZIP path leaves the package", "ZIP-Pfad verlässt das Paket") }
                 if (entry.isDirectory) {
                     output.mkdirs()
                 } else {
@@ -92,9 +97,12 @@ class ProfilePackageStore(
 
     private fun requireComplete(directory: File) {
         requiredFiles.forEach { path ->
-            require(File(directory, path).isFile) { "Profilpaket enthält $path nicht" }
+            require(File(directory, path).isFile) { SimpleModeState.text(
+            "Profile package does not contain $path",
+            "Profilpaket enthält $path nicht") }
         }
-        require(File(directory, "shaders/ES").isDirectory) { "Profilpaket enthält keine Shader" }
+        require(File(directory, "shaders/ES").isDirectory) { SimpleModeState.text(
+            "Profile package contains no shaders", "Profilpaket enthält keine Shader") }
     }
 
     private fun move(source: File, destination: File) {

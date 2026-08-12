@@ -23,6 +23,7 @@ import de.psmobile.shared.rules.AppSettings
 import de.psmobile.ui.AppSettingsScreen
 import de.psmobile.ui.PsUi
 import de.psmobile.shared.rules.ModelFormats
+import de.psmobile.shared.rules.SimpleModeState
 import de.psmobile.shared.rules.RemovableStorage
 import de.psmobile.ui.SceneController
 import de.psmobile.ui.SetupScreen
@@ -714,28 +715,40 @@ class MainActivity : ComponentActivity() {
                         }
                         val profileLabel = importDisplayName(profile)
                         val details = when {
-                            !project.configLoaded ->
+                            !project.configLoaded -> SimpleModeState.text(
+                                "The 3MF contained no project configuration. The objects were " +
+                                    "taken over with their stored arrangement.",
                                 "Die 3MF enthielt keine Projektkonfiguration. Die Objekte wurden " +
-                                    "mit ihrer gespeicherten Anordnung übernommen."
-                            project.exactInstalledPrinter ->
-                                "Das passende Druckerprofil „$profileLabel“ wurde automatisch ausgewählt."
-                            else ->
+                                    "mit ihrer gespeicherten Anordnung übernommen.")
+                            project.exactInstalledPrinter -> SimpleModeState.text(
+                                "The matching printer profile „$profileLabel“ was selected " +
+                                    "automatically.",
+                                "Das passende Druckerprofil „$profileLabel“ wurde automatisch ausgewählt.")
+                            else -> SimpleModeState.text(
+                                "The embedded printer configuration was activated as the " +
+                                    "project-local profile „$profileLabel“.",
                                 "Die eingebettete Druckerkonfiguration wurde als projektlokales " +
-                                    "Profil „$profileLabel“ aktiviert."
+                                    "Profil „$profileLabel“ aktiviert.")
                         }
                         val beds = if (project.bedCount > 1) {
-                            "\n\n${project.bedCount} Druckbetten wurden übernommen und können " +
-                                "oben direkt ausgewählt werden."
+                            "\n\n" + SimpleModeState.text(
+                                "${project.bedCount} print beds were taken over and can be " +
+                                    "selected directly at the top.",
+                                "${project.bedCount} Druckbetten wurden übernommen und können " +
+                                    "oben direkt ausgewählt werden.")
                         } else {
                             ""
                         }
                         importNotice = if (project.postProcessRemoved) {
-                            "$details$beds\n\nEin eingebettetes Post-Processing-Skript wurde aus " +
-                                "Sicherheitsgründen nicht übernommen."
+                            "$details$beds\n\n" + SimpleModeState.text(
+                                "An embedded post-processing script was not taken over, for " +
+                                    "safety reasons.",
+                                "Ein eingebettetes Post-Processing-Skript wurde aus " +
+                                    "Sicherheitsgründen nicht übernommen.")
                         } else {
                             details + beds
                         }
-                        noticeTitle = "Projekt importiert"
+                        noticeTitle = SimpleModeState.text("Project imported", "Projekt importiert")
                         currentProjectUri = sourceUri
                         if (sourceUri != null) {
                             merkeAlsZuletzt(sourceUri, queryDisplayName(sourceUri) ?: file.nameWithoutExtension)

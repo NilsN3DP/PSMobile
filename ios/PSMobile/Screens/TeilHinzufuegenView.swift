@@ -23,11 +23,14 @@ struct TeilHinzufuegenView: View {
     @State private var form: PsmCore.PrimitiveShape = .box
     @State private var groesse: Double = 10
 
-    private let arten: [(PsmCore.VolumeType, String, String, String)] = [
-        (.negative, "Negative volume", "Aussparung", "Ein Loch im Modell — der Körper wird abgezogen."),
-        (.modifier, "Modifier", "Modifier", "In diesem Bereich gelten andere Einstellungen."),
-        (.supportBlocker, "Support blocker", "Stützen verhindern", "Hier setzt der Slicer keine Stützen."),
-        (.supportEnforcer, "Support enforcer", "Stützen erzwingen", "Hier setzt er welche, auch ohne Überhang."),
+    // Nur Typ und Beschriftung. Der Erklaertext stand hier frueher als
+    // vierter Wert mit - auf Deutsch und ohne englische Fassung -, wurde
+    // aber nie gelesen: gezeichnet wird erklaerung(), und die uebersetzt.
+    private let arten: [(PsmCore.VolumeType, String, String)] = [
+        (.negative, "Negative volume", "Aussparung"),
+        (.modifier, "Modifier", "Modifier"),
+        (.supportBlocker, "Support blocker", "Stützen verhindern"),
+        (.supportEnforcer, "Support enforcer", "Stützen erzwingen"),
     ]
 
     var body: some View {
