@@ -1,5 +1,5 @@
 diff --git a/src/libslic3r/CMakeLists.txt b/src/libslic3r/CMakeLists.txt
-index 777744b..1353690 100644
+index 777744b..97297b9 100644
 --- a/src/libslic3r/CMakeLists.txt
 +++ b/src/libslic3r/CMakeLists.txt
 @@ -660,9 +660,13 @@ target_link_libraries(libslic3r PUBLIC
@@ -7,18 +7,18 @@ index 777744b..1353690 100644
  )
  
 -if (APPLE)
-+if (APPLE AND SLIC3R_ENABLE_FORMAT_STEP)
++if ((APPLE OR ANDROID) AND SLIC3R_ENABLE_FORMAT_STEP)
      # TODO: we need to fix notarization with the separate shared library
      target_link_libraries(libslic3r PUBLIC OCCTWrapper)
-+    # PSMobile: STEP.cpp ruft die Wrapper-Funktion auf Apple direkt auf,
-+    # statt sie nachzuladen. Ohne diesen Merker weiss die Datei nicht, ob
-+    # es den Wrapper ueberhaupt gibt.
++    # PSMobile: STEP.cpp ruft die Wrapper-Funktion dann direkt auf,
++    # statt sie nachzuladen. Ohne diesen Merker weiss die Datei nicht,
++    # ob es den Wrapper ueberhaupt gibt.
 +    target_compile_definitions(libslic3r PRIVATE SLIC3R_OCCT_WRAPPER_LINKED)
  endif ()
  
  if (TARGET OpenVDB::openvdb)
 diff --git a/src/libslic3r/Format/STEP.cpp b/src/libslic3r/Format/STEP.cpp
-index c55f0dd..7e28544 100644
+index c55f0dd..a5b28f2 100644
 --- a/src/libslic3r/Format/STEP.cpp
 +++ b/src/libslic3r/Format/STEP.cpp
 @@ -26,7 +26,7 @@
@@ -26,7 +26,7 @@ index c55f0dd..7e28544 100644
  namespace Slic3r {
  
 -#if __APPLE__
-+#if defined(__APPLE__) && defined(SLIC3R_OCCT_WRAPPER_LINKED)
++#if defined(SLIC3R_OCCT_WRAPPER_LINKED)
  extern "C" bool load_step_internal(const char *path, OCCTResult* res, std::optional<std::pair<double, double>> deflections /*= std::nullopt*/);
  #endif
  
@@ -35,7 +35,7 @@ index c55f0dd..7e28544 100644
      static LoadStepFn load_step_fn = nullptr;
  
 -#ifndef __APPLE__
-+#if !defined(__APPLE__) || !defined(SLIC3R_OCCT_WRAPPER_LINKED)
++#if !defined(SLIC3R_OCCT_WRAPPER_LINKED)
      constexpr const char* fn_name = "load_step_internal";
  #endif
  
@@ -44,10 +44,27 @@ index c55f0dd..7e28544 100644
              throw;
          }
 -#elif __APPLE__
-+#elif defined(__APPLE__) && defined(SLIC3R_OCCT_WRAPPER_LINKED)
++#elif defined(SLIC3R_OCCT_WRAPPER_LINKED)
          load_step_fn = &load_step_internal;
  #else
          libpath /= "OCCTWrapper.so";
+diff --git a/src/occt_wrapper/CMakeLists.txt b/src/occt_wrapper/CMakeLists.txt
+index f6df6e7..c0cf08d 100644
+--- a/src/occt_wrapper/CMakeLists.txt
++++ b/src/occt_wrapper/CMakeLists.txt
+@@ -1,8 +1,11 @@
+ cmake_minimum_required(VERSION 3.13)
+ project(OCCTWrapper)
+ 
+-if (APPLE)
++if (APPLE OR ANDROID)
+     # TODO: we need to fix notarization with the separate shared library
++    # PSMobile: auf Android aus demselben Grund wie auf Apple statisch -
++    # ein nachladbares Modul neben der ausfuehrbaren Datei gibt es auf
++    # einem Telefon nicht.
+     add_library(OCCTWrapper STATIC OCCTWrapper.cpp)
+ else ()
+     add_library(OCCTWrapper MODULE OCCTWrapper.cpp)
 diff --git a/src/libvgcode/glad/src/gles2.c b/src/libvgcode/glad/src/gles2.c
 index e9642e9..f0a2af6 100644
 --- a/src/libvgcode/glad/src/gles2.c

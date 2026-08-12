@@ -3,6 +3,7 @@ package de.psmobile.core
 import android.util.Log
 import java.io.Closeable
 import de.psmobile.shared.rules.CoreLabels
+import de.psmobile.shared.rules.ModelFormats
 
 /**
  * Kotlin-Seite der Bruecke zu libpsmobile_core.so.
@@ -22,6 +23,15 @@ class PsmCore private constructor(private var handle: Long) : Closeable {
 
         init {
             System.loadLibrary("psmobile_core")
+            // Dieser Kern wird mit SLIC3R_ENABLE_FORMAT_STEP=ON gebaut
+            // und bindet OCCTWrapper statisch ein (siehe CMakeLists.txt
+            // und build/scripts/dep-excludes.sh). Damit darf die App
+            // STEP-Dateien annehmen.
+            //
+            // Der Wert steht bewusst hier und nicht fest im gemeinsamen
+            // Modul: er beschreibt, was DIESER Kern kann. Wird die
+            // Bibliothek einmal ohne OCCT gebaut, gehoert die Zeile mit.
+            ModelFormats.stepVerfuegbar = true
         }
 
         /**

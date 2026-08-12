@@ -25,6 +25,27 @@ else
     git clone --depth 1 --branch "${PS_TAG}" "${PS_REPO}" "${PS_SRC}"
 fi
 
+# --- 3. Patches ----------------------------------------------------------
+# Bis hierher hat nur macos-bootstrap.sh die Patches angewendet - der
+# Android-Weg holte die Quellen und liess sie, wie sie sind. Was dort
+# trotzdem gebaut wurde, kam ueber Toolchain-Datei und CMake-Schalter
+# zustande; 0003 (STEP ohne Nachladen) fehlte damit auf Android
+# vollstaendig, und niemand hat es gemerkt, weil STEP ohnehin aus war.
+psm_log "Patches"
+for patch in "${PSM_ROOT}"/patches/*.patch; do
+    [ -f "${patch}" ] || continue
+    if git -C "${PS_SRC}" apply --reverse --check "${patch}" >/dev/null 2>&1; then
+        printf '    schon angewendet: %s
+' "$(basename "${patch}")"
+    elif git -C "${PS_SRC}" apply --check "${patch}" >/dev/null 2>&1; then
+        git -C "${PS_SRC}" apply "${patch}"
+        printf '    angewendet: %s
+' "$(basename "${patch}")"
+    else
+        psm_warn "laesst sich nicht anwenden: $(basename "${patch}")"
+    fi
+done
+
 mkdir -p "${DL_CACHE}"
 
 psm_log "Bootstrap fertig"

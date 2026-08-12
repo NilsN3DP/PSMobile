@@ -22,6 +22,7 @@ import androidx.compose.runtime.setValue
 import de.psmobile.shared.rules.AppSettings
 import de.psmobile.ui.AppSettingsScreen
 import de.psmobile.ui.PsUi
+import de.psmobile.shared.rules.ModelFormats
 import de.psmobile.shared.rules.RemovableStorage
 import de.psmobile.ui.SceneController
 import de.psmobile.ui.SetupScreen
@@ -68,11 +69,13 @@ internal fun importDisplayName(value: String): String =
  * der Systemdateiwaehler manche echten STL-Dateien ausgegraut an.
  */
 /**
- * Was der Kern wirklich lesen kann - dieselbe Liste wie in
- * psmobile_zip.cpp und in SlicerModel.unterstuetzteModellendungen (iOS).
- * STEP fehlt bewusst: gebaut wird ohne OCCT.
+ * Was der Kern wirklich lesen kann.
+ *
+ * Die Liste steht im gemeinsamen Modul, weil iOS dieselbe braucht -
+ * vorher stand sie hier und noch einmal in
+ * SlicerModel.unterstuetzteModellendungen.
  */
-internal val MODEL_EXTENSIONS = setOf("stl", "obj", "3mf", "amf")
+internal val MODEL_EXTENSIONS: Set<String> get() = ModelFormats.endungen()
 
 internal val MODEL_MIME_TYPES = arrayOf(
     "model/3mf",
@@ -663,18 +666,12 @@ class MainActivity : ComponentActivity() {
         // engere Liste echte STL-Dateien ausgraut (siehe
         // MODEL_MIME_TYPES) - damit kommt hier aber auch alles andere an.
         // Was der Kern nicht lesen kann, gehoert mit klarer Ansage
-        // abgewiesen: eine STEP-Datei landete sonst in libslic3rs
-        // STEP-Pfad, der den OCCT-Wrapper nachladen will, den dieser
-        // Build gar nicht enthaelt (SLIC3R_ENABLE_FORMAT_STEP=OFF).
-        if (!file.extension.lowercase().let { it in MODEL_EXTENSIONS }) {
-            svc.reportImportError(IllegalArgumentException(
-                de.psmobile.ui.PsUi.appText(
-                    "${file.extension.uppercase()} files are not supported. Use " +
-                        "${MODEL_EXTENSIONS.sorted().joinToString(", ") { it.uppercase() }}.",
-                    "${file.extension.uppercase()}-Dateien werden nicht unterstützt. Möglich sind " +
-                        "${MODEL_EXTENSIONS.sorted().joinToString(", ") { it.uppercase() }}.",
-                )
-            ))
+        // abgewiesen. Die Dateiauswahl laesst deutlich mehr durch, als
+        // libslic3r versteht; ohne diese Pruefung kam die Absage aus dem
+        // Kern und war unlesbar.
+        if (!ModelFormats.erlaubt(file.extension)) {
+            svc.reportImportError(
+                IllegalArgumentException(ModelFormats.nichtUnterstuetzt(file.extension)))
             return ImportOutcome.FAILED
         }
         val mime = contentResolver.getType(uri).orEmpty()

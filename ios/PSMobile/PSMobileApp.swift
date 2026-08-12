@@ -8,6 +8,20 @@ struct PSMobileApp: App {
     @StateObject private var einstellungen = AppSettingsStore()
     @StateObject private var drucker = PrinterStore()
 
+    init() {
+        // Ob dieser Kern STEP lesen kann.
+        //
+        // Auf Android steht hier true: dort ist OCCT gebaut und
+        // OCCTWrapper statisch eingebunden. Fuer iOS laeuft derselbe
+        // Umbau noch - bis die Bibliothek fuer OS64 und SIMULATORARM64
+        // uebersetzt ist, wuerde eine STEP-Datei wieder im dlopen-Pfad
+        // landen und mit "Cannot load OCCTWrapper.so" enden. Genau
+        // dieser Fehler stand schon einmal auf dem Geraet.
+        //
+        // Eine Zeile, wenn der iOS-Kern nachzieht.
+        ModelFormats.shared.stepVerfuegbar = false
+    }
+
     /// Welcher Bildschirm gerade oben liegt.
     ///
     /// Bewusst ein Aufzaehlungstyp und keine Sammlung von Bool-Flaggen:

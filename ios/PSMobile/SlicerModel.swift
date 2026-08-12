@@ -259,10 +259,15 @@ final class SlicerModel: ObservableObject {
         refresh()
     }
 
-    /// Was der Kern wirklich lesen kann - dieselbe Liste wie in
-    /// psmobile_zip.cpp. STEP steht bewusst nicht dabei: dieser Build
-    /// wird ohne OCCT gebaut (SLIC3R_ENABLE_FORMAT_STEP=OFF).
-    static let unterstuetzteModellendungen: Set<String> = ["stl", "obj", "3mf", "amf"]
+    /// Was der Kern wirklich lesen kann.
+    ///
+    /// Die Liste steht im gemeinsamen Modul, damit Android und iOS nicht
+    /// auseinanderlaufen koennen - vorher stand sie hier und noch einmal
+    /// in `MainActivity.MODEL_EXTENSIONS`. Ob STEP dazugehoert, haengt am
+    /// Kern dieses Builds und wird beim Start gesetzt.
+    static var unterstuetzteModellendungen: Set<String> {
+        Set(ModelFormats.shared.endungen())
+    }
 
     func load(url: URL) {
         guard let core else { return }
@@ -278,12 +283,8 @@ final class SlicerModel: ObservableObject {
         // Erklaerung die rohe dlopen-Ausgabe im Fehlerdialog:
         // "Cannot load OCCTWrapper.so: dlopen(...) (no such file)".
         let endung = url.pathExtension.lowercased()
-        guard Self.unterstuetzteModellendungen.contains(endung) else {
-            let liste = Self.unterstuetzteModellendungen
-                .sorted().map { $0.uppercased() }.joined(separator: ", ")
-            progress = .failed(SimpleModeState.shared.text(
-                english: "\(endung.uppercased()) files are not supported. Use \(liste).",
-                german: "\(endung.uppercased())-Dateien werden nicht unterstützt. Möglich sind \(liste)."))
+        guard ModelFormats.shared.erlaubt(endung: endung) else {
+            progress = .failed(ModelFormats.shared.nichtUnterstuetzt(endung: endung))
             return
         }
 
