@@ -97,6 +97,7 @@ class PsmCore private constructor(private var handle: Long) : Closeable {
         @JvmStatic private external fun nativeSetRotation(h: Long, id: Int, x: Float, y: Float, z: Float): Int
         @JvmStatic private external fun nativeSetScale(h: Long, id: Int, x: Float, y: Float, z: Float): Int
         @JvmStatic private external fun nativeDropToBed(h: Long, id: Int): Int
+        @JvmStatic private external fun nativeLayFlatAuto(h: Long, id: Int): Int
         @JvmStatic private external fun nativeDuplicate(h: Long, id: Int): Int
         @JvmStatic private external fun nativeArrange(h: Long, gapMm: Float): Int
         @JvmStatic private external fun nativeScaleToFit(h: Long, id: Int, sizeMm: Float): Int
@@ -554,6 +555,9 @@ class PsmCore private constructor(private var handle: Long) : Closeable {
         check(nativeSetScale(requireHandle(), id, x, y, z), "Skalieren")
 
     fun dropToBed(id: Int) = check(nativeDropToBed(requireHandle(), id), "Aufs Bett legen")
+
+    /** Die groesste ebene Flaeche kommt nach unten. */
+    fun layFlatAuto(id: Int) = check(nativeLayFlatAuto(requireHandle(), id), "Flach hinlegen")
 
     fun duplicate(id: Int): Int {
         val copy = nativeDuplicate(requireHandle(), id)

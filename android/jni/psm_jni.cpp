@@ -601,6 +601,13 @@ JNIEXPORT jint JNICALL JNI_FN(nativeDropToBed)(JNIEnv *, jclass, jlong h, jint i
     return psm_model_drop_to_bed(sess(h), id);
 }
 
+/* Groesste ebene Flaeche nach unten - ein Tippen statt Drehen von Hand.
+   Die C-Funktion gab es laengst, gebunden war sie nur auf iOS. */
+JNIEXPORT jint JNICALL JNI_FN(nativeLayFlatAuto)(JNIEnv *, jclass, jlong h, jint id)
+{
+    return psm_model_lay_flat_auto(sess(h), id);
+}
+
 JNIEXPORT jint JNICALL JNI_FN(nativeArrange)(JNIEnv *, jclass, jlong h, jfloat gapMm)
 {
     return psm_arrange(sess(h), gapMm);
