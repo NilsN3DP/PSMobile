@@ -285,6 +285,24 @@ class Selbsttest(private val context: Context) {
             _aktuell.value = null
             _bericht.value = datei
             _laeuft.value = false
+
+            // Aus dem Feld gemeldet: ein fehlgeschlagener Selbsttest auf
+            // einem echten Geraet war von aussen nicht einsehbar, weil
+            // nur Berichte NACH einem Slice hochgehen
+            // (DiagnosticsReporter.nachSlice) - ein reiner
+            // Selbsttest-Lauf ohne anschliessenden Schnitt blieb
+            // unsichtbar. Jeder Lauf geht deshalb fuer sich hoch, unter
+            // genau denselben zwei Schaltern wie der Slice-Bericht. Sind
+            // beide aus - der Standard -, passiert nichts.
+            runCatching {
+                val alle = _schritte.value
+                de.psmobile.net.DiagnosticsReporter.nachSelbsttest(
+                    context = context,
+                    bericht = datei.readText(),
+                    fehlerZahl = alle.count { it.ausgang == Ausgang.FEHLER },
+                    warnungZahl = alle.count { it.ausgang == Ausgang.UEBERSPRUNGEN },
+                )
+            }
         }
     }
 
