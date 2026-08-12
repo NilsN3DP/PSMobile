@@ -25,6 +25,7 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
@@ -45,6 +46,7 @@ import androidx.compose.ui.unit.sp
 import de.psmobile.net.RemoteSliceClient
 import de.psmobile.slicing.SlicerService
 import de.psmobile.ui.theme.PrusaColors
+import de.psmobile.shared.rules.RemotePairing
 import de.psmobile.shared.rules.SimpleModeState
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -57,10 +59,10 @@ private enum class Pruefung { UNBEKANNT, PRUEFT, ERREICHBAR, FEHLER }
 /**
  * Erklaerung und Einrichtung von Remote Slicing (siehe
  * docs/remote-slicing.md) - Android-Gegenstueck zu
- * `ios/PSMobile/Screens/RemoteSliceView.swift`. Bewusst ohne QR-Pairing
- * in dieser ersten Fassung (siehe android-parity-plan.md, Feature 1,
- * Schritt 5 - Adresse/Token eintippen ist der Kern, QR ist Komfort
- * obendrauf).
+ * `ios/PSMobile/Screens/RemoteSliceView.swift`, einschliesslich der
+ * Kopplung per QR-Code: ein Geraet zeigt seinen Code, ein zweites
+ * scannt ihn. Das Format steht als RemotePairing im gemeinsamen Modul,
+ * damit ein iPhone den Code eines Android-Tablets lesen kann.
  *
  * Kein eigener Slice-Weg - laeuft ueber denselben "Slice now"-Knopf wie
  * immer, siehe SlicerService.remoteSliceEnabled. Dieser Bildschirm
@@ -75,6 +77,8 @@ fun RemoteSliceScreen(
 ) {
     var serverAdresse by remember { mutableStateOf(service.remoteSliceHost) }
     var token by remember { mutableStateOf(service.remoteSliceToken ?: "") }
+    var zeigeScanner by remember { mutableStateOf(false) }
+    var zeigeEigenenCode by remember { mutableStateOf(false) }
     var pruefung by remember { mutableStateOf(Pruefung.UNBEKANNT) }
     var fehlerText by remember { mutableStateOf("") }
     val scope = rememberCoroutineScope()
@@ -192,6 +196,22 @@ fun RemoteSliceScreen(
                 colors = ButtonDefaults.buttonColors(containerColor = PrusaColors.Orange),
             ) { Text(t("Test connection", "Verbindung testen"), color = PrusaColors.Background) }
 
+            // Koppeln per QR-Code, statt Adresse und - vor allem - das
+            // lange Token abzutippen. Ein Gerät zeigt seinen Code, ein
+            // zweites scannt ihn hier. Dasselbe Format wie auf iOS, die
+            // Regel dazu steht im gemeinsamen Modul (RemotePairing).
+            Spacer(Modifier.height(10.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(onClick = { zeigeScanner = true }) {
+                    Text(t("Scan QR code", "QR-Code scannen"), fontSize = 13.sp)
+                }
+                if (serverAdresse.isNotEmpty()) {
+                    OutlinedButton(onClick = { zeigeEigenenCode = true }) {
+                        Text(t("Show my QR code", "Meinen QR-Code zeigen"), fontSize = 13.sp)
+                    }
+                }
+            }
+
             Spacer(Modifier.height(10.dp))
             when (pruefung) {
                 Pruefung.PRUEFT -> Row(verticalAlignment = Alignment.CenterVertically) {
@@ -231,6 +251,79 @@ fun RemoteSliceScreen(
             Spacer(Modifier.height(20.dp))
         }
     }
+
+    if (zeigeScanner) {
+        QrScanSheet(
+            onCode = { code ->
+                zeigeScanner = false
+                // Ein Scanner liest jeden Code, den man ihm hinhaelt.
+                // Passt er nicht, bleibt alles wie es war - stillschweigend
+                // eine fremde Adresse zu uebernehmen waere schlimmer als
+                // gar nichts zu tun.
+                RemotePairing.parse(code)?.let { paar ->
+                    serverAdresse = paar.host
+                    service.remoteSliceHost = paar.host
+                    if (paar.token.isNotEmpty()) {
+                        token = paar.token
+                        service.remoteSliceToken = paar.token
+                    }
+                    pruefung = Pruefung.UNBEKANNT
+                }
+            },
+            onCancel = { zeigeScanner = false },
+        )
+    }
+
+    if (zeigeEigenenCode) {
+        EigenerKopplungscode(
+            host = serverAdresse,
+            token = token,
+            onClose = { zeigeEigenenCode = false },
+        )
+    }
+}
+
+/**
+ * Der eigene Server als QR-Code, fuer ein zweites Geraet.
+ *
+ * Der Hinweis zum Token steht bewusst darunter: wer den Code
+ * herumzeigt, gibt damit auch das Zugangs-Token weiter, und das ist
+ * nicht jedem klar, solange man nur ein Muster aus Quadraten sieht.
+ */
+@Composable
+private fun EigenerKopplungscode(host: String, token: String, onClose: () -> Unit) {
+    de.psmobile.ui.theme.AlertDialog(
+        onDismissRequest = onClose,
+        confirmButton = {
+            Text(
+                t("Close", "Schließen"),
+                color = PrusaColors.Orange,
+                modifier = Modifier.clickable(onClick = onClose).padding(12.dp),
+            )
+        },
+        title = { Text(t("Scan this on your other device", "Auf dem anderen Gerät scannen")) },
+        text = {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                QrCodeBild(
+                    inhalt = RemotePairing.url(host, token),
+                    modifier = Modifier.size(240.dp),
+                )
+                Spacer(Modifier.height(12.dp))
+                Text(
+                    if (token.isEmpty()) {
+                        t("Contains the server address.", "Enthält die Serveradresse.")
+                    } else {
+                        t(
+                            "Contains the server address and the access token - only show it to devices that should have both.",
+                            "Enthält Serveradresse und Zugangs-Token - nur Geräten zeigen, die beides haben sollen.",
+                        )
+                    },
+                    color = PrusaColors.TextMuted,
+                    fontSize = 11.sp,
+                )
+            }
+        },
+    )
 }
 
 @Composable

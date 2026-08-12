@@ -13,6 +13,7 @@ serializationJson = "1.7.3"
 coroutinesTest = "1.9.0"
 camerax = "1.4.1"
 mlkitBarcode = "17.3.0"
+zxing = "3.5.3"
 androidxTestJunit = "1.2.1"
 androidxTestRunner = "1.6.2"
 
@@ -43,6 +44,11 @@ androidx-camera-camera2     = { group = "androidx.camera",           name = "cam
 androidx-camera-lifecycle   = { group = "androidx.camera",           name = "camera-lifecycle",         version.ref = "camerax" }
 androidx-camera-view        = { group = "androidx.camera",           name = "camera-view",              version.ref = "camerax" }
 mlkit-barcode-scanning      = { group = "com.google.mlkit",          name = "barcode-scanning",         version.ref = "mlkitBarcode" }
+# QR-Codes ERZEUGEN. ML Kit liest nur; fuer "meinen Code zeigen"
+# braucht es einen Erzeuger. Reines Java ohne Android-Anhang, und R8
+# wirft den Teil weg, den wir nicht anfassen (wir nutzen nur QR, nicht
+# die zwoelf anderen Strichcodearten).
+zxing-core                  = { group = "com.google.zxing",          name = "core",                     version.ref = "zxing" }
 # Oberflaechentests auf dem Geraet. Die reinen Logiktests unter
 # app/src/test brauchen davon nichts - diese hier zeichnen wirklich.
 androidx-test-ext-junit     = { group = "androidx.test.ext",         name = "junit",                    version.ref = "androidxTestJunit" }
