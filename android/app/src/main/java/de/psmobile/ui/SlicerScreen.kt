@@ -1467,7 +1467,9 @@ private fun LayerProfileSceneOverlay(
  * 12 px am Desktop.
  */
 @Composable
-private fun LayerSlider(
+// internal, weil der Simple Mode denselben Regler benutzt - die
+// Vorschau soll sich in beiden Modi gleich bedienen lassen.
+internal fun LayerSlider(
     count: Int,
     low: Int,
     high: Int,

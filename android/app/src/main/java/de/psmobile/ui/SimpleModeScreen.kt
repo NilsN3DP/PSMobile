@@ -128,6 +128,19 @@ fun SimpleModeScreen(
     // umschaltbar. Man konnte ein Objekt also ziehen, aber weder drehen
     // noch skalieren, waehrend iOS genau das anbietet.
     var gizmo by remember { mutableStateOf(PsmViewport.Gizmo.NONE) }
+    // Die geschnittene Vorschau an Ort und Stelle, wie auf iOS.
+    //
+    // Der Knopf "Vorschau" in der Werkzeugleiste rief bisher dasselbe auf
+    // wie "G-Code": onStartSlice. Er versprach also etwas anderes, als er
+    // tat - eine Vorschau gab es im Simple Mode ueberhaupt nicht.
+    var previewMode by remember { mutableStateOf(false) }
+    var layerCount by remember { mutableStateOf(0) }
+    var layerLo by remember { mutableStateOf(0) }
+    var layerHi by remember { mutableStateOf(0) }
+    // Ob nach dem naechsten fertigen Schnitt die Vorschau aufgehen soll.
+    // Der Advanced Mode springt immer hinein; im Simple Mode nur, wenn man
+    // wirklich die Vorschau wollte und nicht bloss G-Code.
+    var nachDemSchnittZeigen by remember { mutableStateOf(false) }
     var zeigeVerlassenNachfrage by remember { mutableStateOf(false) }
     // Dieselbe Nachfrage wie im Advanced Mode - ein zweites Tippen auf
     // einen Modus oder die Startseite verwirft sonst stillschweigend
@@ -137,6 +150,71 @@ fun SimpleModeScreen(
     }
     val controller = remember { SceneController() }
     LaunchedEffect(controller) { onControllerReady(controller) }
+
+    // Nach einem fertigen Schnitt in die Vorschau - aber nur, wenn sie
+    // angefordert war.
+    LaunchedEffect(progress) {
+        if (progress is SlicerService.Progress.Done && nachDemSchnittZeigen) {
+            nachDemSchnittZeigen = false
+            // Wer die Vorschau angefordert hat, will sie sehen und nicht
+            // das Ergebnisblatt davor. Beim Weg ueber "G-Code" bleibt das
+            // Blatt wie gehabt stehen - dort ist es die Antwort.
+            service.dismissProgress()
+            controller.enterPreview { n ->
+                layerCount = n
+                layerLo = 0
+                layerHi = (n - 1).coerceAtLeast(0)
+                previewMode = n > 0
+            }
+        }
+    }
+
+    // Jede Aenderung am Bett macht das Ergebnis ungueltig, also zurueck in
+    // den Editor. Bewusst getrennt vom Fortschritt: haengen beide an einem
+    // LaunchedEffect, springt ein frisch geladenes Objekt sofort wieder in
+    // die Vorschau des vorherigen Schnitts und ist dann unsichtbar.
+    var gesehenerStand by remember { mutableStateOf(sceneRevision) }
+    LaunchedEffect(sceneRevision) {
+        if (sceneRevision != gesehenerStand) {
+            gesehenerStand = sceneRevision
+            if (previewMode) {
+                controller.enterEditor()
+                previewMode = false
+                layerCount = 0
+            }
+        }
+    }
+
+    // Vorschau oeffnen - und nur rechnen, wenn es sein muss.
+    val vorschauZeigen = {
+        if (previewMode) {
+            controller.enterEditor()
+            previewMode = false
+            layerCount = 0
+        } else if (progress is SlicerService.Progress.Done) {
+            // Das Ergebnis passt noch zur Szene, das Hinsehen kostet nichts.
+            controller.enterPreview { n ->
+                layerCount = n
+                layerLo = 0
+                layerHi = (n - 1).coerceAtLeast(0)
+                previewMode = n > 0
+            }
+        } else {
+            val gruende = SliceSummary.blockers(
+                objects = objects.size,
+                printer = presets.selectedPrinter,
+                filament = presets.selectedFilament,
+                print = presets.selectedPrint,
+            )
+            if (gruende.isEmpty()) {
+                nachDemSchnittZeigen = true
+                panel = SimplePanel.WORKSPACE
+                onStartSlice()
+            } else {
+                hinderungsgruende = gruende
+            }
+        }
+    }
     val placement = SimpleModeLayout.toolbarPlacement(
         configuration.screenWidthDp,
         configuration.screenHeightDp,
@@ -220,6 +298,8 @@ fun SimpleModeScreen(
                     }
                 },
                 onPanel = { panel = if (panel == it) SimplePanel.WORKSPACE else it },
+                onPreview = vorschauZeigen,
+                previewAn = previewMode,
                 onStartSlice = {
                     val gruende = SliceSummary.blockers(
                         objects = objects.size,
@@ -269,10 +349,27 @@ fun SimpleModeScreen(
         // Werkzeuge am rechten Rand, wie auf iOS. Rechts und nicht unten,
         // weil unten schon Rueckgaengig/Wiederholen und das Modelle-Blatt
         // liegen.
+        // Der Schichtregler gehoert zur Vorschau: ohne ihn sieht man nur
+        // die aeusserste Huelle und nie, was innen passiert.
+        if (previewMode && layerCount > 1) {
+            LayerSlider(
+                count = layerCount,
+                low = layerLo,
+                high = layerHi,
+                onChange = { lo, hi ->
+                    layerLo = lo; layerHi = hi
+                    controller.setLayerRange(lo, hi)
+                },
+                modifier = Modifier
+                    .align(Alignment.CenterStart)
+                    .padding(start = 12.dp, top = 12.dp, bottom = 96.dp),
+            )
+        }
         if (panel == SimplePanel.WORKSPACE) {
             SimpleWerkzeugSpalte(
                 gizmo = gizmo,
-                zeigeGriffe = selectedId != null,
+                // In der Vorschau gibt es keine Objekte zum Anfassen.
+                zeigeGriffe = selectedId != null && !previewMode,
                 onGizmo = { g ->
                     // Zweites Tippen auf dasselbe Werkzeug legt es wieder
                     // weg - sonst gibt es keinen Weg zurueck zum blossen
@@ -483,6 +580,8 @@ private fun SimpleToolbar(
     onToggleRemoteSlice: () -> Unit = {},
     onPanel: (SimplePanel) -> Unit,
     onStartSlice: () -> Unit,
+    onPreview: () -> Unit,
+    previewAn: Boolean = false,
 ) {
     val labels = SimpleModeState.toolbarLabels()
     val panels = listOf(SimplePanel.PROJECTS, SimplePanel.PRINTER, SimplePanel.MATERIAL, SimplePanel.SETTINGS)
@@ -502,7 +601,7 @@ private fun SimpleToolbar(
             )
         }
         Spacer(Modifier.weight(1f))
-        SimpleToolbarButton(label = labels[4], selected = false, width = buttonWidth, compact = compact, enabled = canPrint, onClick = onStartSlice)
+        SimpleToolbarButton(label = labels[4], selected = previewAn, width = buttonWidth, compact = compact, enabled = canPrint, onClick = onPreview)
         // Lokal/entfernt umschalten - siehe RemoteSliceScreen.kt fuer die
         // Einrichtung. Ohne eingerichteten Server fuehrt das Tippen erst
         // zur Einrichtung statt stumm auf einen leeren Host umzuschalten.
