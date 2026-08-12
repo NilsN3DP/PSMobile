@@ -102,6 +102,12 @@ fun AppSettingsScreen(
     // WorkflowStartScreen.kt, der beides schon richtig macht.
     val context = LocalContext.current
     var currentLanguage by remember { mutableStateOf(language) }
+    var zeigeSelbsttest by remember { mutableStateOf(false) }
+
+    if (zeigeSelbsttest) {
+        SelbsttestScreen(onClose = { zeigeSelbsttest = false }, modifier = modifier)
+        return
+    }
 
     Box(
         modifier.fillMaxSize().background(PrusaColors.Background),
@@ -192,6 +198,16 @@ fun AppSettingsScreen(
                 // AppSettingsView.swift. Kein Schalter, sondern Werkzeug,
                 // deshalb ganz unten und nicht zwischen den Vorlieben.
                 SectionHeader(t("Diagnostics", "Diagnose"))
+                ActionRow(
+                    title = t("Self-test", "Selbsttest"),
+                    why = t(
+                        "Runs loading, slicing, saving, painting and a load test on this " +
+                            "device, and writes a report.",
+                        "Prüft Laden, Schneiden, Sichern, Bemalen und eine Volllast auf " +
+                            "diesem Gerät und schreibt einen Bericht.",
+                    ),
+                    onClick = { zeigeSelbsttest = true },
+                )
                 ActionRow(
                     title = t("Share log", "Protokoll teilen"),
                     why = t(
