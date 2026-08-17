@@ -1427,6 +1427,35 @@ JNIEXPORT void JNICALL JNI_VP(nativeSetSelections)(
         values.size(), primary);
 }
 
+/* Sagt dem Viewport, dass gemalt wird.
+ *
+ * Ohne das bleibt paint_enabled falsch, und der Viewport zeichnet weder
+ * die Ueberlagerung noch den Pinselzeiger - die Bemalung landet im
+ * Modell, ist aber unsichtbar. Genau das war auf Android der Fall:
+ * gebunden waren nur psm_model_paint_brush und psm_model_clear_paint,
+ * also ausschliesslich die Modellseite. iOS ruft es seit langem. */
+JNIEXPORT void JNICALL JNI_VP(nativeSetPaintOptions)(
+    JNIEnv *, jclass, jlong h, jint enabled, jint tool,
+    jint mode, jint shape, jfloat radiusMm, jfloat fillAngleDeg,
+    jint splitTriangles)
+{
+    if (enabled == 0) {
+        psm_viewport_set_paint_options(
+            vp(h), 0, static_cast<psm_paint_tool>(0), nullptr);
+        return;
+    }
+    psm_paint_options o{};
+    o.version               = PSM_PAINT_OPTIONS_VERSION_1;
+    o.mode                  = static_cast<psm_paint_mode>(mode);
+    o.shape                 = static_cast<psm_paint_shape>(shape);
+    o.radius_mm             = radiusMm;
+    o.fill_angle_deg        = fillAngleDeg;
+    o.split_triangles       = splitTriangles;
+    o.has_previous_position = 0;
+    psm_viewport_set_paint_options(
+        vp(h), 1, static_cast<psm_paint_tool>(tool), &o);
+}
+
 JNIEXPORT jstring JNICALL JNI_VP(nativeSurfacePick)(
     JNIEnv *env, jclass, jlong h, jfloat x, jfloat y)
 {

@@ -347,6 +347,21 @@ private fun SlicerContent(
     var measureStart by remember { mutableStateOf<PsmViewport.SurfaceHit?>(null) }
     var measureText by remember { mutableStateOf<String?>(null) }
 
+    // Dem Viewport sagen, dass gemalt wird.
+    //
+    // Ohne das bleibt paint_enabled im Viewport falsch, und er zeichnet
+    // weder die bemalten Dreiecke noch den Pinselzeiger. Die Bemalung
+    // landete zwar im Modell - der Selbsttest belegt das -, war aber
+    // unsichtbar, und dann sieht es aus, als taete das Werkzeug nichts.
+    // iOS ruft das seit langem (PsmViewport.swift), Android gar nicht.
+    LaunchedEffect(surfaceMode) {
+        val malen = surfaceMode as? SurfaceToolMode.Paint
+        sceneController.setPaintOptions(
+            tool = malen?.tool,
+            radiusMm = malen?.radiusMm ?: 3f,
+        )
+    }
+
     // PrusaSlicer springt nach dem Slicen von selbst in die Vorschau.
     LaunchedEffect(progress) {
         if (progress is SlicerService.Progress.Done) {

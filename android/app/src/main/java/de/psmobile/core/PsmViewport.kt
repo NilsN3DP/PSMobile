@@ -30,6 +30,11 @@ class PsmViewport private constructor(private var handle: Long) {
         @JvmStatic private external fun nativeSetSelection(h: Long, id: Int)
         @JvmStatic private external fun nativeSetSelections(
             h: Long, ids: IntArray, primary: Int)
+        @JvmStatic private external fun nativeSetPaintOptions(
+            h: Long, enabled: Int, tool: Int, mode: Int, shape: Int,
+            radiusMm: Float, fillAngleDeg: Float, splitTriangles: Int,
+        )
+
         @JvmStatic private external fun nativeSurfacePick(
             h: Long, x: Float, y: Float): String?
         @JvmStatic private external fun nativeDragSelected(
@@ -86,6 +91,40 @@ class PsmViewport private constructor(private var handle: Long) {
     )
 
     /** Exakter Dreieckstreffer in Weltkoordinaten. */
+    /** Wie gemalt wird - Gegenstueck zu PsmCore.PaintTool. */
+    enum class PaintMode(val raw: Int) { BRUSH(0), SMART_FILL(1), BUCKET_FILL(2) }
+
+    /** Womit gemalt wird: Kreis auf der Oberflaeche oder Kugel durchs Netz. */
+    enum class PaintShape(val raw: Int) { CIRCLE(0), SPHERE(1) }
+
+    /**
+     * Schaltet die Maldarstellung ein oder aus.
+     *
+     * Der Viewport zeichnet die bemalten Dreiecke und den Pinselzeiger
+     * nur, solange das gesetzt ist. Ohne den Aufruf landet die Bemalung
+     * zwar im Modell, ist aber nicht zu sehen - und dann sieht es aus,
+     * als taete das Werkzeug nichts.
+     *
+     * @param tool null schaltet ab.
+     */
+    fun setPaintOptions(
+        tool: PsmCore.PaintTool?,
+        mode: PaintMode = PaintMode.BRUSH,
+        shape: PaintShape = PaintShape.CIRCLE,
+        radiusMm: Float = 3f,
+        fillAngleDeg: Float = 30f,
+        splitTriangles: Boolean = true,
+    ) {
+        if (tool == null) {
+            nativeSetPaintOptions(handle, 0, 0, 0, 0, 0f, 0f, 0)
+            return
+        }
+        nativeSetPaintOptions(
+            handle, 1, tool.raw, mode.raw, shape.raw,
+            radiusMm, fillAngleDeg, if (splitTriangles) 1 else 0,
+        )
+    }
+
     fun surfacePick(x: Float, y: Float): SurfaceHit? {
         val fields = nativeSurfacePick(handle, x, y)?.split('\t') ?: return null
         if (fields.size != 10) return null

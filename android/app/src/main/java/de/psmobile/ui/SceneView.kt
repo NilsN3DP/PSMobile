@@ -107,6 +107,18 @@ class SceneController {
     fun setGizmo(g: PsmViewport.Gizmo) = run { it.setGizmo(g) }
 
     /**
+     * Schaltet die Maldarstellung im Viewport.
+     *
+     * Muss ueber den GL-Thread wie setGizmo: der Viewport baut dabei
+     * seine Ueberlagerungsnetze neu.
+     */
+    fun setPaintOptions(
+        tool: PsmCore.PaintTool?,
+        mode: PsmViewport.PaintMode = PsmViewport.PaintMode.BRUSH,
+        radiusMm: Float = 3f,
+    ) = run { it.setPaintOptions(tool, mode = mode, radiusMm = radiusMm) }
+
+    /**
      * Momentaufnahme der aktuellen Ansicht - fuer die "Zuletzt"-Kacheln
      * auf der Startseite. Liest den GL-Framebuffer direkt aus, statt
      * einen eigenen Offscreen-Puffer anzulegen: die Ansicht steht ja
