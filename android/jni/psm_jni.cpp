@@ -771,6 +771,57 @@ JNIEXPORT jint JNICALL JNI_FN(nativeClearPaint)(
         sess(h), id, static_cast<psm_paint_tool>(tool));
 }
 
+/*
+ * Der volle Malweg ueber TriangleSelector: Pinsel, Smart Fill und
+ * Bucket Fill, Kreis oder Kugel, und beim Streichen die Kapsel zwischen
+ * zwei Treffern. nativePaintFacet daneben bleibt der alte Kurzweg auf
+ * Instanz 0, den der Selbsttest verwendet.
+ */
+JNIEXPORT jint JNICALL JNI_FN(nativePaintApply)(
+    JNIEnv *, jclass, jlong h, jint id,
+    jint instance, jint volume, jint facet,
+    jint tool, jint state,
+    jint mode, jint shape, jfloat radiusMm, jfloat fillAngleDeg,
+    jint splitTriangles,
+    jfloat hx, jfloat hy, jfloat hz,
+    jint hasPrevious, jfloat px, jfloat py, jfloat pz)
+{
+    if (instance < 0 || volume < 0 || facet < 0)
+        return PSM_ERR_INVALID_ARG;
+
+    psm_paint_options o{};
+    o.version               = PSM_PAINT_OPTIONS_VERSION_1;
+    o.mode                  = static_cast<psm_paint_mode>(mode);
+    o.shape                 = static_cast<psm_paint_shape>(shape);
+    o.radius_mm             = radiusMm;
+    o.fill_angle_deg        = fillAngleDeg;
+    o.split_triangles       = splitTriangles;
+    o.has_previous_position = hasPrevious;
+    o.hit_position[0]       = hx;
+    o.hit_position[1]       = hy;
+    o.hit_position[2]       = hz;
+    o.previous_position[0]  = px;
+    o.previous_position[1]  = py;
+    o.previous_position[2]  = pz;
+
+    return psm_model_paint_apply(
+        sess(h), id,
+        static_cast<size_t>(instance),
+        static_cast<size_t>(volume),
+        static_cast<size_t>(facet),
+        static_cast<psm_paint_tool>(tool), state, &o);
+}
+
+/* Wie viele Facetten dieses Werkzeug markiert hat - ohne die Zahl ist
+   nicht zu sehen, ob ein Strich ueberhaupt etwas bewirkt hat. */
+JNIEXPORT jint JNICALL JNI_FN(nativePaintCount)(
+    JNIEnv *, jclass, jlong h, jint id, jint tool)
+{
+    return static_cast<jint>(psm_model_paint_count(
+        sess(h), id, static_cast<psm_paint_tool>(tool)));
+}
+
+
 JNIEXPORT jint JNICALL JNI_FN(nativeLayerProfileSet)(
     JNIEnv *env, jclass, jlong h, jint id, jdoubleArray values)
 {

@@ -26,12 +26,15 @@ import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -46,6 +49,7 @@ import androidx.compose.ui.window.Dialog
 import de.psmobile.core.PsmCore
 import de.psmobile.slicing.SlicerService
 import de.psmobile.ui.theme.PrusaColors
+import kotlin.math.roundToInt
 
 internal sealed interface SurfaceToolMode {
     data object Flatten : SurfaceToolMode
@@ -53,8 +57,25 @@ internal sealed interface SurfaceToolMode {
     data class Paint(
         val tool: PsmCore.PaintTool,
         val state: Int,
-        val radiusMm: Float = 3f,
-    ) : SurfaceToolMode
+        val radiusMm: Float = 5f,
+        val mode: PsmCore.PaintMode = PsmCore.PaintMode.BRUSH,
+        val shape: PsmCore.PaintShape = PsmCore.PaintShape.SPHERE,
+        val fillAngleDeg: Float = 30f,
+    ) : SurfaceToolMode {
+        /**
+         * Derselbe Optionswert geht an den Kern und an den Viewport -
+         * der Zeiger auf dem Modell zeigt damit genau das, was der
+         * naechste Strich tut.
+         */
+        fun toOptions(): PsmCore.PaintOptions = PsmCore.PaintOptions(
+            tool = tool,
+            state = state,
+            mode = mode,
+            shape = shape,
+            radiusMm = radiusMm,
+            fillAngleDeg = fillAngleDeg,
+        ).normalizedForTool()
+    }
 }
 
 /** Text that tells the user what the next touch on the model will do. */
@@ -324,11 +345,8 @@ internal fun GeometryTools(
             (surfaceMode as? SurfaceToolMode.Paint)?.tool ==
                 PsmCore.PaintTool.SUPPORT,
             {
-                onSurfaceMode(
-                    SurfaceToolMode.Paint(
-                        PsmCore.PaintTool.SUPPORT, 1, brushRadius
-                    )
-                )
+                onSurfaceMode(malwerkzeug(surfaceMode, brushRadius,
+                    PsmCore.PaintTool.SUPPORT, 1))
             },
         )
         ToolButtonRow(
@@ -338,20 +356,16 @@ internal fun GeometryTools(
                 it.tool == PsmCore.PaintTool.SUPPORT && it.state == 2
             } == true,
             {
-                onSurfaceMode(
-                    SurfaceToolMode.Paint(
-                        PsmCore.PaintTool.SUPPORT, 2, brushRadius
-                    )
-                )
+                onSurfaceMode(malwerkzeug(surfaceMode, brushRadius,
+                    PsmCore.PaintTool.SUPPORT, 2))
             },
             "Naht malen",
             geometryToolDescription("Naht malen"),
             (surfaceMode as? SurfaceToolMode.Paint)?.tool ==
                 PsmCore.PaintTool.SEAM,
             {
-                onSurfaceMode(
-                    SurfaceToolMode.Paint(PsmCore.PaintTool.SEAM, 1, brushRadius)
-                )
+                onSurfaceMode(malwerkzeug(surfaceMode, brushRadius,
+                    PsmCore.PaintTool.SEAM, 1))
             },
         )
         ToolButtonRow(
@@ -360,9 +374,8 @@ internal fun GeometryTools(
             (surfaceMode as? SurfaceToolMode.Paint)?.tool ==
                 PsmCore.PaintTool.FUZZY,
             {
-                onSurfaceMode(
-                    SurfaceToolMode.Paint(PsmCore.PaintTool.FUZZY, 1, brushRadius)
-                )
+                onSurfaceMode(malwerkzeug(surfaceMode, brushRadius,
+                    PsmCore.PaintTool.FUZZY, 1))
             },
             "Bemalung beenden",
             geometryToolDescription("Bemalung beenden"),
@@ -370,25 +383,98 @@ internal fun GeometryTools(
             { onSurfaceMode(null) },
         )
 
-        Text(PsUi.appText("Brush radius · mm", "Pinselradius · mm"), color = PrusaColors.TextMuted, fontSize = 12.sp)
-        Row(
-            Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            listOf(1f, 3f, 6f, 12f).forEach { radius ->
-                FilterChip(
-                    selected = brushRadius == radius,
-                    onClick = {
-                        brushRadius = radius
-                        (surfaceMode as? SurfaceToolMode.Paint)?.let {
-                            onSurfaceMode(it.copy(radiusMm = radius))
+        // Die Feineinstellungen gehoeren zum aktiven Werkzeug. Ohne
+        // aktives Werkzeug haetten sie nichts, worauf sie wirken.
+        (surfaceMode as? SurfaceToolMode.Paint)?.let { malen ->
+            val optionen = malen.toOptions()
+
+            PaintOptionRow(PsUi.appText("State", "Zustand")) {
+                if (malen.tool == PsmCore.PaintTool.MMU) {
+                    PaintChoice(PsUi.appText("Erase", "Radieren"), malen.state == 0) {
+                        onSurfaceMode(malen.copy(state = 0))
+                    }
+                    extruderOptions.forEach { extruder ->
+                        PaintChoice(extruder.label, malen.state == extruder.id) {
+                            onSurfaceMode(malen.copy(state = extruder.id))
                         }
-                    },
-                    label = { Text("${radius.toInt()} mm") },
-                    modifier = Modifier.height(48.dp),
-                    colors = prusaFilterChipColors(),
-                    border = prusaFilterChipBorder(brushRadius == radius),
+                    }
+                } else {
+                    PaintChoice(PsUi.appText("Enforce", "Verstärken"), malen.state == 1) {
+                        onSurfaceMode(malen.copy(state = 1))
+                    }
+                    if (malen.tool == PsmCore.PaintTool.SUPPORT) {
+                        PaintChoice(PsUi.appText("Block", "Blockieren"), malen.state == 2) {
+                            onSurfaceMode(malen.copy(state = 2))
+                        }
+                    }
+                    PaintChoice(PsUi.appText("Erase", "Radieren"), malen.state == 0) {
+                        onSurfaceMode(malen.copy(state = 0))
+                    }
+                }
+            }
+
+            // Nicht jedes Werkzeug kann jeden Modus: Naht und Fuzzy
+            // kennen im Kern nur den Pinsel, den Eimer gibt es nur fuer
+            // MMU. Ein Knopf, der nichts tut, waere schlimmer als keiner.
+            if (optionen.supportedModes.size > 1) {
+                PaintOptionRow(PsUi.appText("Mode", "Modus")) {
+                    optionen.supportedModes.forEach { modus ->
+                        PaintChoice(paintModeName(modus), optionen.mode == modus) {
+                            onSurfaceMode(malen.copy(mode = modus))
+                        }
+                    }
+                }
+            }
+
+            if (optionen.mode == PsmCore.PaintMode.BRUSH) {
+                PaintOptionRow(PsUi.appText("Shape", "Form")) {
+                    PaintChoice(
+                        PsUi.appText("Circle", "Kreis"),
+                        malen.shape == PsmCore.PaintShape.CIRCLE,
+                    ) { onSurfaceMode(malen.copy(shape = PsmCore.PaintShape.CIRCLE)) }
+                    PaintChoice(
+                        PsUi.appText("Sphere", "Kugel"),
+                        malen.shape == PsmCore.PaintShape.SPHERE,
+                    ) { onSurfaceMode(malen.copy(shape = PsmCore.PaintShape.SPHERE)) }
+                }
+                PaintSlider(
+                    label = PsUi.appText("Size", "Größe"),
+                    value = malen.radiusMm,
+                    range = 1f..20f,
+                    readout = "${malen.radiusMm.roundToInt()} mm",
+                ) {
+                    brushRadius = it
+                    onSurfaceMode(malen.copy(radiusMm = it))
+                }
+            } else {
+                PaintSlider(
+                    label = PsUi.appText("Angle", "Winkel"),
+                    value = malen.fillAngleDeg,
+                    range = 0f..90f,
+                    readout = "${malen.fillAngleDeg.roundToInt()}°",
+                ) { onSurfaceMode(malen.copy(fillAngleDeg = it)) }
+            }
+
+            // Ohne diese Zahl ist nicht zu sehen, ob ein Strich
+            // ueberhaupt etwas bewirkt hat.
+            val revision by service.paintRevision.collectAsState()
+            val markiert = remember(selected.id, malen.tool, revision) {
+                service.paintCount(selected.id, malen.tool)
+            }
+            Row(
+                Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    "${PsUi.appText("Marked", "Markiert")}: $markiert",
+                    color = PrusaColors.TextMuted,
+                    fontSize = 12.sp,
+                    modifier = Modifier.weight(1f),
                 )
+                TextButton(
+                    onClick = { service.clearPaint(selected.id, malen.tool) },
+                    modifier = Modifier.height(48.dp),
+                ) { Text(PsUi.appText("Clear", "Löschen"), color = PrusaColors.Danger) }
             }
         }
 
@@ -404,36 +490,29 @@ internal fun GeometryTools(
             ) {
                 extruderOptions.forEach { extruder ->
                     val state = extruder.id
+                    // Gleichheit ueber Werkzeug und Zustand, nicht ueber
+                    // den ganzen Optionswert: Radius, Modus und Form
+                    // duerfen die Auswahl nicht mitbestimmen.
+                    val aktiv = (surfaceMode as? SurfaceToolMode.Paint)?.let {
+                        it.tool == PsmCore.PaintTool.MMU && it.state == state
+                    } == true
                     FilterChip(
-                        selected = surfaceMode ==
-                            SurfaceToolMode.Paint(PsmCore.PaintTool.MMU, state),
+                        selected = aktiv,
                         onClick = {
                             onSurfaceMode(
-                                SurfaceToolMode.Paint(
-                                    PsmCore.PaintTool.MMU, state, brushRadius
-                                )
+                                (surfaceMode as? SurfaceToolMode.Paint)
+                                    ?.copy(tool = PsmCore.PaintTool.MMU, state = state)
+                                    ?: SurfaceToolMode.Paint(
+                                        PsmCore.PaintTool.MMU, state, brushRadius
+                                    )
                             )
                         },
                         label = { Text(extruder.label) },
                         modifier = Modifier.height(48.dp),
                         colors = prusaFilterChipColors(),
-                        border = prusaFilterChipBorder(
-                            surfaceMode == SurfaceToolMode.Paint(PsmCore.PaintTool.MMU, state),
-                        ),
+                        border = prusaFilterChipBorder(aktiv),
                     )
                 }
-            }
-        }
-
-        Row(
-            Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-        ) {
-            PsmCore.PaintTool.entries.forEach { tool ->
-                TextButton(
-                    onClick = { service.clearPaint(selected.id, tool) },
-                    modifier = Modifier.height(48.dp),
-                ) { Text("${tool.displayName()} ${PsUi.appText("clear", "löschen")}", fontSize = 12.sp) }
             }
         }
         measureText?.let {
@@ -1237,3 +1316,88 @@ private fun prusaFilterChipBorder(selected: Boolean) = FilterChipDefaults.filter
     borderColor = PrusaColors.Divider,
     selectedBorderColor = PrusaColors.Orange,
 )
+
+/**
+ * Wechselt das Malwerkzeug und behaelt dabei, was der Nutzer vorher
+ * eingestellt hat. Ein Werkzeugwechsel soll nicht Radius, Form und
+ * Modus mit zuruecksetzen; nur was zum neuen Werkzeug nicht passt,
+ * raeumt normalizedForTool weg.
+ */
+private fun malwerkzeug(
+    aktuell: SurfaceToolMode?,
+    radius: Float,
+    tool: PsmCore.PaintTool,
+    state: Int,
+): SurfaceToolMode.Paint {
+    val vorher = aktuell as? SurfaceToolMode.Paint
+        ?: return SurfaceToolMode.Paint(tool, state, radius)
+    val gewaehlt = vorher.copy(tool = tool, state = state)
+    val bereinigt = gewaehlt.toOptions()
+    return gewaehlt.copy(mode = bereinigt.mode, state = bereinigt.state)
+}
+
+private fun paintModeName(mode: PsmCore.PaintMode): String = when (mode) {
+    PsmCore.PaintMode.BRUSH -> PsUi.appText("Brush", "Pinsel")
+    PsmCore.PaintMode.SMART_FILL -> "Smart Fill"
+    PsmCore.PaintMode.BUCKET_FILL -> PsUi.appText("Bucket", "Eimer")
+}
+
+/** Eine beschriftete Zeile aus Auswahlknoepfen, waagerecht scrollbar. */
+@Composable
+private fun PaintOptionRow(label: String, inhalt: @Composable () -> Unit) {
+    Text(label, color = PrusaColors.TextMuted, fontSize = 12.sp)
+    Row(
+        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) { inhalt() }
+}
+
+@Composable
+private fun PaintChoice(label: String, aktiv: Boolean, onClick: () -> Unit) {
+    FilterChip(
+        selected = aktiv,
+        onClick = onClick,
+        label = { Text(label) },
+        modifier = Modifier.height(48.dp),
+        colors = prusaFilterChipColors(),
+        border = prusaFilterChipBorder(aktiv),
+    )
+}
+
+@Composable
+private fun PaintSlider(
+    label: String,
+    value: Float,
+    range: ClosedFloatingPointRange<Float>,
+    readout: String,
+    onChange: (Float) -> Unit,
+) {
+    Row(
+        Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Text(
+            label,
+            color = PrusaColors.TextMuted,
+            fontSize = 12.sp,
+            modifier = Modifier.width(56.dp),
+        )
+        Slider(
+            value = value,
+            onValueChange = onChange,
+            valueRange = range,
+            colors = SliderDefaults.colors(
+                thumbColor = PrusaColors.Orange,
+                activeTrackColor = PrusaColors.Orange,
+            ),
+            modifier = Modifier.weight(1f),
+        )
+        Text(
+            readout,
+            color = PrusaColors.TextPrimary,
+            fontSize = 12.sp,
+            modifier = Modifier.width(56.dp),
+        )
+    }
+}

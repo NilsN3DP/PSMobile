@@ -285,6 +285,14 @@ class SlicerService : Service() {
 
     private val _toolMessage = MutableStateFlow<String?>(null)
     val toolMessage: StateFlow<String?> = _toolMessage.asStateFlow()
+
+    /*
+     * Zaehlt jeden Malvorgang hoch. Die Bedienoberflaeche liest daran ab,
+     * wann sie die Zahl der markierten Facetten neu holen muss - die
+     * Objektliste selbst aendert sich beim Bemalen nicht.
+     */
+    private val _paintRevision = MutableStateFlow(0)
+    val paintRevision: StateFlow<Int> = _paintRevision.asStateFlow()
     private val heavyMutationActive = AtomicBoolean(false)
 
     fun setProjectKey(key: String?) {
@@ -1474,20 +1482,65 @@ class SlicerService : Service() {
             it.layOnFacet(hit.objectId, hit.volumeIndex, hit.facetIndex)
         }
 
-    fun paintFacet(
+    /**
+     * Ein Tupfer eines Malstrichs.
+     *
+     * Bewusst nicht ueber withObjectAsync: das ist der Weg fuer schwere
+     * Netzumbauten und laesst nur eine Operation zugleich zu - beim
+     * Streichen kaeme ab dem zweiten Tupfer nur noch "Bitte warten", und
+     * jeder Tupfer waere ein eigener Rueckgaengig-Schritt. Der Aufruf
+     * laeuft synchron auf dem GL-Thread innerhalb der Verlaufsklammer,
+     * die SceneView um die ganze Geste legt; damit ist ein Strich genau
+     * ein Rueckgaengig-Schritt.
+     *
+     * @param previous voriger Treffer desselben Instanz-Volumens; der
+     *                 Kern malt dann die Kapsel dazwischen.
+     */
+    fun paintStroke(
         hit: de.psmobile.core.PsmViewport.SurfaceHit,
-        tool: PsmCore.PaintTool,
-        state: Int,
-        radiusMm: Float,
-    ) = withObjectAsync(hit.objectId, SimpleModeState.text("Paint face", "Fläche bemalen")) {
-        it.paintFacet(
-            hit.objectId, hit.volumeIndex, hit.facetIndex,
-            tool, state, radiusMm,
-        )
+        previous: de.psmobile.core.PsmViewport.SurfaceHit?,
+        options: PsmCore.PaintOptions,
+    ) {
+        val c = core ?: return
+        if (options.tool == null) return
+        /*
+         * Eine Kapsel verbindet nur Treffer desselben Instanz-Volumens.
+         * Beim Sprung auf eine andere Kopie oder ein anderes Volumen
+         * beginnt ein neuer Tupfer - deren Weltpunkt liesse sich mit der
+         * aktuellen Instanzmatrix nicht zurueckrechnen.
+         */
+        val voriger = previous?.takeIf {
+            it.objectId == hit.objectId &&
+                it.instanceIndex == hit.instanceIndex &&
+                it.volumeIndex == hit.volumeIndex
+        }
+        runCatching {
+            c.paintApply(
+                hit.objectId, hit.instanceIndex, hit.volumeIndex, hit.facetIndex,
+                floatArrayOf(hit.x, hit.y, hit.z),
+                voriger?.let { floatArrayOf(it.x, it.y, it.z) },
+                options,
+            )
+        }.onFailure {
+            Log.w(TAG, "Fläche bemalen: ${it.message}")
+        }.onSuccess {
+            // Nur das Ergebnis entwerten, nicht die Objektliste neu
+            // lesen: beim Streichen kaeme sonst je Beruehrung ein
+            // vollstaendiger Durchlauf.
+            invalidateSliceResult()
+            _paintRevision.value += 1
+        }
     }
 
-    fun clearPaint(id: Int, tool: PsmCore.PaintTool) =
+    /** Zahl der markierten Facetten - ohne sie ist ein Strich nicht nachweisbar. */
+    fun paintCount(id: Int, tool: PsmCore.PaintTool): Int =
+        core?.runCatching { paintCount(id, tool) }?.getOrNull() ?: 0
+
+
+    fun clearPaint(id: Int, tool: PsmCore.PaintTool) {
         withObject(id, SimpleModeState.text("Clear painting", "Bemalung löschen")) { it.clearPaint(id, tool) }
+        _paintRevision.value += 1
+    }
 
     fun layerProfile(id: Int): List<Pair<Double, Double>> =
         core?.layerProfile(id).orEmpty()

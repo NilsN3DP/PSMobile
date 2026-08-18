@@ -123,6 +123,14 @@ class PsmCore private constructor(private var handle: Long) : Closeable {
         @JvmStatic private external fun nativePaintFacet(
             h: Long, id: Int, volume: Int, facet: Int,
             tool: Int, state: Int, radiusMm: Float): Int
+        @JvmStatic private external fun nativePaintApply(
+            h: Long, id: Int, instance: Int, volume: Int, facet: Int,
+            tool: Int, state: Int,
+            mode: Int, shape: Int, radiusMm: Float, fillAngleDeg: Float,
+            splitTriangles: Int,
+            hx: Float, hy: Float, hz: Float,
+            hasPrevious: Int, px: Float, py: Float, pz: Float): Int
+        @JvmStatic private external fun nativePaintCount(h: Long, id: Int, tool: Int): Int
         @JvmStatic private external fun nativeClearPaint(h: Long, id: Int, tool: Int): Int
         @JvmStatic private external fun nativeLayerProfile(h: Long, id: Int): DoubleArray?
         @JvmStatic private external fun nativeLayerProfileSet(
@@ -585,6 +593,50 @@ class PsmCore private constructor(private var handle: Long) : Closeable {
         SUPPORT(0), SEAM(1), FUZZY(2), MMU(3)
     }
 
+    /** Wie gemalt wird. Werte aus dem C-ABI. */
+    enum class PaintMode(val raw: Int) { BRUSH(0), SMART_FILL(1), BUCKET_FILL(2) }
+
+    /** Womit gemalt wird: Kreis auf der Oberfläche oder Kugel durchs Netz. */
+    enum class PaintShape(val raw: Int) { CIRCLE(0), SPHERE(1) }
+
+    /**
+     * Ein einziger Optionszustand für Bedienung, Kernaufruf und Viewport
+     * - genau wie auf iOS. Markierte Facetten werden nirgends gespiegelt
+     * oder nachgerechnet.
+     */
+    data class PaintOptions(
+        val tool: PaintTool? = null,
+        val state: Int = 1,
+        val mode: PaintMode = PaintMode.BRUSH,
+        val shape: PaintShape = PaintShape.SPHERE,
+        val radiusMm: Float = 5f,
+        val fillAngleDeg: Float = 30f,
+        val splitTriangles: Boolean = true,
+    ) {
+        /**
+         * Nicht jedes Werkzeug kann jeden Modus: Naht und Fuzzy kennen
+         * im Kern nur den Pinsel, Bucket Fill gibt es nur für MMU.
+         */
+        val supportedModes: List<PaintMode>
+            get() = when (tool) {
+                PaintTool.SUPPORT -> listOf(PaintMode.BRUSH, PaintMode.SMART_FILL)
+                PaintTool.SEAM, PaintTool.FUZZY -> listOf(PaintMode.BRUSH)
+                PaintTool.MMU ->
+                    listOf(PaintMode.BRUSH, PaintMode.SMART_FILL, PaintMode.BUCKET_FILL)
+                null -> emptyList()
+            }
+
+        /** Räumt Modus und Zustand auf, wenn das Werkzeug gewechselt hat. */
+        fun normalizedForTool(): PaintOptions {
+            var result = this
+            if (tool != null && mode !in supportedModes)
+                result = result.copy(mode = PaintMode.BRUSH)
+            if (tool != PaintTool.MMU && result.state > 2)
+                result = result.copy(state = 1)
+            return result
+        }
+    }
+
     fun splitObjects(id: Int): IntArray =
         nativeSplitObjects(requireHandle(), id)
             ?: throw PsmException("In Objekte teilen fehlgeschlagen: ${lastError()}")
@@ -701,6 +753,42 @@ class PsmCore private constructor(private var handle: Long) : Closeable {
             ),
             "Fläche bemalen",
         )
+
+    /**
+     * Der volle Malweg. Liegt ein voriger Treffer desselben
+     * Instanz-Volumens vor, malt der Kern die Kapsel dazwischen - erst
+     * das macht aus einer Folge von Tupfern einen durchgehenden Strich.
+     */
+    fun paintApply(
+        id: Int,
+        instance: Int,
+        volume: Int,
+        facet: Int,
+        hit: FloatArray,
+        previous: FloatArray?,
+        options: PaintOptions,
+    ) {
+        val tool = options.tool ?: return
+        check(
+            nativePaintApply(
+                requireHandle(), id, instance, volume, facet,
+                tool.raw, options.state,
+                options.mode.raw, options.shape.raw,
+                options.radiusMm, options.fillAngleDeg,
+                if (options.splitTriangles) 1 else 0,
+                hit[0], hit[1], hit[2],
+                if (previous == null) 0 else 1,
+                previous?.get(0) ?: 0f,
+                previous?.get(1) ?: 0f,
+                previous?.get(2) ?: 0f,
+            ),
+            "Fläche bemalen",
+        )
+    }
+
+    /** Zahl der mit diesem Werkzeug markierten Facetten. */
+    fun paintCount(id: Int, tool: PaintTool): Int =
+        nativePaintCount(requireHandle(), id, tool.raw)
 
     fun clearPaint(id: Int, tool: PaintTool) =
         check(nativeClearPaint(requireHandle(), id, tool.raw), "Bemalung löschen")

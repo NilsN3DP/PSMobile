@@ -43,6 +43,13 @@ import kotlin.math.hypot
  */
 private const val HANDLE_RADIUS_PX = 56f
 
+/*
+ * Mindestabstand zweier Tupfer eines Malstrichs in Pixeln. Gross genug,
+ * dass der Kern nicht dieselbe Stelle mehrfach durchrechnet, klein genug,
+ * dass die Kapseln zwischen den Tupfern eine durchgehende Spur ergeben.
+ */
+private const val TUPFER_ABSTAND_PX = 8f
+
 class SceneController {
     internal var view: GLSurfaceView? = null
     internal var holder: ViewportHolder? = null
@@ -112,11 +119,8 @@ class SceneController {
      * Muss ueber den GL-Thread wie setGizmo: der Viewport baut dabei
      * seine Ueberlagerungsnetze neu.
      */
-    fun setPaintOptions(
-        tool: PsmCore.PaintTool?,
-        mode: PsmViewport.PaintMode = PsmViewport.PaintMode.BRUSH,
-        radiusMm: Float = 3f,
-    ) = run { it.setPaintOptions(tool, mode = mode, radiusMm = radiusMm) }
+    fun setPaintOptions(options: PsmCore.PaintOptions) =
+        run { it.setPaintOptions(options) }
 
     /**
      * Momentaufnahme der aktuellen Ansicht - fuer die "Zuletzt"-Kacheln
@@ -163,6 +167,14 @@ fun SceneView(
     selectedIds: Set<Int> = selectedId?.let { setOf(it) } ?: emptySet(),
     onSelect: (Int) -> Unit,
     onSurfaceTap: ((PsmViewport.SurfaceHit) -> Unit)? = null,
+    /*
+     * Malen ist kein Tippen: der Rueckruf kommt beim Aufsetzen und dann
+     * fuer jeden weiteren Tupfer entlang des Fingerwegs, mit dem vorigen
+     * Treffer als zweitem Wert. Er laeuft auf dem GL-Thread, damit
+     * Auswahl, Malaufruf und der umschliessende Verlaufsschritt in
+     * derselben Reihenfolge passieren wie sie ausgeloest wurden.
+     */
+    onSurfaceStroke: ((PsmViewport.SurfaceHit, PsmViewport.SurfaceHit?) -> Unit)? = null,
     invalidateKey: Any,
     controller: SceneController,
     inputEnabled: Boolean = true,
@@ -194,6 +206,7 @@ fun SceneView(
 
             view.selectedId = selectedId ?: -1
             view.surfaceTap = onSurfaceTap
+            view.surfaceStroke = onSurfaceStroke
             // Ein Compose-Overlay liegt visuell ueber GLSurfaceView, die
             // native View kann Beruehrungen aber trotzdem zuerst erhalten.
             // In diesem Zustand darf sie sie nicht konsumieren.
@@ -253,6 +266,13 @@ private class SceneGLView(
     @Volatile private var dragObject = false
     @Volatile var selectedId = -1
     @Volatile var surfaceTap: ((PsmViewport.SurfaceHit) -> Unit)? = null
+    @Volatile var surfaceStroke:
+        ((PsmViewport.SurfaceHit, PsmViewport.SurfaceHit?) -> Unit)? = null
+    /* Laeuft die aktuelle Geste als Malstrich? Wird beim Aufsetzen entschieden. */
+    @Volatile private var malstrich = false
+    private var letzterTupferX = 0f
+    private var letzterTupferY = 0f
+    @Volatile private var letzterMaltreffer: PsmViewport.SurfaceHit? = null
     @Volatile var inputEnabled = true
     @Volatile var onBlockedInput: (() -> Unit)? = null
     /*
@@ -309,12 +329,32 @@ private class SceneGLView(
                 pointers = 1; moved = false
                 downTime = System.currentTimeMillis()
                 val x = event.x; val y = event.y
+                letzterTupferX = x; letzterTupferY = y
+                letzterMaltreffer = null
                 queueEvent {
                     // Alle MOVE-Ereignisse bis ACTION_UP sind genau ein
                     // Undo-Schritt. Eine reine Kamerageste erzeugt keinen
                     // Snapshot, weil der Core erst bei einer Modelländerung
                     // tatsächlich einen Checkpoint anlegt.
                     core.beginHistory("Touch-Geste")
+
+                    // Ein aktives Malwerkzeug hat Vorrang vor allem
+                    // anderen: keine Griffe, kein Verschieben, keine
+                    // Kameradrehung. Wer malt, will malen.
+                    val stroke = surfaceStroke
+                    if (stroke != null && vp.mode == PsmViewport.Mode.EDITOR) {
+                        gizmoAxis = -1
+                        dragObject = false
+                        malstrich = true
+                        vp.surfacePick(x, y)?.let { hit ->
+                            letzterMaltreffer = hit
+                            stroke(hit, null)
+                        }
+                        requestRender()
+                        return@queueEvent
+                    }
+                    malstrich = false
+
                     // Zuerst die Griffe: sie liegen ueber dem Objekt und
                     // haben Vorrang vor Auswahl und Kameradrehung.
                     gizmoAxis =
@@ -366,6 +406,30 @@ private class SceneGLView(
                 } else {
                     val dx = event.x - lastX
                     val dy = event.y - lastY
+                    if (malstrich) {
+                        // Beim Streichen zaehlt nicht jedes Ereignis,
+                        // sondern ein Mindestabstand: sonst rechnet der
+                        // Kern denselben Tupfer bei 120 Hz vielfach nach.
+                        moved = true
+                        val wx = event.x - letzterTupferX
+                        val wy = event.y - letzterTupferY
+                        if (wx * wx + wy * wy >= TUPFER_ABSTAND_PX * TUPFER_ABSTAND_PX) {
+                            letzterTupferX = event.x; letzterTupferY = event.y
+                            val px = event.x; val py = event.y
+                            queueEvent {
+                                val stroke = surfaceStroke
+                                if (stroke != null) {
+                                    vp.surfacePick(px, py)?.let { hit ->
+                                        stroke(hit, letzterMaltreffer)
+                                        letzterMaltreffer = hit
+                                    }
+                                }
+                            }
+                            requestRender()
+                        }
+                        lastX = event.x; lastY = event.y
+                        return true
+                    }
                     if (abs(dx) > 1f || abs(dy) > 1f) {
                         moved = true
                         val fx = lastX; val fy = lastY
@@ -396,7 +460,13 @@ private class SceneGLView(
 
             MotionEvent.ACTION_UP -> {
                 val quick = System.currentTimeMillis() - downTime < 250
-                if (!moved && quick) {
+                // Beim Malen ist beim Aufsetzen schon getupft worden;
+                // ein zweiter Tupfer an derselben Stelle waere nur
+                // doppelte Arbeit, und ausgewaehlt wird hier nichts.
+                if (malstrich) {
+                    malstrich = false
+                    letzterMaltreffer = null
+                } else if (!moved && quick) {
                     val x = event.x; val y = event.y
                     queueEvent {
                         if (vp.mode == PsmViewport.Mode.EDITOR) {
@@ -428,6 +498,8 @@ private class SceneGLView(
             MotionEvent.ACTION_CANCEL -> {
                 pointers = 0
                 gizmoAxis = -1
+                malstrich = false
+                letzterMaltreffer = null
                 queueEvent { core.endHistory() }
             }
         }

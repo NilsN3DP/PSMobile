@@ -355,10 +355,9 @@ private fun SlicerContent(
     // unsichtbar, und dann sieht es aus, als taete das Werkzeug nichts.
     // iOS ruft das seit langem (PsmViewport.swift), Android gar nicht.
     LaunchedEffect(surfaceMode) {
-        val malen = surfaceMode as? SurfaceToolMode.Paint
         sceneController.setPaintOptions(
-            tool = malen?.tool,
-            radiusMm = malen?.radiusMm ?: 3f,
+            (surfaceMode as? SurfaceToolMode.Paint)?.toOptions()
+                ?: PsmCore.PaintOptions(),
         )
     }
 
@@ -516,7 +515,12 @@ private fun SlicerContent(
                             selectedId = id.takeIf { it >= 0 }
                             selectedIds = selectedId?.let { setOf(it) } ?: emptySet()
                         },
-                        onSurfaceTap = surfaceMode?.let { activeTool ->
+                        // Ein aktives Malwerkzeug geht nicht ueber das
+                        // Tippen: sonst waere der erste Tupfer eines
+                        // Strichs zweimal gesetzt.
+                        onSurfaceTap = surfaceMode
+                            ?.takeIf { it !is SurfaceToolMode.Paint }
+                            ?.let { activeTool ->
                             { hit ->
                                 when (activeTool) {
                                     SurfaceToolMode.Flatten -> {
@@ -539,14 +543,20 @@ private fun SlicerContent(
                                             measureStart = null
                                         }
                                     }
-                                    is SurfaceToolMode.Paint ->
-                                        service.paintFacet(
-                                            hit, activeTool.tool,
-                                            activeTool.state, activeTool.radiusMm,
-                                        )
+                                    // Gemalt wird ueber onSurfaceStroke:
+                                    // ein Strich ist mehr als ein Tippen,
+                                    // und der Weg dorthin ist ein anderer.
+                                    is SurfaceToolMode.Paint -> Unit
                                 }
                             }
                         },
+                        onSurfaceStroke = (surfaceMode as? SurfaceToolMode.Paint)
+                            ?.toOptions()
+                            ?.let { optionen ->
+                                { hit, vorher ->
+                                    service.paintStroke(hit, vorher, optionen)
+                                }
+                            },
                         invalidateKey = sceneRevision,
                         controller = sceneController,
                         modifier = Modifier.fillMaxSize(),
