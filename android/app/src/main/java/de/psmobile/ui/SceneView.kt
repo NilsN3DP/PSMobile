@@ -349,6 +349,10 @@ private class SceneGLView(
                         vp.surfacePick(x, y)?.let { hit ->
                             letzterMaltreffer = hit
                             stroke(hit, null)
+                            // Ohne das baut der Viewport seine
+                            // Ueberlagerungsnetze nicht neu: die Bemalung
+                            // stuende im Modell, waere aber nicht zu sehen.
+                            vp.invalidate()
                         }
                         requestRender()
                         return@queueEvent
@@ -422,6 +426,7 @@ private class SceneGLView(
                                     vp.surfacePick(px, py)?.let { hit ->
                                         stroke(hit, letzterMaltreffer)
                                         letzterMaltreffer = hit
+                                        vp.invalidate()
                                     }
                                 }
                             }
