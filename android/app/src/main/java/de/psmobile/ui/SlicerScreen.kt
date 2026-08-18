@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -100,6 +101,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.zIndex
 import de.psmobile.core.PsmViewport
 import de.psmobile.core.PsmCore
+import de.psmobile.shared.rules.AppSettings
 import de.psmobile.shared.rules.BedInput
 import de.psmobile.shared.rules.BedStripContract
 import de.psmobile.slicing.SlicerService
@@ -321,6 +323,26 @@ private fun SlicerContent(
     LaunchedEffect(activeBed) {
         selectedId = null
         selectedIds = emptySet()
+    }
+
+    /*
+     * Alle Betten raeumlich versetzt zeigen. Erst damit gibt es
+     * ueberhaupt ein "anderes Bett", auf das sich ein Objekt ziehen
+     * laesst - und der Bettwechsel beim Loslassen hat einen Sinn.
+     * Der Schalter steht in den App-Einstellungen, weil die Darstellung
+     * auf schwacher Hardware mehr kostet.
+     */
+    val mehrbett = remember(ctx) {
+        ctx.getSharedPreferences("psmobile", android.content.Context.MODE_PRIVATE)
+            .getBoolean(AppSettings.KEY_MULTI_BED_RENDER, true)
+    }
+    LaunchedEffect(mehrbett, beds.size) {
+        sceneController.setMultiBedRender(mehrbett && beds.size > 1)
+    }
+    // Beim Bettwechsel ueber die Leiste dorthin schwenken - sonst
+    // bliebe die Kamera im Mehrbett-Modus auf dem alten Bett stehen.
+    LaunchedEffect(activeBed, mehrbett) {
+        if (mehrbett && beds.size > 1) sceneController.focusBed(activeBed)
     }
 
     LaunchedEffect(objects.map { it.id }) {
@@ -561,6 +583,34 @@ private fun SlicerContent(
                         controller = sceneController,
                         modifier = Modifier.fillMaxSize(),
                     )
+
+                    /*
+                     * Namensschilder an den Betten. Ohne sie waeren in
+                     * der raeumlichen Darstellung alle Betten gleich
+                     * und man wuesste beim Ziehen nicht, wohin.
+                     * Die Punkte kommen vom Viewport, weil nur er die
+                     * Kameramatrix kennt.
+                     */
+                    if (mehrbett && beds.size > 1 && !previewMode) {
+                        var anker by remember { mutableStateOf<List<Pair<Float, Float>?>>(emptyList()) }
+                        LaunchedEffect(sceneRevision, beds.size, activeBed) {
+                            sceneController.bedLabelAnchors(beds.size) { anker = it }
+                        }
+                        val dichte = androidx.compose.ui.platform.LocalDensity.current
+                        beds.forEachIndexed { position, bed ->
+                            val punkt = anker.getOrNull(position) ?: return@forEachIndexed
+                            Text(
+                                bed.name.ifBlank { "${advancedText("Bed", "Bett")} ${bed.index + 1}" },
+                                color = if (bed.active) PrusaColors.Orange else PrusaColors.TextMuted,
+                                fontSize = 12.sp,
+                                maxLines = 1,
+                                modifier = Modifier.offset(
+                                    x = with(dichte) { punkt.first.toDp() },
+                                    y = with(dichte) { punkt.second.toDp() },
+                                ),
+                            )
+                        }
+                    }
                     // Variable Schichthöhe darf keine unsichtbare
                     // Hintergrund-Einstellung sein: Nach dem Übernehmen
                     // bleibt eine kompakte, farbige Höhenkarte direkt im

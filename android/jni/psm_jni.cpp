@@ -1458,6 +1458,44 @@ JNIEXPORT jint JNICALL JNI_VP(nativeDragSelected)(JNIEnv *, jclass, jlong h,
     return psm_viewport_drag_selected(vp(h), fx, fy, tx, ty);
 }
 
+/*
+ * Schliesst ein Ziehen ab. Liegt das Objekt jetzt ueber einem anderen
+ * Bett, gehoert es danach auch dorthin.
+ * @return die neue Objektkennung, oder -1 wenn nichts gewechselt hat.
+ */
+JNIEXPORT jint JNICALL JNI_VP(nativeDropSelected)(JNIEnv *, jclass, jlong h)
+{
+    psm_object_id neu = PSM_INVALID_ID;
+    if (psm_viewport_drop_selected(vp(h), &neu) == 0)
+        return -1;
+    return static_cast<jint>(neu);
+}
+
+/* --- Mehrbett-Darstellung ------------------------------------------ */
+
+JNIEXPORT void JNICALL JNI_VP(nativeSetMultiBedRender)(
+    JNIEnv *, jclass, jlong h, jint enabled)
+{
+    psm_viewport_set_multi_bed_render(vp(h), enabled);
+}
+
+JNIEXPORT void JNICALL JNI_VP(nativeFocusBed)(JNIEnv *, jclass, jlong h, jint index)
+{
+    psm_viewport_focus_bed(vp(h), index);
+}
+
+/* Bildschirmposition fuer das Namensschild eines Betts, als "x	y"
+   oder null wenn es keins gibt. */
+JNIEXPORT jstring JNICALL JNI_VP(nativeBedLabelAnchor)(
+    JNIEnv *env, jclass, jlong h, jint position)
+{
+    float x = 0.f, y = 0.f;
+    if (! psm_viewport_bed_label_anchor(vp(h), position, &x, &y))
+        return nullptr;
+    const std::string value = std::to_string(x) + "	" + std::to_string(y);
+    return env->NewStringUTF(value.c_str());
+}
+
 JNIEXPORT void JNICALL JNI_VP(nativeSetSelection)(JNIEnv *, jclass, jlong h, jint id)
 {
     psm_viewport_set_selection(vp(h), id);

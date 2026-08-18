@@ -123,6 +123,30 @@ class SceneController {
         run { it.setPaintOptions(options) }
 
     /**
+     * Alle Betten raeumlich versetzt zeigen statt nur das aktive.
+     * Kostet mehr Geometrie und Strahltests je Bild - deshalb ein
+     * Schalter in den App-Einstellungen und kein Standardverhalten.
+     */
+    fun setMultiBedRender(enabled: Boolean) =
+        run { it.setMultiBedRender(enabled) }
+
+    /** Schwenkt die Kamera auf ein Bett und passt es ins Bild. */
+    fun focusBed(index: Int) = run { it.focusBed(index) }
+
+    /**
+     * Bildschirmpunkte fuer die Namensschilder der Betten. Die Antwort
+     * kommt per Rueckruf, weil sie nur auf dem GL-Thread zu haben ist.
+     */
+    fun bedLabelAnchors(count: Int, onResult: (List<Pair<Float, Float>?>) -> Unit) {
+        val v = view ?: return
+        v.queueEvent {
+            val vp = holder?.viewport
+            val anchors = (0 until count).map { vp?.bedLabelAnchor(it) }
+            v.post { onResult(anchors) }
+        }
+    }
+
+    /**
      * Momentaufnahme der aktuellen Ansicht - fuer die "Zuletzt"-Kacheln
      * auf der Startseite. Liest den GL-Framebuffer direkt aus, statt
      * einen eigenen Offscreen-Puffer anzulegen: die Ansicht steht ja
@@ -492,7 +516,24 @@ private class SceneGLView(
                 }
                 pointers = 0
                 gizmoAxis = -1
-                queueEvent { core.endHistory() }
+                queueEvent {
+                    /*
+                     * Wurde ein Objekt gezogen, entscheidet erst das
+                     * Loslassen ueber die Bettzuordnung. Waehrend des
+                     * Zugs waere sie unbrauchbar: das Objekt streift auf
+                     * dem Weg jedes Bett dazwischen. Noch vor
+                     * endHistory, damit Zug und Bettwechsel ein
+                     * Rueckgaengig-Schritt bleiben.
+                     */
+                    if (dragObject) {
+                        vp.dropSelected()?.let { neu ->
+                            selectedId = neu
+                            post { onSelect(neu) }
+                        }
+                    }
+                    dragObject = false
+                    core.endHistory()
+                }
             }
 
             MotionEvent.ACTION_POINTER_UP -> {

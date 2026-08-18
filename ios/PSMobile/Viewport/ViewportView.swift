@@ -771,6 +771,20 @@ final class PSMGLView: UIView {
         // Beim Malen ist schon alles gemalt - ein Tupfer zum Abschied
         // saesse dort, wo der Finger abhebt, und das ist selten gewollt.
         if malstrich { requestRender(); return }
+
+        /*
+         * Wurde ein Objekt gezogen, entscheidet erst das Loslassen
+         * ueber die Bettzuordnung. Waehrend des Zugs waere sie
+         * unbrauchbar: das Objekt streift auf dem Weg jedes Bett
+         * dazwischen, und jeder Wechsel legte einen Verlaufsschritt an.
+         */
+        if dragObject, let vp = viewport {
+            EAGLContext.setCurrent(context)
+            if let neu = vp.dropSelected() {
+                selectedId = neu
+                onSelect?(neu)
+            }
+        }
         guard let vp = viewport, !moved,
               let p = touches.first?.location(in: self) else { return }
 

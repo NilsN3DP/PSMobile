@@ -145,6 +145,16 @@ final class PsmViewport {
     /// einen Wiederherstellungspunkt.
     func gestureBegin() { psm_viewport_gesture_begin(handle) }
 
+    /// Schliesst ein Ziehen ab. Liegt das Objekt jetzt ueber einem
+    /// anderen Bett, gehoert es danach auch dorthin - und behaelt dabei
+    /// die Stelle, an der der Finger es abgesetzt hat.
+    /// - Returns: die neue Objektkennung, wenn das Bett gewechselt hat.
+    func dropSelected() -> Int32? {
+        var neu: psm_object_id = PSM_INVALID_ID
+        guard psm_viewport_drop_selected(handle, &neu) != 0 else { return nil }
+        return Int32(neu)
+    }
+
     @discardableResult
     func scaleSelected(_ factor: Float) -> Bool {
         psm_viewport_scale_selected(handle, factor) != 0

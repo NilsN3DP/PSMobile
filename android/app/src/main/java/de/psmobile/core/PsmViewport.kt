@@ -28,6 +28,10 @@ class PsmViewport private constructor(private var handle: Long) {
         @JvmStatic private external fun nativeViewPreset(h: Long, which: Int)
         @JvmStatic private external fun nativePick(h: Long, x: Float, y: Float): Int
         @JvmStatic private external fun nativeSetSelection(h: Long, id: Int)
+        @JvmStatic private external fun nativeDropSelected(h: Long): Int
+        @JvmStatic private external fun nativeSetMultiBedRender(h: Long, enabled: Int)
+        @JvmStatic private external fun nativeFocusBed(h: Long, index: Int)
+        @JvmStatic private external fun nativeBedLabelAnchor(h: Long, position: Int): String?
         @JvmStatic private external fun nativeSetSelections(
             h: Long, ids: IntArray, primary: Int)
         @JvmStatic private external fun nativeSetPaintOptions(
@@ -140,6 +144,38 @@ class PsmViewport private constructor(private var handle: Long) {
     /** @return true wenn das ausgewaehlte Objekt bewegt wurde */
     fun dragSelected(fx: Float, fy: Float, tx: Float, ty: Float): Boolean =
         nativeDragSelected(handle, fx, fy, tx, ty) != 0
+
+    /**
+     * Schliesst ein Ziehen ab. Liegt das Objekt jetzt ueber einem
+     * anderen Bett, gehoert es danach auch dorthin - und bleibt dabei
+     * an der Stelle, an der der Finger es abgesetzt hat.
+     *
+     * @return die neue Objektkennung, oder null wenn nichts wechselte.
+     */
+    fun dropSelected(): Int? = nativeDropSelected(handle).takeIf { it >= 0 }
+
+    /**
+     * Alle Betten raeumlich versetzt zeigen statt nur das aktive.
+     * Kostet mehr Geometrie und Strahltests pro Bild - deshalb ein
+     * Schalter und kein Standardverhalten.
+     */
+    fun setMultiBedRender(enabled: Boolean) =
+        nativeSetMultiBedRender(handle, if (enabled) 1 else 0)
+
+    /** Schwenkt die Kamera auf genau ein Bett und passt es ins Bild. */
+    fun focusBed(index: Int) = nativeFocusBed(handle, index)
+
+    /**
+     * Bildschirmpunkt fuer das Namensschild eines Betts, oder null
+     * ausserhalb der Mehrbett-Darstellung.
+     */
+    fun bedLabelAnchor(position: Int): Pair<Float, Float>? {
+        val fields = nativeBedLabelAnchor(handle, position)?.split('	') ?: return null
+        if (fields.size != 2) return null
+        val x = fields[0].toFloatOrNull() ?: return null
+        val y = fields[1].toFloatOrNull() ?: return null
+        return x to y
+    }
 
     /**
      * Skaliert das ausgewaehlte Objekt gleichmaessig und setzt es wieder

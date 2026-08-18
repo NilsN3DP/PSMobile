@@ -1931,6 +1931,107 @@ PSM_API int psm_viewport_drag_selected(psm_viewport *v,
     return 1;
 }
 
+PSM_API int psm_viewport_drop_selected(psm_viewport *v,
+                                       psm_object_id *out_new_id)
+{
+    if (v == nullptr || v->selection == PSM_INVALID_ID)
+        return 0;
+    std::lock_guard<std::recursive_mutex> data_lock(v->session->data_mtx);
+    if (out_new_id != nullptr)
+        *out_new_id = v->selection;
+
+    /* Ohne raeumliche Mehrbett-Darstellung liegen alle Betten am selben
+     * Ursprung. Dann gibt es kein "anderes Bett", auf das man etwas
+     * ziehen koennte, und jede Zuordnung waere geraten. */
+    if (! v->multi_bed_render || v->session->bed_models.size() <= 1)
+        return 0;
+
+    /* get_bed_translation() rechnet gegen die zuletzt gemeldete
+     * Druckflaeche - dieselbe Vorbedingung wie beim Zeichnen. */
+    update_multi_bed_metrics(v);
+
+    const auto *shape =
+        v->session->config.opt<Slic3r::ConfigOptionPoints>("bed_shape");
+    const auto *height =
+        v->session->config.opt<Slic3r::ConfigOptionFloat>("max_print_height");
+    if (shape == nullptr || shape->values.size() < 3 || height == nullptr)
+        return 0;
+    Slic3r::BoundingBoxf flaeche;
+    try {
+        Slic3r::BuildVolume volume(shape->values, height->value);
+        if (! volume.valid())
+            return 0;
+        flaeche = volume.bounding_volume2d();
+    } catch (...) {
+        return 0;
+    }
+
+    Slic3r::ModelObject *obj = nullptr;
+    for (Slic3r::ModelObject *o : v->session->model().objects)
+        if (static_cast<psm_object_id>(o->id().id) == v->selection) {
+            obj = o;
+            break;
+        }
+    if (obj == nullptr || obj->instances.empty())
+        return 0;
+
+    const size_t quelle = v->session->active_bed;
+    const Slic3r::Vec3d versatz_quelle = bed_offset(v, quelle);
+    /* Der Mittelpunkt entscheidet, nicht eine Ecke: sonst wechselte ein
+     * grosses Teil das Bett, sobald sein Rand hinueberragt. */
+    const Slic3r::Vec3d mitte =
+        obj->instance_bounding_box(0, false).center() + versatz_quelle;
+
+    size_t ziel = quelle;
+    for (size_t i = 0; i < v->session->bed_models.size(); ++i) {
+        const Slic3r::Vec3d off = bed_offset(v, i);
+        if (mitte.x() >= flaeche.min.x() + off.x() &&
+            mitte.x() <= flaeche.max.x() + off.x() &&
+            mitte.y() >= flaeche.min.y() + off.y() &&
+            mitte.y() <= flaeche.max.y() + off.y()) {
+            ziel = i;
+            break;
+        }
+    }
+    if (ziel == quelle)
+        return 0;
+
+    /*
+     * Das Objekt soll dort liegen bleiben, wo es losgelassen wurde. Die
+     * gespeicherte Position ist bettlokal, der Versatz der Betten steckt
+     * nur in der Darstellung - beim Bettwechsel muss er einmal
+     * herausgerechnet werden.
+     */
+    const Slic3r::Vec3d delta = versatz_quelle - bed_offset(v, ziel);
+    Slic3r::ModelInstance *inst = obj->instances.front();
+    const Slic3r::Vec3d vorher = inst->get_offset();
+    Slic3r::Vec3d off = vorher;
+    off.x() += delta.x();
+    off.y() += delta.y();
+    inst->set_offset(off);
+    obj->invalidate_bounding_box();
+
+    psm_object_id neu = PSM_INVALID_ID;
+    if (psm_bed_move_object(v->session, v->selection, ziel, &neu) != PSM_OK) {
+        inst->set_offset(vorher);
+        obj->invalidate_bounding_box();
+        return 0;
+    }
+
+    /* Dem Nutzer folgen: er arbeitet jetzt auf dem Bett, auf das er
+     * gezogen hat - genau wie beim Tippen auf ein fremdes Bett. */
+    v->session->active_bed = ziel;
+    v->selection = neu;
+    v->selections.clear();
+    if (neu != PSM_INVALID_ID)
+        v->selections.push_back(neu);
+    v->dirty = true;
+    v->session->mark_design_changed();
+    if (out_new_id != nullptr)
+        *out_new_id = neu;
+    return 1;
+}
+
 /* ------------------------------------------------------------------ */
 
 namespace {

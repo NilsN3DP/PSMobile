@@ -190,6 +190,29 @@ PSM_API int psm_viewport_drag_selected(psm_viewport *v,
                                        float to_x, float to_y);
 
 /*
+ * Schliesst ein Ziehen ab und ordnet das Objekt dem Bett zu, ueber dem
+ * es losgelassen wurde.
+ *
+ * Ohne das bleibt ein Objekt in der raeumlichen Mehrbett-Darstellung an
+ * seinem alten Bett haengen, auch wenn es sichtbar auf einem anderen
+ * liegt: die gespeicherte Position ist bettlokal, der Versatz der
+ * Betten steckt allein in der Darstellung. Der Versatz wird beim
+ * Wechsel herausgerechnet, damit das Objekt dort liegen bleibt, wo der
+ * Finger es abgesetzt hat. Ueber den Bettwechsel entscheidet der
+ * Mittelpunkt, nicht der Rand.
+ *
+ * Ausserhalb des Mehrbett-Modus und ueber keinem Bett passiert nichts.
+ * Beim Wechsel wird das Zielbett aktiv, wie beim Tippen auf ein Objekt
+ * eines fremden Betts.
+ *
+ * @param out_new_id optional; das Objekt bekommt beim Bettwechsel eine
+ *                   neue Kennung. Ohne Wechsel bleibt es die alte.
+ * @return 1 wenn das Objekt das Bett gewechselt hat, sonst 0.
+ */
+PSM_API int psm_viewport_drop_selected(psm_viewport *v,
+                                       psm_object_id *out_new_id);
+
+/*
  * Ausgewaehltes Objekt gleichmaessig skalieren.
  *
  * Fuer die Spreizgeste: solange das Skalieren-Werkzeug aktiv ist,
