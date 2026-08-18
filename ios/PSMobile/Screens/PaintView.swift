@@ -29,6 +29,10 @@ struct PaintView: View {
                          kennung: "malen.stuetzen")
                 werkzeug(PsUiCatalog.tr("Seam"), .seam,
                          kennung: "malen.naht")
+                // Fuzzy Skin kann der Kern seit langem, angeboten wurde
+                // es nur auf Android.
+                werkzeug(st("Fuzzy", "Fuzzy"), .fuzzy,
+                         kennung: "malen.fuzzy")
                 if model.extruderCount > 1 {
                     werkzeug("MMU", .mmu, kennung: "malen.mmu")
                 }
@@ -144,10 +148,14 @@ struct PaintView: View {
                      kennung: "malen.zustand.1") {
                     options.state = 1
                 }
-                wahl(PsUiCatalog.tr("Block"),
-                     an: options.state == 2,
-                     kennung: "malen.zustand.2") {
-                    options.state = 2
+                // Fuzzy kennt im Kern keinen zweiten Facettenzustand
+                // (paint_state_is_valid laesst dort nur 0 und 1 zu).
+                if aktiv == .support || aktiv == .seam {
+                    wahl(PsUiCatalog.tr("Block"),
+                         an: options.state == 2,
+                         kennung: "malen.zustand.2") {
+                        options.state = 2
+                    }
                 }
                 wahl(st("Erase", "Radieren"),
                      an: options.state == 0,

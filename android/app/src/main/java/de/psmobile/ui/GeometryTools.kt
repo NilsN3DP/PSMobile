@@ -402,7 +402,10 @@ internal fun GeometryTools(
                     PaintChoice(PsUi.appText("Enforce", "Verstärken"), malen.state == 1) {
                         onSurfaceMode(malen.copy(state = 1))
                     }
-                    if (malen.tool == PsmCore.PaintTool.SUPPORT) {
+                    // Fuzzy kennt im Kern keinen zweiten
+                    // Facettenzustand - dort waere der Knopf ein Fehler.
+                    if (malen.tool == PsmCore.PaintTool.SUPPORT ||
+                        malen.tool == PsmCore.PaintTool.SEAM) {
                         PaintChoice(PsUi.appText("Block", "Blockieren"), malen.state == 2) {
                             onSurfaceMode(malen.copy(state = 2))
                         }
