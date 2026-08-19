@@ -89,7 +89,14 @@ ab; von dort gehört sie in die Arbeitskopie kopiert. Achtung: `du` meldet
 
 ### Als Nächstes
 
-**AP-05 zu Ende bringen — die linke Schiene.** Kein Kernbau nötig. Die
+**AP-21 · Bettübersicht mit Entfernen je Bett.** Von Nils gemeldet,
+kein Kernbau, klein — der Sheet-Zweig existiert schon, er hängt nur am
+schmalen Fenster.
+
+Danach **AP-22 · Alle Betten schneiden** zusammen mit **AP-11
+Slice-Blatt** — sonst entstehen Dateien, die niemand sieht.
+
+Danach **AP-05 zu Ende bringen — die linke Schiene.** Kein Kernbau nötig. Die
 obere Leiste und die Fußzeile stehen seit `c41a1ba`; es fehlen drei
 Einträge in der Schiene selbst.
 
@@ -724,6 +731,78 @@ Kopfzeile, *Print Settings · Filament Settings · Printer Settings*,
 Trennlinie, `PROFILES` offen, darunter `OBJECTS`, `EDIT` und `TOOLS` als
 Überschriften mit Pfeil — *Bearbeiten* und *Werkzeuge* ohne Auswahl
 gedämpft statt verschwunden —, unten der Schneiden-Block.
+
+---
+
+### AP-21 · Bettübersicht: entfernen je Bett · Kern: nein
+
+**Von Nils gemeldet** (19.08.): „bei iOS habe ich in der Bettübersicht
+ein x zum Entfernen".
+
+**Fundstelle iOS** `Screens/BedSelector.swift:268ff`
+(`BedSelectionSheet`). Je Bett eine Karte — Symbol, Name, *N Objekte*,
+aktiv orange — und rechts daneben drei kleine Knöpfe: **Stift**
+(umbenennen), **Schloss**, **Papierkorb**. Der Papierkorb erscheint nur,
+wenn `canRemove` aus dem gemeinsamen `BedStripContract` es erlaubt.
+Darunter *Bett hinzufügen*, gesperrt wenn `canAdd` falsch ist.
+Erreichbar über den Bettwähler (`onOpenSelection`), zusätzlich zur
+Kapselreihe — iOS hat **beides**.
+
+**Zustand Android** `SlicerScreen.kt:2160` (`BedSelector`) hat zwei
+Zweige, und nur einer stimmt:
+
+- **schmal**: eine vollständige Liste im Bottom-Sheet, je Bett Schloss,
+  Stift und ein **X** — inhaltlich dasselbe wie iOS.
+- **breit** (also auf dem Tablet, dem Hauptfall): nur die Kapselreihe
+  mit Schloss und Stift, dazu ein globales **+** und ein Papierkorb,
+  der das *aktive* Bett entfernt. Kein Weg zur Übersicht, kein
+  Entfernen je Bett.
+
+Damit unterscheidet sich Android nicht nur von iOS, sondern auch von
+sich selbst, je nach Fensterbreite.
+
+**Umsetzung** Den Sheet-Zweig aus `schmal` herausziehen und aus beiden
+Zweigen erreichbar machen: die Kapselreihe bekommt denselben Weg in die
+Übersicht wie auf iOS. Der globale Papierkorb am Ende der Reihe
+entfällt dann — er tut, was der Eintrag in der Übersicht genauer tut.
+
+**Fertig wenn** Auf dem Tablet führt ein Weg von der Bettreihe in eine
+Übersicht, in der jedes Bett Stift, Schloss und X hat, und *Bett
+hinzufügen* darunter steht.
+
+---
+
+### AP-22 · Alle Betten schneiden · Kern: nein
+
+**Von Nils gemeldet** (19.08.): „iOS hat unter *Slice now* ein *Slice
+all beds*".
+
+**Fundstelle iOS** `AdvancedWorkspaceView.swift:1209ff` — unter dem
+Schneiden-Knopf, **nur wenn mehr als ein Bett existiert**. Während des
+Laufs steht dort *Bett 3/5* statt der Beschriftung, und der Knopf ist
+gesperrt. Die Hinderungsgründe sind dieselben wie beim einzelnen
+Schnitt: „ohne Bett auf dem Bett ist *alle Betten schneiden* derselbe
+leere Auftrag".
+
+`SlicerModel.sliceAll()` (`SlicerModel.swift:1635ff`) nimmt alle Betten
+mit Objekten, wählt sie der Reihe nach aus, schneidet je Bett und sammelt
+die Dateien in `gcodeURLs` — plus Summen für Zeit und Gramm.
+
+**Zustand Android** Gibt es nicht; `SlicerService` kennt kein
+`sliceAll`.
+
+**Umsetzung**
+
+1. `SlicerService.sliceAlleBetten()` nach demselben Muster: Betten mit
+   Objekten sammeln, der Reihe nach auswählen und schneiden, Dateien
+   sammeln, am Ende das Ausgangsbett wieder aktiv setzen.
+2. Ein Fortschritt *Bett i/n* im vorhandenen `Progress`-Zustand, damit
+   der Knopf dasselbe zeigen kann.
+3. Der zweite Knopf unter *Slice now*, nur bei mehr als einem Bett.
+
+**Hängt zusammen mit AP-11**: das Slice-Blatt braucht dann eine Zeile je
+G-Code-Datei und *Alle exportieren*. Beides zusammen bearbeiten, sonst
+entstehen Dateien, die niemand sieht.
 
 ---
 
