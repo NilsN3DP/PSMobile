@@ -16,7 +16,47 @@ das, was eine neue Sitzung als Erstes liest — hier steht, wo genau
 weitergemacht wird, ohne dass jemand die Historie durchsuchen muss.
 
 **Zuletzt geändert:** 19.08.2026 · Zweig
-`codex/ios-android-parity-implementation` · letzter Commit `875a655`
+`codex/ios-android-parity-implementation` · letzter Commit `bb47ae1`
+
+### Wo die Arbeit liegt
+
+Es gibt drei Kopien dieses Baums, und nur eine davon wird bearbeitet.
+Wer das verwechselt, baut ein Paket ein zweites Mal — genau das ist am
+19.08. passiert.
+
+| Kopie | Pfad | Wofür |
+|---|---|---|
+| **Arbeitskopie** | `C:\Users\Nils\.codex\worktrees\psmobile-ios-android-parity-sidebuild-local\.worktrees\ios-android-parity-implementation` | **Hier wird geschrieben, gebaut und committet.** Zweig `codex/ios-android-parity-implementation`. |
+| Build-Host | `\\Localunraid\n3dp\KI Projekte\psmobile-parity-buildhost\repo` (dort `/mnt/user/N3DP/…`) | Nur der native Kern im Docker. Von Windows aus **nicht schreibbar**; sein Git steht auf dem Stand vom 10.08. |
+| Alter Hauptcheckout | `\\Localunraid\n3dp\KI Projekte\PSMobile` | Stand vom 09.08., Elternverzeichnis der Worktrees. Nicht die laufende Arbeit. |
+
+Die Fassungen dieses Plans auf dem Build-Host und im alten Checkout sind
+**Kopien**. Maßgeblich ist die in der Arbeitskopie.
+
+**Android bauen** (Windows, aus der Arbeitskopie):
+
+```bash
+JAVA_HOME="C:/Program Files/Android/Android Studio/jbr" \
+  ./android/gradlew -p android :app:assembleProductionDebug
+```
+
+`ANDROID_SDK_ROOT` steht auf `S:\PC-Auslagerung\Android\Sdk` — kein
+`ANDROID_HOME` dazusetzen, sonst bricht Gradle mit „several environment
+variables … contain different paths to the SDK" ab. Die APK liegt
+danach als `app-production-x86_64-debug.apk` für den Emulator und als
+`…-arm64-v8a-…` fürs Gerät.
+
+**Kern bauen** (nur auf dem Unraid, ~20–25 min):
+
+```bash
+ssh -i ~/.ssh/unraid_aipp root@100.109.46.54
+cd "/mnt/user/N3DP/KI Projekte/psmobile-parity-buildhost/repo"
+bash build/scripts/build-core.sh && bash build/scripts/stage-native.sh
+```
+
+`stage-native.sh` legt die `.so` unter `android/app/src/main/jniLibsFixed/`
+ab; von dort gehört sie in die Arbeitskopie kopiert. Achtung: `du` meldet
+über die Freigabe falsche Größen — für echte Zahlen `ls -l`.
 
 ### Erledigt
 
@@ -26,6 +66,7 @@ weitergemacht wird, ohne dass jemand die Historie durchsuchen muss.
 | AP-02 Eckenradien (Android) | `75c8dd1`, `11c7ebb` | 164 Stellen, keine rohen Radien mehr |
 | AP-03 Vorschau | `3377a96` | `0:30 · 3.59 m · 10.7 g`, Chips grauen aus |
 | AP-07 Materialauswahl | `875a655` | Typ-Filter PLA blendet auf vier Karten ein |
+| AP-08 Einstellungskopf | `bb47ae1` | Profilname mit Trichter, Zähler `1`, Rückfrage nennt „Perimeters 2 → 4" |
 | AP-09 Leere Zustände | `875a655` | `LeeresPanel` als Muster |
 | AP-18 Bindungen | `27ac6eb`, `1eb4c97` | 26 fehlende Funktionen → noch 2 |
 | Bemalen (Strich, Füllmodi) | `e2f9dad`, `9da2adf` | Spur statt Punkt, 1358 Facetten |
@@ -45,23 +86,27 @@ weitergemacht wird, ohne dass jemand die Historie durchsuchen muss.
 
 ### Als Nächstes
 
-**AP-08 · Einstellungskopf.** Kein Kernbau nötig.
+**AP-06 · Schwebende Dialoge statt Vollbildseiten.** Kein Kernbau nötig,
+und die Änderung mit der größten Breitenwirkung, die noch aussteht.
 
 Konkret:
 
-1. `SlicerService`: `profilaenderungen()` als Gegenstück zu
-   `SlicerModel.profilaenderungen()` (iOS `SlicerModel.swift:556ff`) —
-   je geänderter Wert Typ, Schlüssel, Bezeichnung, vorher, jetzt. Die
-   Zahlen dafür liegen schon in `_presets.value.*Changes`.
-2. `SettingsScreen.kt` ab Zeile 125: in die Reiterzeile den Namen des
-   geltenden Profils mit Lupe aufnehmen; Tipp öffnet die Profilsuche.
-3. Die Suche selbst gibt es schon als `filterPresetOptions` im
-   Advanced-Seitenband — wiederverwenden, nicht neu bauen.
-4. Daneben der Zähler der geänderten Werte, Tipp öffnet eine Rückfrage
-   vor dem Zurücksetzen.
+1. Ein `SchwebenderDialog` in `ui/` als Gegenstück zu
+   `Screens/ProfilWechselDialog.swift` — abgedunkelter Hintergrund,
+   Tipp daneben schließt, Rand ringsherum: 10 dp auf schmalen, 28 dp
+   auf breiten Geräten (`SettingsLayout.usesCompactNavigation` sagt
+   schon, welcher Fall vorliegt).
+2. Er gehört **in `ScaledOverlay`**. Dialoge rendern auf Android in
+   einem eigenen Fenster und erben `LocalDensity` nicht; ohne das ist
+   der Inhalt falsch skaliert. Ein Regeltest wacht darüber.
+3. Danach die Vollbildseiten der Reihe nach umstellen: erst
+   `SettingsScreen` (dort ist der Kontextverlust am größten), dann
+   `SetupScreen`, `AppSettingsScreen`, Profilwechsel und ZIP-Frage.
+   Jeweils einzeln bauen und ansehen — der Rand ändert die Höhe, an
+   der die inneren Listen scrollen.
 
-Danach **AP-06 · Schwebende Dialoge** — ebenfalls ohne Kernbau, und die
-Änderung mit der größten Breitenwirkung, die noch aussteht.
+Danach **AP-05** zu Ende (obere Leiste: *Öffnen*, *Projekte*; Schiene:
+*Stützen*, *Naht*, *Trennen* als Untermenü, Fußzeile).
 
 ### Worauf zu achten ist
 
@@ -368,6 +413,21 @@ Profil geänderten Werte mit Rückfrage vor dem Zurücksetzen.
 
 **Zustand Android** Nur *Zurück* und die drei Reiter. Die Profilsuche
 existiert, aber nur im Advanced-Seitenband (`filterPresetOptions`).
+
+**Stand: erledigt** (19.08., `bb47ae1`). Rechts im Kopf stehen der Name
+des geltenden Profils und — sobald es etwas gibt — der Zähler der
+ungespeicherten Werte. `SlicerService.profilaenderungen()` sammelt über
+alle drei Sammlungen und holt den lesbaren Namen aus dem Kern
+(`configMeta.label`); die Suche ist `filterPresetOptions` aus dem
+Advanced-Seitenband, nicht eine zweite.
+
+Belegt am Emulator: Kopf zeigt `0.10mm FAST DETAIL @COREON…`, nach
+*Perimeters* 2 → 4 erscheint der Zähler `1`, die Rückfrage nennt
+„Perimeters 2 → 4", Zurücksetzen stellt 2 wieder her; die Suche filtert
+auf „SOLUBLE" von acht auf zwei Profile.
+
+Statt der Lupe steht der **Trichter** aus PrusaSlicers Symbolsatz — eine
+Lupe gibt es dort nicht, und eigene Symbole kommen nicht dazu (E-12).
 
 ---
 

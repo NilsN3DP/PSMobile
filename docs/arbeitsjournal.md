@@ -52,7 +52,7 @@ sondern die Absprache währenddessen.
 | iOS Advanced: Werkzeugleiste, Objektbaum | Claude | steht, 4 Tests |
 | Bemalen: Stützen, Naht, MMU | Claude | steht auf iOS, 2 Tests |
 | Sonderwerte auf iOS (Bett, Reinigung) | Claude | zwei von fünf |
-| Gleichstand Android ↔ iOS | Claude | Plan in `00-gleichstand-implementierungsplan.md`, AP-01/02/03/18 fertig |
+| Gleichstand Android ↔ iOS | Claude | Plan in `00-gleichstand-implementierungsplan.md`, AP-01/02/03/07/08/09/18 fertig |
 
 ---
 
@@ -153,6 +153,62 @@ Geschriebener, aber ungebauter Swift-Code zählt nicht.
 Szenenrevision entgegen. Wer sie nicht mitgibt, legt ein Ergebnis von
 vorhin auf eine Anordnung von jetzt. Das wäre ein stiller Datenfehler
 geworden.
+
+### Claude — AP-08 Einstellungskopf, und eine Stunde am falschen Baum
+
+Der Kopf der Einstellungen zeigte nur *Zurück* und die drei Reiter.
+Welches Profil man gerade veraendert, stand nirgends; ein anderes
+waehlen ging nur ueber den Umweg zurueck zum Bett. Jetzt stehen rechts
+der Profilname (Tipp oeffnet die Suche) und, sobald es etwas gibt, der
+Zaehler der ungespeicherten Werte (Tipp oeffnet die Rueckfrage).
+
+`SlicerService.profilaenderungen()` sammelt ueber alle drei Sammlungen
+und holt den lesbaren Namen aus dem Kern (`configMeta.label`) — nicht
+aus einer Liste in der Oberflaeche, die beim naechsten
+PrusaSlicer-Sprung veraltet. Die Suche ist `filterPresetOptions` aus
+dem Advanced-Seitenband; eine zweite Suche mit eigenen Regeln waeren
+zwei Antworten auf dieselbe Frage.
+
+Commit `bb47ae1`. Belegt am Emulator: Kopf zeigt
+`0.10mm FAST DETAIL @COREON…`, nach *Perimeters* 2 → 4 erscheint der
+Zaehler `1`, die Rueckfrage nennt „Perimeters 2 → 4", Zuruecksetzen
+stellt 2 wieder her, und die Suche filtert auf „SOLUBLE" von acht auf
+zwei Profile.
+
+**Statt der Lupe der Trichter.** PrusaSlicers Symbolsatz hat keine
+Lupe, und eigene Symbole kommen nicht dazu (E-12). iOS zeigt dort ein
+SF-Symbol; das ist die eine Stelle, an der beide Fassungen bewusst
+verschieden aussehen.
+
+**Der Fehler, der die meiste Zeit gekostet hat:** ich habe die Sitzung
+in der falschen Kopie begonnen. Die Freigabe
+`\\Localunraid\n3dp\KI Projekte\psmobile-parity-buildhost\repo` sieht
+aus wie der Arbeitsstand — sie hat denselben Plan, dieselben Quellen
+und war am selben Tag angefasst worden. Sie ist aber nur die
+Build-Host-Spiegelung fuer den nativen Kern; ihr Git steht auf dem
+10.08., und der Plan darin ist eine Kopie ohne den Abschnitt „Stand
+und naechster Schritt". Ich habe darin AP-03 ein zweites Mal gebaut
+(JNI und Kotlin lagen schon da, ich habe `PreviewRange` und die
+Compose-Karte ergaenzt), bevor mir der Gradle-Daemon-Log den echten
+Pfad verriet: der Worktree unter `C:\Users\Nils\.codex\worktrees\…`.
+Die Doppelarbeit ist zurueckgenommen, die Spiegelung steht wieder auf
+ihrem Stand von 19:58.
+
+Zwei Dinge haetten das verhindert, beide jetzt im Plan unter **„Wo die
+Arbeit liegt"**: die Tabelle der drei Kopien mit dem Satz, welche
+bearbeitet wird — und der Hinweis, dass die Planfassungen in den
+anderen beiden Kopien sind. Wer eine Kopie findet, in der `git log`
+aelter ist als das Datum im Plankopf, hat die falsche.
+
+**Zwei Fallstricke beim Bauen unter Windows**, ebenfalls jetzt im Plan:
+`ANDROID_SDK_ROOT` steht auf `S:\PC-Auslagerung\Android\Sdk` — wer
+zusaetzlich `ANDROID_HOME` setzt, bekommt von Gradle „several
+environment variables … contain different paths to the SDK". Und die
+Freigabe ist von Windows aus nur lesbar; Aenderungen dort gehen ueber
+SSH als `root`.
+
+**Nicht angefasst und bewusst so:** die iOS-Seite. Der Mac unter
+`192.168.1.107` antwortet weiterhin nicht.
 
 ---
 
