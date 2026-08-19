@@ -366,6 +366,64 @@ sass — auf Android ist keiner davon angekommen.
 
 ---
 
+## M · Was diese Untersuchung NICHT belegen kann
+
+Drei Durchgaenge, drei Mal laenger geworden. Damit die Liste nicht ein
+viertes Mal waechst, hier die Grenze der Methode.
+
+### Die Zahl
+
+    ~5.700 geaenderte Zeilen in 27 iOS-Ansichtsdateien,
+    aus Commits, die android/ nie angefasst haben.
+
+Verteilt auf: AdvancedWorkspaceView 1021 · BedSelector 838 ·
+SimpleModeView 654 · AdvancedObjectInspectorView 428 · ColorMixView 394 ·
+PaintView 351 · SpecialValueEditors 302 · FinalPreviewPanel 291 ·
+WerkzeugSchiene 169 · SimpleObjectBarView 138 · SettingsView 129 ·
+ProfileSearchSheet 123 · MaterialAuswahlView 104 · PSScale 98 · und
+dreizehn weitere.
+
+Gelesen habe ich davon den **Zustand** von rund zwei Dritteln. Die
+**Diffs** habe ich nicht gelesen — nur die Commit-Betreffs.
+
+### Was das kostet: ein Beispiel
+
+`WerkzeugSchiene.swift` (169 geaenderte Zeilen) hatte ich bis zuletzt
+nie geoeffnet. Beim ersten Blick:
+
+| | iOS | Android |
+|---|---|---|
+| Eintraege | Import, Delete, **Clear**, **Arrange**, Copy, Paste, + copy, − copy, **Separate** (Untermenue), **Supports**, **Seam** | delete, copy, more, fewer, splitobjects, splitvolumes, layersediting, paste, undo, redo, add |
+| Fusszeile | **Drucker**, **App-Einstellungen** | — |
+
+Andere Reihenfolge, andere Eintraege, in beide Richtungen. Eine Datei,
+ein Blick, ein neuer Befund. Das ist der Grund, warum ich nicht sagen
+kann, die Liste sei vollstaendig.
+
+### Die eigentliche Grenze
+
+**Ich habe die iOS-App nie gesehen.** Der Mac unter `192.168.1.107`
+antwortet nicht, und alles, was in diesem Papier ueber iOS steht, ist aus
+dem Quelltext erschlossen.
+
+Quelltextvergleich findet fehlende Funktionen und fehlende
+Bedienelemente. Er findet **nicht**: Abstaende, Rhythmus, Uebergaenge,
+wie sich etwas anfuehlt. Genau darum ging die Frage aber.
+
+### Was die Liste schliessen wuerde
+
+1. **Die 5.700 Zeilen Diff lesen**, nicht den Zustand. Ohne Mac machbar,
+   mehrere Stunden.
+2. **Den Mac hochbringen** und beide Apps Bildschirm fuer Bildschirm
+   nebeneinander stellen, im Quer- und im Hochformat. Ohne das bleibt
+   jede Aussage ueber das Aussehen geraten.
+
+Bis dahin gilt: **belegbar vollstaendig ist genau eine Aussage** — die
+26 nicht gebundenen Kernfunktionen. Dieser Vergleich ist mechanisch und
+erschoepfend. Alles andere in diesem Papier ist *bisher gefunden*.
+
+---
+
 ## Reihenfolge
 
 Nach sichtbarem Gewinn je Aufwand, und so, dass jeder Schritt für sich
