@@ -131,6 +131,28 @@ class PsmCore private constructor(private var handle: Long) : Closeable {
             hx: Float, hy: Float, hz: Float,
             hasPrevious: Int, px: Float, py: Float, pz: Float): Int
         @JvmStatic private external fun nativePaintCount(h: Long, id: Int, tool: Int): Int
+        @JvmStatic private external fun nativePresetOptionAt(
+            h: Long, type: Int, name: String, key: String): String
+        @JvmStatic private external fun nativePreviewSnapshot(h: Long): String?
+        @JvmStatic private external fun nativePreviewLayerAt(h: Long, index: Int): String?
+        @JvmStatic private external fun nativePreviewExtruderAt(h: Long, index: Int): String?
+        @JvmStatic private external fun nativePreviewRoleAt(h: Long, index: Int): String?
+        @JvmStatic private external fun nativeSliceExtruderCount(h: Long): Int
+        @JvmStatic private external fun nativeSliceExtruderAt(h: Long, index: Int): String?
+        @JvmStatic private external fun nativeLoadGcodeForPreview(h: Long, path: String): Int
+        @JvmStatic private external fun nativeArrangeBedEx(
+            h: Long, bedIndex: Int, gapMm: Float, allowRotation: Int): String
+        @JvmStatic private external fun nativeLayerProfileAdaptive(
+            h: Long, id: Int, quality: Float): DoubleArray?
+        @JvmStatic private external fun nativeZipExtractModels(
+            zipPath: String, destDir: String): Int
+        @JvmStatic private external fun nativeSliceResultIsCurrent(h: Long): Int
+        @JvmStatic private external fun nativeAcceptRemoteGcode(
+            h: Long, path: String, requestRevision: Long): Int
+        @JvmStatic private external fun nativeDesignRevision(h: Long): Long
+        @JvmStatic private external fun nativeBedStateOf(h: Long, id: Int): Int
+        @JvmStatic private external fun nativeLayOnFacetInstance(
+            h: Long, id: Int, instance: Int, volume: Int, facet: Int): Int
         @JvmStatic private external fun nativeClearPaint(h: Long, id: Int, tool: Int): Int
         @JvmStatic private external fun nativeLayerProfile(h: Long, id: Int): DoubleArray?
         @JvmStatic private external fun nativeLayerProfileSet(
@@ -789,6 +811,251 @@ class PsmCore private constructor(private var handle: Long) : Closeable {
     /** Zahl der mit diesem Werkzeug markierten Facetten. */
     fun paintCount(id: Int, tool: PaintTool): Int =
         nativePaintCount(requireHandle(), id, tool.raw)
+
+    /* --- Materialauswahl -------------------------------------------- */
+
+    /**
+     * Ein Wert aus einem benannten Profil, ohne es auszuwaehlen.
+     *
+     * Die Materialauswahl braucht von jedem Filamentprofil Typ und
+     * Farbe, und zwar von allen gleichzeitig. Ueber die Auswahl zu
+     * gehen hiesse, fuer jede Zeile die ganze Konfiguration umzubauen
+     * und das Slice-Ergebnis zu verwerfen.
+     */
+    /**
+     * Entpackt die Modelle aus einer ZIP - typisch eine Sammlung von
+     * Printables. Braucht keine Sitzung: der Kern liest nur die Datei.
+     *
+     * @return Zahl der entpackten Modelle, oder null bei einem Fehler.
+     */
+    fun zipExtractModels(zipPath: String, destDir: String): Int? =
+        nativeZipExtractModels(zipPath, destDir).takeIf { it >= 0 }
+
+    fun presetOption(type: PresetType, name: String, key: String): String =
+        nativePresetOptionAt(requireHandle(), type.raw, name, key)
+
+    /* --- Vorschau ---------------------------------------------------- */
+
+    /** Kopf des final verarbeiteten Vorschau-Datensatzes. */
+    data class PreviewSnapshot(
+        val moveCount: Int,
+        val layerCount: Int,
+        val extruderCount: Int,
+        val roleCount: Int,
+        val printTimeSeconds: Double,
+        val filamentUsedMm: Double,
+        val filamentUsedG: Double,
+        val minZ: Float,
+        val maxZ: Float,
+    )
+
+    /** Eine Schicht des Ergebnisses - Grundlage der Bereichsrechnung. */
+    data class PreviewLayer(
+        val index: Int,
+        val sourceLayerId: Int,
+        val zLower: Double,
+        val zUpper: Double,
+        val timeSeconds: Double,
+        val filamentUsedMm: Double,
+        val filamentUsedG: Double,
+    )
+
+    /** Ein Extruder im Ergebnis, mit seiner Farbe aus dem Profil. */
+    data class PreviewExtruder(
+        val extruder: Int,
+        val colorRgba: Long,
+        val moveCount: Long,
+        val timeSeconds: Double,
+        val filamentUsedMm: Double,
+        val filamentUsedG: Double,
+    )
+
+    /** Eine Merkmalsrolle im Ergebnis, mit libvgcodes Farbe. */
+    data class PreviewRole(
+        val role: Int,
+        val colorRgba: Long,
+        val moveCount: Long,
+        val timeSeconds: Double,
+        val filamentUsedMm: Double,
+        val filamentUsedG: Double,
+    )
+
+    /** Was eine Rolle gekostet hat - Modell, Turm und Spuelen getrennt. */
+    data class ExtruderUsage(
+        val extruder: Int,
+        val volumeMm3: Double,
+        val wipeTowerMm3: Double,
+        val flushMm3: Double,
+    )
+
+    private fun felder(roh: String?, erwartet: Int): List<String>? {
+        val f = roh?.split('\t') ?: return null
+        return if (f.size == erwartet) f else null
+    }
+
+    fun previewSnapshot(): PreviewSnapshot? {
+        val f = felder(nativePreviewSnapshot(requireHandle()), 9) ?: return null
+        return PreviewSnapshot(
+            moveCount = f[0].toIntOrNull() ?: return null,
+            layerCount = f[1].toIntOrNull() ?: return null,
+            extruderCount = f[2].toIntOrNull() ?: return null,
+            roleCount = f[3].toIntOrNull() ?: return null,
+            printTimeSeconds = f[4].toDoubleOrNull() ?: return null,
+            filamentUsedMm = f[5].toDoubleOrNull() ?: return null,
+            filamentUsedG = f[6].toDoubleOrNull() ?: return null,
+            minZ = f[7].toFloatOrNull() ?: return null,
+            maxZ = f[8].toFloatOrNull() ?: return null,
+        )
+    }
+
+    fun previewLayer(index: Int): PreviewLayer? {
+        val f = felder(nativePreviewLayerAt(requireHandle(), index), 7) ?: return null
+        return PreviewLayer(
+            index = f[0].toIntOrNull() ?: return null,
+            sourceLayerId = f[1].toIntOrNull() ?: return null,
+            zLower = f[2].toDoubleOrNull() ?: return null,
+            zUpper = f[3].toDoubleOrNull() ?: return null,
+            timeSeconds = f[4].toDoubleOrNull() ?: return null,
+            filamentUsedMm = f[5].toDoubleOrNull() ?: return null,
+            filamentUsedG = f[6].toDoubleOrNull() ?: return null,
+        )
+    }
+
+    fun previewExtruder(index: Int): PreviewExtruder? {
+        val f = felder(nativePreviewExtruderAt(requireHandle(), index), 6) ?: return null
+        return PreviewExtruder(
+            extruder = f[0].toIntOrNull() ?: return null,
+            colorRgba = f[1].toLongOrNull() ?: return null,
+            moveCount = f[2].toLongOrNull() ?: return null,
+            timeSeconds = f[3].toDoubleOrNull() ?: return null,
+            filamentUsedMm = f[4].toDoubleOrNull() ?: return null,
+            filamentUsedG = f[5].toDoubleOrNull() ?: return null,
+        )
+    }
+
+    fun previewRole(index: Int): PreviewRole? {
+        val f = felder(nativePreviewRoleAt(requireHandle(), index), 6) ?: return null
+        return PreviewRole(
+            role = f[0].toIntOrNull() ?: return null,
+            colorRgba = f[1].toLongOrNull() ?: return null,
+            moveCount = f[2].toLongOrNull() ?: return null,
+            timeSeconds = f[3].toDoubleOrNull() ?: return null,
+            filamentUsedMm = f[4].toDoubleOrNull() ?: return null,
+            filamentUsedG = f[5].toDoubleOrNull() ?: return null,
+        )
+    }
+
+    /** Wie viele Extruder im letzten Ergebnis wirklich gedruckt haben. */
+    fun sliceExtruderCount(): Int = nativeSliceExtruderCount(requireHandle())
+
+    fun sliceExtruder(index: Int): ExtruderUsage? {
+        val f = felder(nativeSliceExtruderAt(requireHandle(), index), 4) ?: return null
+        return ExtruderUsage(
+            extruder = f[0].toIntOrNull() ?: return null,
+            volumeMm3 = f[1].toDoubleOrNull() ?: return null,
+            wipeTowerMm3 = f[2].toDoubleOrNull() ?: return null,
+            flushMm3 = f[3].toDoubleOrNull() ?: return null,
+        )
+    }
+
+    fun loadGcodeForPreview(path: String) =
+        check(nativeLoadGcodeForPreview(requireHandle(), path), "G-Code laden")
+
+    /* --- Anordnen ---------------------------------------------------- */
+
+    /** Wie PrusaSlicer den Ausgang einer Anordnung meldet. */
+    enum class ArrangeStatus(val raw: Int) {
+        ARRANGED(0), EMPTY(1), LOCKED(2), FULL(3), UNKNOWN(-1);
+
+        companion object {
+            fun of(raw: Int) = entries.firstOrNull { it.raw == raw } ?: UNKNOWN
+        }
+    }
+
+    data class ArrangeResult(
+        val status: ArrangeStatus,
+        val objectCount: Int,
+        val instanceCount: Int,
+        val ok: Boolean,
+    )
+
+    /**
+     * Anordnen mit Optionen und Auskunft.
+     *
+     * Die nackte Fassung [arrange] sagt nur, dass es nicht ging. Diese
+     * hier meldet gesperrt und voll als eigenen Zustand und liefert
+     * dazu Objekt- und Instanzzahl - damit die Oberflaeche einen Satz
+     * schreiben kann statt eines Fehlercodes.
+     */
+    fun arrangeBed(bedIndex: Int, gapMm: Float, allowRotation: Boolean): ArrangeResult {
+        val f = nativeArrangeBedEx(
+            requireHandle(), bedIndex, gapMm, if (allowRotation) 1 else 0,
+        ).split('\t')
+        if (f.size != 4) return ArrangeResult(ArrangeStatus.UNKNOWN, 0, 0, false)
+        return ArrangeResult(
+            status = ArrangeStatus.of(f[0].toIntOrNull() ?: -1),
+            objectCount = f[1].toIntOrNull() ?: 0,
+            instanceCount = f[2].toIntOrNull() ?: 0,
+            ok = (f[3].toIntOrNull() ?: -1) == 0,
+        )
+    }
+
+    /* --- Adaptive Schichthoehe --------------------------------------- */
+
+    /**
+     * PrusaSlicers adaptive Schichthoehe aus der Objektgeometrie.
+     *
+     * @param quality 0 grob bis 1 fein, wie der Regler am Desktop.
+     * @return Paare aus z und Hoehe, leer wenn nichts zu rechnen war.
+     */
+    fun adaptiveLayerProfile(id: Int, quality: Float): List<Pair<Double, Double>> {
+        val werte = nativeLayerProfileAdaptive(requireHandle(), id, quality)
+            ?: return emptyList()
+        return werte.toList().chunked(2).mapNotNull {
+            if (it.size == 2) it[0] to it[1] else null
+        }
+    }
+
+    /* --- Sonstiges ---------------------------------------------------- */
+
+    /** Ob das letzte Ergebnis noch zum aktuellen Stand des Betts passt. */
+    fun sliceResultIsCurrent(): Boolean = nativeSliceResultIsCurrent(requireHandle()) != 0
+
+    /**
+     * Fertigen G-Code von aussen uebernehmen, statt lokal neu zu
+     * rechnen - der Weg fuer das Fernslicen.
+     *
+     * [requestRevision] ist die Szenenrevision, die beim Hochladen galt
+     * ([designRevision]). Hat sich das Bett seither geaendert, weist der
+     * Kern die Datei ab - sonst laege ein Ergebnis von vorhin auf einer
+     * Anordnung von jetzt.
+     */
+    fun acceptRemoteGcode(path: String, requestRevision: Long) =
+        check(
+            nativeAcceptRemoteGcode(requireHandle(), path, requestRevision),
+            "G-Code übernehmen",
+        )
+
+    fun designRevision(): Long = nativeDesignRevision(requireHandle())
+
+    /** Lage eines Objekts zum Druckraum, feiner als [ObjectInfo.outsideBed]. */
+    enum class BedState(val raw: Int) {
+        INSIDE(0), COLLIDING(1), OUTSIDE(2), BELOW(3), UNKNOWN(4);
+
+        companion object {
+            fun of(raw: Int) = entries.firstOrNull { it.raw == raw } ?: UNKNOWN
+        }
+    }
+
+    fun bedStateOf(id: Int): BedState =
+        BedState.of(nativeBedStateOf(requireHandle(), id))
+
+    /** Auf Flaeche legen fuer genau diese Kopie statt immer Instanz 0. */
+    fun layOnFacet(id: Int, instance: Int, volume: Int, facet: Int) =
+        check(
+            nativeLayOnFacetInstance(requireHandle(), id, instance, volume, facet),
+            "Auf Fläche legen",
+        )
 
     fun clearPaint(id: Int, tool: PaintTool) =
         check(nativeClearPaint(requireHandle(), id, tool.raw), "Bemalung löschen")

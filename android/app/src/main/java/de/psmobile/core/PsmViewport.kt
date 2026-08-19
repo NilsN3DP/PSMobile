@@ -32,6 +32,14 @@ class PsmViewport private constructor(private var handle: Long) {
         @JvmStatic private external fun nativeSetMultiBedRender(h: Long, enabled: Int)
         @JvmStatic private external fun nativeFocusBed(h: Long, index: Int)
         @JvmStatic private external fun nativeBedLabelAnchor(h: Long, position: Int): String?
+        @JvmStatic private external fun nativeSetPreviewView(h: Long, view: Int)
+        @JvmStatic private external fun nativeSetRoleVisible(h: Long, role: Int, visible: Int)
+        @JvmStatic private external fun nativeSetExtruderVisible(h: Long, extruder: Int, visible: Int)
+        @JvmStatic private external fun nativeMoveRangeBounds(h: Long): String?
+        @JvmStatic private external fun nativeSetMoveRange(h: Long, first: Int, last: Int)
+        @JvmStatic private external fun nativeGestureBegin(h: Long)
+        @JvmStatic private external fun nativeGetGizmo(h: Long): Int
+        @JvmStatic private external fun nativeGizmoAxisScreen(h: Long, axis: Int): String?
         @JvmStatic private external fun nativeSetSelections(
             h: Long, ids: IntArray, primary: Int)
         @JvmStatic private external fun nativeSetPaintOptions(
@@ -164,6 +172,58 @@ class PsmViewport private constructor(private var handle: Long) {
 
     /** Schwenkt die Kamera auf genau ein Bett und passt es ins Bild. */
     fun focusBed(index: Int) = nativeFocusBed(handle, index)
+
+    /* --- Vorschau-Filter --------------------------------------------- */
+
+    /** Wonach die Werkzeugwege eingefaerbt werden. */
+    enum class PreviewView(val raw: Int) { FEATURE(0), EXTRUDER(1) }
+
+    fun setPreviewView(view: PreviewView) = nativeSetPreviewView(handle, view.raw)
+
+    /** Eine Merkmalsrolle aus- oder einblenden. */
+    fun setRoleVisible(role: Int, visible: Boolean) =
+        nativeSetRoleVisible(handle, role, if (visible) 1 else 0)
+
+    /** Einen Extruder aus- oder einblenden. */
+    fun setExtruderVisible(extruder: Int, visible: Boolean) =
+        nativeSetExtruderVisible(handle, extruder, if (visible) 1 else 0)
+
+    /* --- Werkzeugweg innerhalb der Schicht ---------------------------- */
+
+    /**
+     * Grenzen des unteren Reglers. Er scrubt innerhalb einer Schicht,
+     * statt zwischen Schichten zu wechseln. Sie aendern sich mit dem
+     * Schichtbereich - also vor jedem Aufbau des Reglers neu abfragen.
+     */
+    fun moveRangeBounds(): IntRange? {
+        val f = nativeMoveRangeBounds(handle)?.split('\t') ?: return null
+        if (f.size != 2) return null
+        val min = f[0].toIntOrNull() ?: return null
+        val max = f[1].toIntOrNull() ?: return null
+        return min..max
+    }
+
+    fun setMoveRange(first: Int, last: Int) = nativeSetMoveRange(handle, first, last)
+
+    /**
+     * Meldet den Anfang einer Geste - danach setzt der Kern genau einen
+     * Wiederherstellungspunkt.
+     */
+    fun gestureBegin() = nativeGestureBegin(handle)
+
+    fun currentGizmo(): Gizmo =
+        Gizmo.entries.firstOrNull { it.raw == nativeGetGizmo(handle) } ?: Gizmo.NONE
+
+    /**
+     * Bildschirmsegment einer Move-Gizmo-Achse in Renderpixeln, oder
+     * null wenn sie gerade nicht sichtbar ist.
+     */
+    fun gizmoAxisScreen(axis: Int): FloatArray? {
+        val f = nativeGizmoAxisScreen(handle, axis)?.split('\t') ?: return null
+        if (f.size != 4) return null
+        val werte = f.map { it.toFloatOrNull() ?: return null }
+        return werte.toFloatArray()
+    }
 
     /**
      * Bildschirmpunkt fuer das Namensschild eines Betts, oder null

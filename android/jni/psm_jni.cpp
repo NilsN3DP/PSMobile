@@ -1586,11 +1586,20 @@ JNIEXPORT jint JNICALL JNI_FN(nativeSliceResultIsCurrent)(JNIEnv *, jclass, jlon
     return psm_slice_result_is_current(sess(h)) ? 1 : 0;
 }
 
+/*
+ * Fertigen G-Code von aussen uebernehmen.
+ *
+ * requestRevision ist die Szenenrevision, die beim Hochladen galt. Hat
+ * sich das Bett seither geaendert, weist der Kern die Datei ab
+ * (PSM_ERR_STALE_RESULT) - sonst laege ein Ergebnis von vorhin auf
+ * einer Anordnung von jetzt.
+ */
 JNIEXPORT jint JNICALL JNI_FN(nativeAcceptRemoteGcode)(
-    JNIEnv *env, jclass, jlong h, jstring path)
+    JNIEnv *env, jclass, jlong h, jstring path, jlong requestRevision)
 {
     const char *p = env->GetStringUTFChars(path, nullptr);
-    const psm_result r = psm_slice_accept_remote_gcode(sess(h), p);
+    const psm_result r = psm_slice_accept_remote_gcode(
+        sess(h), p, static_cast<uint64_t>(requestRevision));
     env->ReleaseStringUTFChars(path, p);
     return r;
 }
