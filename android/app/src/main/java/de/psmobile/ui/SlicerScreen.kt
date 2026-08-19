@@ -1442,7 +1442,7 @@ internal fun formatDuration(seconds: Double): String {
 }
 
 /** "#RRGGBB" nach Compose-Color. Null, wenn nichts oder Unsinn drinsteht. */
-private fun parseColor(rgb: String): Color? {
+internal fun parseColor(rgb: String): Color? {
     val hex = rgb.removePrefix("#")
     if (hex.length != 6) return null
     val v = hex.toLongOrNull(16) ?: return null

@@ -57,6 +57,7 @@ import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import de.psmobile.shared.rules.FilamentCatalog
 import de.psmobile.shared.ui.Corners
 import de.psmobile.ui.theme.psTouch
 import de.psmobile.ui.theme.AlertDialog
@@ -317,7 +318,7 @@ internal fun Sidebar(
                         // Same composable as Simple Mode, deliberately kept in this
                         // sidebar composition so its device scale stays identical.
                         SimpleMaterialChooser(
-                            filaments = presets.filaments,
+                            katalog = service.filamentCatalog(),
                             selectedExtruder = materialHead,
                             onBack = { filamentPickerIndex = null },
                             onChoose = { filament ->

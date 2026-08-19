@@ -80,6 +80,8 @@ import de.psmobile.slicing.SlicerService
 import de.psmobile.ui.theme.PrusaColors
 import de.psmobile.ui.theme.ScaledOverlay
 import de.psmobile.ui.theme.uiScaleFor
+import androidx.compose.foundation.shape.CircleShape
+import de.psmobile.shared.rules.FilamentCatalog
 import de.psmobile.shared.ui.Corners
 import de.psmobile.shared.rules.AdhesionAdvice
 import de.psmobile.shared.rules.SimpleModeState
@@ -950,7 +952,7 @@ private fun SimpleMaterialPanel(service: SlicerService, presets: SlicerService.P
     var chooserOpen by rememberSaveable { mutableStateOf(false) }
     if (chooserOpen) {
         SimpleMaterialChooser(
-            filaments = presets.filaments,
+            katalog = service.filamentCatalog(),
             selectedExtruder = selectedExtruder,
             onBack = { chooserOpen = false },
             onChoose = { filament ->
@@ -1017,7 +1019,7 @@ private fun SimpleMaterialPanel(service: SlicerService, presets: SlicerService.P
 @Composable
 @OptIn(ExperimentalLayoutApi::class)
 internal fun SimpleMaterialChooser(
-    filaments: List<String>,
+    katalog: List<FilamentCatalog.Entry>,
     selectedExtruder: Int,
     onBack: () -> Unit,
     onChoose: (String) -> Unit,
@@ -1027,6 +1029,9 @@ internal fun SimpleMaterialChooser(
     onShowIncompatible: ((Boolean) -> Unit)? = null,
 ) {
     var query by rememberSaveable { mutableStateOf("") }
+    var typ by rememberSaveable { mutableStateOf("") }
+    var farbe by rememberSaveable { mutableStateOf("") }
+
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         TextButton(onClick = onBack) { Text("←") }
         Text(
@@ -1035,28 +1040,103 @@ internal fun SimpleMaterialChooser(
             style = MaterialTheme.typography.titleLarge,
             modifier = Modifier.weight(1f),
         )
-        Text("T${selectedExtruder + 1}", color = PrusaColors.Orange, style = MaterialTheme.typography.labelLarge)
+        Text(
+            "T${selectedExtruder + 1}",
+            color = PrusaColors.Orange,
+            style = MaterialTheme.typography.labelLarge,
+        )
     }
-    Text(st("FIND A SPOOL", "SPULE SUCHEN"), color = PrusaColors.TextMuted, style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(top = 8.dp))
-    TextField(query, { query = it }, label = { Text(st("search by vendor, material or color", "nach Hersteller, Material oder Farbe suchen")) }, modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp), singleLine = true)
-    // Im Seitenpanel eines Tablets wäre eine horizontale Chip-Leiste
-    // abgeschnitten und nur durch verstecktes Wischen erreichbar. FlowRow
-    // erhält die Easy-Print-Auswahl, passt sie aber sauber an jede Breite an.
+
+    /*
+     * Die Auswahl, wie EasyPrint sie zeigt: Suchfeld ueber Anbieter,
+     * Material und Farbe, darunter Typ-Knoepfe und Farbpunkte, und
+     * darunter Karten mit einer echten Spule.
+     *
+     * Die Regeln dazu stehen im gemeinsamen Modul (FilamentCatalog) und
+     * lagen dort seit langem ungenutzt - Android hatte bis hierher nur
+     * ein Suchfeld und eine Liste. Eine Liste mit vierhundert Profilen
+     * ist mit dem Finger nicht zu durchsuchen, und niemand kennt den
+     * genauen Namen seines Profils: man weiss, welche Rolle im Schrank
+     * liegt.
+     */
+    TextField(
+        query,
+        { query = it },
+        label = {
+            Text(st(
+                FilamentCatalog.searchHint().english,
+                FilamentCatalog.searchHint().german,
+            ))
+        },
+        modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+        singleLine = true,
+    )
+
+    // Die gaengigen Typen zuerst - wer PLA sucht, soll nicht an ABS
+    // vorbei. Ein zweiter Tipp auf denselben Knopf hebt den Filter auf.
     FlowRow(
         Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(6.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp),
         maxItemsInEachRow = 5,
     ) {
-        SimpleModeState.materialTypes().forEach { type -> OutlinedButton(onClick = { query = type }) { Text(type) } }
+        FilamentCatalog.types(katalog).forEach { name ->
+            val aktiv = typ == name
+            Box(
+                Modifier
+                    .height(psTouch(44))
+                    .clip(RoundedCornerShape(Corners.PILL.dp))
+                    .background(if (aktiv) PrusaColors.Orange else PrusaColors.PanelRaised)
+                    .clickable { typ = if (aktiv) "" else name }
+                    .padding(horizontal = 14.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    name,
+                    color = if (aktiv) PrusaColors.Background else PrusaColors.TextPrimary,
+                    style = MaterialTheme.typography.labelMedium,
+                )
+            }
+        }
     }
-    // Ohne Suche waere die vollstaendige Liste unbrauchbar - mit Suche
-    // ist sie es nicht mehr, und wer ein fremdes Filament bewusst
-    // einsetzt, kam vorher gar nicht daran. Unpassende bleiben aber
-    // sichtbar als solche markiert.
+
+    // Die haeufigsten Farben im Bestand, nicht ein fester Farbkreis: die
+    // Punkte sollen zeigen, was wirklich da ist.
+    val farben = FilamentCatalog.colors(katalog)
+    if (farben.isNotEmpty()) {
+        Row(
+            Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())
+                .padding(top = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            farben.forEach { hex ->
+                val aktiv = farbe == hex
+                Box(
+                    Modifier
+                        .size(psTouch(44))
+                        .clickable { farbe = if (aktiv) "" else hex },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Box(
+                        Modifier
+                            .size(if (aktiv) 30.dp else 26.dp)
+                            .clip(CircleShape)
+                            .background(parseColor(hex) ?: PrusaColors.PanelRaised)
+                            .border(
+                                if (aktiv) 3.dp else 1.dp,
+                                if (aktiv) PrusaColors.Orange else PrusaColors.Divider,
+                                CircleShape,
+                            ),
+                    )
+                }
+            }
+        }
+    }
+
     if (showIncompatible != null && onShowIncompatible != null) {
         Row(
             Modifier.fillMaxWidth().padding(top = 8.dp)
+                .heightIn(min = psTouch(44))
                 .clickable { onShowIncompatible(!showIncompatible) },
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -1076,31 +1156,64 @@ internal fun SimpleMaterialChooser(
             )
         }
     }
-    val matches = EasyModeState.filterPresets(filaments, query).take(15)
-    if (matches.isEmpty()) {
-        TextButton(onClick = onOpenAdvanced) { Text(st("Set up filament", "Filament einrichten")) }
+
+    val treffer = FilamentCatalog.filter(katalog, query, typ, farbe)
+    if (treffer.isEmpty()) {
+        LeeresPanel(
+            nachricht = st(
+                FilamentCatalog.emptyMessage().english,
+                FilamentCatalog.emptyMessage().german,
+            ),
+            aktion = st("Set up filament", "Filament einrichten"),
+            onAktion = onOpenAdvanced,
+        )
     } else {
-        matches.chunked(3).forEach { row ->
-            Row(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                row.forEach { filament ->
-                    val fits = filament !in incompatible
+        treffer.chunked(2).forEach { row ->
+            Row(
+                Modifier.fillMaxWidth().padding(top = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                row.forEach { eintrag ->
+                    val passt = eintrag.rawPreset !in incompatible
                     Column(
-                        Modifier.weight(1f).height(112.dp)
-                            .background(PrusaColors.PanelRaised, RoundedCornerShape(Corners.FIELD.dp))
+                        Modifier.weight(1f)
+                            .background(
+                                PrusaColors.PanelRaised,
+                                RoundedCornerShape(Corners.CARD.dp),
+                            )
                             .then(
-                                if (fits) Modifier
+                                if (passt) Modifier
                                 else Modifier.border(
-                                    1.dp, PrusaColors.Danger, RoundedCornerShape(Corners.FIELD.dp)
+                                    1.dp, PrusaColors.Danger,
+                                    RoundedCornerShape(Corners.CARD.dp),
                                 )
                             )
-                            .clickable { onChoose(filament) }.padding(10.dp),
+                            .clickable { onChoose(eintrag.rawPreset) }
+                            .padding(10.dp),
                         horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.SpaceBetween,
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
                     ) {
-                        Text(filament.substringBeforeLast(" ", filament), color = PrusaColors.TextPrimary, textAlign = TextAlign.Center, style = MaterialTheme.typography.labelMedium, maxLines = 2)
-                        if (fits) {
-                            Text("━━━━", color = PrusaColors.Orange, fontSize = 18.sp)
-                        } else {
+                        Text(
+                            eintrag.vendor,
+                            color = PrusaColors.TextPrimary,
+                            style = MaterialTheme.typography.labelLarge,
+                            maxLines = 1,
+                        )
+                        Text(
+                            eintrag.type.ifBlank { " " },
+                            color = PrusaColors.TextMuted,
+                            style = MaterialTheme.typography.labelSmall,
+                            maxLines = 1,
+                        )
+                        Spule(eintrag.colorHex)
+                        Text(
+                            eintrag.rawPreset,
+                            color = PrusaColors.TextMuted,
+                            style = MaterialTheme.typography.labelSmall,
+                            textAlign = TextAlign.Center,
+                            maxLines = 2,
+                        )
+                        if (!passt) {
                             Text(
                                 st("other printer", "anderer Drucker"),
                                 color = PrusaColors.Danger,
@@ -1110,8 +1223,73 @@ internal fun SimpleMaterialChooser(
                         }
                     }
                 }
-                repeat(3 - row.size) { Spacer(Modifier.weight(1f)) }
+                repeat(2 - row.size) { Spacer(Modifier.weight(1f)) }
             }
+        }
+    }
+}
+
+/**
+ * Eine Rolle statt eines Farbklecks.
+ *
+ * In EasyPrint steht auf jeder Karte ein Foto der Spule. Ein Foto je
+ * Filament haetten wir nicht, aber die Form allein traegt schon die
+ * Auskunft: das hier ist eine Rolle in dieser Farbe - von vorn gesehen
+ * wie eine echte Spule, nicht nur ein gefaerbter Kreis. Aeusserer
+ * Flansch, aufgewickeltes Filament als Ring, Nabe und Kernloch.
+ */
+@Composable
+private fun Spule(hex: String) {
+    val farbe = parseColor(hex) ?: PrusaColors.PanelRaised
+    Box(Modifier.size(44.dp), contentAlignment = Alignment.Center) {
+        Box(
+            Modifier.size(44.dp).clip(CircleShape)
+                .background(PrusaColors.PanelRaised)
+                .border(1.dp, PrusaColors.Divider, CircleShape),
+        )
+        Box(Modifier.size(34.dp).clip(CircleShape).background(farbe))
+        Box(
+            Modifier.size(18.dp).clip(CircleShape)
+                .background(PrusaColors.Background)
+                .border(1.dp, PrusaColors.Divider, CircleShape),
+        )
+        Box(Modifier.size(7.dp).clip(CircleShape).background(PrusaColors.Panel))
+    }
+}
+
+/**
+ * Eine Aussage plus der Knopf, der aus der Lage herausfuehrt.
+ *
+ * Vorher stand an diesen Stellen eine leere Flaeche oder ein nackter
+ * Textknopf. Wer dort landet, hat ein Problem und keinen Weg heraus -
+ * iOS hat dafuer seit langem ein eigenes Muster (leeresPanel).
+ */
+@Composable
+internal fun LeeresPanel(nachricht: String, aktion: String, onAktion: () -> Unit) {
+    Column(
+        Modifier.fillMaxWidth()
+            .padding(top = 8.dp)
+            .background(PrusaColors.PanelRaised, RoundedCornerShape(Corners.CARD.dp))
+            .padding(18.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Text(
+            nachricht,
+            color = PrusaColors.TextMuted,
+            style = MaterialTheme.typography.bodyMedium,
+            textAlign = TextAlign.Center,
+        )
+        Box(
+            Modifier
+                .height(psTouch(44))
+                .clip(RoundedCornerShape(Corners.FIELD.dp))
+                .border(1.dp, PrusaColors.Divider, RoundedCornerShape(Corners.FIELD.dp))
+                .clickable(onClick = onAktion)
+                .padding(horizontal = 14.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(aktion, color = PrusaColors.Orange, style = MaterialTheme.typography.bodyMedium)
         }
     }
 }

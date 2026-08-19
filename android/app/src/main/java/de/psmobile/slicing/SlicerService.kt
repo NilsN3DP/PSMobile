@@ -21,6 +21,7 @@ import de.psmobile.slicing.profileupdate.ProfileUpdateRepository
 import de.psmobile.slicing.profileupdate.ProfileUpdateState
 import de.psmobile.slicing.profileupdate.ProfileVersion
 import de.psmobile.slicing.profileupdate.HttpUrlConnectionProfileUpdateHttp
+import de.psmobile.shared.rules.FilamentCatalog
 import de.psmobile.shared.rules.PreviewLayerMetrics
 import de.psmobile.shared.rules.ColorMixCodec
 import de.psmobile.shared.rules.ColorMixRecipe
@@ -1541,6 +1542,44 @@ class SlicerService : Service() {
     fun clearPaint(id: Int, tool: PsmCore.PaintTool) {
         withObject(id, SimpleModeState.text("Clear painting", "Bemalung löschen")) { it.clearPaint(id, tool) }
         _paintRevision.value += 1
+    }
+
+    /* --- Materialauswahl --------------------------------------------- */
+
+    /*
+     * Der Katalog wird gemerkt: die Auswahl liest je Profil zwei Werte
+     * ueber die Schnittstelle, und bei jedem Tastendruck im Suchfeld
+     * erneut waere das bei vierhundert Filamenten spuerbar.
+     */
+    private var filamentKatalog: List<FilamentCatalog.Entry> = emptyList()
+    private var filamentKatalogFuer: List<String> = emptyList()
+
+    /**
+     * Alle Filamentprofile mit Typ und Farbe, aufbereitet fuer die
+     * Materialauswahl.
+     *
+     * Typ und Farbe stehen als `filament_type` und `filament_colour` im
+     * Profil. Sie ueber die Auswahl zu holen hiesse, fuer jede Zeile die
+     * ganze Konfiguration umzubauen - deshalb `presetOption`, das ohne
+     * Auswechseln liest.
+     */
+    fun filamentCatalog(): List<FilamentCatalog.Entry> {
+        val c = core ?: return emptyList()
+        val namen = _presets.value.filaments
+        if (namen == filamentKatalogFuer) return filamentKatalog
+        filamentKatalog = namen.map { name ->
+            FilamentCatalog.entry(
+                rawPreset = name,
+                type = runCatching {
+                    c.presetOption(PsmCore.PresetType.FILAMENT, name, "filament_type")
+                }.getOrDefault(""),
+                colorHex = runCatching {
+                    c.presetOption(PsmCore.PresetType.FILAMENT, name, "filament_colour")
+                }.getOrDefault(""),
+            )
+        }
+        filamentKatalogFuer = namen
+        return filamentKatalog
     }
 
     /* --- Vorschau: Statistik und Legende ----------------------------- */
