@@ -80,6 +80,11 @@ Zielflächen zurückrechnet, und alle festen Knopfhöhen darauf umstellen.
 **Fertig wenn** Auf einem Fenster an der Untergrenze misst kein Knopf
 weniger als 44 dp.
 
+**Stand: erledigt** (19.08., `75c8dd1`). `psTouch()` in
+`ui/theme/Theme.kt`, 118 Fundstellen zwischen 40 und 58 dp umgestellt.
+Was darüber liegt, bleibt: Kartenhöhen sind eine Gestaltungsfrage, keine
+Trefferfrage.
+
 **Warum zuerst** Das Paket wirkt auf jedem Bildschirm. Alles danach baut
 darauf auf.
 
@@ -110,12 +115,12 @@ Modul:
 | `FIELD` | 8 | Felder, Knöpfe, Zeilen |
 | `PILL` | rund | Typfilter, Bettkapseln, Chips |
 
-**Stand** Skala angelegt und dort angewandt, wo der Sprung am größten
-war: Panel im Simple Mode, große Dialoge, Werkzeugmeldung. Offen: rund
-150 Stellen auf Android, rund 160 auf iOS.
+**Stand: Android erledigt** (19.08., `75c8dd1`). 164 Fundstellen
+umgestellt: bis 9 dp `FIELD`, 10 bis 12 `CARD`, darüber `SHEET`.
+`grep -c 'RoundedCornerShape([0-9]'` findet im `ui`-Paket nichts mehr.
 
-**Fertig wenn** `grep -c RoundedCornerShape([0-9]` findet auf Android nur
-noch Farbproben.
+**Offen: iOS**, rund 160 Fundstellen. Der Mac ist nicht erreichbar, also
+weder zu schreiben noch zu prüfen.
 
 ---
 
