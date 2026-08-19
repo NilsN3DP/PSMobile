@@ -166,6 +166,14 @@ weder zu schreiben noch zu prüfen.
 **Fertig wenn** Nach dem Slicen steht dieselbe Statistik da wie auf iOS,
 und ein abgeschalteter Merkmals-Chip blendet die Wege im Viewport aus.
 
+**Stand: erledigt** (19.08., `3377a96`). Belegt am Emulator: `0:30 ·
+3.59 m · 10.7 g · 0.20–20.00 mm`, Umschalter Merkmale/Extruder, Chips
+mit Farbpunkt, und *Perimeter* und *Solid infill* lassen sich ausgrauen.
+`PreviewRange` liegt im gemeinsamen Modul mit sechs Tests.
+
+Der Verbrauch je Werkzeug ist eingebaut, aber noch **nicht am Geraet
+gesehen** — er erscheint erst ab zwei wirklich druckenden Extrudern.
+
 ---
 
 ### AP-04 · Schwebende Objektleiste im Advanced Mode · Kern: nein
