@@ -16,7 +16,7 @@ das, was eine neue Sitzung als Erstes liest — hier steht, wo genau
 weitergemacht wird, ohne dass jemand die Historie durchsuchen muss.
 
 **Zuletzt geändert:** 19.08.2026 · Zweig
-`codex/ios-android-parity-implementation` · letzter Commit `bb47ae1`
+`codex/ios-android-parity-implementation` · letzter Commit `469203a`
 
 ### Wo die Arbeit liegt
 
@@ -81,29 +81,31 @@ ab; von dort gehört sie in die Arbeitskopie kopiert. Achtung: `du` meldet
   *Öffnen* und *Projekte* in der oberen Leiste, *Stützen* und *Naht* in
   der Schiene, *Trennen* als Untermenü, Fußzeile mit Drucker und
   App-Einstellungen.
+- **AP-06** `SchwebenderDialog` steht und trägt Einstellungen, Drucker
+  und ColorMix (`469203a`). Offen: `SetupScreen`, `AppSettingsScreen`,
+  Profilwechsel und ZIP-Frage.
 - **AP-09** Das Muster steht und ist in der Materialauswahl im Einsatz.
   Offen: dieselbe Behandlung für *Keine Druckeinstellungen vorhanden*.
 
 ### Als Nächstes
 
-**AP-06 · Schwebende Dialoge statt Vollbildseiten.** Kein Kernbau nötig,
-und die Änderung mit der größten Breitenwirkung, die noch aussteht.
+**AP-06 zu Ende bringen.** Kein Kernbau nötig. `SchwebenderDialog`
+steht bereits und trägt drei Bildschirme; es fehlen die beiden aus
+`MainActivity` und die zwei Rückfragen.
 
 Konkret:
 
-1. Ein `SchwebenderDialog` in `ui/` als Gegenstück zu
-   `Screens/ProfilWechselDialog.swift` — abgedunkelter Hintergrund,
-   Tipp daneben schließt, Rand ringsherum: 10 dp auf schmalen, 28 dp
-   auf breiten Geräten (`SettingsLayout.usesCompactNavigation` sagt
-   schon, welcher Fall vorliegt).
-2. Er gehört **in `ScaledOverlay`**. Dialoge rendern auf Android in
-   einem eigenen Fenster und erben `LocalDensity` nicht; ohne das ist
-   der Inhalt falsch skaliert. Ein Regeltest wacht darüber.
-3. Danach die Vollbildseiten der Reihe nach umstellen: erst
-   `SettingsScreen` (dort ist der Kontextverlust am größten), dann
-   `SetupScreen`, `AppSettingsScreen`, Profilwechsel und ZIP-Frage.
-   Jeweils einzeln bauen und ansehen — der Rand ändert die Höhe, an
-   der die inneren Listen scrollen.
+1. `MainActivity.kt:311` — `AppSettingsScreen` in `SchwebenderDialog`
+   fassen, `maxBreite = 900.dp`, `onClose` bleibt wie es ist. Das ist
+   der einfachere der beiden Fälle und zeigt gleich, ob die inneren
+   Listen mit dem kleineren Fenster zurechtkommen.
+2. `SetupScreen` genauso. Achtung: die Ersteinrichtung läuft, bevor
+   ein Bett steht — dahinter ist der Bildschirm leer. Erst ansehen,
+   ob das Schweben dort überhaupt etwas beiträgt; wenn nicht, im Plan
+   als bewusste Ausnahme vermerken statt es stillschweigend zu lassen.
+3. Profilwechsel und ZIP-Frage sind bereits Dialoge, aber ohne den
+   gemeinsamen Rahmen — auf `SchwebenderDialog` umstellen, damit alle
+   vier Ecken und Ränder gleich aussehen.
 
 Danach **AP-05** zu Ende (obere Leiste: *Öffnen*, *Projekte*; Schiene:
 *Stützen*, *Naht*, *Trennen* als Untermenü, Fußzeile).
@@ -386,6 +388,25 @@ breiten Geräten.
 **Achtung** Auf Android rendern Dialoge in einem eigenen Fenster und
 erben `LocalDensity` nicht. Jeder neue Dialog gehört in `ScaledOverlay`,
 sonst ist er falsch skaliert. Ein Regeltest wacht darüber.
+
+**Stand: teilweise** (19.08., `469203a`). `SchwebenderDialog` steht in
+`ui/SchwebenderDialog.kt` und trägt **Einstellungen, Drucker und
+ColorMix**. Belegt am Emulator: die Einstellungen stehen als Karte über
+dem Bett, Werkzeugleiste und Seitenband schauen ringsum hervor, ein Tipp
+daneben schließt.
+
+**Offen:** `SetupScreen`, `AppSettingsScreen` (beide in `MainActivity`),
+Profilwechsel und ZIP-Frage.
+
+**Der Fallstrick, den der nächste kennen sollte:** mit
+`usePlatformDefaultWidth = false` ist das Dialogfenster so hoch wie der
+Bildschirm, sitzt aber unter der Statusleiste — es ragt genau um deren
+Höhe unten heraus (gemessen: 104 px Rand oben, 8 px unten). Weder
+`windowInsetsPadding` noch `decorFitsSystemWindows` noch
+`FLAG_LAYOUT_NO_LIMITS` ändern daran etwas. Die Karte rechnet ihre Größe
+deshalb aus der Ansicht der Aktivität minus Systemleisten und hängt oben
+an. Wer einen weiteren schwebenden Bildschirm baut, nimmt
+`SchwebenderDialog` und misst nicht neu.
 
 ---
 

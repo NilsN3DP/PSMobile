@@ -52,7 +52,7 @@ sondern die Absprache währenddessen.
 | iOS Advanced: Werkzeugleiste, Objektbaum | Claude | steht, 4 Tests |
 | Bemalen: Stützen, Naht, MMU | Claude | steht auf iOS, 2 Tests |
 | Sonderwerte auf iOS (Bett, Reinigung) | Claude | zwei von fünf |
-| Gleichstand Android ↔ iOS | Claude | Plan in `00-gleichstand-implementierungsplan.md`, AP-01/02/03/07/08/09/18 fertig |
+| Gleichstand Android ↔ iOS | Claude | Plan in `00-gleichstand-implementierungsplan.md`, AP-01/02/03/07/08/09/18 fertig, AP-06 teilweise |
 
 ---
 
@@ -209,6 +209,43 @@ SSH als `root`.
 
 **Nicht angefasst und bewusst so:** die iOS-Seite. Der Mac unter
 `192.168.1.107` antwortet weiterhin nicht.
+
+### Claude — AP-06 Schwebende Dialoge, und ein Fenster, das 48 px zu tief sitzt
+
+`SchwebenderDialog` steht in `ui/SchwebenderDialog.kt` und traegt
+Einstellungen, Drucker und ColorMix. Die drei ersetzten bisher den
+ganzen Bildschirm; jetzt liegen sie als Karte mit Rand ringsherum ueber
+dem Arbeitsbereich, und Werkzeugleiste, Bett und Seitenband bleiben
+sichtbar. Ein Tipp daneben schliesst.
+
+Commit `469203a`. Belegt am Emulator, gemessen am Bildschirmfoto:
+104 px Rand oben, 120 px unten, 80 px links und rechts — oben und unten
+jeweils der eigene Rand plus die Systemleiste.
+
+**Der Fehler, der drei Anlaeufe gekostet hat.** Mit
+`usePlatformDefaultWidth = false` ist das Dialogfenster so hoch wie der
+Bildschirm, sitzt aber unter der Statusleiste — es ragt genau um deren
+Hoehe unten heraus. Die Karte klebte an der Unterkante: 104 px Rand
+oben, 8 px unten. Nacheinander versucht und alle wirkungslos:
+`windowInsetsPadding(safeDrawing)`, `WindowInsets.safeDrawing.
+asPaddingValues()`, `DialogProperties(decorFitsSystemWindows = false)`,
+`WindowCompat.setDecorFitsSystemWindows` am echten Fenster und
+`FLAG_LAYOUT_NO_LIMITS`. Erst die Rechnung aus der Ansicht der
+Aktivitaet minus Systemleisten, mit der Karte oben angeschlagen, sitzt.
+
+**Was mich dabei laenger im Kreis laufen liess als noetig:** ich habe
+den Rand aus Bildschirmfotos gemessen und die Helligkeit in der
+*Mittelspalte* geprueft — dort liegt der weisse Gestenbalken. Der zaehlte
+als „Karte", und der untere Rand kam mehrfach falsch heraus. Wer so
+misst, nimmt eine Spalte abseits der Mitte, oder besser die Kanten
+(Farbsprung) statt einer Schwelle. Ausserdem hat einmal die
+Navigation nicht gegriffen (die App war noch auf der Startseite), und
+ich habe das Ergebnis trotzdem als Messung genommen — bei jedem
+Messfoto zuerst pruefen, ob ueberhaupt das Richtige zu sehen ist.
+
+**Offen:** `SetupScreen` und `AppSettingsScreen` (beide in
+`MainActivity`), Profilwechsel und ZIP-Frage. Steht mit konkreter
+Reihenfolge im Plan.
 
 ---
 
