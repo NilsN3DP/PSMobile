@@ -66,6 +66,8 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material.icons.filled.Undo
+import androidx.compose.material.icons.filled.Redo
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.LinearProgressIndicator
@@ -734,7 +736,13 @@ private fun SlicerContent(
                                 }
                             },
                         )
-                        ViewBar(sceneController)
+                        ViewBar(
+                            controller = sceneController,
+                            canUndo = history.undoCount > 0,
+                            canRedo = history.redoCount > 0,
+                            onUndo = service::undo,
+                            onRedo = service::redo,
+                        )
                     }
 
                     if (previewMode && layerCount > 1) {
@@ -1096,6 +1104,31 @@ private fun SlicerContent(
  * Tablet steht sie senkrecht links: quer wuerde sie bei 56 dp Zielgroesse
  * die halbe Bettbreite fressen.
  */
+/** Ein Knopf der unteren Leiste, ausgegraut wenn es nichts zu tun gibt. */
+@Composable
+private fun SchrittKnopf(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    moeglich: Boolean,
+    onClick: () -> Unit,
+) {
+    Row(
+        Modifier
+            .height(psTouch(40))
+            .clip(RoundedCornerShape(Corners.FIELD.dp))
+            .background(PrusaColors.PanelRaised)
+            .clickable(enabled = moeglich, onClick = onClick)
+            .padding(horizontal = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        val farbe = if (moeglich) PrusaColors.TextPrimary
+                    else PrusaColors.TextMuted.copy(alpha = 0.4f)
+        Icon(icon, contentDescription = null, tint = farbe, modifier = Modifier.size(16.dp))
+        Text(label, color = farbe, fontSize = 11.sp)
+    }
+}
+
 @Composable
 private fun ToolStrip(
     hasSelection: Boolean,
@@ -1109,7 +1142,9 @@ private fun ToolStrip(
     // enabling_callbacks im Original.
     val needsSelection = setOf("delete", "copy", "more", "fewer",
                                "splitobjects", "splitvolumes")
-    val notYet = setOf("layersediting")
+    // Zurueck und Vor sind in die untere Leiste gewandert, wo der
+    // Daumen liegt - hier waeren sie ein zweiter Weg zur selben Sache.
+    val notYet = setOf("layersediting", "undo", "redo")
 
     Column(
         Modifier
@@ -1764,16 +1799,41 @@ internal fun LayerSlider(
 }
 
 @Composable
-private fun ViewBar(controller: SceneController, modifier: Modifier = Modifier) {
+private fun ViewBar(
+    controller: SceneController,
+    canUndo: Boolean = false,
+    canRedo: Boolean = false,
+    onUndo: () -> Unit = {},
+    onRedo: () -> Unit = {},
+    modifier: Modifier = Modifier,
+) {
     Row(
         modifier
             .clip(RoundedCornerShape(Corners.FIELD.dp))
             .background(PrusaColors.Panel.copy(alpha = 0.88f))
             .padding(horizontal = 4.dp, vertical = 4.dp),
         horizontalArrangement = Arrangement.spacedBy(2.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
+        /*
+         * Zurueck und Vor stehen am Anfang der unteren Leiste, nicht in
+         * der linken Schiene: sie sind das, was man am haeufigsten
+         * braucht, und unten links liegt der Daumen ohnehin. In der
+         * Schiene lagen sie diagonal am weitesten weg von allem, was man
+         * tut. Dieselbe Anordnung wie auf iOS.
+         */
+        SchrittKnopf(Icons.Default.Undo, PsUi.appText("Undo", "Zurück"), canUndo, onUndo)
+        SchrittKnopf(Icons.Default.Redo, PsUi.appText("Redo", "Vor"), canRedo, onRedo)
+        Box(
+            Modifier.width(1.dp).height(24.dp)
+                .background(PrusaColors.Divider)
+                .padding(horizontal = 4.dp),
+        )
         val views = listOf(
-            "Iso" to PsmViewport.View.ISO,
+            // Nicht "Iso": der Name ist in der CAD-Welt richtig und
+            // sonst nirgends. Neben Oben/Vorn/Hinten stuende damit ein
+            // Wort, das als einziges keine Richtung nennt.
+            "3D" to PsmViewport.View.ISO,
             PsUi.appText("Top", "Oben") to PsmViewport.View.TOP,
             PsUi.appText("Front", "Vorn") to PsmViewport.View.FRONT,
             PsUi.appText("Back", "Hinten") to PsmViewport.View.BACK,
