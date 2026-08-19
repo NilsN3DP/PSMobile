@@ -11,7 +11,14 @@ umgekehrt iOS hinterherhängt.
 
 Ein zweiter Durchgang (Abschnitt K) vergleicht die Ausarbeitung statt
 der Funktionen und findet sieben weitere Stellen, an denen Android
-dünner ist.
+dünner ist. Ein dritter (Abschnitt L) liest die Historie: **neunzig
+Commits fassen `ios/` an, ohne `android/` anzufassen** — darunter neun
+Gestaltungsentscheidungen, die nie zurückkamen.
+
+Damit sind es **24 Schritte**, nicht die fünf aus meinem ersten Bericht.
+Wer nur den Zustand vergleicht, findet fehlende Funktionen. Wer die
+Historie liest, findet auch die Entscheidungen, die auf Android in der
+älteren Fassung stehengeblieben sind.
 
 Was gleich ist, steht am Ende — damit klar ist, was nicht mehr geprüft
 werden muss.
@@ -269,6 +276,96 @@ Gleicher Inhalt, anderer Ort.
 
 ---
 
+## L · Dritter Durchgang: was die Historie zeigt
+
+Die beiden ersten Durchgaenge lesen den Zustand. Der dritte liest die
+Entstehung — und der ist der ehrlichste.
+
+    git log --since="21 days ago" -- ios/
+
+**Neunzig Commits fassen ios/ an, ohne android/ anzufassen.** Der groesste
+Teil davon ist der Aufbau der Plattform selbst und ihre Tests; die gab es
+vorher nicht, und dafuer gibt es auf Android kein Gegenstueck. Aber rund
+ein Dutzend davon sind **Gestaltungsentscheidungen**, die nie
+zurueckgekommen sind. Genau die faellt niemand auf, der nur den Zustand
+vergleicht: auf Android steht dort nichts Falsches, es steht nur noch die
+aeltere Fassung.
+
+### L1 · Schwebende Dialoge statt Vollbildseiten
+
+Commits `8eb97e0`, `f85c169`, `170b014`, `e1e74a0` (05.08.)
+
+Auf iOS liegen **Ersteinrichtung**, **App-Einstellungen**,
+**Profilwechsel** und **ZIP-Modus** als Dialog ueber dem Arbeitsbereich
+(`SchwebenderDialog`). Man sieht, wohin man zurueckkehrt. Auf Android
+sind es Vollbildseiten.
+
+### L2 · Griffe schwebend statt permanent oben
+
+Commit `94a53aa` (06.08.)
+
+Move, Rotate und Scale wurden von einer festen Leiste oben zu einer
+kompakten, schwebenden Gruppe. Im selben Commit wanderten **Drucker und
+App-Einstellungen nach unten links in die Werkzeugschiene**.
+
+### L3 · Bettleiste
+
+Commits `04b2c3d`, `c4402bb` (06.08.)
+
+Die Bettleiste flog **aus dem Easy Mode heraus** — dort stoerte sie mehr
+als sie half. Im Advanced wurde sie eine **Kapselreihe**, und Sperren,
+Umbenennen und Entfernen zogen ins **Kontextmenue**. **Arrange oeffnet
+per Tipp und Halten.**
+
+### L4 · Separate-Menue statt Doppelung
+
+Commit `d4cf9a1` (06.08.)
+
+*In Objekte teilen* und *In Volumen teilen* wurden zu einem
+Separate-Menue zusammengefasst. Android hat weiterhin zwei Knoepfe
+nebeneinander.
+
+### L5 · Groessenverhaeltnis je Objekt
+
+Commit `0befe95` (04.08.)
+
+iOS zeigt in beiden Objektlisten ein kleines Kaestchen mit dem
+Groessenverhaeltnis (`SimpleModelSheetView.swift:288`). Android nicht.
+
+### L6 · Inkompatible Filamente
+
+Commits `2213e04`, `61c1b47` (06.08.)
+
+Erst **gekennzeichnet statt versteckt**, dann **standardmaessig
+ausgeblendet mit Umschalter**. Auf Android gibt es die Einstellung im
+Kern, aber keinen Umschalter an der Materialauswahl.
+
+### L7 · „Export G-Code" statt „Save"
+
+Commit `2213e04` (06.08.)
+
+Bewusste Wortwahl: die Datei verlaesst die App. Android sagt weiterhin
+*G-Code sichern*.
+
+### L8 · Schmale Geraete
+
+Commits `2213e04`, `12f5b52` (06.08.)
+
+Die **iPad-Seitenleiste bleibt auch hochkant ausgeklappt**, und die
+**iPhone-Vorschau wurde scrollbar**, weil der untere Schichtregler sonst
+aus dem Bottom-Sheet fiel. Auf Android ist das Verhalten im Hochformat
+nie geprueft worden.
+
+### L9 · Advanced-Inspector
+
+Commits `3e45739`, `cb08ec1`, `bda94c2`, `8a53aa3` (05.08.)
+
+Nach einer Auswahl **oeffnet sich der Bearbeiten-Bereich von selbst**,
+und der Fokus bleibt beim Blaettern layoutstabil. Vier Anlaeufe, bis es
+sass — auf Android ist keiner davon angekommen.
+
+---
+
 ## Reihenfolge
 
 Nach sichtbarem Gewinn je Aufwand, und so, dass jeder Schritt für sich
@@ -290,8 +387,16 @@ prüfbar ist:
 | 12 | **K5** Projekt und Platte weitergeben | nein |
 | 13 | **K2** ColorMix-Vorschau | nein |
 | 14 | **K6** Reinigungsturm in die Extruderbank | nein |
-| 15 | **I** restliche Bindungen | ja |
-| 16 | **J** iOS nachziehen | nein, aber der Mac muss erreichbar sein |
+| 15 | **L1** Schwebende Dialoge | nein |
+| 16 | **L3** Bettleiste: Easy Mode, Kapseln, Kontextmenue | nein |
+| 17 | **L2** Griffe schwebend, Drucker/Einstellungen unten links | nein |
+| 18 | **L9** Inspector oeffnet nach Auswahl | nein |
+| 19 | **L6** Inkompatible Filamente mit Umschalter | nein |
+| 20 | **L5** Groessenverhaeltnis je Objekt | nein |
+| 21 | **L4** Separate-Menue, **L7** Wortwahl | nein |
+| 22 | **L8** Hochformat pruefen und nachziehen | nein |
+| 23 | **I** restliche Bindungen | ja |
+| 24 | **J** iOS nachziehen | nein, aber der Mac muss erreichbar sein |
 
 Die Schritte ohne Kernbau (3, 4, 7) lassen sich erledigen, während ein
 Kernbau läuft, statt auf ihn zu warten.
