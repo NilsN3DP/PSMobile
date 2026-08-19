@@ -37,7 +37,9 @@ wenig.
 
 Zahlen aus Durchgang 2 und 3:
 
-- **26** Funktionen der C-Schnittstelle nutzt iOS, Android bindet sie nicht.
+- **26** Funktionen der C-Schnittstelle nutzte iOS, ohne dass Android sie
+  band. **Stand 19.08.: noch 2** — `psm_viewport_active_layer_visualization`
+  und `psm_viewport_active_paint_visualization`, beide nur Legenden.
 - **90** Commits fassen `ios/` an, ohne `android/` anzufassen.
 - **~5.700** geänderte Zeilen in **27** iOS-Ansichtsdateien, nie übertragen.
 
@@ -405,6 +407,18 @@ bleibt beim Blättern layoutstabil.
 ---
 
 ### AP-18 · Restliche Bindungen · Kern: ja
+
+**Stand: erledigt bis auf zwei** (19.08., `27ac6eb`, `1eb4c97`).
+Gebunden und im gestrippten `.so` nachgewiesen, App startet ohne
+`UnsatisfiedLinkError`. Offen bleiben nur
+`psm_viewport_active_layer_visualization` und
+`psm_viewport_active_paint_visualization` — beide liefern Legenden, die
+erst mit AP-03 sichtbar werden.
+
+Beim Binden fiel auf: `psm_slice_accept_remote_gcode` nimmt eine
+**Szenenrevision** entgegen. Wer sie nicht mitgibt, bekommt ein Ergebnis
+von vorhin auf einer Anordnung von jetzt. Die Kotlin-Seite fragt sie
+über `designRevision()` ab.
 
 | Funktion | Wofür |
 |---|---|
