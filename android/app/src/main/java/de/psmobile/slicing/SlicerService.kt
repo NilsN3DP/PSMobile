@@ -21,6 +21,7 @@ import de.psmobile.slicing.profileupdate.ProfileUpdateRepository
 import de.psmobile.slicing.profileupdate.ProfileUpdateState
 import de.psmobile.slicing.profileupdate.ProfileVersion
 import de.psmobile.slicing.profileupdate.HttpUrlConnectionProfileUpdateHttp
+import de.psmobile.shared.rules.PreviewLayerMetrics
 import de.psmobile.shared.rules.ColorMixCodec
 import de.psmobile.shared.rules.ColorMixRecipe
 import de.psmobile.shared.rules.SimpleModeState
@@ -1541,6 +1542,60 @@ class SlicerService : Service() {
         withObject(id, SimpleModeState.text("Clear painting", "Bemalung löschen")) { it.clearPaint(id, tool) }
         _paintRevision.value += 1
     }
+
+    /* --- Vorschau: Statistik und Legende ----------------------------- */
+
+    /**
+     * Alles, was die Vorschau ueber das fertige Ergebnis weiss.
+     *
+     * In einem Rutsch geholt und nicht Zeile fuer Zeile: die
+     * Statistikzeile braucht alle Schichten, die Legende alle Rollen und
+     * Extruder, und ueber die Schnittstelle ist jeder Aufruf eine
+     * eigene Kopie.
+     */
+    data class PreviewData(
+        val snapshot: PsmCore.PreviewSnapshot,
+        val layers: List<PreviewLayerMetrics>,
+        val roles: List<PsmCore.PreviewRole>,
+        val extruders: List<PsmCore.PreviewExtruder>,
+        val usage: List<PsmCore.ExtruderUsage>,
+    )
+
+    /**
+     * @return null, solange kein Ergebnis vorliegt - dann gibt es auch
+     *         nichts anzuzeigen.
+     */
+    fun previewData(): PreviewData? {
+        val c = core ?: return null
+        val snap = runCatching { c.previewSnapshot() }.getOrNull() ?: return null
+        val schichten = (0 until snap.layerCount).mapNotNull { c.previewLayer(it) }
+            .map {
+                PreviewLayerMetrics(
+                    zLower = it.zLower,
+                    zUpper = it.zUpper,
+                    timeSeconds = it.timeSeconds,
+                    filamentMm = it.filamentUsedMm,
+                    filamentGrams = it.filamentUsedG,
+                )
+            }
+        val rollen = (0 until snap.roleCount).mapNotNull { c.previewRole(it) }
+        val extruder = (0 until snap.extruderCount).mapNotNull { c.previewExtruder(it) }
+        // Verbrauch je Werkzeug erst ab zwei Extrudern: bei einfarbigem
+        // Druck stuende dieselbe Zahl zwei Zeilen darueber.
+        val verbrauch = runCatching {
+            val n = c.sliceExtruderCount()
+            if (n > 1) (0 until n).mapNotNull { c.sliceExtruder(it) } else emptyList()
+        }.getOrDefault(emptyList())
+        return PreviewData(snap, schichten, rollen, extruder, verbrauch)
+    }
+
+    /** Ob das letzte Ergebnis noch zum aktuellen Stand des Betts passt. */
+    fun sliceResultIsCurrent(): Boolean =
+        core?.runCatching { sliceResultIsCurrent() }?.getOrNull() ?: false
+
+    /** Revision der Szene - beim Hochladen merken, beim Ergebnis angeben. */
+    fun designRevision(): Long =
+        core?.runCatching { designRevision() }?.getOrNull() ?: 0L
 
     fun layerProfile(id: Int): List<Pair<Double, Double>> =
         core?.layerProfile(id).orEmpty()

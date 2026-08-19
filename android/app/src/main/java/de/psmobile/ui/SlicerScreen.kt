@@ -104,6 +104,7 @@ import androidx.compose.ui.zIndex
 import de.psmobile.core.PsmViewport
 import de.psmobile.core.PsmCore
 import de.psmobile.shared.rules.AppSettings
+import de.psmobile.shared.rules.PreviewRange
 import de.psmobile.shared.rules.BedInput
 import de.psmobile.shared.rules.BedStripContract
 import de.psmobile.slicing.SlicerService
@@ -367,6 +368,14 @@ private fun SlicerContent(
     var layerCount by remember { mutableStateOf(0) }
     var layerLo by remember { mutableStateOf(0) }
     var layerHi by remember { mutableStateOf(0) }
+    /*
+     * Was die Vorschau ueber das Ergebnis weiss - Statistik und
+     * Legende. Erst nach dem Slicen vorhanden, deshalb nullable.
+     */
+    var previewData by remember { mutableStateOf<SlicerService.PreviewData?>(null) }
+    var previewView by remember { mutableStateOf(PsmViewport.PreviewView.FEATURE) }
+    var hiddenRoles by remember { mutableStateOf(emptySet<Int>()) }
+    var hiddenExtruders by remember { mutableStateOf(emptySet<Int>()) }
     var surfaceMode by remember { mutableStateOf<SurfaceToolMode?>(null) }
     var measureStart by remember { mutableStateOf<PsmViewport.SurfaceHit?>(null) }
     var measureText by remember { mutableStateOf<String?>(null) }
@@ -393,6 +402,11 @@ private fun SlicerContent(
                 layerLo = 0
                 layerHi = (n - 1).coerceAtLeast(0)
                 previewMode = n > 0
+                // Statistik und Legende gehoeren zum Ergebnis, nicht zur
+                // Kamera: einmal holen, wenn die Vorschau steht.
+                previewData = if (n > 0) service.previewData() else null
+                hiddenRoles = emptySet()
+                hiddenExtruders = emptySet()
             }
         } else if (previewMode) {
             sceneController.enterEditor()
@@ -736,6 +750,79 @@ private fun SlicerContent(
                                 .align(Alignment.CenterEnd)
                                 .padding(end = 12.dp, top = 12.dp, bottom = 84.dp),
                         )
+                    }
+
+                    /*
+                     * Statistik und Legende der Vorschau.
+                     *
+                     * Bisher sah man auf Android nach dem Slicen die
+                     * Wege, aber nicht, was sie kosten - und ausblenden
+                     * liess sich nichts. iOS hat beides in beiden Modi.
+                     *
+                     * Unten am Rand und nicht im Seitenband: die Zahlen
+                     * gehoeren zu dem, was man gerade ansieht, und das
+                     * Seitenband ist im Vorschaumodus oft zu.
+                     */
+                    previewData?.let { daten ->
+                        if (previewMode) {
+                            Column(
+                                Modifier
+                                    .align(Alignment.BottomStart)
+                                    // Ueber der Ansichtsleiste, nicht auf ihr:
+                                    // sonst verdeckt die Legende Oben/Vorn/Links.
+                                    .padding(start = 12.dp, end = 12.dp, bottom = 84.dp)
+                                    .widthIn(max = 520.dp)
+                                    .background(
+                                        PrusaColors.Panel.copy(alpha = 0.94f),
+                                        RoundedCornerShape(Corners.CARD.dp),
+                                    )
+                                    .padding(12.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
+                                PreviewStatsRow(
+                                    range = PreviewRange(layerCount)
+                                        .withLower(layerLo)
+                                        .withUpper(layerHi),
+                                    data = daten,
+                                )
+                                PreviewLegendPicker(
+                                    data = daten,
+                                    view = previewView,
+                                    hiddenRoles = hiddenRoles,
+                                    hiddenExtruders = hiddenExtruders,
+                                    onView = {
+                                        previewView = it
+                                        sceneController.setPreviewView(it)
+                                    },
+                                    onToggleRole = { rolle ->
+                                        val sichtbar = rolle in hiddenRoles
+                                        hiddenRoles = if (sichtbar) hiddenRoles - rolle
+                                                      else hiddenRoles + rolle
+                                        sceneController.setRoleVisible(rolle, sichtbar)
+                                    },
+                                    onToggleExtruder = { e ->
+                                        val sichtbar = e in hiddenExtruders
+                                        hiddenExtruders = if (sichtbar) hiddenExtruders - e
+                                                          else hiddenExtruders + e
+                                        sceneController.setExtruderVisible(e, sichtbar)
+                                    },
+                                )
+                                PreviewUsageRows(
+                                    data = daten,
+                                    farbeVon = { extruder: Int ->
+                                        daten.extruders
+                                            .firstOrNull { it.extruder == extruder }
+                                            ?.let { roh ->
+                                                androidx.compose.ui.graphics.Color(
+                                                    ((roh.colorRgba shr 24) and 0xFF).toInt(),
+                                                    ((roh.colorRgba shr 16) and 0xFF).toInt(),
+                                                    ((roh.colorRgba shr 8) and 0xFF).toInt(),
+                                                )
+                                            } ?: PrusaColors.PanelRaised
+                                    },
+                                )
+                            }
+                        }
                     }
                 }
             }

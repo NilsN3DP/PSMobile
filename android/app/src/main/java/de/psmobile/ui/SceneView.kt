@@ -130,6 +130,20 @@ class SceneController {
     fun setMultiBedRender(enabled: Boolean) =
         run { it.setMultiBedRender(enabled) }
 
+    /*
+     * Farbsicht und Sichtbarkeitsfilter der Vorschau.
+     *
+     * Ueber den GL-Thread wie alles andere am Viewport: libvgcode baut
+     * dabei seine Puffer neu.
+     */
+    fun setPreviewView(view: PsmViewport.PreviewView) = run { it.setPreviewView(view) }
+
+    fun setRoleVisible(role: Int, visible: Boolean) =
+        run { it.setRoleVisible(role, visible) }
+
+    fun setExtruderVisible(extruder: Int, visible: Boolean) =
+        run { it.setExtruderVisible(extruder, visible) }
+
     /** Schwenkt die Kamera auf ein Bett und passt es ins Bild. */
     fun focusBed(index: Int) = run { it.focusBed(index) }
 
