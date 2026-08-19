@@ -109,11 +109,12 @@ Konkret, in dieser Reihenfolge:
    öffnet die Optionen (alle Betten, Rotation erlauben) — auf iOS ist
    das ein Popover am Knopf, siehe `faf4729`.
 
-**Bewusste Ausnahme, nicht vergessen:** *Sichern unter* bleibt als
-eigener Knopf. iOS fragt beim Sichern nach dem Namen; unter Android
+**Zu *Sichern unter*:** der Knopf bleibt auf Android. Unter Android
 kommt der Name aus dem Systemdialog, und ein offenes Projekt still zu
-überschreiben ist dort das erwartete Verhalten. Ein Knopf, der bei jedem
-Sichern den Systemdialog aufruft, wäre schlechter, nicht gleicher.
+überschreiben ist dort das erwartete Verhalten; ein Knopf, der bei jedem
+Sichern den Systemdialog aufruft, wäre schlechter. Damit die Leiste
+trotzdem Zeile für Zeile gleich liest, bekommt **iOS denselben zweiten
+Knopf** — siehe Abschnitt Z.
 
 Danach **AP-04** zu Ende — dafür muss aber der Mac erreichbar sein, weil
 die Angleichung dort auf der iOS-Seite passiert. Er ist ab dem
@@ -138,14 +139,24 @@ die Angleichung dort auf der iOS-Seite passiert. Er ist ab dem
   **20.08.2026** wieder da. Bis dahin liegen die iOS-Seite von AP-02
   (~160 Stellen), der Rest von AP-04 und der ganze Abschnitt Z still.
   Geschriebener, aber ungebauter Swift-Code zählt nicht als erledigt.
-- **AP-19 Hochformat** ist nicht geschätzt, weil Android dort nie
-  gelaufen ist. Erst ansehen, dann planen.
+- **AP-19 Hochformat ist zurückgestellt** (Nils, 19.08.). Nicht
+  geschätzt, weil Android dort nie gelaufen ist, und es steht hinter
+  allem anderen: erst soll die Bedienung im Querformat auf beiden
+  Geräten gleich sein. Wird angefasst, wenn die übrigen Pakete zu sind.
 
 ---
 
 ## Grundsatz
 
 **iOS ist die Referenz. Android zieht nach.**
+
+**Das Ziel ist woertlich dieselbe Bedienung:** dieselben Schaltflaechen,
+dieselben Namen, dieselbe Reihenfolge, derselbe Ort — in beiden Modi.
+Es soll egal sein, auf welchem Geraet jemand sitzt (Nils, 19.08.).
+Wo eine Seite etwas hat, das die andere nicht hat, wird angeglichen und
+nicht begruendet. Vom Betriebssystem kommende Oberflaechen —
+Dateiwaehler, Teilen-Blatt, Zurueck-Geste — sind davon ausgenommen; sie
+lassen sich nicht angleichen.
 
 Das war nicht immer so — die README nannte lange „Android-first". Seit
 dem Aufbau der iOS-Fassung im August ist es umgekehrt: dort sind die
@@ -472,6 +483,8 @@ auf „SOLUBLE" von acht auf zwei Profile.
 
 Statt der Lupe steht der **Trichter** aus PrusaSlicers Symbolsatz — eine
 Lupe gibt es dort nicht, und eigene Symbole kommen nicht dazu (E-12).
+**Damit sehen beide Seiten verschieden aus; das ist offen, nicht
+entschieden** — iOS uebernimmt den Trichter, siehe Abschnitt Z.
 
 ---
 
@@ -656,7 +669,16 @@ Braucht einen erreichbaren Mac.
    `model.undoLabel` unverändert; bei englischer Oberfläche steht dort
    „Druckbett leeren". Die Übersetzungstabelle `CoreLabels` liegt im
    gemeinsamen Modul und wird für diesen Weg nicht benutzt.
-5. **Auswahlblatt überlappt die Seitenleiste.** Das Filamentblatt ist ein
+5. **Trichter statt Lupe im Einstellungskopf.** Android nimmt den
+   Trichter aus PrusaSlicers Symbolsatz, weil es dort keine Lupe gibt
+   und eigene Symbole nicht dazukommen (E-12). iOS zeigt an derselben
+   Stelle ein SF-Symbol. Damit auf beiden Geräten dasselbe Zeichen
+   steht, übernimmt iOS den Trichter.
+6. **Zweiter Sichern-Knopf.** Android führt *Sichern* und *Sichern
+   unter*; iOS fragt beim Sichern nach dem Namen und hat nur einen
+   Knopf. iOS bekommt denselben zweiten Knopf, damit die obere Leiste
+   auf beiden Seiten gleich liest.
+7. **Auswahlblatt überlappt die Seitenleiste.** Das Filamentblatt ist ein
    `.sheet` und schneidet auf dem iPad die rechte Seitenleiste mitten im
    Wort. Der Advanced-Einstellungsdialog macht es richtig und legt einen
    Schleier über den ganzen Bereich.
