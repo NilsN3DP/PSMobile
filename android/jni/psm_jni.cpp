@@ -1383,6 +1383,238 @@ JNIEXPORT jlong JNICALL JNI_FN(nativeEstimateMemory)(JNIEnv *, jclass, jlong h)
     return static_cast<jlong>(psm_estimate_slice_memory(sess(h)));
 }
 
+/* --- Materialauswahl ------------------------------------------------ */
+
+/*
+ * Einen Wert aus einem benannten Preset lesen, ohne es auszuwaehlen.
+ *
+ * Die Materialauswahl braucht von jedem Filamentprofil Typ und Farbe,
+ * und zwar von allen gleichzeitig. Ueber die Auswahl zu gehen hiesse,
+ * fuer jede Zeile die ganze Konfiguration umzubauen und das
+ * Slice-Ergebnis zu verwerfen.
+ */
+JNIEXPORT jstring JNICALL JNI_FN(nativePresetOptionAt)(
+    JNIEnv *env, jclass, jlong h, jint type, jstring name, jstring key)
+{
+    const char *n = env->GetStringUTFChars(name, nullptr);
+    const char *k = env->GetStringUTFChars(key, nullptr);
+    char buf[512] = { 0 };
+    const psm_result r = psm_preset_option_at(
+        sess(h), static_cast<psm_preset_type>(type), n, k, buf, sizeof(buf));
+    env->ReleaseStringUTFChars(name, n);
+    env->ReleaseStringUTFChars(key, k);
+    return env->NewStringUTF(r == PSM_OK ? buf : "");
+}
+
+/* --- Vorschau: Statistik und Legende -------------------------------- */
+
+/*
+ * Kopf des Vorschau-Datensatzes als Tab-getrennte Zeichenkette, wie
+ * nativeSurfacePick. Ein eigener JNI-Objektbau waere fuer zehn Zahlen
+ * mehr Geruest als Inhalt, und die Reihenfolge steht hier neben der
+ * Gegenstelle in PsmCore.kt.
+ */
+JNIEXPORT jstring JNICALL JNI_FN(nativePreviewSnapshot)(JNIEnv *env, jclass, jlong h)
+{
+    psm_preview_snapshot snap{};
+    snap.version = PSM_PREVIEW_SNAPSHOT_VERSION_1;
+    if (psm_preview_snapshot_get(sess(h), &snap) != PSM_OK)
+        return nullptr;
+    const std::string value =
+        std::to_string(snap.final_move_count) + "\t" +
+        std::to_string(snap.layer_count) + "\t" +
+        std::to_string(snap.extruder_count) + "\t" +
+        std::to_string(snap.role_count) + "\t" +
+        std::to_string(snap.print_time_seconds) + "\t" +
+        std::to_string(snap.filament_used_mm) + "\t" +
+        std::to_string(snap.filament_used_g) + "\t" +
+        std::to_string(snap.min_z) + "\t" +
+        std::to_string(snap.max_z);
+    return env->NewStringUTF(value.c_str());
+}
+
+JNIEXPORT jstring JNICALL JNI_FN(nativePreviewLayerAt)(
+    JNIEnv *env, jclass, jlong h, jint index)
+{
+    psm_preview_layer l{};
+    if (index < 0 ||
+        psm_preview_layer_at(sess(h), static_cast<size_t>(index), &l) != PSM_OK)
+        return nullptr;
+    const std::string value =
+        std::to_string(l.index) + "\t" +
+        std::to_string(l.source_layer_id) + "\t" +
+        std::to_string(l.z_lower) + "\t" +
+        std::to_string(l.z_upper) + "\t" +
+        std::to_string(l.time_seconds) + "\t" +
+        std::to_string(l.filament_used_mm) + "\t" +
+        std::to_string(l.filament_used_g);
+    return env->NewStringUTF(value.c_str());
+}
+
+JNIEXPORT jstring JNICALL JNI_FN(nativePreviewExtruderAt)(
+    JNIEnv *env, jclass, jlong h, jint index)
+{
+    psm_preview_extruder e{};
+    if (index < 0 ||
+        psm_preview_extruder_at(sess(h), static_cast<size_t>(index), &e) != PSM_OK)
+        return nullptr;
+    const std::string value =
+        std::to_string(e.extruder) + "\t" +
+        std::to_string(e.color_rgba) + "\t" +
+        std::to_string(e.move_count) + "\t" +
+        std::to_string(e.time_seconds) + "\t" +
+        std::to_string(e.filament_used_mm) + "\t" +
+        std::to_string(e.filament_used_g);
+    return env->NewStringUTF(value.c_str());
+}
+
+JNIEXPORT jstring JNICALL JNI_FN(nativePreviewRoleAt)(
+    JNIEnv *env, jclass, jlong h, jint index)
+{
+    psm_preview_role r{};
+    if (index < 0 ||
+        psm_preview_role_at(sess(h), static_cast<size_t>(index), &r) != PSM_OK)
+        return nullptr;
+    const std::string value =
+        std::to_string(static_cast<int>(r.role)) + "\t" +
+        std::to_string(r.color_rgba) + "\t" +
+        std::to_string(r.move_count) + "\t" +
+        std::to_string(r.time_seconds) + "\t" +
+        std::to_string(r.filament_used_mm) + "\t" +
+        std::to_string(r.filament_used_g);
+    return env->NewStringUTF(value.c_str());
+}
+
+/* Verbrauch je Werkzeug - erst ab zwei Extrudern eine Auskunft. */
+JNIEXPORT jint JNICALL JNI_FN(nativeSliceExtruderCount)(JNIEnv *, jclass, jlong h)
+{
+    return static_cast<jint>(psm_slice_extruder_count(sess(h)));
+}
+
+JNIEXPORT jstring JNICALL JNI_FN(nativeSliceExtruderAt)(
+    JNIEnv *env, jclass, jlong h, jint index)
+{
+    psm_extruder_usage u{};
+    if (index < 0 ||
+        psm_slice_extruder_at(sess(h), static_cast<size_t>(index), &u) != PSM_OK)
+        return nullptr;
+    const std::string value =
+        std::to_string(u.extruder) + "\t" +
+        std::to_string(u.volume_mm3) + "\t" +
+        std::to_string(u.wipe_tower_mm3) + "\t" +
+        std::to_string(u.flush_mm3);
+    return env->NewStringUTF(value.c_str());
+}
+
+JNIEXPORT jint JNICALL JNI_FN(nativeLoadGcodeForPreview)(
+    JNIEnv *env, jclass, jlong h, jstring path)
+{
+    const char *p = env->GetStringUTFChars(path, nullptr);
+    const psm_result r = psm_slice_load_gcode_for_preview(sess(h), p);
+    env->ReleaseStringUTFChars(path, p);
+    return r;
+}
+
+/* --- Anordnen mit Optionen ------------------------------------------ */
+
+/*
+ * Die auskunftsreiche Fassung: sie meldet gesperrt und voll als eigene
+ * Fehler und liefert dazu Objekt- und Instanzzahl. Der nackte
+ * psm_arrange_bed sagt nur, dass es nicht ging.
+ *
+ * Rueckgabe: "status\tobjekte\tinstanzen\tergebnis".
+ */
+JNIEXPORT jstring JNICALL JNI_FN(nativeArrangeBedEx)(
+    JNIEnv *env, jclass, jlong h, jint bedIndex, jfloat gapMm, jint allowRotation)
+{
+    psm_arrange_info info{};
+    const psm_result r = psm_arrange_bed_ex(
+        sess(h), static_cast<size_t>(bedIndex), gapMm, allowRotation, &info);
+    const std::string value =
+        std::to_string(static_cast<int>(info.status)) + "\t" +
+        std::to_string(info.object_count) + "\t" +
+        std::to_string(info.instance_count) + "\t" +
+        std::to_string(static_cast<int>(r));
+    return env->NewStringUTF(value.c_str());
+}
+
+/* --- Adaptive Schichthoehe ------------------------------------------ */
+
+/*
+ * Zweischritt wie beim manuellen Profil: erst ohne Puffer die Paarzahl
+ * erfragen, dann mit passendem Puffer holen. Ein fester Puffer waere
+ * geraten, und geraten wird hier nichts.
+ */
+JNIEXPORT jdoubleArray JNICALL JNI_FN(nativeLayerProfileAdaptive)(
+    JNIEnv *env, jclass, jlong h, jint id, jfloat quality)
+{
+    size_t anzahl = 0;
+    if (psm_model_layer_profile_adaptive(
+            sess(h), id, quality, nullptr, 0, &anzahl) != PSM_OK || anzahl == 0)
+        return nullptr;
+    std::vector<double> werte(anzahl * 2);
+    size_t geliefert = 0;
+    if (psm_model_layer_profile_adaptive(
+            sess(h), id, quality, werte.data(), werte.size(), &geliefert) != PSM_OK)
+        return nullptr;
+    jdoubleArray out = env->NewDoubleArray(static_cast<jsize>(geliefert * 2));
+    if (out != nullptr)
+        env->SetDoubleArrayRegion(
+            out, 0, static_cast<jsize>(geliefert * 2), werte.data());
+    return out;
+}
+
+/* --- ZIP ------------------------------------------------------------- */
+
+/* @return Zahl der entpackten Modelle, oder -1 bei einem Fehler. */
+JNIEXPORT jint JNICALL JNI_FN(nativeZipExtractModels)(
+    JNIEnv *env, jclass, jstring zipPath, jstring destDir)
+{
+    const char *z = env->GetStringUTFChars(zipPath, nullptr);
+    const char *d = env->GetStringUTFChars(destDir, nullptr);
+    size_t anzahl = 0;
+    const psm_result r = psm_zip_extract_models(z, d, &anzahl);
+    env->ReleaseStringUTFChars(zipPath, z);
+    env->ReleaseStringUTFChars(destDir, d);
+    return r == PSM_OK ? static_cast<jint>(anzahl) : -1;
+}
+
+/* --- Fernslicen und Kleinkram --------------------------------------- */
+
+JNIEXPORT jint JNICALL JNI_FN(nativeSliceResultIsCurrent)(JNIEnv *, jclass, jlong h)
+{
+    return psm_slice_result_is_current(sess(h)) ? 1 : 0;
+}
+
+JNIEXPORT jint JNICALL JNI_FN(nativeAcceptRemoteGcode)(
+    JNIEnv *env, jclass, jlong h, jstring path)
+{
+    const char *p = env->GetStringUTFChars(path, nullptr);
+    const psm_result r = psm_slice_accept_remote_gcode(sess(h), p);
+    env->ReleaseStringUTFChars(path, p);
+    return r;
+}
+
+JNIEXPORT jlong JNICALL JNI_FN(nativeDesignRevision)(JNIEnv *, jclass, jlong h)
+{
+    return static_cast<jlong>(psm_design_revision(sess(h)));
+}
+
+JNIEXPORT jint JNICALL JNI_FN(nativeBedStateOf)(JNIEnv *, jclass, jlong h, jint id)
+{
+    return static_cast<jint>(psm_model_bed_state(sess(h), id));
+}
+
+/* Auf Flaeche legen fuer genau diese Kopie statt immer Instanz 0. */
+JNIEXPORT jint JNICALL JNI_FN(nativeLayOnFacetInstance)(
+    JNIEnv *, jclass, jlong h, jint id, jint instance, jint volume, jint facet)
+{
+    return instance < 0 || volume < 0 || facet < 0 ? PSM_ERR_INVALID_ARG :
+        psm_model_lay_on_facet_instance(
+            sess(h), id, static_cast<size_t>(instance),
+            static_cast<size_t>(volume), static_cast<size_t>(facet));
+}
+
 /* --- Viewport --------------------------------------------------------- */
 /*
  * Diese Aufrufe kommen vom GL-Thread des GLSurfaceView, nicht vom
@@ -1482,6 +1714,80 @@ JNIEXPORT void JNICALL JNI_VP(nativeSetMultiBedRender)(
 JNIEXPORT void JNICALL JNI_VP(nativeFocusBed)(JNIEnv *, jclass, jlong h, jint index)
 {
     psm_viewport_focus_bed(vp(h), index);
+}
+
+/* --- Vorschau-Filter und Zuggrenzen --------------------------------- */
+
+/** Farbsicht der Werkzeugwege: 0 Merkmale, 1 Extruder. */
+JNIEXPORT void JNICALL JNI_VP(nativeSetPreviewView)(
+    JNIEnv *, jclass, jlong h, jint view)
+{
+    psm_viewport_set_preview_view(vp(h), static_cast<psm_preview_view>(view));
+}
+
+JNIEXPORT void JNICALL JNI_VP(nativeSetRoleVisible)(
+    JNIEnv *, jclass, jlong h, jint role, jint visible)
+{
+    psm_viewport_set_role_visible(
+        vp(h), static_cast<psm_preview_feature_role>(role), visible);
+}
+
+JNIEXPORT void JNICALL JNI_VP(nativeSetExtruderVisible)(
+    JNIEnv *, jclass, jlong h, jint extruder, jint visible)
+{
+    psm_viewport_set_extruder_visible(vp(h), extruder, visible);
+}
+
+/*
+ * Grenzen des unteren Reglers - er scrubt innerhalb einer Schicht statt
+ * zwischen Schichten. Sie aendern sich mit dem Schichtbereich, also vor
+ * jedem Aufbau neu abfragen.
+ * @return "min\tmax", oder null wenn kein G-Code geladen ist.
+ */
+JNIEXPORT jstring JNICALL JNI_VP(nativeMoveRangeBounds)(JNIEnv *env, jclass, jlong h)
+{
+    int32_t min = 0, max = 0;
+    if (! psm_viewport_move_range_bounds(vp(h), &min, &max))
+        return nullptr;
+    const std::string value = std::to_string(min) + "\t" + std::to_string(max);
+    return env->NewStringUTF(value.c_str());
+}
+
+JNIEXPORT void JNICALL JNI_VP(nativeSetMoveRange)(
+    JNIEnv *, jclass, jlong h, jint first, jint last)
+{
+    psm_viewport_set_move_range(vp(h), first, last);
+}
+
+/** Eine Geste ist ein Rueckgaengig-Schritt. */
+JNIEXPORT void JNICALL JNI_VP(nativeGestureBegin)(JNIEnv *, jclass, jlong h)
+{
+    psm_viewport_gesture_begin(vp(h));
+}
+
+JNIEXPORT jint JNICALL JNI_VP(nativeGetGizmo)(JNIEnv *, jclass, jlong h)
+{
+    return static_cast<jint>(psm_viewport_get_gizmo(vp(h)));
+}
+
+/*
+ * Bildschirmsegment einer Move-Gizmo-Achse, in Renderpixeln mit
+ * Ursprung links oben - dieselbe Geometrie, die auch die
+ * viewportseitige Treffererkennung verwendet.
+ *
+ * Rueckgabe "vonX\tvonY\tnachX\tnachY", oder null wenn die Achse
+ * gerade nicht sichtbar ist.
+ */
+JNIEXPORT jstring JNICALL JNI_VP(nativeGizmoAxisScreen)(
+    JNIEnv *env, jclass, jlong h, jint axis)
+{
+    psm_gizmo_screen_axis a{};
+    if (! psm_viewport_gizmo_axis_screen(vp(h), axis, &a))
+        return nullptr;
+    const std::string value =
+        std::to_string(a.from_x) + "\t" + std::to_string(a.from_y) + "\t" +
+        std::to_string(a.to_x) + "\t" + std::to_string(a.to_y);
+    return env->NewStringUTF(value.c_str());
 }
 
 /* Bildschirmposition fuer das Namensschild eines Betts, als "x	y"
