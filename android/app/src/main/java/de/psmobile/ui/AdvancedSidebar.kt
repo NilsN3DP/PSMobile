@@ -167,7 +167,13 @@ internal fun Sidebar(
 ) {
     val isRunning = progress is SlicerService.Progress.Running
     var sendMenu by remember { mutableStateOf(false) }
-    var section by remember { mutableStateOf(InspectorSection.PROFILES) }
+    // Vier Bereiche untereinander, nicht vier Reiter. Der Grund steht
+    // auf iOS im Quelltext und gilt hier genauso: vier Reiter heissen,
+    // dass drei Viertel des Gesuchten unsichtbar sind. So sieht man alle
+    // Ueberschriften und klappt auf, was man gerade braucht.
+    var offeneBereiche by remember {
+        mutableStateOf(setOf(InspectorSection.PROFILES))
+    }
     var selectedExtruderIndex by remember(presets.selectedPrinter) { mutableStateOf(0) }
     var filamentPickerIndex by remember { mutableStateOf<Int?>(null) }
     var pendingPresetSwitch by remember { mutableStateOf<PendingPresetSwitch?>(null) }
@@ -203,12 +209,13 @@ internal fun Sidebar(
     // TOOLS wird beim Auswaehlen nicht angetastet: wer gerade malt und
     // ein anderes Objekt antippt, wird nicht aus dem Werkzeug gerissen.
     LaunchedEffect(selected?.id) {
-        if (selected == null) {
-            if (section == InspectorSection.TRANSFORM || section == InspectorSection.TOOLS) {
-                section = InspectorSection.PROFILES
-            }
-        } else if (section == InspectorSection.PROFILES || section == InspectorSection.OBJECTS) {
-            section = InspectorSection.TRANSFORM
+        offeneBereiche = if (selected == null) {
+            // Ohne Auswahl haben Bearbeiten und Werkzeuge nichts zu
+            // zeigen - zu, aber sichtbar, damit man weiss, dass es sie
+            // gibt.
+            offeneBereiche - InspectorSection.TRANSFORM - InspectorSection.TOOLS
+        } else {
+            offeneBereiche + InspectorSection.TRANSFORM
         }
     }
 
@@ -216,15 +223,9 @@ internal fun Sidebar(
         inspectorScroll.scrollTo(0)
     }
 
-    // Ein Tabwechsel darf keinen Scrollstand aus dem vorherigen Bereich
-    // übernehmen. Sonst öffnet etwa „Werkzeuge“ mitten in der Profilliste
-    // und die Orientierung bzw. die Tab-Leiste wirken verschwunden.
-    LaunchedEffect(section) {
-        inspectorScroll.scrollTo(0)
-    }
-
-    LaunchedEffect(section, selected?.id) {
-        if (section != InspectorSection.TOOLS || layerEditorObjectId != selected?.id) {
+    LaunchedEffect(offeneBereiche, selected?.id) {
+        if (InspectorSection.TOOLS !in offeneBereiche ||
+            layerEditorObjectId != selected?.id) {
             layerEditorObjectId = null
         }
     }
@@ -285,12 +286,6 @@ internal fun Sidebar(
             }
         }
 
-        InspectorTabs(
-            selected = section,
-            transformEnabled = selected != null,
-            onSelect = { section = it },
-        )
-
         val editingLayersFor = layerEditorObjectId
         if (editingLayersFor != null && selected?.id == editingLayersFor) {
             LayerProfileToolPage(
@@ -311,8 +306,12 @@ internal fun Sidebar(
             Modifier.weight(1f).verticalScroll(inspectorScroll),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            when (section) {
-                InspectorSection.PROFILES -> {
+            Bereich(
+                titel = PsUi.appText("Profiles", "Profile"),
+                offen = InspectorSection.PROFILES in offeneBereiche,
+                moeglich = true,
+                onToggle = { offeneBereiche = umschalten(offeneBereiche, InspectorSection.PROFILES) },
+            ) {
                     val materialHead = filamentPickerIndex
                     if (materialHead != null) {
                         // Same composable as Simple Mode, deliberately kept in this
@@ -423,7 +422,12 @@ internal fun Sidebar(
                     }
                 }
 
-                InspectorSection.OBJECTS -> {
+            Bereich(
+                titel = PsUi.appText("Objects", "Objekte"),
+                offen = InspectorSection.OBJECTS in offeneBereiche,
+                moeglich = true,
+                onToggle = { offeneBereiche = umschalten(offeneBereiche, InspectorSection.OBJECTS) },
+            ) {
                     if (objects.isEmpty()) {
                         Box(
                             Modifier
@@ -514,7 +518,9 @@ internal fun Sidebar(
                         }
                         selected?.let {
                             Button(
-                                onClick = { section = InspectorSection.TRANSFORM },
+                                onClick = {
+                                    offeneBereiche = offeneBereiche + InspectorSection.TRANSFORM
+                                },
                                 modifier = Modifier.fillMaxWidth().height(psTouch(54)),
                                 shape = RoundedCornerShape(Corners.CARD.dp),
                                 colors = ButtonDefaults.buttonColors(
@@ -548,7 +554,12 @@ internal fun Sidebar(
                     }
                 }
 
-                InspectorSection.TRANSFORM -> selected?.let { obj ->
+            Bereich(
+                titel = PsUi.appText("Edit", "Bearbeiten"),
+                offen = InspectorSection.TRANSFORM in offeneBereiche,
+                moeglich = selected != null,
+                onToggle = { offeneBereiche = umschalten(offeneBereiche, InspectorSection.TRANSFORM) },
+            ) { selected?.let { obj ->
                     Text(
                         obj.name.ifBlank { advancedText("Object ${obj.id}", "Objekt ${obj.id}") },
                         color = PrusaColors.TextPrimary,
@@ -566,9 +577,14 @@ internal fun Sidebar(
                         scaleToolActive = scaleTool,
                         onScaleToolChange = onScaleToolChange,
                     )
-                }
+                } }
 
-                InspectorSection.TOOLS -> {
+            Bereich(
+                titel = PsUi.appText("Tools", "Werkzeuge"),
+                offen = InspectorSection.TOOLS in offeneBereiche,
+                moeglich = selected != null,
+                onToggle = { offeneBereiche = umschalten(offeneBereiche, InspectorSection.TOOLS) },
+            ) {
                     GeometryTools(
                         service = service,
                         selected = selected,
@@ -585,7 +601,6 @@ internal fun Sidebar(
                         onAddSvg = onAddSvg,
                         onOpenLayerEditor = { layerEditorObjectId = it },
                     )
-                }
             }
         }
 
@@ -807,56 +822,56 @@ internal fun Sidebar(
     }
 }
 
+/**
+ * Ein aufklappbarer Bereich des Inspektors.
+ *
+ * Gegenstueck zu `bereich(_:)` in `AdvancedWorkspaceView.swift`. Ohne
+ * Auswahl bleiben *Bearbeiten* und *Werkzeuge* sichtbar, aber gedaempft
+ * und zu - verschwaenden sie, waere nicht zu erkennen, dass es sie gibt.
+ */
 @Composable
-private fun InspectorTabs(
-    selected: InspectorSection,
-    transformEnabled: Boolean,
-    onSelect: (InspectorSection) -> Unit,
+private fun Bereich(
+    titel: String,
+    offen: Boolean,
+    moeglich: Boolean,
+    onToggle: () -> Unit,
+    inhalt: @Composable () -> Unit,
 ) {
-    val tabs = listOf(
-        InspectorSection.PROFILES to PsUi.appText("Profiles", "Profile"),
-        InspectorSection.OBJECTS to PsUi.appText("Objects", "Objekte"),
-        InspectorSection.TRANSFORM to PsUi.appText("Edit", "Bearbeiten"),
-        InspectorSection.TOOLS to PsUi.appText("Tools", "Werkzeuge"),
-    )
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(Corners.CARD.dp))
-            .background(PrusaColors.Background.copy(alpha = 0.62f))
-            .padding(4.dp),
-        horizontalArrangement = Arrangement.spacedBy(4.dp),
-    ) {
-        tabs.forEach { (section, label) ->
-            val enabled =
-                (section != InspectorSection.TRANSFORM &&
-                    section != InspectorSection.TOOLS) ||
-                    transformEnabled
-            val active = section == selected
-            Box(
-                Modifier
-                    .weight(1f)
-                    .height(psTouch(48))
-                    .clip(RoundedCornerShape(Corners.FIELD.dp))
-                    .background(if (active) PrusaColors.Orange else Color.Transparent)
-                    .clickable(enabled = enabled && !active) { onSelect(section) },
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    label,
-                    color = when {
-                        active -> Color.White
-                        enabled -> PrusaColors.TextPrimary
-                        else -> PrusaColors.TextMuted.copy(alpha = 0.45f)
-                    },
-                    fontSize = 13.sp,
-                    fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal,
-                    maxLines = 1,
-                )
-            }
+    val sichtbarOffen = offen && moeglich
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(Corners.FIELD.dp))
+                .clickable(enabled = moeglich, onClick = onToggle)
+                .heightIn(min = psTouch(40))
+                .padding(horizontal = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                titel.uppercase(),
+                color = if (moeglich) PrusaColors.TextMuted
+                        else PrusaColors.TextMuted.copy(alpha = 0.4f),
+                fontSize = 11.sp,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.weight(1f),
+            )
+            Text(
+                if (sichtbarOffen) "\u25be" else "\u25b8",
+                color = PrusaColors.TextMuted,
+                fontSize = 12.sp,
+            )
         }
+        if (sichtbarOffen) inhalt()
     }
 }
+
+/** Einen Bereich auf- oder zuklappen. */
+private fun umschalten(
+    offen: Set<InspectorSection>,
+    bereich: InspectorSection,
+): Set<InspectorSection> =
+    if (bereich in offen) offen - bereich else offen + bereich
 
 @Composable
 private fun SectionLabel(text: String) {
