@@ -24,11 +24,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import de.psmobile.shared.ui.Corners
 import de.psmobile.core.PsmCore
 import de.psmobile.shared.net.PrusaLinkRules
 import de.psmobile.shared.rules.SimpleModeState
 import de.psmobile.shared.rules.SliceSummary
 import de.psmobile.slicing.SlicerService
+import de.psmobile.ui.theme.psTouch
 import de.psmobile.ui.theme.PrusaColors
 
 /**
@@ -64,7 +66,7 @@ internal fun SimpleSliceSheet(
     ) {
         Column(
             Modifier.widthIn(max = 420.dp)
-                .background(PrusaColors.Panel, RoundedCornerShape(4.dp))
+                .background(PrusaColors.Panel, RoundedCornerShape(Corners.FIELD.dp))
                 .padding(20.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
@@ -94,11 +96,11 @@ internal fun SimpleSliceSheet(
                     progress.stats?.let { Zahlen(it) }
                     Button(
                         onClick = onShare,
-                        shape = RoundedCornerShape(3.dp),
+                        shape = RoundedCornerShape(Corners.FIELD.dp),
                         colors = ButtonDefaults.buttonColors(
                             containerColor = PrusaColors.Orange,
                         ),
-                        modifier = Modifier.fillMaxWidth().heightIn(min = 50.dp),
+                        modifier = Modifier.fillMaxWidth().heightIn(min = psTouch(50)),
                     ) { Text(st("Save G-Code", "G-Code sichern")) }
                     TextButton(onClick = onClose, modifier = Modifier.fillMaxWidth()) {
                         Text(st("Close", "Schließen"), color = PrusaColors.TextMuted)
@@ -173,7 +175,7 @@ internal fun SimpleSliceBlockers(gruende: List<String>, onClose: () -> Unit) {
     ) {
         Column(
             Modifier.widthIn(max = 380.dp)
-                .background(PrusaColors.Panel, RoundedCornerShape(4.dp))
+                .background(PrusaColors.Panel, RoundedCornerShape(Corners.FIELD.dp))
                 .padding(20.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {

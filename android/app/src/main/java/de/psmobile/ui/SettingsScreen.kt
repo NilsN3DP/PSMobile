@@ -50,7 +50,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import de.psmobile.shared.ui.Corners
 import de.psmobile.core.PsmCore
+import de.psmobile.ui.theme.psTouch
 import de.psmobile.ui.theme.PrusaColors
 import de.psmobile.ui.theme.ScaledOverlay
 
@@ -138,7 +140,7 @@ fun SettingsScreen(
             fontSize = 15.sp,
             modifier = Modifier
                 .clickable(onClick = onClose)
-                .height(52.dp)
+                .height(psTouch(52))
                 .padding(horizontal = 18.dp, vertical = 14.dp),
         )
         listOf(
@@ -149,7 +151,7 @@ fun SettingsScreen(
             val active = key == tab
             Box(
                 Modifier
-                    .height(52.dp)
+                    .height(psTouch(52))
                     .clickable(enabled = !active) { onTabChange(key) }
                     .background(if (active) PrusaColors.Background else PrusaColors.Panel)
                     .padding(horizontal = if (compactNavigation) 10.dp else 20.dp),
@@ -197,7 +199,7 @@ fun SettingsScreen(
             pages.forEachIndexed { i, page ->
                 val active = i == pageIndex
                 Row(
-                    Modifier.fillMaxWidth().height(52.dp)
+                    Modifier.fillMaxWidth().height(psTouch(52))
                         .background(if (active) PrusaColors.PanelRaised else PrusaColors.Panel)
                         .clickable { pageIndex = i }
                         .padding(horizontal = 12.dp),
@@ -221,7 +223,7 @@ fun SettingsScreen(
             }
             val specialActive = pageIndex == pages.size
             Row(
-                Modifier.fillMaxWidth().height(56.dp)
+                Modifier.fillMaxWidth().height(psTouch(56))
                     .background(
                         if (specialActive) PrusaColors.PanelRaised else PrusaColors.Panel
                     )
@@ -230,7 +232,7 @@ fun SettingsScreen(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Box(
-                    Modifier.size(20.dp).clip(RoundedCornerShape(5.dp))
+                    Modifier.size(20.dp).clip(RoundedCornerShape(Corners.FIELD.dp))
                         .background(PrusaColors.Orange),
                     contentAlignment = Alignment.Center,
                 ) {
@@ -267,8 +269,8 @@ fun SettingsScreen(
                 ).forEach { (m, label) ->
                     val active = m == mode
                     Box(
-                        Modifier.height(48.dp)
-                            .clip(RoundedCornerShape(8.dp))
+                        Modifier.height(psTouch(48))
+                            .clip(RoundedCornerShape(Corners.FIELD.dp))
                             .background(if (active) PrusaColors.Orange else PrusaColors.PanelRaised)
                             .clickable { onModeChange(m) }
                             .padding(horizontal = 16.dp),
@@ -427,7 +429,7 @@ private fun SettingsPageRail(
     ) {
         val favouritesActive = pageIndex == FAVORITES_PAGE
         Box(
-            Modifier.height(48.dp).clip(RoundedCornerShape(8.dp))
+            Modifier.height(psTouch(48)).clip(RoundedCornerShape(Corners.FIELD.dp))
                 .background(if (favouritesActive) PrusaColors.Orange else PrusaColors.PanelRaised)
                 .clickable { onSelect(FAVORITES_PAGE) }
                 .padding(horizontal = 14.dp),
@@ -442,7 +444,7 @@ private fun SettingsPageRail(
         pages.forEachIndexed { index, page ->
             val active = index == pageIndex
             Box(
-                Modifier.height(48.dp).clip(RoundedCornerShape(8.dp))
+                Modifier.height(psTouch(48)).clip(RoundedCornerShape(Corners.FIELD.dp))
                     .background(if (active) PrusaColors.Orange else PrusaColors.PanelRaised)
                     .clickable { onSelect(index) }
                     .padding(horizontal = 14.dp),
@@ -458,7 +460,7 @@ private fun SettingsPageRail(
         }
         val special = pageIndex == pages.size
         Box(
-            Modifier.height(48.dp).clip(RoundedCornerShape(8.dp))
+            Modifier.height(psTouch(48)).clip(RoundedCornerShape(Corners.FIELD.dp))
                 .background(if (special) PrusaColors.Orange else PrusaColors.PanelRaised)
                 .clickable { onSelect(pages.size) }
                 .padding(horizontal = 14.dp),
@@ -533,7 +535,7 @@ internal fun SettingRow(
                 Box(
                     Modifier
                         .size(44.dp)
-                        .clip(RoundedCornerShape(8.dp))
+                        .clip(RoundedCornerShape(Corners.FIELD.dp))
                         .clickable(onClick = toggle),
                     contentAlignment = Alignment.Center,
                 ) {
@@ -618,10 +620,10 @@ private fun EnumField(
 
     Box {
         Row(
-            Modifier.fillMaxWidth().height(48.dp)
-                .clip(RoundedCornerShape(8.dp))
+            Modifier.fillMaxWidth().height(psTouch(48))
+                .clip(RoundedCornerShape(Corners.FIELD.dp))
                 .background(PrusaColors.PanelRaised)
-                .border(1.dp, PrusaColors.Divider, RoundedCornerShape(8.dp))
+                .border(1.dp, PrusaColors.Divider, RoundedCornerShape(Corners.FIELD.dp))
                 .clickable { expanded = true }
                 .padding(horizontal = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -650,10 +652,10 @@ private fun EnumField(
 @Composable
 private fun ValueField(value: String, unit: String, onChange: (String) -> Unit) {
     Row(
-        Modifier.fillMaxWidth().height(48.dp)
-            .clip(RoundedCornerShape(8.dp))
+        Modifier.fillMaxWidth().height(psTouch(48))
+            .clip(RoundedCornerShape(Corners.FIELD.dp))
             .background(PrusaColors.PanelRaised)
-            .border(1.dp, PrusaColors.Divider, RoundedCornerShape(8.dp))
+            .border(1.dp, PrusaColors.Divider, RoundedCornerShape(Corners.FIELD.dp))
             .padding(horizontal = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -710,9 +712,9 @@ private fun GcodeField(
         Box(
             Modifier.fillMaxWidth()
                 .heightIn(min = 120.dp)
-                .clip(RoundedCornerShape(4.dp))
+                .clip(RoundedCornerShape(Corners.FIELD.dp))
                 .background(PrusaColors.PanelRaised)
-                .border(1.dp, PrusaColors.Divider, RoundedCornerShape(4.dp))
+                .border(1.dp, PrusaColors.Divider, RoundedCornerShape(Corners.FIELD.dp))
                 .onFocusChanged { if (!it.isFocused && text != value) onCommit(text) }
                 .padding(10.dp),
         ) {
@@ -768,7 +770,7 @@ private fun SettingsPageEntry(
     onClick: () -> Unit,
 ) {
     Row(
-        Modifier.fillMaxWidth().height(56.dp)
+        Modifier.fillMaxWidth().height(psTouch(56))
             .background(if (active) PrusaColors.PanelRaised else PrusaColors.Panel)
             .clickable(onClick = onClick)
             .padding(horizontal = 12.dp),

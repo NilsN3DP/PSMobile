@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import de.psmobile.shared.ui.Corners
 import de.psmobile.ui.theme.AlertDialog
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
@@ -98,8 +99,8 @@ internal fun SimpleModelSheet(
         modifier
             .padding(end = 12.dp, bottom = bottomInset + 12.dp)
             .widthIn(max = 380.dp)
-            .background(PrusaColors.Panel, RoundedCornerShape(2.dp))
-            .border(1.dp, PrusaColors.Divider, RoundedCornerShape(2.dp)),
+            .background(PrusaColors.Panel, RoundedCornerShape(Corners.FIELD.dp))
+            .border(1.dp, PrusaColors.Divider, RoundedCornerShape(Corners.FIELD.dp)),
     ) {
         Row(
             Modifier.fillMaxWidth().padding(start = 10.dp, end = 2.dp),
@@ -249,7 +250,7 @@ private fun SheetAction(
     Column(
         Modifier
             .widthIn(min = 56.dp)
-            .clip(RoundedCornerShape(2.dp))
+            .clip(RoundedCornerShape(Corners.FIELD.dp))
             .clickable(enabled = enabled, onClick = onClick)
             .padding(vertical = 8.dp, horizontal = 4.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -290,7 +291,7 @@ private fun SimpleModelRow(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(
-            Modifier.size(36.dp).clip(RoundedCornerShape(2.dp)).clickable(onClick = onToggle),
+            Modifier.size(36.dp).clip(RoundedCornerShape(Corners.FIELD.dp)).clickable(onClick = onToggle),
             contentAlignment = Alignment.Center,
         ) {
             Text(
@@ -345,13 +346,13 @@ private fun ObjectProportionThumb(obj: PsmCore.ObjectInfo) {
     val boxW = (26f * (maxOf(w, d) / longest)).coerceAtLeast(4f)
     val boxH = (26f * (h / longest)).coerceAtLeast(4f)
     Box(
-        Modifier.size(36.dp).background(PrusaColors.Background, RoundedCornerShape(2.dp)),
+        Modifier.size(36.dp).background(PrusaColors.Background, RoundedCornerShape(Corners.FIELD.dp)),
         contentAlignment = Alignment.Center,
     ) {
         Box(
             Modifier
                 .size(boxW.dp, boxH.dp)
-                .background(PrusaColors.Orange, RoundedCornerShape(1.dp)),
+                .background(PrusaColors.Orange, RoundedCornerShape(Corners.FIELD.dp)),
         )
     }
 }

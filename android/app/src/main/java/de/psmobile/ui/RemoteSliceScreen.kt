@@ -43,6 +43,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import de.psmobile.shared.ui.Corners
 import de.psmobile.net.RemoteSliceClient
 import de.psmobile.slicing.SlicerService
 import de.psmobile.ui.theme.PrusaColors
@@ -115,7 +116,7 @@ fun RemoteSliceScreen(
 
             Spacer(Modifier.height(20.dp))
             Column(
-                Modifier.fillMaxWidth().background(PrusaColors.Panel, RoundedCornerShape(8.dp)).padding(14.dp),
+                Modifier.fillMaxWidth().background(PrusaColors.Panel, RoundedCornerShape(Corners.FIELD.dp)).padding(14.dp),
             ) {
                 Text(t("How it works", "So funktioniert es"), color = PrusaColors.TextPrimary,
                     fontSize = 13.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold)
@@ -235,7 +236,7 @@ fun RemoteSliceScreen(
 
             Spacer(Modifier.height(20.dp))
             Column(
-                Modifier.fillMaxWidth().background(PrusaColors.Panel.copy(alpha = 0.6f), RoundedCornerShape(8.dp))
+                Modifier.fillMaxWidth().background(PrusaColors.Panel.copy(alpha = 0.6f), RoundedCornerShape(Corners.FIELD.dp))
                     .padding(14.dp),
             ) {
                 Text(t("Security", "Sicherheit"), color = PrusaColors.TextPrimary,

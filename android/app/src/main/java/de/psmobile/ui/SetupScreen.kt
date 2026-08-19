@@ -48,7 +48,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import de.psmobile.shared.ui.Corners
 import de.psmobile.core.PsmCore
+import de.psmobile.ui.theme.psTouch
 import de.psmobile.ui.theme.PrusaColors
 import de.psmobile.ui.theme.ScaledOverlay
 import de.psmobile.shared.rules.PrinterGrouping
@@ -178,8 +180,8 @@ fun SetupScreen(
                 // mitgelieferten PrusaSlicer-Katalogen.
                 Box {
                     Row(
-                        Modifier.height(48.dp)
-                            .clip(RoundedCornerShape(8.dp))
+                        Modifier.height(psTouch(48))
+                            .clip(RoundedCornerShape(Corners.FIELD.dp))
                             .background(PrusaColors.PanelRaised)
                             .clickable { langMenu = true }
                             .padding(horizontal = 12.dp),
@@ -237,8 +239,8 @@ fun SetupScreen(
                 Row(
                     Modifier.fillMaxWidth()
                         .padding(bottom = 6.dp)
-                        .height(40.dp)
-                        .clip(RoundedCornerShape(8.dp))
+                        .height(psTouch(40))
+                        .clip(RoundedCornerShape(Corners.FIELD.dp))
                         .background(PrusaColors.PanelRaised)
                         .padding(horizontal = 12.dp),
                     verticalAlignment = Alignment.CenterVertically,
@@ -314,12 +316,12 @@ fun SetupScreen(
                     val on = selected.any { it.startsWith("${m.key}:") }
                     Column(
                         Modifier.fillMaxWidth()
-                            .clip(RoundedCornerShape(10.dp))
+                            .clip(RoundedCornerShape(Corners.CARD.dp))
                             .background(if (on) PrusaColors.Orange.copy(alpha = 0.16f)
                                         else PrusaColors.PanelRaised)
                             .border(1.dp,
                                     if (on) PrusaColors.Orange else PrusaColors.Divider,
-                                    RoundedCornerShape(10.dp))
+                                    RoundedCornerShape(Corners.CARD.dp))
                             .padding(horizontal = 14.dp, vertical = itemVerticalPadding),
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically,
@@ -400,7 +402,7 @@ fun SetupScreen(
                                     val vOn = vkey in selected
                                     Box(
                                         Modifier.height(nozzleHeight)
-                                            .clip(RoundedCornerShape(8.dp))
+                                            .clip(RoundedCornerShape(Corners.FIELD.dp))
                                             .background(if (vOn) PrusaColors.Orange
                                                         else PrusaColors.Panel)
                                             .clickable {
@@ -424,7 +426,7 @@ fun SetupScreen(
                 onClick = { onConfirm(selected.toList()) },
                 enabled = selected.isNotEmpty() && !busy,
                 modifier = Modifier.fillMaxWidth().padding(top = 10.dp).height(finishHeight),
-                shape = RoundedCornerShape(12.dp),
+                shape = RoundedCornerShape(Corners.CARD.dp),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = PrusaColors.Orange,
                     contentColor = PrusaColors.TextPrimary,

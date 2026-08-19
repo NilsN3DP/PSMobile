@@ -9,6 +9,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import de.psmobile.shared.ui.Corners
+import de.psmobile.ui.theme.psTouch
 import de.psmobile.ui.theme.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -74,7 +76,7 @@ internal fun ProjectTools(
                 }
             },
             enabled = x != null && y != null && rotation != null,
-            modifier = Modifier.fillMaxWidth().height(50.dp),
+            modifier = Modifier.fillMaxWidth().height(psTouch(50)),
             colors = ButtonDefaults.buttonColors(
                 containerColor = PrusaColors.PanelRaised,
             ),
@@ -113,7 +115,7 @@ internal fun ProjectTools(
                 }
                 TextButton(
                     onClick = { editIndex = index },
-                    modifier = Modifier.height(48.dp),
+                    modifier = Modifier.height(psTouch(48)),
                 ) { Text(PsUi.appText("Edit", "Ändern")) }
                 TextButton(
                     onClick = {
@@ -122,14 +124,14 @@ internal fun ProjectTools(
                         }
                         service.replaceCustomGcodes(gcodes)
                     },
-                    modifier = Modifier.height(48.dp),
+                    modifier = Modifier.height(psTouch(48)),
                 ) { Text(PsUi.appText("Delete", "Löschen"), color = PrusaColors.Danger) }
             }
         }
         OutlinedButton(
             onClick = { addingGcode = true },
-            modifier = Modifier.fillMaxWidth().height(50.dp),
-            shape = RoundedCornerShape(10.dp),
+            modifier = Modifier.fillMaxWidth().height(psTouch(50)),
+            shape = RoundedCornerShape(Corners.CARD.dp),
         ) { Text(PsUi.appText("Add height command", "Höhenbefehl hinzufügen")) }
 
         HorizontalDivider(color = PrusaColors.Divider)
@@ -140,11 +142,11 @@ internal fun ProjectTools(
         ) {
             OutlinedButton(
                 onClick = { onExportPlate(PsmCore.PlateFormat.STL) },
-                modifier = Modifier.weight(1f).height(54.dp),
+                modifier = Modifier.weight(1f).height(psTouch(54)),
             ) { Text(PsUi.appText("Bed as STL", "Bett als STL"), fontSize = 12.sp) }
             OutlinedButton(
                 onClick = { onExportPlate(PsmCore.PlateFormat.OBJ) },
-                modifier = Modifier.weight(1f).height(54.dp),
+                modifier = Modifier.weight(1f).height(psTouch(54)),
             ) { Text(PsUi.appText("Bed as OBJ", "Bett als OBJ"), fontSize = 12.sp) }
         }
         Row(
@@ -153,11 +155,11 @@ internal fun ProjectTools(
         ) {
             OutlinedButton(
                 onClick = onRepairStl,
-                modifier = Modifier.weight(1f).height(54.dp),
+                modifier = Modifier.weight(1f).height(psTouch(54)),
             ) { Text(PsUi.appText("Repair STL", "STL reparieren"), fontSize = 12.sp) }
             OutlinedButton(
                 onClick = onConvertGcode,
-                modifier = Modifier.weight(1f).height(54.dp),
+                modifier = Modifier.weight(1f).height(psTouch(54)),
             ) { Text(PsUi.appText("Convert G-code", "G-Code wandeln"), fontSize = 12.sp) }
         }
         Text(
@@ -233,7 +235,7 @@ private fun CustomGcodeDialog(
                             selected = type == value,
                             onClick = { type = value },
                             label = { Text(value.displayName()) },
-                            modifier = Modifier.height(48.dp),
+                            modifier = Modifier.height(psTouch(48)),
                         )
                     }
                 }

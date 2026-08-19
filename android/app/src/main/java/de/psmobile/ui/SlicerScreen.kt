@@ -59,6 +59,8 @@ import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import de.psmobile.shared.ui.Corners
+import de.psmobile.ui.theme.psTouch
 import de.psmobile.ui.theme.AlertDialog
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
@@ -644,7 +646,7 @@ private fun SlicerContent(
                                 .padding(top = 14.dp, start = 126.dp, end = 18.dp)
                                 .widthIn(max = 420.dp)
                                 .clickable { service.clearToolMessage() },
-                            shape = RoundedCornerShape(10.dp),
+                            shape = RoundedCornerShape(Corners.CARD.dp),
                             color = PrusaColors.Panel.copy(alpha = 0.96f),
                             shadowElevation = 6.dp,
                         ) {
@@ -1017,7 +1019,7 @@ private fun ToolButton(tool: PsUi.Tool, enabled: Boolean, onClick: () -> Unit) {
         Modifier
             .fillMaxWidth()
             .height(TOOL_SIZE)
-            .clip(RoundedCornerShape(12.dp))
+            .clip(RoundedCornerShape(Corners.CARD.dp))
             .background(if (enabled) PrusaColors.PanelRaised else Color.Transparent)
             .clickable(enabled = enabled, onClick = onClick),
         contentAlignment = Alignment.Center,
@@ -1103,12 +1105,12 @@ private fun ExtruderRow(
         Box(
             Modifier
                 .size(44.dp)
-                .clip(RoundedCornerShape(8.dp))
+                .clip(RoundedCornerShape(Corners.FIELD.dp))
                 .background(parseColor(extruder.color) ?: PrusaColors.PanelRaised)
                 .border(
                     1.dp,
                     if (extruder.color.isEmpty()) PrusaColors.Divider else Color.White.copy(alpha = 0.45f),
-                    RoundedCornerShape(8.dp),
+                    RoundedCornerShape(Corners.FIELD.dp),
                 )
                 .clickable { pickColor = true },
             contentAlignment = Alignment.Center,
@@ -1121,10 +1123,10 @@ private fun ExtruderRow(
         Row(
             Modifier
                 .weight(1f)
-                .height(52.dp)
-                .clip(RoundedCornerShape(9.dp))
+                .height(psTouch(52))
+                .clip(RoundedCornerShape(Corners.FIELD.dp))
                 .background(PrusaColors.PanelRaised)
-                .border(1.dp, PrusaColors.Divider, RoundedCornerShape(9.dp))
+                .border(1.dp, PrusaColors.Divider, RoundedCornerShape(Corners.FIELD.dp))
                 .clickable(onClick = onPickFilament)
                 .padding(horizontal = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -1158,10 +1160,10 @@ internal fun MaterialPickerButton(selected: String, onClick: () -> Unit) {
     Row(
         Modifier
             .fillMaxWidth()
-            .height(56.dp)
-            .clip(RoundedCornerShape(10.dp))
+            .height(psTouch(56))
+            .clip(RoundedCornerShape(Corners.CARD.dp))
             .background(PrusaColors.PanelRaised)
-            .border(1.dp, PrusaColors.Divider, RoundedCornerShape(10.dp))
+            .border(1.dp, PrusaColors.Divider, RoundedCornerShape(Corners.CARD.dp))
             .clickable(onClick = onClick)
             .padding(horizontal = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -1222,13 +1224,13 @@ internal fun ExtruderBank(
                     Column(
                         Modifier
                             .weight(1f)
-                            .height(52.dp)
-                            .clip(RoundedCornerShape(10.dp))
+                            .height(psTouch(52))
+                            .clip(RoundedCornerShape(Corners.CARD.dp))
                             .background(if (active) PrusaColors.PanelRaised else PrusaColors.Panel)
                             .border(
                                 if (active) 2.dp else 1.dp,
                                 if (active) PrusaColors.Orange else PrusaColors.Divider,
-                                RoundedCornerShape(10.dp),
+                                RoundedCornerShape(Corners.CARD.dp),
                             )
                             .clickable { onSelect(index) }
                             .padding(horizontal = 8.dp, vertical = 7.dp),
@@ -1245,7 +1247,7 @@ internal fun ExtruderBank(
                             Modifier
                                 .fillMaxWidth()
                                 .height(14.dp)
-                                .clip(RoundedCornerShape(5.dp))
+                                .clip(RoundedCornerShape(Corners.FIELD.dp))
                                 .background(parseColor(head.color) ?: PrusaColors.Divider),
                         )
                     }
@@ -1321,7 +1323,7 @@ private fun ColorPickerDialog(
                     .fillMaxWidth()
                     .heightIn(max = 620.dp)
                     .padding(18.dp),
-                shape = RoundedCornerShape(18.dp),
+                shape = RoundedCornerShape(Corners.SHEET.dp),
                 color = PrusaColors.Panel,
             ) {
                 Column(
@@ -1356,14 +1358,14 @@ private fun ColorPickerDialog(
                                 Box(
                                     Modifier
                                         .weight(1f)
-                                        .height(48.dp)
-                                        .clip(RoundedCornerShape(8.dp))
+                                        .height(psTouch(48))
+                                        .clip(RoundedCornerShape(Corners.FIELD.dp))
                                         .background(parseColor(hex) ?: Color.Gray)
                                         .border(
                                             if (hex.equals(current, true)) 3.dp else 1.dp,
                                             if (hex.equals(current, true)) PrusaColors.Orange
                                             else PrusaColors.Divider,
-                                            RoundedCornerShape(8.dp),
+                                            RoundedCornerShape(Corners.FIELD.dp),
                                         )
                                         .clickable { onPick(hex) },
                                 )
@@ -1391,7 +1393,7 @@ private fun ColorPickerDialog(
                     Button(
                         onClick = { onPick(manual.trim()) },
                         enabled = manual.isBlank() || parseColor(manual.trim()) != null,
-                        modifier = Modifier.fillMaxWidth().height(48.dp),
+                        modifier = Modifier.fillMaxWidth().height(psTouch(48)),
                         colors = ButtonDefaults.buttonColors(
                             containerColor = PrusaColors.Orange,
                             contentColor = PrusaColors.TextPrimary,
@@ -1403,11 +1405,11 @@ private fun ColorPickerDialog(
                     ) {
                         TextButton(
                             onClick = { onPick("") },
-                            modifier = Modifier.weight(1f).height(44.dp),
+                            modifier = Modifier.weight(1f).height(psTouch(44)),
                         ) { Text(advancedText("Use filament", "Vom Filament"), maxLines = 1) }
                         TextButton(
                             onClick = onDismiss,
-                            modifier = Modifier.weight(1f).height(44.dp),
+                            modifier = Modifier.weight(1f).height(psTouch(44)),
                         ) { Text(advancedText("Cancel", "Abbrechen"), maxLines = 1) }
                     }
                 }
@@ -1432,7 +1434,7 @@ private fun ViewModeTabs(
 ) {
     Row(
         modifier
-            .clip(RoundedCornerShape(6.dp))
+            .clip(RoundedCornerShape(Corners.FIELD.dp))
             .background(PrusaColors.Panel.copy(alpha = 0.88f))
             .padding(4.dp),
         horizontalArrangement = Arrangement.spacedBy(2.dp),
@@ -1453,7 +1455,7 @@ private fun ViewModeTabs(
                 fontSize = 13.sp,
                 fontWeight = if (on) FontWeight.SemiBold else FontWeight.Normal,
                 modifier = Modifier
-                    .clip(RoundedCornerShape(4.dp))
+                    .clip(RoundedCornerShape(Corners.FIELD.dp))
                     .background(if (on) PrusaColors.Orange else Color.Transparent)
                     .clickable(enabled = enabled && !on) { onSelect(isPreview) }
                     .heightIn(min = TOUCH_TARGET)
@@ -1475,7 +1477,7 @@ private fun LayerProfileSceneOverlay(
     val maxLayer = segments.maxOf { it.heightMm }.coerceAtLeast(0.01)
     Surface(
         modifier = modifier.width(164.dp),
-        shape = RoundedCornerShape(10.dp),
+        shape = RoundedCornerShape(Corners.CARD.dp),
         color = PrusaColors.Panel.copy(alpha = 0.94f),
         shadowElevation = 8.dp,
     ) {
@@ -1488,7 +1490,7 @@ private fun LayerProfileSceneOverlay(
             Row(Modifier.fillMaxWidth().height(88.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 Column(
                     Modifier.width(26.dp)
-                        .clip(RoundedCornerShape(5.dp))
+                        .clip(RoundedCornerShape(Corners.FIELD.dp))
                         .background(PrusaColors.PanelRaised),
                 ) {
                     segments.asReversed().forEach { segment ->
@@ -1625,7 +1627,7 @@ internal fun LayerSlider(
                     modifier = Modifier
                         .align(Alignment.TopStart)
                         .padding(top = (centerPx - 9.dp.toPx()).coerceAtLeast(0f).toDp())
-                        .clip(RoundedCornerShape(4.dp))
+                        .clip(RoundedCornerShape(Corners.FIELD.dp))
                         .background(PrusaColors.Panel.copy(alpha = 0.88f))
                         .padding(horizontal = 5.dp, vertical = 2.dp),
                 )
@@ -1647,7 +1649,7 @@ internal fun LayerSlider(
 private fun ViewBar(controller: SceneController, modifier: Modifier = Modifier) {
     Row(
         modifier
-            .clip(RoundedCornerShape(6.dp))
+            .clip(RoundedCornerShape(Corners.FIELD.dp))
             .background(PrusaColors.Panel.copy(alpha = 0.88f))
             .padding(horizontal = 4.dp, vertical = 4.dp),
         horizontalArrangement = Arrangement.spacedBy(2.dp),
@@ -1664,7 +1666,7 @@ private fun ViewBar(controller: SceneController, modifier: Modifier = Modifier) 
             Box(
                 Modifier
                     .height(TOUCH_TARGET)
-                    .clip(RoundedCornerShape(8.dp))
+                    .clip(RoundedCornerShape(Corners.FIELD.dp))
                     .clickable { controller.setView(v) }
                     .padding(horizontal = 16.dp),
                 contentAlignment = Alignment.Center,
@@ -1790,7 +1792,7 @@ private fun WerkzeugKnopf(
     Column(
         Modifier
             .width(56.dp)
-            .heightIn(min = 46.dp)
+            .heightIn(min = psTouch(46))
             .clickable(enabled = enabled, onClick = onClick)
             .padding(vertical = 4.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -1858,11 +1860,11 @@ internal fun BedSelector(
         var zeigeListe by remember { mutableStateOf(false) }
         Row(
             modifier
-                .clip(RoundedCornerShape(8.dp))
+                .clip(RoundedCornerShape(Corners.FIELD.dp))
                 .background(PrusaColors.PanelRaised)
                 .clickable { zeigeListe = true }
                 .padding(horizontal = 12.dp, vertical = 8.dp)
-                .heightIn(min = 44.dp),
+                .heightIn(min = psTouch(44)),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(7.dp),
         ) {
@@ -1906,7 +1908,7 @@ internal fun BedSelector(
                             Modifier
                                 .fillMaxWidth()
                                 .heightIn(min = 64.dp)
-                                .clip(RoundedCornerShape(8.dp))
+                                .clip(RoundedCornerShape(Corners.FIELD.dp))
                                 .background(if (bett.active) PrusaColors.Orange else PrusaColors.PanelRaised)
                                 .clickable { onSelect(bett.id); zeigeListe = false }
                                 .padding(horizontal = 12.dp),
@@ -1954,7 +1956,7 @@ internal fun BedSelector(
                     androidx.compose.material3.Button(
                         onClick = { onAdd(); zeigeListe = false },
                         colors = androidx.compose.material3.ButtonDefaults.buttonColors(containerColor = PrusaColors.Orange),
-                        modifier = Modifier.fillMaxWidth().heightIn(min = 44.dp),
+                        modifier = Modifier.fillMaxWidth().heightIn(min = psTouch(44)),
                     ) {
                         Icon(Icons.Default.Add, contentDescription = null)
                         Spacer(Modifier.width(6.dp))
@@ -1969,7 +1971,7 @@ internal fun BedSelector(
 
     Row(
         modifier
-            .clip(RoundedCornerShape(10.dp))
+            .clip(RoundedCornerShape(Corners.CARD.dp))
             .background(PrusaColors.Background.copy(alpha = 0.55f))
             .padding(3.dp),
         horizontalArrangement = Arrangement.spacedBy(3.dp),
@@ -1977,7 +1979,7 @@ internal fun BedSelector(
     ) {
         strip.items.forEach { bed ->
             Row(
-                Modifier.clip(RoundedCornerShape(8.dp))
+                Modifier.clip(RoundedCornerShape(Corners.FIELD.dp))
                     .background(if (bed.active) PrusaColors.Orange else PrusaColors.PanelRaised),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -1987,8 +1989,8 @@ internal fun BedSelector(
                 fontSize = 14.sp,
                 fontWeight = if (bed.active) FontWeight.SemiBold else FontWeight.Normal,
                 modifier = Modifier
-                    .height(50.dp)
-                    .clip(RoundedCornerShape(8.dp))
+                    .height(psTouch(50))
+                    .clip(RoundedCornerShape(Corners.FIELD.dp))
                     .combinedClickable(
                         enabled = true,
                         onClick = { if (!bed.active) onSelect(bed.id) },
@@ -2011,7 +2013,7 @@ internal fun BedSelector(
         Box(
             Modifier
                 .size(50.dp)
-                .clip(RoundedCornerShape(8.dp))
+                .clip(RoundedCornerShape(Corners.FIELD.dp))
                 .background(PrusaColors.PanelRaised)
                 .clickable(enabled = strip.canAdd, onClick = onAdd),
             contentAlignment = Alignment.Center,
@@ -2024,7 +2026,7 @@ internal fun BedSelector(
             Box(
                 Modifier
                     .size(50.dp)
-                    .clip(RoundedCornerShape(8.dp))
+                    .clip(RoundedCornerShape(Corners.FIELD.dp))
                     .background(PrusaColors.PanelRaised)
                 .clickable { onRemove(active.id) },
                 contentAlignment = Alignment.Center,

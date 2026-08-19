@@ -29,8 +29,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import de.psmobile.shared.ui.Corners
 import de.psmobile.core.PsmCore
 import de.psmobile.slicing.SlicerService
+import de.psmobile.ui.theme.psTouch
 import de.psmobile.ui.theme.PrusaColors
 import de.psmobile.ui.theme.ScaledOverlay
 import kotlin.math.roundToInt
@@ -228,10 +230,10 @@ private fun Picker(
 
     Box(Modifier.fillMaxWidth()) {
         Row(
-            Modifier.fillMaxWidth().height(48.dp)
-                .clip(RoundedCornerShape(8.dp))
+            Modifier.fillMaxWidth().height(psTouch(48))
+                .clip(RoundedCornerShape(Corners.FIELD.dp))
                 .background(PrusaColors.PanelRaised)
-                .border(1.dp, PrusaColors.Divider, RoundedCornerShape(8.dp))
+                .border(1.dp, PrusaColors.Divider, RoundedCornerShape(Corners.FIELD.dp))
                 .clickable { open = true }
                 .padding(horizontal = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -263,20 +265,20 @@ private fun Picker(
 @Composable
 private fun Toggle(on: Boolean, onChange: (Boolean) -> Unit) {
     Box(
-        Modifier.width(60.dp).height(48.dp)
-            .clip(RoundedCornerShape(10.dp))
+        Modifier.width(60.dp).height(psTouch(48))
+            .clip(RoundedCornerShape(Corners.CARD.dp))
             .clickable { onChange(!on) },
         contentAlignment = Alignment.Center,
     ) {
         Box(
             Modifier.width(56.dp).height(34.dp)
-                .clip(RoundedCornerShape(17.dp))
+                .clip(RoundedCornerShape(Corners.SHEET.dp))
                 .background(if (on) PrusaColors.Orange else PrusaColors.PanelRaised),
             contentAlignment = if (on) Alignment.CenterEnd else Alignment.CenterStart,
         ) {
             Box(
                 Modifier.padding(horizontal = 3.dp).size(28.dp)
-                    .clip(RoundedCornerShape(14.dp))
+                    .clip(RoundedCornerShape(Corners.SHEET.dp))
                     .background(Color.White),
             )
         }
@@ -305,8 +307,8 @@ private fun Stepper(value: Int, onChange: (Int) -> Unit) {
 @Composable
 private fun StepButton(label: String, onClick: () -> Unit) {
     Box(
-        Modifier.width(48.dp).height(48.dp)
-            .clip(RoundedCornerShape(8.dp))
+        Modifier.width(48.dp).height(psTouch(48))
+            .clip(RoundedCornerShape(Corners.FIELD.dp))
             .background(PrusaColors.PanelRaised)
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center,

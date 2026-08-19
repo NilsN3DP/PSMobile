@@ -57,6 +57,8 @@ import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import de.psmobile.shared.ui.Corners
+import de.psmobile.ui.theme.psTouch
 import de.psmobile.ui.theme.AlertDialog
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
@@ -243,7 +245,7 @@ internal fun Sidebar(
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         Row(
-            Modifier.fillMaxWidth().height(48.dp),
+            Modifier.fillMaxWidth().height(psTouch(48)),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Column(Modifier.weight(1f)) {
@@ -268,7 +270,7 @@ internal fun Sidebar(
                 Box(
                     Modifier
                         .size(48.dp)
-                        .clip(RoundedCornerShape(10.dp))
+                        .clip(RoundedCornerShape(Corners.CARD.dp))
                         .background(PrusaColors.PanelRaised)
                         .clickable(onClick = close),
                     contentAlignment = Alignment.Center,
@@ -399,8 +401,8 @@ internal fun Sidebar(
 
                     OutlinedButton(
                         onClick = onManagePrinters,
-                        modifier = Modifier.fillMaxWidth().height(52.dp),
-                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier.fillMaxWidth().height(psTouch(52)),
+                        shape = RoundedCornerShape(Corners.CARD.dp),
                     ) {
                         Text(
                             advancedText("Manage printers", "Drucker verwalten"),
@@ -411,8 +413,8 @@ internal fun Sidebar(
                     if (presets.extruders.size >= 2) {
                         OutlinedButton(
                             onClick = { service.showScreen(SlicerService.Screen.ColorMix) },
-                            modifier = Modifier.fillMaxWidth().height(52.dp),
-                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier.fillMaxWidth().height(psTouch(52)),
+                            shape = RoundedCornerShape(Corners.CARD.dp),
                         ) {
                             Text("ColorMix", color = PrusaColors.TextPrimary, fontSize = 14.sp)
                         }
@@ -426,7 +428,7 @@ internal fun Sidebar(
                             Modifier
                                 .fillMaxWidth()
                                 .height(150.dp)
-                                .clip(RoundedCornerShape(12.dp))
+                                .clip(RoundedCornerShape(Corners.CARD.dp))
                                 .background(PrusaColors.PanelRaised),
                             contentAlignment = Alignment.Center,
                         ) {
@@ -454,7 +456,7 @@ internal fun Sidebar(
                             onValueChange = { objectQuery = it },
                             singleLine = true,
                             label = { Text(advancedText("Search objects", "Objekte suchen")) },
-                            modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp),
+                            modifier = Modifier.fillMaxWidth().heightIn(min = psTouch(56)),
                         )
                         Row(
                             Modifier.fillMaxWidth(),
@@ -463,12 +465,12 @@ internal fun Sidebar(
                         ) {
                             TextButton(
                                 onClick = onSelectAll,
-                                modifier = Modifier.height(48.dp),
+                                modifier = Modifier.height(psTouch(48)),
                             ) { Text(PsUi.appText("Select all", "Alle auswählen")) }
                             TextButton(
                                 onClick = onClearSelection,
                                 enabled = selectedIds.isNotEmpty(),
-                                modifier = Modifier.height(48.dp),
+                                modifier = Modifier.height(psTouch(48)),
                             ) { Text(PsUi.appText("Clear", "Aufheben")) }
                             Spacer(Modifier.weight(1f))
                             Text(
@@ -512,8 +514,8 @@ internal fun Sidebar(
                         selected?.let {
                             Button(
                                 onClick = { section = InspectorSection.TRANSFORM },
-                                modifier = Modifier.fillMaxWidth().height(54.dp),
-                                shape = RoundedCornerShape(10.dp),
+                                modifier = Modifier.fillMaxWidth().height(psTouch(54)),
+                                shape = RoundedCornerShape(Corners.CARD.dp),
                                 colors = ButtonDefaults.buttonColors(
                                     containerColor = PrusaColors.PanelRaised,
                                     contentColor = PrusaColors.TextPrimary,
@@ -591,8 +593,8 @@ internal fun Sidebar(
         Button(
             onClick = { if (isRunning) service.cancelSlice() else service.startSlice() },
             enabled = objects.isNotEmpty() || isRunning,
-            modifier = Modifier.fillMaxWidth().height(58.dp),
-            shape = RoundedCornerShape(12.dp),
+            modifier = Modifier.fillMaxWidth().height(psTouch(58)),
+            shape = RoundedCornerShape(Corners.CARD.dp),
             colors = ButtonDefaults.buttonColors(
                 containerColor = if (isRunning) PrusaColors.PanelRaised else PrusaColors.Orange,
                 contentColor = PrusaColors.TextPrimary,
@@ -619,8 +621,8 @@ internal fun Sidebar(
                         else
                             sendMenu = true
                     },
-                    modifier = Modifier.fillMaxWidth().height(52.dp),
-                    shape = RoundedCornerShape(10.dp),
+                    modifier = Modifier.fillMaxWidth().height(psTouch(52)),
+                    shape = RoundedCornerShape(Corners.CARD.dp),
                     colors = ButtonDefaults.buttonColors(
                         containerColor = PrusaColors.PanelRaised,
                         contentColor = PrusaColors.TextPrimary,
@@ -667,8 +669,8 @@ internal fun Sidebar(
         if (progress is SlicerService.Progress.Done) {
             OutlinedButton(
                 onClick = { service.shareableGcodeUri()?.let(onShare) },
-                modifier = Modifier.fillMaxWidth().height(52.dp),
-                shape = RoundedCornerShape(10.dp),
+                modifier = Modifier.fillMaxWidth().height(psTouch(52)),
+                shape = RoundedCornerShape(Corners.CARD.dp),
             ) {
                 Icon(Icons.Default.Share, contentDescription = null, Modifier.size(18.dp))
                 Text(advancedText("Export G-code", "G-Code exportieren"),
@@ -680,8 +682,8 @@ internal fun Sidebar(
             usbTarget?.let { label ->
                 OutlinedButton(
                     onClick = onExportToUsb,
-                    modifier = Modifier.fillMaxWidth().height(52.dp).padding(top = 6.dp),
-                    shape = RoundedCornerShape(10.dp),
+                    modifier = Modifier.fillMaxWidth().height(psTouch(52)).padding(top = 6.dp),
+                    shape = RoundedCornerShape(Corners.CARD.dp),
                 ) {
                     Text("⏻", color = PrusaColors.Orange)
                     Text(label, Modifier.padding(start = 8.dp))
@@ -819,7 +821,7 @@ private fun InspectorTabs(
     Row(
         Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
+            .clip(RoundedCornerShape(Corners.CARD.dp))
             .background(PrusaColors.Background.copy(alpha = 0.62f))
             .padding(4.dp),
         horizontalArrangement = Arrangement.spacedBy(4.dp),
@@ -833,8 +835,8 @@ private fun InspectorTabs(
             Box(
                 Modifier
                     .weight(1f)
-                    .height(48.dp)
-                    .clip(RoundedCornerShape(9.dp))
+                    .height(psTouch(48))
+                    .clip(RoundedCornerShape(Corners.FIELD.dp))
                     .background(if (active) PrusaColors.Orange else Color.Transparent)
                     .clickable(enabled = enabled && !active) { onSelect(section) },
                 contentAlignment = Alignment.Center,
@@ -904,9 +906,9 @@ private fun PresetCombo(
             Modifier
                 .fillMaxWidth()
                 .height(if (dirtyCount > 0) 60.dp else 52.dp)
-                .clip(RoundedCornerShape(9.dp))
+                .clip(RoundedCornerShape(Corners.FIELD.dp))
                 .background(PrusaColors.PanelRaised)
-                .border(1.dp, PrusaColors.Divider, RoundedCornerShape(9.dp))
+                .border(1.dp, PrusaColors.Divider, RoundedCornerShape(Corners.FIELD.dp))
                 .clickable(enabled = options.isNotEmpty()) {
                     query = ""
                     pickerOpen = true
@@ -936,7 +938,7 @@ private fun PresetCombo(
             }
             Text("▾", color = PrusaColors.TextMuted)
             Box(
-                Modifier.size(44.dp).clip(RoundedCornerShape(8.dp))
+                Modifier.size(44.dp).clip(RoundedCornerShape(Corners.FIELD.dp))
                     .clickable(onClick = onEdit),
                 contentAlignment = Alignment.Center,
             ) { PsIcon("cog.svg", Modifier.size(20.dp)) }
@@ -1044,7 +1046,7 @@ private fun ObjectTreeRow(
     Column(
         Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(10.dp))
+            .clip(RoundedCornerShape(Corners.CARD.dp))
             .background(
                 if (isSelected) PrusaColors.Orange.copy(alpha = 0.18f)
                 else PrusaColors.PanelRaised
@@ -1052,7 +1054,7 @@ private fun ObjectTreeRow(
             .then(
                 if (isPrimary)
                     Modifier.border(
-                        1.dp, PrusaColors.Orange, RoundedCornerShape(10.dp)
+                        1.dp, PrusaColors.Orange, RoundedCornerShape(Corners.CARD.dp)
                     )
                 else Modifier
             ),
@@ -1070,7 +1072,7 @@ private fun ObjectTreeRow(
             Box(
                 Modifier
                     .size(48.dp)
-                    .clip(RoundedCornerShape(8.dp))
+                    .clip(RoundedCornerShape(Corners.FIELD.dp))
                     .clickable(enabled = volumes.isNotEmpty()) { expanded = !expanded },
                 contentAlignment = Alignment.Center,
             ) {
@@ -1116,7 +1118,7 @@ private fun ObjectTreeRow(
             Box(
                 Modifier
                     .size(48.dp)
-                    .clip(RoundedCornerShape(8.dp))
+                    .clip(RoundedCornerShape(Corners.FIELD.dp))
                     .clickable(onClick = onDelete),
                 contentAlignment = Alignment.Center,
             ) {
@@ -1160,7 +1162,7 @@ private fun VolumeTreeRow(
     Row(
         Modifier
             .fillMaxWidth()
-            .heightIn(min = 58.dp)
+            .heightIn(min = psTouch(58))
             .padding(start = 48.dp, end = 8.dp, top = 8.dp, bottom = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -1168,7 +1170,7 @@ private fun VolumeTreeRow(
         Box(
             Modifier
                 .size(8.dp)
-                .clip(RoundedCornerShape(2.dp))
+                .clip(RoundedCornerShape(Corners.FIELD.dp))
                 .background(
                     if (volume.type == PsmCore.VolumeType.MODEL_PART)
                         PrusaColors.Orange else PrusaColors.TextMuted
@@ -1213,10 +1215,10 @@ private fun ExtruderPicker(
     Box {
         Box(
             Modifier
-                .height(44.dp)
-                .clip(RoundedCornerShape(8.dp))
+                .height(psTouch(44))
+                .clip(RoundedCornerShape(Corners.FIELD.dp))
                 .background(PrusaColors.Background.copy(alpha = 0.55f))
-                .border(1.dp, PrusaColors.Divider, RoundedCornerShape(8.dp))
+                .border(1.dp, PrusaColors.Divider, RoundedCornerShape(Corners.FIELD.dp))
                 .clickable { expanded = true }
                 .padding(horizontal = 10.dp),
             contentAlignment = Alignment.Center,

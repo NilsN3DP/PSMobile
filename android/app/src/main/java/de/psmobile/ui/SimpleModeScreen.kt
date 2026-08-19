@@ -31,6 +31,7 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import de.psmobile.ui.theme.psTouch
 import de.psmobile.ui.theme.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -400,7 +401,7 @@ fun SimpleModeScreen(
                 onClick = onPickFile,
                 shape = RoundedCornerShape(Corners.FIELD.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = PrusaColors.Orange),
-                modifier = Modifier.align(Alignment.BottomEnd).padding(end = 12.dp, bottom = workspaceActionBottom + 12.dp).heightIn(min = 56.dp),
+                modifier = Modifier.align(Alignment.BottomEnd).padding(end = 12.dp, bottom = workspaceActionBottom + 12.dp).heightIn(min = psTouch(56)),
             ) { Text("＋ " + st("Add model", "Modell hinzufügen")) }
         } else {
             // Sobald etwas auf dem Bett liegt, uebernimmt das Modelle-Blatt
@@ -541,7 +542,7 @@ private fun SimpleHeader(
     Row(verticalAlignment = Alignment.CenterVertically) {
         Box(
             Modifier.size(if (compact) 23.dp else 28.dp)
-                .background(PrusaColors.Orange, RoundedCornerShape(4.dp)),
+                .background(PrusaColors.Orange, RoundedCornerShape(Corners.FIELD.dp)),
             contentAlignment = Alignment.Center,
         ) { Text("S", color = PrusaColors.Background, fontSize = if (compact) 13.sp else 16.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold) }
         Spacer(Modifier.width(8.dp))
@@ -625,9 +626,9 @@ private fun SimpleToolbar(
                 Modifier
                     .height(if (compact) 46.dp else 54.dp)
                     .width(if (compact) 40.dp else 46.dp)
-                    .clip(RoundedCornerShape(1.dp))
+                    .clip(RoundedCornerShape(Corners.FIELD.dp))
                     .background(if (remoteSliceOn) PrusaColors.Orange else PrusaColors.Panel)
-                    .border(1.dp, if (remoteSliceOn) PrusaColors.Orange else PrusaColors.Divider, RoundedCornerShape(1.dp))
+                    .border(1.dp, if (remoteSliceOn) PrusaColors.Orange else PrusaColors.Divider, RoundedCornerShape(Corners.FIELD.dp))
                     .clickable(onClick = onToggleRemoteSlice),
                 contentAlignment = Alignment.Center,
             ) {
@@ -684,10 +685,10 @@ private fun simpleToolbarLabel(label: String): String = when (label) {
 
 @Composable
 private fun SimpleUndoRedo(onUndo: () -> Unit, onRedo: () -> Unit, modifier: Modifier) = Row(
-    modifier.background(PrusaColors.Panel, RoundedCornerShape(4.dp)),
+    modifier.background(PrusaColors.Panel, RoundedCornerShape(Corners.FIELD.dp)),
 ) {
-    TextButton(onClick = onUndo, modifier = Modifier.height(52.dp).width(72.dp)) { Text("↶\n" + st("Undo", "Rückgängig")) }
-    TextButton(onClick = onRedo, modifier = Modifier.height(52.dp).width(72.dp)) { Text("↷\n" + st("Redo", "Wiederholen")) }
+    TextButton(onClick = onUndo, modifier = Modifier.height(psTouch(52)).width(72.dp)) { Text("↶\n" + st("Undo", "Rückgängig")) }
+    TextButton(onClick = onRedo, modifier = Modifier.height(psTouch(52)).width(72.dp)) { Text("↷\n" + st("Redo", "Wiederholen")) }
 }
 
 /**
@@ -706,7 +707,7 @@ private fun SimpleWerkzeugSpalte(
     onAnsicht: () -> Unit,
     modifier: Modifier = Modifier,
 ) = Column(
-    modifier.background(PrusaColors.Panel, RoundedCornerShape(4.dp)),
+    modifier.background(PrusaColors.Panel, RoundedCornerShape(Corners.FIELD.dp)),
     horizontalAlignment = Alignment.CenterHorizontally,
 ) {
     if (zeigeGriffe) {
@@ -728,7 +729,7 @@ private fun SimpleWerkzeugKnopf(
     onClick: () -> Unit,
 ) = TextButton(
     onClick = onClick,
-    modifier = Modifier.height(52.dp).width(72.dp),
+    modifier = Modifier.height(psTouch(52)).width(72.dp),
     colors = ButtonDefaults.textButtonColors(
         contentColor = if (aktiv) PrusaColors.Orange else PrusaColors.TextPrimary,
     ),
@@ -837,11 +838,11 @@ private fun SimpleProjectsPanel(onPickFile: () -> Unit, presets: SlicerService.P
 
 @Composable
 private fun SimpleProjectRow(title: String, printer: String, material: String, detail: String) = Row(
-    Modifier.fillMaxWidth().padding(top = 4.dp).background(PrusaColors.PanelRaised, RoundedCornerShape(2.dp)).padding(12.dp),
+    Modifier.fillMaxWidth().padding(top = 4.dp).background(PrusaColors.PanelRaised, RoundedCornerShape(Corners.FIELD.dp)).padding(12.dp),
     verticalAlignment = Alignment.CenterVertically,
 ) {
     Box(
-        Modifier.size(70.dp).background(PrusaColors.Background, RoundedCornerShape(2.dp)),
+        Modifier.size(70.dp).background(PrusaColors.Background, RoundedCornerShape(Corners.FIELD.dp)),
         contentAlignment = Alignment.Center,
     ) { Text("▧", fontSize = 30.sp, color = PrusaColors.TextMuted) }
     Column(Modifier.weight(1f).padding(start = 12.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
@@ -899,8 +900,8 @@ private fun SimplePrinterCard(
 ) = Column(
     modifier
         .heightIn(min = 162.dp)
-        .background(if (selected) PrusaColors.PanelRaised else PrusaColors.Background, RoundedCornerShape(4.dp))
-        .border(1.dp, if (selected) PrusaColors.Orange else PrusaColors.Divider, RoundedCornerShape(4.dp))
+        .background(if (selected) PrusaColors.PanelRaised else PrusaColors.Background, RoundedCornerShape(Corners.FIELD.dp))
+        .border(1.dp, if (selected) PrusaColors.Orange else PrusaColors.Divider, RoundedCornerShape(Corners.FIELD.dp))
         .clickable(onClick = onClick)
         .padding(12.dp),
     verticalArrangement = Arrangement.spacedBy(5.dp),
@@ -924,22 +925,22 @@ private fun SimplePrinterCard(
 @Composable
 private fun SimplePrinterGlyph() = Box(
     Modifier.width(62.dp).height(72.dp)
-        .background(PrusaColors.Panel, RoundedCornerShape(5.dp))
-        .border(1.dp, PrusaColors.Divider, RoundedCornerShape(5.dp)),
+        .background(PrusaColors.Panel, RoundedCornerShape(Corners.FIELD.dp))
+        .border(1.dp, PrusaColors.Divider, RoundedCornerShape(Corners.FIELD.dp)),
     contentAlignment = Alignment.Center,
 ) {
     Box(
-        Modifier.width(38.dp).height(48.dp)
-            .background(PrusaColors.Background, RoundedCornerShape(2.dp))
-            .border(1.dp, PrusaColors.TextMuted.copy(alpha = 0.4f), RoundedCornerShape(2.dp)),
+        Modifier.width(38.dp).height(psTouch(48))
+            .background(PrusaColors.Background, RoundedCornerShape(Corners.FIELD.dp))
+            .border(1.dp, PrusaColors.TextMuted.copy(alpha = 0.4f), RoundedCornerShape(Corners.FIELD.dp)),
     )
     Box(
-        Modifier.align(Alignment.CenterEnd).width(3.dp).height(42.dp)
-            .background(PrusaColors.Orange, RoundedCornerShape(2.dp)),
+        Modifier.align(Alignment.CenterEnd).width(3.dp).height(psTouch(42))
+            .background(PrusaColors.Orange, RoundedCornerShape(Corners.FIELD.dp)),
     )
     Box(
         Modifier.align(Alignment.BottomCenter).width(28.dp).height(3.dp)
-            .background(PrusaColors.TextMuted, RoundedCornerShape(2.dp)),
+            .background(PrusaColors.TextMuted, RoundedCornerShape(Corners.FIELD.dp)),
     )
 }
 
@@ -979,14 +980,14 @@ private fun SimpleMaterialPanel(service: SlicerService, presets: SlicerService.P
                 val active = selectedExtruder == extruder.index
                 Column(
                     Modifier.weight(1f)
-                        .background(if (active) PrusaColors.PanelRaised else PrusaColors.Panel, RoundedCornerShape(2.dp))
-                        .border(1.dp, if (active) PrusaColors.Orange else PrusaColors.Divider, RoundedCornerShape(2.dp))
+                        .background(if (active) PrusaColors.PanelRaised else PrusaColors.Panel, RoundedCornerShape(Corners.FIELD.dp))
+                        .border(1.dp, if (active) PrusaColors.Orange else PrusaColors.Divider, RoundedCornerShape(Corners.FIELD.dp))
                         .clickable { selectedExtruder = extruder.index; chooserOpen = true }
                         .padding(12.dp),
                     verticalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(Modifier.size(14.dp).background(androidx.compose.ui.graphics.Color(android.graphics.Color.parseColor(extruder.color.ifBlank { "#808080" })), RoundedCornerShape(7.dp)))
+                        Box(Modifier.size(14.dp).background(androidx.compose.ui.graphics.Color(android.graphics.Color.parseColor(extruder.color.ifBlank { "#808080" })), RoundedCornerShape(Corners.FIELD.dp)))
                         Text("  T${extruder.index + 1}", color = PrusaColors.TextPrimary, style = MaterialTheme.typography.labelLarge)
                     }
                     Text(
@@ -1005,8 +1006,8 @@ private fun SimpleMaterialPanel(service: SlicerService, presets: SlicerService.P
     Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         listOf("#E53935", "#FB8C00", "#FDD835", "#43A047", "#1E88E5", "#8E24AA", "#212121", "#F5F5F5").forEach { color ->
             Box(
-                Modifier.size(36.dp).background(androidx.compose.ui.graphics.Color(android.graphics.Color.parseColor(color)), RoundedCornerShape(18.dp))
-                    .border(1.dp, PrusaColors.Divider, RoundedCornerShape(18.dp))
+                Modifier.size(36.dp).background(androidx.compose.ui.graphics.Color(android.graphics.Color.parseColor(color)), RoundedCornerShape(Corners.SHEET.dp))
+                    .border(1.dp, PrusaColors.Divider, RoundedCornerShape(Corners.SHEET.dp))
                     .clickable { service.setExtruderColor(selectedExtruder, color) },
             )
         }
@@ -1085,11 +1086,11 @@ internal fun SimpleMaterialChooser(
                     val fits = filament !in incompatible
                     Column(
                         Modifier.weight(1f).height(112.dp)
-                            .background(PrusaColors.PanelRaised, RoundedCornerShape(2.dp))
+                            .background(PrusaColors.PanelRaised, RoundedCornerShape(Corners.FIELD.dp))
                             .then(
                                 if (fits) Modifier
                                 else Modifier.border(
-                                    1.dp, PrusaColors.Danger, RoundedCornerShape(2.dp)
+                                    1.dp, PrusaColors.Danger, RoundedCornerShape(Corners.FIELD.dp)
                                 )
                             )
                             .clickable { onChoose(filament) }.padding(10.dp),
@@ -1171,13 +1172,13 @@ private fun SimpleSettingsPanel(
     }
     TextButton(
         onClick = onOpenAdvanced,
-        modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+        modifier = Modifier.fillMaxWidth().heightIn(min = psTouch(48)),
     ) { Text(st("Open Advanced Mode", "Advanced Mode öffnen"), color = PrusaColors.TextMuted) }
     // Programm statt Werkstueck: Sprache, Startmodus, Vorschau. Steht hier,
     // weil man die Startseite nicht mehr sieht, wenn der Modus fest ist.
     TextButton(
         onClick = onAppSettings,
-        modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+        modifier = Modifier.fillMaxWidth().heightIn(min = psTouch(48)),
     ) { Text(st("App settings", "App-Einstellungen"), color = PrusaColors.TextMuted) }
 }
 
@@ -1197,15 +1198,15 @@ private fun SimpleSettingsCard(
 ) = Column(
     modifier
         .heightIn(min = 122.dp)
-        .background(PrusaColors.PanelRaised, RoundedCornerShape(4.dp))
-        .border(1.dp, if (card.enabled) PrusaColors.Orange.copy(alpha = 0.65f) else PrusaColors.Divider, RoundedCornerShape(4.dp))
+        .background(PrusaColors.PanelRaised, RoundedCornerShape(Corners.FIELD.dp))
+        .border(1.dp, if (card.enabled) PrusaColors.Orange.copy(alpha = 0.65f) else PrusaColors.Divider, RoundedCornerShape(Corners.FIELD.dp))
         .clickable(onClick = onClick)
         .padding(14.dp),
     verticalArrangement = Arrangement.spacedBy(8.dp),
 ) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         Box(
-            Modifier.size(46.dp).background(PrusaColors.Panel, RoundedCornerShape(4.dp)),
+            Modifier.size(46.dp).background(PrusaColors.Panel, RoundedCornerShape(Corners.FIELD.dp)),
             contentAlignment = Alignment.Center,
         ) { Text(card.icon, color = if (card.enabled) PrusaColors.Orange else PrusaColors.TextMuted, fontSize = 25.sp) }
         Spacer(Modifier.width(10.dp))
@@ -1217,7 +1218,7 @@ private fun SimpleSettingsCard(
 
 @Composable
 private fun EmptySimplePanel(message: String, action: String, onClick: () -> Unit) = Column(
-    Modifier.fillMaxWidth().background(PrusaColors.PanelRaised, RoundedCornerShape(4.dp)).padding(18.dp),
+    Modifier.fillMaxWidth().background(PrusaColors.PanelRaised, RoundedCornerShape(Corners.FIELD.dp)).padding(18.dp),
     horizontalAlignment = Alignment.CenterHorizontally,
     verticalArrangement = Arrangement.spacedBy(10.dp),
 ) {
@@ -1342,13 +1343,13 @@ private fun SimpleChoice(label: String, selected: Boolean, onClick: () -> Unit) 
 @Composable
 private fun SimpleReferenceChoice(title: String, detail: String, selected: Boolean, onClick: () -> Unit) = Row(
     Modifier.fillMaxWidth().padding(top = 10.dp)
-        .background(if (selected) PrusaColors.PanelRaised else PrusaColors.Background, RoundedCornerShape(2.dp))
-        .border(1.dp, if (selected) PrusaColors.Orange else PrusaColors.Divider, RoundedCornerShape(2.dp))
+        .background(if (selected) PrusaColors.PanelRaised else PrusaColors.Background, RoundedCornerShape(Corners.FIELD.dp))
+        .border(1.dp, if (selected) PrusaColors.Orange else PrusaColors.Divider, RoundedCornerShape(Corners.FIELD.dp))
         .clickable(onClick = onClick)
         .padding(12.dp),
     verticalAlignment = Alignment.CenterVertically,
 ) {
-    Box(Modifier.size(58.dp).background(PrusaColors.Panel, RoundedCornerShape(2.dp)), contentAlignment = Alignment.Center) {
+    Box(Modifier.size(58.dp).background(PrusaColors.Panel, RoundedCornerShape(Corners.FIELD.dp)), contentAlignment = Alignment.Center) {
         Text(if (selected) "✓" else "▧", color = if (selected) PrusaColors.Orange else PrusaColors.TextMuted, fontSize = 25.sp)
     }
     Column(Modifier.weight(1f).padding(start = 12.dp)) {

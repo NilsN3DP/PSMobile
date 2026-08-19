@@ -32,7 +32,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import de.psmobile.shared.ui.Corners
 import de.psmobile.diagnose.Selbsttest
+import de.psmobile.ui.theme.psTouch
 import de.psmobile.ui.theme.PrusaColors
 import de.psmobile.shared.rules.SimpleModeState
 import kotlinx.coroutines.Dispatchers
@@ -68,7 +70,7 @@ fun SelbsttestScreen(onClose: () -> Unit, modifier: Modifier = Modifier) {
                 .padding(horizontal = 16.dp),
         ) {
             Row(
-                Modifier.fillMaxWidth().height(56.dp),
+                Modifier.fillMaxWidth().height(psTouch(56)),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
@@ -107,7 +109,7 @@ fun SelbsttestScreen(onClose: () -> Unit, modifier: Modifier = Modifier) {
                         scope.launch(Dispatchers.Default) { test.durchlauf() }
                     },
                     enabled = !laeuft,
-                    shape = RoundedCornerShape(4.dp),
+                    shape = RoundedCornerShape(Corners.FIELD.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = PrusaColors.Orange),
                 ) {
                     Text(if (laeuft) st("Running…", "Läuft…") else st("Start", "Starten"))
@@ -132,7 +134,7 @@ fun SelbsttestScreen(onClose: () -> Unit, modifier: Modifier = Modifier) {
                                     )
                                 }
                             },
-                            shape = RoundedCornerShape(4.dp),
+                            shape = RoundedCornerShape(Corners.FIELD.dp),
                             colors = ButtonDefaults.buttonColors(containerColor = PrusaColors.Panel),
                         ) {
                             Text(st("Share report", "Bericht teilen"))

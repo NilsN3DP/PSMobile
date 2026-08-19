@@ -26,6 +26,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import de.psmobile.shared.ui.Corners
+import de.psmobile.ui.theme.psTouch
 import de.psmobile.ui.theme.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -423,7 +424,7 @@ private fun SpecialAction(
 ) {
     Surface(
         color = PrusaColors.Panel,
-        shape = RoundedCornerShape(12.dp),
+        shape = RoundedCornerShape(Corners.CARD.dp),
         modifier = Modifier.fillMaxWidth(),
     ) {
         Row(
@@ -435,7 +436,7 @@ private fun SpecialAction(
                 Text(title, color = PrusaColors.TextPrimary, fontWeight = FontWeight.SemiBold)
                 Text(description, color = PrusaColors.TextMuted, fontSize = 12.sp)
             }
-            OutlinedButton(onClick = onClick, modifier = Modifier.height(50.dp)) {
+            OutlinedButton(onClick = onClick, modifier = Modifier.height(psTouch(50))) {
                 Text(label)
             }
         }
@@ -452,7 +453,7 @@ private fun BedAssetAction(
 ) {
     Surface(
         color = PrusaColors.Panel,
-        shape = RoundedCornerShape(12.dp),
+        shape = RoundedCornerShape(Corners.CARD.dp),
         modifier = Modifier.fillMaxWidth(),
     ) {
         Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -464,11 +465,11 @@ private fun BedAssetAction(
                 fontSize = 12.sp,
             )
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(onClick = onSelect, modifier = Modifier.height(50.dp)) {
+                OutlinedButton(onClick = onSelect, modifier = Modifier.height(psTouch(50))) {
                     Text(selectLabel)
                 }
                 if (current.isNotBlank()) {
-                    TextButton(onClick = onClear, modifier = Modifier.height(50.dp)) {
+                    TextButton(onClick = onClear, modifier = Modifier.height(psTouch(50))) {
                         Text(PsUi.appText("Reset", "Zurücksetzen"), color = PrusaColors.Danger)
                     }
                 }
@@ -543,7 +544,7 @@ private fun BedShapeDialog(
                             fields = fields.toMutableList().also { it.removeAt(index) }
                         },
                         enabled = fields.size > 3,
-                        modifier = Modifier.height(50.dp),
+                        modifier = Modifier.height(psTouch(50)),
                     ) { Text(PsUi.appText("Delete", "Löschen")) }
                 }
             }
@@ -553,7 +554,7 @@ private fun BedShapeDialog(
                 val last = fields.lastOrNull() ?: ("0" to "0")
                 fields = fields + last
             },
-            modifier = Modifier.fillMaxWidth().height(50.dp),
+            modifier = Modifier.fillMaxWidth().height(psTouch(50)),
         ) { Text(PsUi.appText("Add point", "Punkt hinzufügen")) }
         DialogButtons(
             valid = valid,
@@ -609,7 +610,7 @@ private fun WipeMatrixDialog(
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 Spacer(Modifier.width(64.dp))
                 repeat(count) { to ->
-                    Box(Modifier.width(88.dp).height(44.dp), contentAlignment = Alignment.Center) {
+                    Box(Modifier.width(88.dp).height(psTouch(44)), contentAlignment = Alignment.Center) {
                         Text("Zu ${to + 1}", color = PrusaColors.TextMuted, fontSize = 12.sp)
                     }
                 }
@@ -734,7 +735,7 @@ private fun RammingSettingsDialog(
                             controlsChanged = true
                         },
                         enabled = controls.size > 2,
-                        modifier = Modifier.height(50.dp),
+                        modifier = Modifier.height(psTouch(50)),
                     ) { Text(PsUi.appText("Delete", "Löschen")) }
                 }
             }
@@ -747,7 +748,7 @@ private fun RammingSettingsDialog(
                 )
                 controlsChanged = true
             },
-            modifier = Modifier.fillMaxWidth().height(50.dp),
+            modifier = Modifier.fillMaxWidth().height(psTouch(50)),
         ) { Text(PsUi.appText("Add curve point", "Kurvenpunkt hinzufügen")) }
         DialogButtons(
             valid = valid,
@@ -796,7 +797,7 @@ private fun SubstitutionsDialog(
             items(rows.size) { index ->
                 Surface(
                     color = PrusaColors.PanelRaised,
-                    shape = RoundedCornerShape(10.dp),
+                    shape = RoundedCornerShape(Corners.CARD.dp),
                     modifier = Modifier.fillMaxWidth(),
                 ) {
                     Row(
@@ -816,14 +817,14 @@ private fun SubstitutionsDialog(
                                 fontSize = 12.sp,
                             )
                         }
-                        TextButton(onClick = { edit = index }, modifier = Modifier.height(50.dp)) {
+                        TextButton(onClick = { edit = index }, modifier = Modifier.height(psTouch(50))) {
                             Text(PsUi.appText("Edit", "Ändern"))
                         }
                         TextButton(
                             onClick = {
                                 rows = rows.toMutableList().also { it.removeAt(index) }
                             },
-                            modifier = Modifier.height(50.dp),
+                            modifier = Modifier.height(psTouch(50)),
                         ) { Text(PsUi.appText("Delete", "Löschen"), color = PrusaColors.Danger) }
                     }
                 }
@@ -834,7 +835,7 @@ private fun SubstitutionsDialog(
                 rows = rows + SubstitutionRow()
                 edit = rows.lastIndex
             },
-            modifier = Modifier.fillMaxWidth().height(50.dp),
+            modifier = Modifier.fillMaxWidth().height(psTouch(50)),
         ) { Text(PsUi.appText("Add substitution", "Ersetzung hinzufügen")) }
         DialogButtons(
             valid = true,
@@ -964,11 +965,11 @@ private fun CompatibilityDialog(
                 onClick = {
                     selected = LinkedHashSet(selected).also { it.addAll(visible) }
                 },
-                modifier = Modifier.height(48.dp),
+                modifier = Modifier.height(psTouch(48)),
             ) { Text(PsUi.appText("Select matches", "Treffer auswählen")) }
             TextButton(
                 onClick = { selected = linkedSetOf() },
-                modifier = Modifier.height(48.dp),
+                modifier = Modifier.height(psTouch(48)),
             ) { Text(PsUi.appText("No restriction", "Keine Einschränkung")) }
             Spacer(Modifier.weight(1f))
             Text(
@@ -984,7 +985,7 @@ private fun CompatibilityDialog(
         ) {
             items(visible) { name ->
                 Row(
-                    Modifier.fillMaxWidth().heightIn(min = 52.dp)
+                    Modifier.fillMaxWidth().heightIn(min = psTouch(52))
                         .clickable {
                             selected = LinkedHashSet(selected).also {
                                 if (!it.add(name)) it.remove(name)
@@ -1021,7 +1022,7 @@ private fun CompatibilityDialog(
                 }
                 items(unavailable) { name ->
                     Row(
-                        Modifier.fillMaxWidth().heightIn(min = 52.dp),
+                        Modifier.fillMaxWidth().heightIn(min = psTouch(52)),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Checkbox(
@@ -1056,7 +1057,7 @@ private fun CheckLine(
     onChecked: (Boolean) -> Unit,
 ) {
     Row(
-        Modifier.fillMaxWidth().height(48.dp),
+        Modifier.fillMaxWidth().height(psTouch(48)),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Checkbox(checked = checked, onCheckedChange = onChecked)
@@ -1125,13 +1126,13 @@ private fun DialogButtons(
         } else {
             Spacer(Modifier.weight(1f))
         }
-        TextButton(onClick = onDismiss, modifier = Modifier.height(50.dp)) {
+        TextButton(onClick = onDismiss, modifier = Modifier.height(psTouch(50))) {
             Text(PsUi.appText("Cancel", "Abbrechen"))
         }
         Button(
             onClick = onApply,
             enabled = valid,
-            modifier = Modifier.height(50.dp),
+            modifier = Modifier.height(psTouch(50)),
             colors = ButtonDefaults.buttonColors(containerColor = PrusaColors.Orange),
         ) { Text(PsUi.appText("Apply", "Übernehmen")) }
     }

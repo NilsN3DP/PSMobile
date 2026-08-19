@@ -34,6 +34,8 @@ import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.ViewInAr
+import de.psmobile.shared.ui.Corners
+import de.psmobile.ui.theme.psTouch
 import de.psmobile.ui.theme.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -132,7 +134,7 @@ fun WorkflowStartScreen(
             ) {
                 Box(
                     Modifier.size(if (tight) 34.dp else 40.dp)
-                        .background(PrusaColors.Orange, RoundedCornerShape(4.dp)),
+                        .background(PrusaColors.Orange, RoundedCornerShape(Corners.FIELD.dp)),
                     contentAlignment = Alignment.Center,
                 ) { Text("S", color = PrusaColors.Background, fontWeight = FontWeight.Bold) }
                 Column(Modifier.padding(start = 12.dp).weight(1f)) {
@@ -311,16 +313,16 @@ private fun ModusKarte(
 ) {
     Surface(
         Modifier.fillMaxWidth()
-            .border(1.dp, PrusaColors.Divider, RoundedCornerShape(6.dp))
+            .border(1.dp, PrusaColors.Divider, RoundedCornerShape(Corners.FIELD.dp))
             .clickable(onClick = onClick),
         color = PrusaColors.Panel,
-        shape = RoundedCornerShape(6.dp),
+        shape = RoundedCornerShape(Corners.FIELD.dp),
     ) {
         Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Box(
                     Modifier.size(28.dp)
-                        .background(PrusaColors.Orange.copy(alpha = 0.12f), RoundedCornerShape(6.dp)),
+                        .background(PrusaColors.Orange.copy(alpha = 0.12f), RoundedCornerShape(Corners.FIELD.dp)),
                     contentAlignment = Alignment.Center,
                 ) { Icon(icon, contentDescription = null, tint = PrusaColors.Orange, modifier = Modifier.size(16.dp)) }
                 Spacer(Modifier.weight(1f))
@@ -343,7 +345,7 @@ private fun ModusKarte(
 @Composable
 private fun FusszeilenKnopf(label: String, icon: androidx.compose.ui.graphics.vector.ImageVector, onClick: () -> Unit) {
     Surface(
-        Modifier.heightIn(min = 40.dp).clickable(onClick = onClick),
+        Modifier.heightIn(min = psTouch(40)).clickable(onClick = onClick),
         color = PrusaColors.PanelRaised,
         shape = CircleShape,
     ) {
@@ -386,7 +388,7 @@ private fun ProjektKachel(
                 )
             }
             .clickable(onClick = onOpen)
-            .background(PrusaColors.PanelRaised, RoundedCornerShape(8.dp))
+            .background(PrusaColors.PanelRaised, RoundedCornerShape(Corners.FIELD.dp))
             .padding(8.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
@@ -396,8 +398,8 @@ private fun ProjektKachel(
             }
         }
         Box(
-            Modifier.fillMaxWidth().height(56.dp)
-                .background(PrusaColors.Panel, RoundedCornerShape(6.dp)),
+            Modifier.fillMaxWidth().height(psTouch(56))
+                .background(PrusaColors.Panel, RoundedCornerShape(Corners.FIELD.dp)),
             contentAlignment = Alignment.Center,
         ) {
             if (thumb != null) {
@@ -405,7 +407,7 @@ private fun ProjektKachel(
                     bitmap = thumb.asImageBitmap(),
                     contentDescription = null,
                     contentScale = androidx.compose.ui.layout.ContentScale.Crop,
-                    modifier = Modifier.fillMaxWidth().height(56.dp).clip(RoundedCornerShape(6.dp)),
+                    modifier = Modifier.fillMaxWidth().height(psTouch(56)).clip(RoundedCornerShape(Corners.FIELD.dp)),
                 )
             } else {
                 Icon(Icons.Filled.ViewInAr, contentDescription = null, tint = PrusaColors.TextMuted)

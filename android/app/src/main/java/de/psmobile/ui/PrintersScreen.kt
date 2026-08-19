@@ -46,12 +46,14 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import de.psmobile.shared.ui.Corners
 import de.psmobile.net.BackupStore
 import de.psmobile.net.PrinterStore
 import de.psmobile.shared.net.PrusaLinkRules.Auth
 import de.psmobile.net.PrusaLink
 import de.psmobile.shared.net.LocalPrusaLinkPairing
 import de.psmobile.shared.net.LocalPairingValidation
+import de.psmobile.ui.theme.psTouch
 import de.psmobile.ui.theme.PrusaColors
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -96,7 +98,7 @@ fun PrintersScreen(
                 Text("‹  ${PsUi.tr("Back")}",
                      color = PrusaColors.Orange, fontSize = 15.sp,
                      modifier = Modifier
-                         .height(52.dp)
+                         .height(psTouch(52))
                          .clickable(onClick = onClose)
                          .padding(horizontal = 12.dp, vertical = 15.dp))
                 Box(Modifier.weight(1f))
@@ -104,8 +106,8 @@ fun PrintersScreen(
                     onClick = {
                         editing = PrusaLink.Printer(UUID.randomUUID().toString(), "", "")
                     },
-                    modifier = Modifier.height(52.dp),
-                    shape = RoundedCornerShape(10.dp),
+                    modifier = Modifier.height(psTouch(52)),
+                    shape = RoundedCornerShape(Corners.CARD.dp),
                 ) { Text(PsUi.tr("Add printer")) }
                 if (localPairingOptIn) {
                     OutlinedButton(
@@ -115,7 +117,7 @@ fun PrintersScreen(
                                 localExperimental = true, allowInsecureHttp = true,
                             )
                         },
-                        modifier = Modifier.height(52.dp),
+                        modifier = Modifier.height(psTouch(52)),
                     ) { Text(PsUi.appText("Experimental: pair via QR", "Experimental: QR koppeln")) }
                 }
             }
@@ -158,7 +160,7 @@ fun PrintersScreen(
                     Column(
                         Modifier.fillMaxWidth()
                             .heightIn(min = 72.dp)
-                            .clip(RoundedCornerShape(10.dp))
+                            .clip(RoundedCornerShape(Corners.CARD.dp))
                             .background(PrusaColors.PanelRaised)
                             .clickable { editing = p }
                             .padding(14.dp),
@@ -346,9 +348,9 @@ private fun PrinterEditor(
             Modifier.widthIn(max = 560.dp).fillMaxWidth()
                 .fillMaxHeight()
                 .verticalScroll(rememberScrollState())
-                .clip(RoundedCornerShape(12.dp))
+                .clip(RoundedCornerShape(Corners.CARD.dp))
                 .background(PrusaColors.Panel)
-                .border(1.dp, PrusaColors.Divider, RoundedCornerShape(12.dp))
+                .border(1.dp, PrusaColors.Divider, RoundedCornerShape(Corners.CARD.dp))
                 .padding(22.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
@@ -366,13 +368,13 @@ private fun PrinterEditor(
                 OutlinedButton(
                     enabled = !testing,
                     onClick = { showScanner = true },
-                    modifier = Modifier.fillMaxWidth().height(52.dp),
+                    modifier = Modifier.fillMaxWidth().height(psTouch(52)),
                 ) { Text(PsUi.appText("Scan QR code", "QR-Code scannen")) }
                 Field(PsUi.appText("QR payload (manual fallback)", "QR-Payload (manuelle Fallback-Eingabe)"), pairingJson) { pairingJson = it }
                 OutlinedButton(
                     enabled = pairingJson.isNotBlank() && !testing,
                     onClick = { runPairing(pairingJson) },
-                    modifier = Modifier.fillMaxWidth().height(52.dp),
+                    modifier = Modifier.fillMaxWidth().height(psTouch(52)),
                 ) { Text(if (testing) PsUi.appText("Pairing\u2026", "Kopplung l\u00e4uft\u2026")
                        else PsUi.appText("Pair QR payload", "QR-Payload koppeln")) }
                 pairingResult?.let {
@@ -387,7 +389,7 @@ private fun PrinterEditor(
             Field(PsUi.appText("Address (HTTPS URL or hostname)", "Adresse (HTTPS-URL oder Hostname)"), host) { host = it }
             Row(
                 Modifier.fillMaxWidth()
-                    .clip(RoundedCornerShape(10.dp))
+                    .clip(RoundedCornerShape(Corners.CARD.dp))
                     .background(
                         if (allowHttp) PrusaColors.Danger.copy(alpha = 0.15f)
                         else PrusaColors.PanelRaised
@@ -428,8 +430,8 @@ private fun PrinterEditor(
                 ).forEach { (mode, label) ->
                     val active = mode == auth
                     Box(
-                        Modifier.weight(1f).height(48.dp)
-                            .clip(RoundedCornerShape(8.dp))
+                        Modifier.weight(1f).height(psTouch(48))
+                            .clip(RoundedCornerShape(Corners.FIELD.dp))
                             .background(if (active) PrusaColors.Orange
                                         else PrusaColors.PanelRaised)
                             .clickable { auth = mode },
@@ -452,7 +454,7 @@ private fun PrinterEditor(
 
             Row(
                 Modifier.fillMaxWidth()
-                    .clip(RoundedCornerShape(10.dp))
+                    .clip(RoundedCornerShape(Corners.CARD.dp))
                     .background(PrusaColors.PanelRaised)
                     .padding(horizontal = 10.dp, vertical = 7.dp),
                 verticalAlignment = Alignment.CenterVertically,
@@ -490,8 +492,8 @@ private fun PrinterEditor(
                         testing = false
                     }
                 },
-                modifier = Modifier.fillMaxWidth().height(52.dp),
-                shape = RoundedCornerShape(10.dp),
+                modifier = Modifier.fillMaxWidth().height(psTouch(52)),
+                shape = RoundedCornerShape(Corners.CARD.dp),
             ) { Text(if (testing) PsUi.appText("Checking\u2026", "Pr\u00fcfe\u2026")
                        else PsUi.appText("Test connection", "Verbindung testen")) }
 
@@ -502,21 +504,21 @@ private fun PrinterEditor(
                 if (printer.localExperimental) {
                     OutlinedButton(
                         onClick = onResetLocal,
-                        modifier = Modifier.weight(1f).height(52.dp),
-                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier.weight(1f).height(psTouch(52)),
+                        shape = RoundedCornerShape(Corners.CARD.dp),
                     ) { Text(PsUi.appText("Reset local pairing", "Lokale Kopplung zur\u00fccksetzen")) }
                 }
                 if (printer.name.isNotBlank()) {
                     OutlinedButton(
                         onClick = onDelete,
-                        modifier = Modifier.weight(1f).height(52.dp),
-                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier.weight(1f).height(psTouch(52)),
+                        shape = RoundedCornerShape(Corners.CARD.dp),
                     ) { Text(PsUi.appText("Delete", "L\u00f6schen")) }
                 }
                 OutlinedButton(
                     onClick = onCancel,
-                    modifier = Modifier.weight(1f).height(52.dp),
-                    shape = RoundedCornerShape(10.dp),
+                    modifier = Modifier.weight(1f).height(psTouch(52)),
+                    shape = RoundedCornerShape(Corners.CARD.dp),
                 ) { Text(PsUi.appText("Cancel", "Abbrechen")) }
                 Button(
                     enabled = host.isNotBlank() && (
@@ -532,8 +534,8 @@ private fun PrinterEditor(
                             lightingOptIn = lightingOptIn,
                         ))
                     },
-                    modifier = Modifier.weight(1f).height(52.dp),
-                    shape = RoundedCornerShape(10.dp),
+                    modifier = Modifier.weight(1f).height(psTouch(52)),
+                    shape = RoundedCornerShape(Corners.CARD.dp),
                     colors = ButtonDefaults.buttonColors(
                         containerColor = PrusaColors.Orange,
                         contentColor = PrusaColors.TextPrimary,
@@ -559,7 +561,7 @@ private fun PrinterEditor(
 private fun LocalPairingDetail(printer: PrusaLink.Printer) {
     Column(
         Modifier.fillMaxWidth()
-            .clip(RoundedCornerShape(10.dp))
+            .clip(RoundedCornerShape(Corners.CARD.dp))
             .background(PrusaColors.PanelRaised)
             .padding(12.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp),
@@ -588,10 +590,10 @@ private fun Field(label: String, value: String, onChange: (String) -> Unit) {
     Column {
         Text(label, color = PrusaColors.TextMuted, fontSize = 12.sp)
         Box(
-            Modifier.fillMaxWidth().height(52.dp)
-                .clip(RoundedCornerShape(8.dp))
+            Modifier.fillMaxWidth().height(psTouch(52))
+                .clip(RoundedCornerShape(Corners.FIELD.dp))
                 .background(PrusaColors.PanelRaised)
-                .border(1.dp, PrusaColors.Divider, RoundedCornerShape(8.dp))
+                .border(1.dp, PrusaColors.Divider, RoundedCornerShape(Corners.FIELD.dp))
                 .padding(horizontal = 10.dp),
             contentAlignment = Alignment.CenterStart,
         ) {
@@ -614,10 +616,10 @@ private fun PresetPickerCompact(
     var expanded by remember { mutableStateOf(false) }
     Box {
         Row(
-            Modifier.fillMaxWidth().height(52.dp)
-                .clip(RoundedCornerShape(8.dp))
+            Modifier.fillMaxWidth().height(psTouch(52))
+                .clip(RoundedCornerShape(Corners.FIELD.dp))
                 .background(PrusaColors.PanelRaised)
-                .border(1.dp, PrusaColors.Divider, RoundedCornerShape(8.dp))
+                .border(1.dp, PrusaColors.Divider, RoundedCornerShape(Corners.FIELD.dp))
                 .clickable { expanded = true }
                 .padding(horizontal = 10.dp),
             verticalAlignment = Alignment.CenterVertically,

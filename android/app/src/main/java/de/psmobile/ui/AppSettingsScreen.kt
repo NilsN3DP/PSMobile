@@ -38,6 +38,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import de.psmobile.shared.ui.Corners
+import de.psmobile.ui.theme.psTouch
 import de.psmobile.ui.theme.PrusaColors
 import de.psmobile.shared.rules.AppSettings
 import de.psmobile.shared.rules.SimpleModeState
@@ -121,7 +123,7 @@ fun AppSettingsScreen(
                 .padding(horizontal = 16.dp),
         ) {
             Row(
-                Modifier.fillMaxWidth().height(56.dp),
+                Modifier.fillMaxWidth().height(psTouch(56)),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
@@ -266,7 +268,7 @@ private fun ToggleRow(
 ) {
     Row(
         Modifier.fillMaxWidth()
-            .clip(RoundedCornerShape(10.dp))
+            .clip(RoundedCornerShape(Corners.CARD.dp))
             .background(PrusaColors.PanelRaised)
             .clickable { onChange(!checked) }
             .padding(horizontal = 14.dp, vertical = 10.dp),
@@ -303,10 +305,10 @@ private fun ActionRow(
         Modifier
             .fillMaxWidth()
             .padding(vertical = 4.dp)
-            .background(PrusaColors.PanelRaised, RoundedCornerShape(10.dp))
+            .background(PrusaColors.PanelRaised, RoundedCornerShape(Corners.CARD.dp))
             .clickable(onClick = onClick)
             .padding(horizontal = 14.dp, vertical = 10.dp)
-            .heightIn(min = 56.dp),
+            .heightIn(min = psTouch(56)),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(Modifier.weight(1f)) {
@@ -328,7 +330,7 @@ private fun ChoiceRow(
 ) {
     Column(
         Modifier.fillMaxWidth()
-            .clip(RoundedCornerShape(10.dp))
+            .clip(RoundedCornerShape(Corners.CARD.dp))
             .background(PrusaColors.PanelRaised)
             .padding(horizontal = 14.dp, vertical = 10.dp),
     ) {
@@ -342,12 +344,12 @@ private fun ChoiceRow(
                 val on = option == selected
                 Box(
                     Modifier
-                        .clip(RoundedCornerShape(8.dp))
+                        .clip(RoundedCornerShape(Corners.FIELD.dp))
                         .background(if (on) PrusaColors.Orange else PrusaColors.Panel)
                         .border(
                             1.dp,
                             if (on) PrusaColors.Orange else PrusaColors.Divider,
-                            RoundedCornerShape(8.dp),
+                            RoundedCornerShape(Corners.FIELD.dp),
                         )
                         .clickable { onSelect(option) }
                         .padding(horizontal = 12.dp, vertical = 8.dp),

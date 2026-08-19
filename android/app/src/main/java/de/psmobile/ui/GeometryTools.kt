@@ -17,6 +17,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
+import de.psmobile.shared.ui.Corners
+import de.psmobile.ui.theme.psTouch
 import de.psmobile.ui.theme.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -302,7 +304,7 @@ internal fun GeometryTools(
                         .fillMaxWidth()
                         .background(
                             PrusaColors.PanelRaised,
-                            RoundedCornerShape(9.dp),
+                            RoundedCornerShape(Corners.FIELD.dp),
                         )
                         .padding(horizontal = 12.dp, vertical = 7.dp),
                     verticalAlignment = Alignment.CenterVertically,
@@ -323,7 +325,7 @@ internal fun GeometryTools(
                         onClick = {
                             service.removeVolume(selected.id, volume.index)
                         },
-                        modifier = Modifier.height(48.dp),
+                        modifier = Modifier.height(psTouch(48)),
                     ) { Text(PsUi.appText("Remove", "Entfernen"), color = PrusaColors.Danger) }
                 }
             }
@@ -476,7 +478,7 @@ internal fun GeometryTools(
                 )
                 TextButton(
                     onClick = { service.clearPaint(selected.id, malen.tool) },
-                    modifier = Modifier.height(48.dp),
+                    modifier = Modifier.height(psTouch(48)),
                 ) { Text(PsUi.appText("Clear", "Löschen"), color = PrusaColors.Danger) }
             }
         }
@@ -511,7 +513,7 @@ internal fun GeometryTools(
                             )
                         },
                         label = { Text(extruder.label) },
-                        modifier = Modifier.height(48.dp),
+                        modifier = Modifier.height(psTouch(48)),
                         colors = prusaFilterChipColors(),
                         border = prusaFilterChipBorder(aktiv),
                     )
@@ -527,7 +529,7 @@ internal fun GeometryTools(
                     .fillMaxWidth()
                     .background(
                         PrusaColors.Orange.copy(alpha = 0.12f),
-                        RoundedCornerShape(9.dp),
+                        RoundedCornerShape(Corners.FIELD.dp),
                     )
                     .padding(12.dp),
             )
@@ -546,7 +548,7 @@ internal fun GeometryTools(
         Button(
             onClick = { service.setObjectColour(selected.id, colour.trim()) },
             enabled = Regex("#[0-9a-fA-F]{6}").matches(colour.trim()),
-            modifier = Modifier.fillMaxWidth().height(50.dp),
+            modifier = Modifier.fillMaxWidth().height(psTouch(50)),
             colors = ButtonDefaults.buttonColors(
                 containerColor = PrusaColors.PanelRaised,
             ),
@@ -643,7 +645,7 @@ internal fun LayerProfileToolPage(
     ) {
         TextButton(
             onClick = onBack,
-            modifier = Modifier.height(40.dp),
+            modifier = Modifier.height(psTouch(40)),
         ) { Text("← " + PsUi.appText("Tools", "Werkzeuge"), color = PrusaColors.TextPrimary) }
         Text(
             PsUi.appText("Variable layer heights", "Variable Schichthöhen"),
@@ -678,7 +680,7 @@ internal fun LayerProfileToolPage(
                     // Creation remains beside the very first visible row.
                     // A separate button below a scrolling list vanished on
                     // landscape tablets, leaving an apparently static tool.
-                    Column(Modifier.width(56.dp).height(56.dp)) {
+                    Column(Modifier.width(56.dp).height(psTouch(56))) {
                         TextButton(
                             onClick = { editor = editor.addPoint() },
                             modifier = Modifier.fillMaxWidth().height(28.dp),
@@ -697,7 +699,7 @@ internal fun LayerProfileToolPage(
             Button(
                 enabled = editor.canApply,
                 onClick = { onApply(editor.validPoints) },
-                modifier = Modifier.weight(2f).height(52.dp),
+                modifier = Modifier.weight(2f).height(psTouch(52)),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = PrusaColors.Orange,
                     contentColor = PrusaColors.TextPrimary,
@@ -705,7 +707,7 @@ internal fun LayerProfileToolPage(
             ) { Text(PsUi.appText("Apply", "Übernehmen")) }
             OutlinedButton(
                 onClick = onReset,
-                modifier = Modifier.weight(1f).height(48.dp),
+                modifier = Modifier.weight(1f).height(psTouch(48)),
             ) { Text(PsUi.appText("Reset", "Reset")) }
         }
     }
@@ -721,14 +723,14 @@ private fun LayerProfilePreview(
     } else segments
     Row(
         Modifier.fillMaxWidth().height(62.dp)
-            .clip(RoundedCornerShape(9.dp))
+            .clip(RoundedCornerShape(Corners.FIELD.dp))
             .background(PrusaColors.PanelRaised)
             .padding(8.dp),
         horizontalArrangement = Arrangement.spacedBy(10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(
-            Modifier.width(26.dp).height(46.dp).clip(RoundedCornerShape(4.dp)),
+            Modifier.width(26.dp).height(psTouch(46)).clip(RoundedCornerShape(Corners.FIELD.dp)),
         ) {
             val largest = display.maxOfOrNull { it.heightMm } ?: 0.2
             display.asReversed().forEach { segment ->
@@ -820,7 +822,7 @@ private fun ToolActionCard(
     Button(
         onClick = onClick,
         modifier = modifier.height(76.dp),
-        shape = RoundedCornerShape(10.dp),
+        shape = RoundedCornerShape(Corners.CARD.dp),
         colors = ButtonDefaults.buttonColors(
             containerColor =
                 if (active) PrusaColors.Orange else PrusaColors.PanelRaised,
@@ -849,7 +851,7 @@ private fun ActiveSurfaceToolCard(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .background(PrusaColors.Orange.copy(alpha = 0.16f), RoundedCornerShape(12.dp))
+            .background(PrusaColors.Orange.copy(alpha = 0.16f), RoundedCornerShape(Corners.CARD.dp))
             .padding(12.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -858,7 +860,7 @@ private fun ActiveSurfaceToolCard(
             Text(title, color = PrusaColors.Orange, fontWeight = FontWeight.SemiBold)
             Text(instruction, color = PrusaColors.TextPrimary, fontSize = 12.sp)
         }
-        OutlinedButton(onClick = onCancel, modifier = Modifier.height(44.dp)) {
+        OutlinedButton(onClick = onCancel, modifier = Modifier.height(psTouch(44))) {
             Text(PsUi.appText("Finish", "Beenden"))
         }
     }
@@ -867,7 +869,7 @@ private fun ActiveSurfaceToolCard(
 @Composable
 private fun ToggleRow(label: String, value: Boolean, onChange: (Boolean) -> Unit) {
     Row(
-        Modifier.fillMaxWidth().height(52.dp),
+        Modifier.fillMaxWidth().height(psTouch(52)),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(label, color = PrusaColors.TextPrimary, modifier = Modifier.weight(1f))
@@ -910,7 +912,7 @@ private fun CutDialog(
                             selected = cutResult == option,
                             onClick = { cutResult = option },
                             label = { Text(option.anzeige()) },
-                            modifier = Modifier.height(48.dp),
+                            modifier = Modifier.height(psTouch(48)),
                             colors = FilterChipDefaults.filterChipColors(
                                 containerColor = PrusaColors.PanelRaised,
                                 labelColor = PrusaColors.TextPrimary,
@@ -1023,8 +1025,8 @@ private fun AddVolumeDialog(
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedButton(
                     onClick = { rolePickerOpen = true },
-                    modifier = Modifier.fillMaxWidth().height(56.dp),
-                    shape = RoundedCornerShape(10.dp),
+                    modifier = Modifier.fillMaxWidth().height(psTouch(56)),
+                    shape = RoundedCornerShape(Corners.CARD.dp),
                 ) {
                     Column(Modifier.fillMaxWidth()) {
                         Text("Rolle", color = PrusaColors.TextMuted, fontSize = 11.sp)
@@ -1040,7 +1042,7 @@ private fun AddVolumeDialog(
                             selected = shape == it,
                             onClick = { shape = it },
                             label = { Text(it.displayName()) },
-                            modifier = Modifier.height(48.dp),
+                            modifier = Modifier.height(psTouch(48)),
                             colors = prusaFilterChipColors(),
                             border = prusaFilterChipBorder(shape == it),
                         )
@@ -1082,7 +1084,7 @@ private fun AddVolumeDialog(
                                 role = option
                                 rolePickerOpen = false
                             },
-                            modifier = Modifier.fillMaxWidth().height(52.dp),
+                            modifier = Modifier.fillMaxWidth().height(psTouch(52)),
                             colors = ButtonDefaults.outlinedButtonColors(
                                 contentColor = if (role == option)
                                     PrusaColors.Orange else PrusaColors.TextPrimary,
@@ -1139,7 +1141,7 @@ internal fun insertLayerProfilePoint(
 @Composable
 private fun CheckRow(label: String, checked: Boolean, onChange: (Boolean) -> Unit) {
     Row(
-        Modifier.fillMaxWidth().height(48.dp),
+        Modifier.fillMaxWidth().height(psTouch(48)),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Checkbox(checked = checked, onCheckedChange = onChange)
@@ -1295,7 +1297,7 @@ private fun EmbossRolePicker(
                 selected = selected == value,
                 onClick = { onSelect(value) },
                 label = { Text(value.displayName()) },
-                modifier = Modifier.height(48.dp),
+                modifier = Modifier.height(psTouch(48)),
                 colors = prusaFilterChipColors(),
                 border = prusaFilterChipBorder(selected == value),
             )
@@ -1361,7 +1363,7 @@ private fun PaintChoice(label: String, aktiv: Boolean, onClick: () -> Unit) {
         selected = aktiv,
         onClick = onClick,
         label = { Text(label) },
-        modifier = Modifier.height(48.dp),
+        modifier = Modifier.height(psTouch(48)),
         colors = prusaFilterChipColors(),
         border = prusaFilterChipBorder(aktiv),
     )

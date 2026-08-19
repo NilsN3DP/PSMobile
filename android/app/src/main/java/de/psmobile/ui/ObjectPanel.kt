@@ -37,8 +37,10 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.text.KeyboardOptions
+import de.psmobile.shared.ui.Corners
 import de.psmobile.core.PsmCore
 import de.psmobile.slicing.SlicerService
+import de.psmobile.ui.theme.psTouch
 import de.psmobile.ui.theme.PrusaColors
 import de.psmobile.ui.theme.ScaledOverlay
 import kotlin.math.roundToInt
@@ -84,8 +86,8 @@ fun ObjectPanel(
             ).forEach { (g, label) ->
                 val on = g == gizmo
                 Box(
-                    Modifier.weight(1f).height(48.dp)
-                        .clip(RoundedCornerShape(9.dp))
+                    Modifier.weight(1f).height(psTouch(48))
+                        .clip(RoundedCornerShape(Corners.FIELD.dp))
                         .background(if (on) PrusaColors.Orange else PrusaColors.PanelRaised)
                         .clickable { onGizmoChange(g) },
                     contentAlignment = Alignment.Center,
@@ -137,8 +139,8 @@ fun ObjectPanel(
         // sein, sonst wirkt der Viewport kaputt.
         Row(
             Modifier.fillMaxWidth()
-                .height(50.dp)
-                .clip(RoundedCornerShape(9.dp))
+                .height(psTouch(50))
+                .clip(RoundedCornerShape(Corners.FIELD.dp))
                 .background(if (scaleToolActive) PrusaColors.Orange else PrusaColors.PanelRaised)
                 .clickable { onScaleToolChange(!scaleToolActive) }
                 .padding(horizontal = 12.dp),
@@ -288,10 +290,10 @@ private fun NumberField(
     var text by remember(value) { mutableStateOf(value) }
 
     Row(
-        modifier.height(48.dp)
-            .clip(RoundedCornerShape(8.dp))
+        modifier.height(psTouch(48))
+            .clip(RoundedCornerShape(Corners.FIELD.dp))
             .background(PrusaColors.PanelRaised)
-            .border(1.dp, PrusaColors.Divider, RoundedCornerShape(8.dp))
+            .border(1.dp, PrusaColors.Divider, RoundedCornerShape(Corners.FIELD.dp))
             .padding(horizontal = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -318,8 +320,8 @@ private fun NumberField(
 @Composable
 private fun SmallButton(label: String, modifier: Modifier = Modifier, onClick: () -> Unit) {
     Box(
-        modifier.height(48.dp)
-            .clip(RoundedCornerShape(8.dp))
+        modifier.height(psTouch(48))
+            .clip(RoundedCornerShape(Corners.FIELD.dp))
             .background(PrusaColors.PanelRaised)
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center,

@@ -16,6 +16,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.DialogProperties
 import de.psmobile.shared.ui.WindowScale
@@ -170,6 +171,36 @@ fun PSMobileTheme(content: @Composable () -> Unit) {
 fun ScaledOverlay(content: @Composable () -> Unit) {
     CompositionLocalProvider(LocalDensity provides gestauchteDichte(), content = content)
 }
+
+/**
+ * Ein Mass fuer eine Zielflaeche - Gegenstueck zu `ps.touch()` auf iOS.
+ *
+ * [PSMobileTheme] staucht die Dichte global. Fuer Abstaende und Kaesten
+ * ist das richtig, fuer Zielflaechen nicht: bei MIN_SCALE 0.7 wird aus
+ * einem 48-dp-Knopf einer mit 33,6 dp, und der ist mit dem Finger nicht
+ * mehr sicher zu treffen. iOS deckelt deshalb bei 44 pt:
+ *
+ *     func touch(_ v: CGFloat = 44) -> CGFloat { max(pt(v), 44) }
+ *
+ * Hier ist es dieselbe Regel, nur andersherum gerechnet: die Stauchung
+ * wird fuer diesen einen Wert zurueckgenommen, sobald sie das Mass unter
+ * die Untergrenze druecken wuerde. Wo es enger wird, muss der Bildschirm
+ * Inhalt weglassen, statt weiter zu schrumpfen.
+ */
+@Composable
+fun psTouch(dp: Int = 44): Dp {
+    val configuration = LocalConfiguration.current
+    val scale = uiScaleFor(configuration.screenWidthDp, configuration.screenHeightDp)
+    if (scale >= 1f) return dp.dp
+    // Das Theme multipliziert jeden dp-Wert spaeter mit scale. Damit
+    // hinten mindestens MIN_TOUCH_DP herauskommen, muss hier durch
+    // scale geteilt werden.
+    val gewuenscht = maxOf(dp * scale, MIN_TOUCH_DP)
+    return (gewuenscht / scale).dp
+}
+
+/** Apples Untergrenze, und dieselbe, die iOS hier verwendet. */
+const val MIN_TOUCH_DP = 44f
 
 /**
  * Ersatz fuer `androidx.compose.material3.AlertDialog` mit derselben

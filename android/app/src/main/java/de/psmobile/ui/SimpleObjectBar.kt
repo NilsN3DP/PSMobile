@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import de.psmobile.shared.ui.Corners
 import de.psmobile.ui.theme.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -63,8 +64,8 @@ internal fun SimpleObjectBar(
     Row(
         modifier
             .widthIn(max = 640.dp)
-            .background(PrusaColors.Panel.copy(alpha = 0.95f), RoundedCornerShape(2.dp))
-            .border(1.dp, PrusaColors.Divider, RoundedCornerShape(2.dp))
+            .background(PrusaColors.Panel.copy(alpha = 0.95f), RoundedCornerShape(Corners.FIELD.dp))
+            .border(1.dp, PrusaColors.Divider, RoundedCornerShape(Corners.FIELD.dp))
             .horizontalScroll(rememberScrollState())
             .padding(horizontal = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -189,7 +190,7 @@ private fun BarAction(
     Column(
         Modifier
             .widthIn(min = 60.dp)
-            .clip(RoundedCornerShape(2.dp))
+            .clip(RoundedCornerShape(Corners.FIELD.dp))
             .clickable(onClick = onClick)
             .padding(vertical = 8.dp, horizontal = 6.dp),
         horizontalAlignment = Alignment.CenterHorizontally,

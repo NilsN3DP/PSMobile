@@ -42,6 +42,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import com.google.mlkit.vision.barcode.BarcodeScanning
 import com.google.mlkit.vision.barcode.common.Barcode
 import com.google.mlkit.vision.common.InputImage
+import de.psmobile.shared.ui.Corners
 import de.psmobile.ui.theme.PrusaColors
 import java.util.concurrent.Executors
 
@@ -98,7 +99,7 @@ fun QrScanSheet(
 private fun ScannerOverlay() {
     Box(
         Modifier.size(240.dp)
-            .clip(RoundedCornerShape(16.dp))
+            .clip(RoundedCornerShape(Corners.SHEET.dp))
             .background(Color.Transparent),
     )
     Text(
