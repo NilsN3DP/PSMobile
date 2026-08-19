@@ -89,12 +89,10 @@ ab; von dort gehört sie in die Arbeitskopie kopiert. Achtung: `du` meldet
 
 ### Als Nächstes
 
-**AP-21 · Bettübersicht mit Entfernen je Bett.** Von Nils gemeldet,
-kein Kernbau, klein — der Sheet-Zweig existiert schon, er hängt nur am
-schmalen Fenster.
-
-Danach **AP-22 · Alle Betten schneiden** zusammen mit **AP-11
-Slice-Blatt** — sonst entstehen Dateien, die niemand sieht.
+**AP-22 · Alle Betten schneiden**, zusammen mit **AP-11 Slice-Blatt** —
+sonst entstehen Dateien, die niemand sieht. Kein Kernbau. Vorgehen steht
+in beiden Paketen; die Vorlage ist `SlicerModel.sliceAll()`
+(`SlicerModel.swift:1635ff`).
 
 Danach **AP-05 zu Ende bringen — die linke Schiene.** Kein Kernbau nötig. Die
 obere Leiste und die Fußzeile stehen seit `c41a1ba`; es fehlen drei
