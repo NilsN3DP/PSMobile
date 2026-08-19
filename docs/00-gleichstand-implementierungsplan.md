@@ -88,7 +88,11 @@ ab; von dort gehört sie in die Arbeitskopie kopiert. Achtung: `du` meldet
 
 ### Als Nächstes
 
-**AP-05 zu Ende bringen — die linke Schiene.** Kein Kernbau nötig. Die
+**AP-20 · Rechter Bereich: Bereiche statt Reiter.** Von Nils gemeldet
+und die groesste sichtbare Abweichung der Anordnung. Kein Kernbau
+noetig. Vorgehen steht im Paket.
+
+Danach **AP-05 zu Ende bringen — die linke Schiene.** Kein Kernbau nötig. Die
 obere Leiste und die Fußzeile stehen seit `c41a1ba`; es fehlen drei
 Einträge in der Schiene selbst.
 
@@ -109,12 +113,10 @@ Konkret, in dieser Reihenfolge:
    öffnet die Optionen (alle Betten, Rotation erlauben) — auf iOS ist
    das ein Popover am Knopf, siehe `faf4729`.
 
-**Zu *Sichern unter*:** der Knopf bleibt auf Android. Unter Android
-kommt der Name aus dem Systemdialog, und ein offenes Projekt still zu
-überschreiben ist dort das erwartete Verhalten; ein Knopf, der bei jedem
-Sichern den Systemdialog aufruft, wäre schlechter. Damit die Leiste
-trotzdem Zeile für Zeile gleich liest, bekommt **iOS denselben zweiten
-Knopf** — siehe Abschnitt Z.
+**Zu *Sichern unter*:** der Knopf bleibt auf Android und iOS bekommt
+keinen. Der Name kommt unter Android aus dem Systemdialog, ein offenes
+Projekt still zu überschreiben ist dort das erwartete Verhalten — ein
+systemeigener Unterschied, und die sind erlaubt (siehe Grundsatz).
 
 Danach **AP-04** zu Ende — dafür muss aber der Mac erreichbar sein, weil
 die Angleichung dort auf der iOS-Seite passiert. Er ist ab dem
@@ -150,13 +152,20 @@ die Angleichung dort auf der iOS-Seite passiert. Er ist ab dem
 
 **iOS ist die Referenz. Android zieht nach.**
 
-**Das Ziel ist woertlich dieselbe Bedienung:** dieselben Schaltflaechen,
-dieselben Namen, dieselbe Reihenfolge, derselbe Ort — in beiden Modi.
-Es soll egal sein, auf welchem Geraet jemand sitzt (Nils, 19.08.).
-Wo eine Seite etwas hat, das die andere nicht hat, wird angeglichen und
-nicht begruendet. Vom Betriebssystem kommende Oberflaechen —
-Dateiwaehler, Teilen-Blatt, Zurueck-Geste — sind davon ausgenommen; sie
-lassen sich nicht angleichen.
+**Das Ziel ist dieselbe Bedienung, nicht nur derselbe Funktionsumfang:**
+dieselbe Anordnung, dieselbe Reihenfolge, derselbe Ort, dieselben Namen
+— in beiden Modi. Es soll egal sein, auf welchem Geraet jemand sitzt
+(Nils, 19.08.).
+
+Zwei Dinge sind davon ausgenommen, beide auf Nils' Ansage:
+
+- **Systemeigenes darf abweichen.** Dateiwaehler, Teilen-Blatt,
+  Zurueck-Geste — und was daran haengt. *Sichern unter* auf Android ist
+  so ein Fall: der Name kommt dort aus dem Systemdialog. Solche
+  Unterschiede sind erlaubt und brauchen keine Angleichung.
+- **Symbole kommen zuletzt.** Sie werden am Ende in einem eigenen
+  Durchgang vereinheitlicht. Bis dahin ist ein abweichendes Symbol kein
+  offener Punkt — eine abweichende **Anordnung** dagegen schon.
 
 Das war nicht immer so — die README nannte lange „Android-first". Seit
 dem Aufbau der iOS-Fassung im August ist es umgekehrt: dort sind die
@@ -483,8 +492,8 @@ auf „SOLUBLE" von acht auf zwei Profile.
 
 Statt der Lupe steht der **Trichter** aus PrusaSlicers Symbolsatz — eine
 Lupe gibt es dort nicht, und eigene Symbole kommen nicht dazu (E-12).
-**Damit sehen beide Seiten verschieden aus; das ist offen, nicht
-entschieden** — iOS uebernimmt den Trichter, siehe Abschnitt Z.
+Das Symbol wird im Symbol-Durchgang am Ende vereinheitlicht, nicht
+jetzt; Ort und Verhalten sind gleich.
 
 ---
 
@@ -656,6 +665,65 @@ die nur am Gerät sichtbar werden.
 
 ---
 
+### AP-20 · Rechter Bereich: Bereiche statt Reiter · Kern: nein
+
+**Von Nils gemeldet** (19.08.): „die Anordnung vom Toolbereich rechts ist
+noch komplett unterschiedlich". Stimmt — und iOS hat den Weg, den Android
+noch geht, ausdrücklich verlassen.
+
+**Fundstelle iOS** `AdvancedWorkspaceView.swift:941ff` (`seitenleiste`).
+Aufbau von oben nach unten:
+
+1. **Drei Einstellungszeilen** — *Druckeinstellungen*, *Filament*,
+   *Drucker*. Jede öffnet die zugehörige Einstellungsseite.
+   Begründung im Quelltext: sie wirken auf das Profil, und das Profil
+   steht rechts; oben in die Werkzeugleiste gehört, was auf den
+   Viewport wirkt.
+2. Trennlinie.
+3. **Alle vier Inspektorbereiche untereinander**, jeder mit Überschrift
+   und Aufklapppfeil: *Profile · Objekte · Bearbeiten · Werkzeuge*.
+   Wörtlich aus dem Quelltext:
+
+   > Untereinander statt hinter Reitern: vier Reiter heissen, dass drei
+   > Viertel des Gesuchten unsichtbar sind. So sieht man alle
+   > Ueberschriften und klappt auf, was man braucht.
+
+   *Bearbeiten* und *Werkzeuge* sind ohne Auswahl ausgegraut, nicht
+   verschwunden.
+4. **Abschluss außerhalb der Bereiche** — Fortschritt, Ergebnis und der
+   Schneiden-Knopf. Begründung: „was ein Schnitt ergeben hat, ist keine
+   Frage des gerade offenen Reiters."
+
+**Zustand Android** `AdvancedSidebar.kt:811` (`InspectorTabs`): dieselben
+vier Namen, aber als **Reiterzeile** — immer nur einer sichtbar. Die drei
+Einstellungsseiten stecken im Reiter *Profile* statt oben zu stehen.
+Kopfzeile *Arbeitsbereich · Bett 1 · 1 Objekt* darüber, Schneiden-Knopf
+unten (der stimmt schon).
+
+**Umsetzung**
+
+1. `InspectorSection` bleibt als Aufzählung, wird aber vom *einen*
+   gewählten Reiter zu einer **Menge offener Bereiche**
+   (`Set<InspectorSection>`, gemerkt über `rememberSaveable`).
+2. `InspectorTabs` entfällt. An seine Stelle tritt je Bereich eine
+   Kopfzeile mit Namen und Pfeil, darunter der bisherige Inhalt —
+   die vier Inhaltsblöcke selbst bleiben unverändert.
+3. Die drei Einstellungszeilen aus dem Profile-Block nach oben ziehen,
+   über die Trennlinie.
+4. Der `LaunchedEffect` auf `selected?.id`, der heute den Reiter
+   umschaltet, wird zum Öffnen des passenden Bereichs: bei Auswahl
+   *Bearbeiten* aufklappen, ohne Auswahl zuklappen. *Werkzeuge* bleibt
+   unangetastet, wie schon heute.
+5. Die Scrollstand-Zurücksetzer an `section` entfallen — es gibt nur
+   noch einen durchgehenden Scrollbereich.
+
+**Fertig wenn** Rechts stehen von oben nach unten: drei
+Einstellungszeilen, Trennlinie, vier aufklappbare Bereiche mit
+sichtbaren Überschriften, unten der Schneiden-Block — und ein
+Bildschirmfoto zeigt dieselbe Reihenfolge wie auf iOS.
+
+---
+
 ## Z · Wo umgekehrt iOS nachzieht
 
 Braucht einen erreichbaren Mac.
@@ -669,16 +737,11 @@ Braucht einen erreichbaren Mac.
    `model.undoLabel` unverändert; bei englischer Oberfläche steht dort
    „Druckbett leeren". Die Übersetzungstabelle `CoreLabels` liegt im
    gemeinsamen Modul und wird für diesen Weg nicht benutzt.
-5. **Trichter statt Lupe im Einstellungskopf.** Android nimmt den
-   Trichter aus PrusaSlicers Symbolsatz, weil es dort keine Lupe gibt
-   und eigene Symbole nicht dazukommen (E-12). iOS zeigt an derselben
-   Stelle ein SF-Symbol. Damit auf beiden Geräten dasselbe Zeichen
-   steht, übernimmt iOS den Trichter.
-6. **Zweiter Sichern-Knopf.** Android führt *Sichern* und *Sichern
-   unter*; iOS fragt beim Sichern nach dem Namen und hat nur einen
-   Knopf. iOS bekommt denselben zweiten Knopf, damit die obere Leiste
-   auf beiden Seiten gleich liest.
-7. **Auswahlblatt überlappt die Seitenleiste.** Das Filamentblatt ist ein
+5. **Reiter statt Bereiche rechts.** Siehe AP-20 — dort steht die
+   Angleichung auf der Android-Seite. Falls sich beim Umbau zeigt, dass
+   iOS eine Stelle besser löst oder umgekehrt, gehört die Rückrichtung
+   hierher.
+6. **Auswahlblatt überlappt die Seitenleiste.** Das Filamentblatt ist ein
    `.sheet` und schneidet auf dem iPad die rechte Seitenleiste mitten im
    Wort. Der Advanced-Einstellungsdialog macht es richtig und legt einen
    Schleier über den ganzen Bereich.
