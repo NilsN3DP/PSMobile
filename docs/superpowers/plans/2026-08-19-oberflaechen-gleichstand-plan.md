@@ -9,6 +9,10 @@ Daraus folgen sechs Unterschiede in der Bedienung, dazu drei reine
 Oberflächenunterschiede ohne Kernbezug und drei Punkte, an denen
 umgekehrt iOS hinterherhängt.
 
+Ein zweiter Durchgang (Abschnitt K) vergleicht die Ausarbeitung statt
+der Funktionen und findet sieben weitere Stellen, an denen Android
+dünner ist.
+
 Was gleich ist, steht am Ende — damit klar ist, was nicht mehr geprüft
 werden muss.
 
@@ -200,6 +204,71 @@ Der Gleichstand gilt in beide Richtungen.
 
 ---
 
+## K · Zweiter Durchgang: Ausarbeitung statt Funktionen
+
+Der erste Durchgang verglich Konzepte und Kernfunktionen. Er findet, was
+ganz fehlt, aber nicht, wo dieselbe Sache auf Android duenner ausfaellt.
+Der zweite Durchgang vergleicht deshalb den Textbestand beider Seiten
+Bildschirm fuer Bildschirm.
+
+### K1 · Slice-Blatt
+
+iOS zeigt nach dem Slicen mehr als einen Sichern-Knopf
+(`SliceSheet.swift:79ff`):
+
+- **„Geslict in 2:14"** — wie lange es gedauert hat.
+- **Mehrere G-Code-Dateien** bei Mehrbett: eine Zeile je Datei mit
+  eigenem *Senden*-Knopf, dazu *Alle exportieren*.
+- **An Drucker senden** direkt aus dem Blatt.
+- Ein Hinweis, wenn der G-Code nicht geschrieben werden konnte.
+
+Android hat *G-Code sichern* und *Schliessen*. Senden geht nur ueber
+einen anderen Weg, die Dauer steht nirgends, und bei mehreren Betten
+gibt es keine Liste.
+
+### K2 · ColorMix-Vorschau
+
+iOS zeigt die gemischte Farbe vor dem Speichern (`ColorMixView.swift:92`)
+und meldet, wenn sie nicht gespeichert werden konnte. Android speichert
+blind.
+
+### K3 · Leere Zustaende im Simple Mode
+
+iOS hat ein eigenes Muster dafuer (`leeresPanel`): eine Aussage plus den
+Knopf, der aus der Lage herausfuehrt.
+
+- *Kein Material vorhanden* → **Advanced Mode oeffnen**
+- *Keine Druckeinstellungen vorhanden* → **Druckeinstellungen einrichten**
+
+Auf Android fehlen beide. Wer in diese Lage geraet, sieht eine leere
+Flaeche ohne Weg heraus.
+
+### K4 · Material je Extruder im Simple Mode
+
+iOS hat in der Materialseite einen Abschnitt **„Je Extruder"**
+(`SimpleModeView.swift:1028`). Android nicht.
+
+### K5 · Projekt weitergeben
+
+iOS kann das Projekt (`.3mf`) aus dem Projektpanel weitergeben, ebenso
+die Platte und alle G-Code-Dateien auf einmal. Android kann nur den
+G-Code einer Datei und das Protokoll teilen.
+
+### K6 · Reinigungsturm sitzt woanders
+
+Kein Verlust, aber ein Unterschied: iOS stellt X, Y und Drehung des
+Reinigungsturms direkt in die Extruderbank, wo man ohnehin arbeitet.
+Android versteckt sie in den Projektwerkzeugen.
+
+### K7 · Teile-Liste
+
+iOS zeigt je Teil den Typ im Klartext — *Teil, Aussparung, Modifikator,
+Stuetzensperre, Stuetzenzwang*. Android zeigt den Typnamen ebenfalls,
+aber die Liste liegt im Werkzeuge-Reiter statt neben den Objektwerten.
+Gleicher Inhalt, anderer Ort.
+
+---
+
 ## Reihenfolge
 
 Nach sichtbarem Gewinn je Aufwand, und so, dass jeder Schritt für sich
@@ -215,8 +284,14 @@ prüfbar ist:
 | 6 | **D** Adaptive Schichthöhe | ja, zusammen mit 5 |
 | 7 | **H** Druckerkarten | nein |
 | 8 | **E** ZIP-Import | ja |
-| 9 | **I** restliche Bindungen | ja |
-| 10 | **J** iOS nachziehen | nein, aber der Mac muss erreichbar sein |
+| 9 | **K1** Slice-Blatt: Dauer, Dateiliste, Senden | nein |
+| 10 | **K3** Leere Zustaende im Simple Mode | nein |
+| 11 | **K4** Material je Extruder | nein |
+| 12 | **K5** Projekt und Platte weitergeben | nein |
+| 13 | **K2** ColorMix-Vorschau | nein |
+| 14 | **K6** Reinigungsturm in die Extruderbank | nein |
+| 15 | **I** restliche Bindungen | ja |
+| 16 | **J** iOS nachziehen | nein, aber der Mac muss erreichbar sein |
 
 Die Schritte ohne Kernbau (3, 4, 7) lassen sich erledigen, während ein
 Kernbau läuft, statt auf ihn zu warten.
