@@ -1,5 +1,11 @@
 # Arbeitsjournal
 
+> **Vor diesem Journal:**
+> [00-gleichstand-implementierungsplan.md](00-gleichstand-implementierungsplan.md).
+> Dort steht der Stand von Android gegenueber iOS und die Reihenfolge
+> der Arbeitspakete. iOS ist die Referenz.
+
+
 **Wer hier arbeitet, liest diese Datei zuerst und schreibt am Ende jedes
 Schrittes hinein.**
 

@@ -1,6 +1,12 @@
 # PSMobile
 
-> **Wer an diesem Projekt arbeitet - Mensch oder Agent - liest zuerst
+> **Wer an der Oberflaeche arbeitet, liest zuerst
+> [docs/00-gleichstand-implementierungsplan.md](docs/00-gleichstand-implementierungsplan.md).**
+> Dort steht, wo Android gegenueber iOS zurueckhaengt, warum, und in
+> welcher Reihenfolge es nachgezogen wird. **iOS ist die Referenz.**
+> Jede Abweichung wird auf Android angeglichen, nicht umgekehrt.
+>
+> **Wer an diesem Projekt arbeitet - Mensch oder Agent - liest danach
 > [docs/arbeitsjournal.md](docs/arbeitsjournal.md) und schreibt nach
 > jedem fertigen Schritt hinein.** Dort steht, wer gerade woran ist, was
 > zuletzt schiefging und was man nicht zweimal bauen muss.
@@ -9,8 +15,12 @@
 PrusaSlicer-Kern auf Mobilgeräten, mit einer Oberfläche, die für Touch
 und Stift gebaut ist statt für Maus und Tastatur.
 
-Stand: 2026-07-30 – Android-first. iOS folgt erst nach einem stabilen,
-auf Geräten geprüften Android-Ablauf.
+Stand: 2026-08-19 – **iOS ist die Referenzplattform.** Die
+Gestaltungsentscheidungen fallen dort; Android zieht nach. Der frühere
+Vermerk „Android-first“ galt bis zum Aufbau der iOS-Fassung im August
+und ist überholt – er hat dazu beigetragen, dass beide Fassungen
+auseinandergelaufen sind. Siehe
+[docs/00-gleichstand-implementierungsplan.md](docs/00-gleichstand-implementierungsplan.md).
 
 > **Klarstellung**: PSMobile ist kein Port der PrusaSlicer-Anwendung,
 > sondern ein neuer mobiler Client um den PrusaSlicer-Kern (`libslic3r`).
