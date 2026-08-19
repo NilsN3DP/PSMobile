@@ -20,6 +20,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import de.psmobile.shared.rules.AppSettings
+import androidx.compose.ui.unit.dp
 import de.psmobile.ui.AppSettingsScreen
 import de.psmobile.ui.PsUi
 import de.psmobile.shared.rules.ModelFormats
@@ -295,42 +296,10 @@ class MainActivity : ComponentActivity() {
                 val setupNeeded by (svc?.setupNeeded?.collectAsState()
                     ?: remember { mutableStateOf(false) })
 
-                if (svc != null && setupNeeded) {
-                    val models by svc.printerModels.collectAsState()
-                    val busy by svc.setupBusy.collectAsState()
-                    SetupScreen(
-                        models = models,
-                        busy = busy,
-                        onConfirm = { svc.completeSetup(it) },
-                        onLanguageChange = { svc.uiLanguage = it },
-                        preselected = svc.installedPrinters(),
-                        onClose = if (svc.installedPrinters().isEmpty()) null
-                                  else { { svc.dismissSetup() } },
-                    )
-                } else if (showAppSettings) {
-                    AppSettingsScreen(
-                        prefs = appPrefs,
-                        language = svc?.uiLanguage ?: "en",
-                        onLanguageChange = { svc?.uiLanguage = it },
-                        onToggleChanged = { key, on -> applyAppSetting(key, on) },
-                        onClose = { showAppSettings = false },
-                    )
-                } else if (showRemoteSlice && svc != null) {
+                if (showRemoteSlice && svc != null) {
                     de.psmobile.ui.RemoteSliceScreen(
                         service = svc,
                         onHome = { showRemoteSlice = false },
-                    )
-                } else if (showPrinters && svc != null) {
-                    // Von der Startseite aus, ohne erst ein Projekt im
-                    // Advanced Mode oeffnen zu muessen - vorher war die
-                    // Druckerverwaltung (und damit die QR-Kopplung) nur
-                    // ueber dessen Seitenleiste erreichbar.
-                    val presets by svc.presets.collectAsState()
-                    de.psmobile.ui.PrintersScreen(
-                        presetNames = presets.printers,
-                        onClose = { showPrinters = false },
-                        onPickBackupFolder = { backupPicker.launch(null) },
-                        onReopenSetup = { svc.reopenSetup() },
                     )
                 } else if (appMode == null) {
                     WorkflowStartScreen(
@@ -415,6 +384,76 @@ class MainActivity : ComponentActivity() {
                         },
                         onControllerReady = { advancedSceneController = it },
                     )
+                }
+
+                // AP-06: Diese drei ersetzten bisher den ganzen
+                // Bildschirm. Jetzt liegen sie als Karte darueber - was
+                // darunter war, bleibt sichtbar, und man findet sich beim
+                // Schliessen sofort wieder zurecht.
+                if (svc != null && setupNeeded) {
+                    val models by svc.printerModels.collectAsState()
+                    val busy by svc.setupBusy.collectAsState()
+                    // Beim allerersten Start gibt es keinen Weg hinaus -
+                    // dann darf auch ein Tipp daneben nicht schliessen.
+                    // Dahinter liegt dort ohnehin nichts; die Karte
+                    // traegt erst beim spaeteren Wiederoeffnen aus dem
+                    // Arbeitsbereich heraus.
+                    val schliessbar = svc.installedPrinters().isNotEmpty()
+                    de.psmobile.ui.SchwebenderDialog(
+                        kennung = "dialog.ersteinrichtung",
+                        onClose = { svc.dismissSetup() },
+                        maxBreite = 900.dp,
+                        abbrechbar = schliessbar,
+                    ) {
+                        SetupScreen(
+                            models = models,
+                            busy = busy,
+                            onConfirm = { svc.completeSetup(it) },
+                            onLanguageChange = { svc.uiLanguage = it },
+                            preselected = svc.installedPrinters(),
+                            onClose = if (schliessbar) {
+                                { svc.dismissSetup() }
+                            } else null,
+                        )
+                    }
+                }
+
+                if (showAppSettings) {
+                    de.psmobile.ui.SchwebenderDialog(
+                        kennung = "dialog.app-einstellungen",
+                        onClose = { showAppSettings = false },
+                        maxBreite = 900.dp,
+                    ) {
+                        AppSettingsScreen(
+                            prefs = appPrefs,
+                            language = svc?.uiLanguage ?: "en",
+                            onLanguageChange = { svc?.uiLanguage = it },
+                            onToggleChanged = { key, on -> applyAppSetting(key, on) },
+                            onClose = { showAppSettings = false },
+                        )
+                    }
+                }
+
+                // Von der Startseite aus, ohne erst ein Projekt im
+                // Advanced Mode oeffnen zu muessen - vorher war die
+                // Druckerverwaltung (und damit die QR-Kopplung) nur ueber
+                // dessen Seitenleiste erreichbar. Schwebt wie ihr
+                // Gegenstueck im Advanced Mode; zwei verschiedene Rahmen
+                // fuer denselben Bildschirm waeren eine Zumutung.
+                if (showPrinters && svc != null) {
+                    val presets by svc.presets.collectAsState()
+                    de.psmobile.ui.SchwebenderDialog(
+                        kennung = "dialog.drucker",
+                        onClose = { showPrinters = false },
+                        maxBreite = 900.dp,
+                    ) {
+                        de.psmobile.ui.PrintersScreen(
+                            presetNames = presets.printers,
+                            onClose = { showPrinters = false },
+                            onPickBackupFolder = { backupPicker.launch(null) },
+                            onReopenSetup = { svc.reopenSetup() },
+                        )
+                    }
                 }
 
                 var showProfileUpdateSaveWarning by remember { mutableStateOf(false) }

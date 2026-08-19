@@ -59,6 +59,9 @@ import de.psmobile.ui.theme.ScaledOverlay
  * Aktivitaet - sie wird hier vor dem Dialog gemessen, und die Karte
  * haengt daran, oben angeschlagen.
  *
+ * @param abbrechbar Ob ein Tipp daneben und die Zurueck-Geste schliessen.
+ *        Die Ersteinrichtung beim allerersten Start hat keinen Weg
+ *        hinaus - dort bleibt nur der Weg durch.
  * @param kennung Name fuer die Bedienungshilfen und die Oberflaechentests.
  * @param maxBreite Obergrenze der Breite. Auf einem breiten Tablet soll
  *        eine Einstellungsseite nicht ueber die ganzen 2560 px laufen.
@@ -68,6 +71,7 @@ internal fun SchwebenderDialog(
     kennung: String,
     onClose: () -> Unit,
     maxBreite: Dp = 1100.dp,
+    abbrechbar: Boolean = true,
     inhalt: @Composable () -> Unit,
 ) {
     // Auf schmalen Geraeten kostet ein breiter Rand den Platz, den der
@@ -93,8 +97,12 @@ internal fun SchwebenderDialog(
         leisten.calculateTopPadding() - leisten.calculateBottomPadding()
 
     Dialog(
-        onDismissRequest = onClose,
-        properties = DialogProperties(usePlatformDefaultWidth = false),
+        onDismissRequest = { if (abbrechbar) onClose() },
+        properties = DialogProperties(
+            usePlatformDefaultWidth = false,
+            dismissOnBackPress = abbrechbar,
+            dismissOnClickOutside = abbrechbar,
+        ),
     ) {
         ScaledOverlay {
             Box(
@@ -104,7 +112,9 @@ internal fun SchwebenderDialog(
                     // Tipp daneben schliesst. Bewusst ohne Wellenschlag:
                     // der Hintergrund ist kein Knopf, er ist der Weg
                     // hinaus.
-                    .pointerInput(onClose) { detectTapGestures { onClose() } },
+                    .pointerInput(abbrechbar, onClose) {
+                        detectTapGestures { if (abbrechbar) onClose() }
+                    },
             ) {
                 Box(
                     Modifier
