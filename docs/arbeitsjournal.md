@@ -52,6 +52,91 @@ sondern die Absprache währenddessen.
 | iOS Advanced: Werkzeugleiste, Objektbaum | Claude | steht, 4 Tests |
 | Bemalen: Stützen, Naht, MMU | Claude | steht auf iOS, 2 Tests |
 | Sonderwerte auf iOS (Bett, Reinigung) | Claude | zwei von fünf |
+| Gleichstand Android ↔ iOS | Claude | Plan in `00-gleichstand-implementierungsplan.md`, AP-01/02/03/18 fertig |
+
+---
+
+## 2026-08-19
+
+### Claude — Bemalen ging nicht, und warum das kein Einzelfall war
+
+**Ausgangsfrage** war, warum sich Dateien nicht bemalen lassen.
+**Befund**: Android hat `psm_viewport_set_paint_options` nie gerufen.
+Damit blieb `paint_enabled` im Viewport falsch — die Bemalung landete im
+Modell, wurde aber nie gezeichnet. iOS ruft es seit langem.
+
+Beim Nachprüfen kamen im selben Werkzeug drei weitere Lücken heraus:
+Streichen tat nichts (nur Tippen war verdrahtet), es gab nur den Pinsel
+(`psm_model_paint_apply` war nicht gebunden), und jeder Tupfer war ein
+eigener Rückgängig-Schritt, weil das Malen über den Weg für schwere
+Netzumbauten lief.
+
+Commits `e2f9dad`, `9da2adf`, `ef59dc7`. Am Emulator belegt: eine
+durchgehende Spur statt einzelner Punkte, 1358 markierte Facetten nach
+einem Strich.
+
+### Claude — Objekt gehört dem Bett, auf das man es zieht
+
+Nutzerreport. Ein Objekt blieb an seinem alten Bett hängen, auch wenn es
+sichtbar auf einem anderen lag: die gespeicherte Position ist bettlokal,
+der Versatz der Betten steckt allein in der Darstellung.
+
+`psm_viewport_drop_selected` schließt jetzt das Ziehen ab. Android
+bekam dazu die räumliche Mehrbett-Darstellung überhaupt erst —
+`set_multi_bed_render`, `focus_bed` und `bed_label_anchor` waren nie
+gebunden.
+
+Commit `6f17c85`. Belegt: nach dem Ziehen steht `Bed 1 · 0 / Bed 2 · 1`.
+
+**Fehler dabei, der Zeit gekostet hat:** mein erster Test schlug fehl,
+weil der wiederhergestellte Arbeitsstand nur *ein* Bett hatte — die
+Funktion kehrte korrekt bei `bed_models.size() <= 1` zurück. Ich habe
+eine Diagnose-Ausgabe in den Viewport gebaut, den Kern zweimal gebaut
+und erst dann gemerkt, dass der Testaufbau falsch war, nicht der Code.
+Vor dem nächsten Diagnose-Kernbau: erst den Aufbau prüfen.
+
+### Claude — Der Gleichstand ist größer als gedacht
+
+Der Nutzer hat viermal nachgefragt, ob die Liste vollständig sei. Sie war
+es dreimal nicht. Die Verfahren im Vergleich:
+
+| Verfahren | findet | blind für |
+|---|---|---|
+| Begriffe suchen | fehlende Funktionen | alles andere |
+| C-Schnittstelle vergleichen | nicht gebundene Funktionen | reine Oberfläche |
+| `git log -- ios/` | nie übertragene Entscheidungen | — |
+| Quelltext Datei für Datei | Ausarbeitung, Wortwahl | Abstände, Rhythmus |
+
+Die Zahl, die es entschieden hat: **90 Commits fassen `ios/` an, ohne
+`android/` anzufassen — ~5.700 geänderte Zeilen in 27 Ansichtsdateien.**
+Wer nur den Zustand vergleicht, findet das nie.
+
+Daraus entstand `docs/00-gleichstand-implementierungsplan.md`. Er ist ab
+sofort der Einstiegspunkt, vor diesem Journal. Die README nannte bis
+heute „Android-first" — das ist überholt und hat mit dazu beigetragen,
+dass beide Fassungen auseinandergelaufen sind.
+
+### Claude — AP-01 bis AP-05
+
+- **AP-01** `psTouch()`: Zielflächen fallen nicht mehr unter 44 dp. Die
+  Schrift war längst gedämpft, die Trefferflächen nicht — bei
+  `MIN_SCALE 0.7` wurde aus 48 dp effektiv 33,6 dp. 118 Stellen.
+- **AP-02** `Corners` im gemeinsamen Modul: 164 Stellen. Vorher zwölf
+  verschiedene Radien auf iOS, fünfzehn auf Android.
+- **AP-18** 17 Bindungen nachgezogen. Von 26 fehlenden Funktionen sind
+  noch 2 übrig, beide nur Legenden.
+- **AP-03** Vorschau mit Statistik, Legende und Verbrauch je Werkzeug.
+  `PreviewRange` liegt im gemeinsamen Modul mit sechs Tests.
+- **AP-04**, **AP-05** teilweise — siehe Plan.
+
+**Nicht angefasst und bewusst so:** die iOS-Seite von AP-02 und der
+ganze Abschnitt Z. Der Mac unter `192.168.1.107` antwortet nicht.
+Geschriebener, aber ungebauter Swift-Code zählt nicht.
+
+**Was beim Binden auffiel:** `psm_slice_accept_remote_gcode` nimmt eine
+Szenenrevision entgegen. Wer sie nicht mitgibt, legt ein Ergebnis von
+vorhin auf eine Anordnung von jetzt. Das wäre ein stiller Datenfehler
+geworden.
 
 ---
 

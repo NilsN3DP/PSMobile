@@ -9,6 +9,76 @@ und die Quelltextkommentare.
 
 ---
 
+## Stand und nächster Schritt
+
+**Dieser Abschnitt wird nach jedem Arbeitspaket fortgeschrieben.** Er ist
+das, was eine neue Sitzung als Erstes liest — hier steht, wo genau
+weitergemacht wird, ohne dass jemand die Historie durchsuchen muss.
+
+**Zuletzt geändert:** 19.08.2026 · Zweig
+`codex/ios-android-parity-implementation` · letzter Commit `d52450e`
+
+### Erledigt
+
+| Paket | Commit | Beleg |
+|---|---|---|
+| AP-01 Zielflächen | `75c8dd1` | 118 Stellen, `psTouch()` |
+| AP-02 Eckenradien (Android) | `75c8dd1`, `11c7ebb` | 164 Stellen, keine rohen Radien mehr |
+| AP-03 Vorschau | `3377a96` | Emulator: `0:30 · 3.59 m · 10.7 g`, Chips grauen aus |
+| AP-18 Bindungen | `27ac6eb`, `1eb4c97` | 26 fehlende Funktionen → noch 2 |
+| Bemalen (Strich, Füllmodi) | `e2f9dad`, `9da2adf` | Emulator: Spur statt Punkt |
+| Bettzuordnung beim Ziehen | `6f17c85` | Emulator: `Bed 1 · 0 / Bed 2 · 1` |
+
+### Teilweise
+
+- **AP-04** Objektleiste steht im Advanced Mode (`78ecc90`). Offen: iOS
+  führt die Griffe *Verschieben · Drehen · Skalieren · Kein* am Anfang
+  derselben Leiste, Android hat sie getrennt.
+- **AP-05** Zurück/Vor unten, „3D" statt „Iso" (`f489a48`). Offen:
+  *Öffnen* und *Projekte* in der oberen Leiste, *Stützen* und *Naht* in
+  der Schiene, *Trennen* als Untermenü, Fußzeile mit Drucker und
+  App-Einstellungen.
+
+### Als Nächstes
+
+**AP-07 · Materialauswahl.** Kein Kernbau nötig, `psm_preset_option_at`
+ist seit `27ac6eb` gebunden.
+
+Konkret:
+
+1. `SlicerService`: einen Katalog bauen, wie `SlicerModel.filamentCatalog()`
+   auf iOS (`SlicerModel.swift:536`) — je Profil
+   `presetOption(FILAMENT, name, "filament_type")` und
+   `"filament_colour"`, Ergebnis merken, sonst läuft es bei jedem
+   Tastendruck im Suchfeld neu.
+2. `SimpleModeScreen.kt:1039ff` auf `FilamentCatalog.filter()` umstellen.
+3. Farbpunkte aus `FilamentCatalog.colors()`, Typ-Knöpfe als echter
+   Filter statt Suchtext-Setzer.
+4. Karten mit Hersteller, Typ, Farbe und Spule (Ring mit Loch).
+5. Schalter *inkompatible zeigen*, standardmäßig aus.
+
+Danach **AP-08 · Einstellungskopf** — ebenfalls ohne Kernbau.
+
+### Worauf zu achten ist
+
+- **Kernbau dauert 20–25 Minuten.** Wer einen braucht, stößt ihn zuerst
+  an und arbeitet währenddessen an einem Paket ohne Kern.
+- **Neue Dialoge gehören in `ScaledOverlay`.** Sie rendern in einem
+  eigenen Fenster und erben die gestauchte Dichte nicht. Ein Regeltest
+  wacht darüber.
+- **`psTouch()` statt fester dp-Höhen** an allem, was man antippt.
+- **Kein Paket gilt als fertig ohne Bildschirmfoto vom Emulator.**
+
+### Blockiert
+
+- **Der Mac** unter `192.168.1.107` antwortet nicht. Damit liegen die
+  iOS-Seite von AP-02 (~160 Stellen) und der ganze Abschnitt Z still.
+  Geschriebener, aber ungebauter Swift-Code zählt nicht als erledigt.
+- **AP-19 Hochformat** ist nicht geschätzt, weil Android dort nie
+  gelaufen ist. Erst ansehen, dann planen.
+
+---
+
 ## Grundsatz
 
 **iOS ist die Referenz. Android zieht nach.**
