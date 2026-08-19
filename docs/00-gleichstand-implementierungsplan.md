@@ -16,7 +16,7 @@ das, was eine neue Sitzung als Erstes liest — hier steht, wo genau
 weitergemacht wird, ohne dass jemand die Historie durchsuchen muss.
 
 **Zuletzt geändert:** 19.08.2026 · Zweig
-`codex/ios-android-parity-implementation` · letzter Commit `469203a`
+`codex/ios-android-parity-implementation` · letzter Commit `1e785c0`
 
 ### Wo die Arbeit liegt
 
@@ -66,6 +66,7 @@ ab; von dort gehört sie in die Arbeitskopie kopiert. Achtung: `du` meldet
 | AP-02 Eckenradien (Android) | `75c8dd1`, `11c7ebb` | 164 Stellen, keine rohen Radien mehr |
 | AP-03 Vorschau | `3377a96` | `0:30 · 3.59 m · 10.7 g`, Chips grauen aus |
 | AP-07 Materialauswahl | `875a655` | Typ-Filter PLA blendet auf vier Karten ein |
+| AP-06 Schwebende Dialoge | `469203a`, `1e785c0` | Einstellungen als Karte über dem Bett, Rand 104/120/80 px |
 | AP-08 Einstellungskopf | `bb47ae1` | Profilname mit Trichter, Zähler `1`, Rückfrage nennt „Perimeters 2 → 4" |
 | AP-09 Leere Zustände | `875a655` | `LeeresPanel` als Muster |
 | AP-18 Bindungen | `27ac6eb`, `1eb4c97` | 26 fehlende Funktionen → noch 2 |
@@ -81,34 +82,30 @@ ab; von dort gehört sie in die Arbeitskopie kopiert. Achtung: `du` meldet
   *Öffnen* und *Projekte* in der oberen Leiste, *Stützen* und *Naht* in
   der Schiene, *Trennen* als Untermenü, Fußzeile mit Drucker und
   App-Einstellungen.
-- **AP-06** `SchwebenderDialog` steht und trägt Einstellungen, Drucker
-  und ColorMix (`469203a`). Offen: `SetupScreen`, `AppSettingsScreen`,
-  Profilwechsel und ZIP-Frage.
 - **AP-09** Das Muster steht und ist in der Materialauswahl im Einsatz.
   Offen: dieselbe Behandlung für *Keine Druckeinstellungen vorhanden*.
 
 ### Als Nächstes
 
-**AP-06 zu Ende bringen.** Kein Kernbau nötig. `SchwebenderDialog`
-steht bereits und trägt drei Bildschirme; es fehlen die beiden aus
-`MainActivity` und die zwei Rückfragen.
+**AP-05 zu Ende bringen.** Kein Kernbau nötig. *Zurück* und *Vor* stehen
+schon unten, die Ansicht heißt „3D" (`f489a48`); es fehlt der Rest der
+Leisten.
 
-Konkret:
+Konkret, in dieser Reihenfolge:
 
-1. `MainActivity.kt:311` — `AppSettingsScreen` in `SchwebenderDialog`
-   fassen, `maxBreite = 900.dp`, `onClose` bleibt wie es ist. Das ist
-   der einfachere der beiden Fälle und zeigt gleich, ob die inneren
-   Listen mit dem kleineren Fenster zurechtkommen.
-2. `SetupScreen` genauso. Achtung: die Ersteinrichtung läuft, bevor
-   ein Bett steht — dahinter ist der Bildschirm leer. Erst ansehen,
-   ob das Schweben dort überhaupt etwas beiträgt; wenn nicht, im Plan
-   als bewusste Ausnahme vermerken statt es stillschweigend zu lassen.
-3. Profilwechsel und ZIP-Frage sind bereits Dialoge, aber ohne den
-   gemeinsamen Rahmen — auf `SchwebenderDialog` umstellen, damit alle
-   vier Ecken und Ränder gleich aussehen.
+1. **Obere Leiste**: *Öffnen* und *Projekte* aufnehmen. Beim Sichern
+   nach dem Namen fragen, statt *Sichern* und *Sichern unter* als zwei
+   Knöpfe zu führen — so macht es iOS, und der zweite Knopf wird dann
+   überflüssig.
+2. **Linke Schiene**: *Stützen* und *Naht* fehlen ganz; beide gibt es
+   im Kern längst (Bemalen ist gebunden, siehe `e2f9dad`).
+3. *Zu Objekten* und *Zu Volumen* zu einem Eintrag **Trennen** mit
+   Untermenü zusammenfassen. *Anordnen* öffnet per Tipp **und Halten**.
+4. **Fußzeile der Schiene**: *Drucker* und *App-Einstellungen*, wie auf
+   iOS. Beide schweben seit `1e785c0` ohnehin schon.
 
-Danach **AP-05** zu Ende (obere Leiste: *Öffnen*, *Projekte*; Schiene:
-*Stützen*, *Naht*, *Trennen* als Untermenü, Fußzeile).
+Danach **AP-04** zu Ende — dafür muss aber der Mac erreichbar sein, weil
+die Angleichung dort auf der iOS-Seite passiert.
 
 ### Worauf zu achten ist
 
@@ -389,14 +386,27 @@ breiten Geräten.
 erben `LocalDensity` nicht. Jeder neue Dialog gehört in `ScaledOverlay`,
 sonst ist er falsch skaliert. Ein Regeltest wacht darüber.
 
-**Stand: teilweise** (19.08., `469203a`). `SchwebenderDialog` steht in
-`ui/SchwebenderDialog.kt` und trägt **Einstellungen, Drucker und
-ColorMix**. Belegt am Emulator: die Einstellungen stehen als Karte über
-dem Bett, Werkzeugleiste und Seitenband schauen ringsum hervor, ein Tipp
-daneben schließt.
+**Stand: erledigt** (19.08., `469203a`, `1e785c0`).
+`SchwebenderDialog` steht in `ui/SchwebenderDialog.kt` und trägt
+**Einstellungen, Drucker (beide Wege), ColorMix, App-Einstellungen und
+Ersteinrichtung**. Belegt am Emulator: die Einstellungen stehen als
+Karte über dem Bett, Werkzeugleiste und Seitenband schauen ringsum
+hervor; App-Einstellungen und Druckerverwaltung stehen als 900-dp-Karte
+über der abgedunkelten Startseite. Ein Tipp daneben schließt.
 
-**Offen:** `SetupScreen`, `AppSettingsScreen` (beide in `MainActivity`),
-Profilwechsel und ZIP-Frage.
+Die Ersteinrichtung kennt `abbrechbar = false`: beim allerersten Start
+gibt es keinen Weg hinaus, dort darf weder ein Tipp daneben noch die
+Zurück-Geste schließen.
+
+**Bewusst nicht umgestellt:** Profilwechsel und ZIP-Frage. Beide sind
+kurze Rückfragen mit zwei bis drei Knöpfen und liegen schon im
+`AlertDialog` aus `ui/theme`, der `ScaledOverlay` selbst mitbringt. In
+eine formatfüllende Karte gefasst wären sie größer als ihre Frage.
+
+**Noch offen, aber keine Vollbildseite aus der Liste:**
+`RemoteSliceScreen` ersetzt weiterhin den Bildschirm. Es hat auf iOS
+kein Gegenstück, deshalb sagt der Vergleich hier nichts — erst ansehen,
+dann entscheiden.
 
 **Der Fallstrick, den der nächste kennen sollte:** mit
 `usePlatformDefaultWidth = false` ist das Dialogfenster so hoch wie der

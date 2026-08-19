@@ -52,7 +52,7 @@ sondern die Absprache währenddessen.
 | iOS Advanced: Werkzeugleiste, Objektbaum | Claude | steht, 4 Tests |
 | Bemalen: Stützen, Naht, MMU | Claude | steht auf iOS, 2 Tests |
 | Sonderwerte auf iOS (Bett, Reinigung) | Claude | zwei von fünf |
-| Gleichstand Android ↔ iOS | Claude | Plan in `00-gleichstand-implementierungsplan.md`, AP-01/02/03/07/08/09/18 fertig, AP-06 teilweise |
+| Gleichstand Android ↔ iOS | Claude | Plan in `00-gleichstand-implementierungsplan.md`, AP-01/02/03/06/07/08/09/18 fertig |
 
 ---
 
@@ -243,9 +243,21 @@ Navigation nicht gegriffen (die App war noch auf der Startseite), und
 ich habe das Ergebnis trotzdem als Messung genommen — bei jedem
 Messfoto zuerst pruefen, ob ueberhaupt das Richtige zu sehen ist.
 
-**Offen:** `SetupScreen` und `AppSettingsScreen` (beide in
-`MainActivity`), Profilwechsel und ZIP-Frage. Steht mit konkreter
-Reihenfolge im Plan.
+**Nachgezogen im selben Zug** (`1e785c0`): Ersteinrichtung,
+App-Einstellungen und die Druckerverwaltung von der Startseite. Die drei
+lagen in `MainActivity` in derselben if/else-Kette wie der
+Arbeitsbereich - solange eine dran war, wurde alles andere gar nicht
+gezeichnet. Sie stehen jetzt als Ueberlagerung hinter der Kette.
+`SchwebenderDialog` hat dafuer `abbrechbar` bekommen: beim allerersten
+Start gibt es aus der Ersteinrichtung keinen Weg hinaus, dort darf auch
+ein Tipp daneben nicht schliessen.
+
+**Bewusst nicht umgestellt:** Profilwechsel und ZIP-Frage. Beide sind
+kurze Rueckfragen und liegen schon im `AlertDialog` aus `ui/theme`, der
+`ScaledOverlay` selbst mitbringt - in eine formatfuellende Karte
+gefasst waeren sie groesser als ihre Frage. `RemoteSliceScreen` ersetzt
+weiterhin den Bildschirm; es hat auf iOS kein Gegenstueck, deshalb sagt
+der Vergleich dort nichts.
 
 ---
 
