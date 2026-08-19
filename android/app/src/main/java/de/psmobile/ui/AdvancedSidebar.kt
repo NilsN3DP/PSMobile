@@ -286,6 +286,25 @@ internal fun Sidebar(
             }
         }
 
+        // Die drei Einstellungsseiten stehen oben im Band, nicht in
+        // einem der Bereiche: sie wirken auf das Profil, und das Profil
+        // steht rechts. Oben in die Werkzeugleiste gehoert, was auf den
+        // Viewport wirkt. Wortgleich zu `einstellungsbereiche` in
+        // AdvancedWorkspaceView.swift.
+        EinstellungsZeile(
+            PsUi.tr("Print Settings"),
+            onClick = { onOpenSettings("print") },
+        )
+        EinstellungsZeile(
+            PsUi.tr("Filament Settings"),
+            onClick = { onOpenSettings("filament") },
+        )
+        EinstellungsZeile(
+            PsUi.tr("Printer Settings"),
+            onClick = { onOpenSettings("printer") },
+        )
+        HorizontalDivider(color = PrusaColors.Divider)
+
         val editingLayersFor = layerEditorObjectId
         if (editingLayersFor != null && selected?.id == editingLayersFor) {
             LayerProfileToolPage(
@@ -819,6 +838,35 @@ internal fun Sidebar(
                 }
             },
         )
+    }
+}
+
+/**
+ * Eine Zeile, die eine Einstellungsseite oeffnet.
+ *
+ * Gegenstueck zu `einstellungsZeile` in `AdvancedWorkspaceView.swift`.
+ * Der Name kommt aus PrusaSlicers eigenem Katalog, nicht von hier.
+ */
+@Composable
+private fun EinstellungsZeile(titel: String, onClick: () -> Unit) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(Corners.FIELD.dp))
+            .clickable(onClick = onClick)
+            .heightIn(min = psTouch(44))
+            .padding(horizontal = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            titel,
+            color = PrusaColors.TextPrimary,
+            fontSize = 13.sp,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f),
+        )
+        Text("›", color = PrusaColors.TextMuted, fontSize = 15.sp)
     }
 }
 
