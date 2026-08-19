@@ -192,6 +192,14 @@ genau das der Fehler, der zweimal korrigiert wurde.
 
 **Fertig wenn** Objekt auswählen zeigt die Leiste mittig über dem Bett.
 
+**Stand: teilweise** (19.08.). Die Leiste steht im Advanced Mode und ist
+am Emulator belegt. **Offen: der Inhalt weicht ab.** iOS führt die Griffe
+*Verschieben · Drehen · Skalieren · Kein* am Anfang derselben Leiste,
+Android hat sie im Simple Mode in einer eigenen Spalte
+(`SimpleWerkzeugSpalte`) und im Advanced Mode nur im Seitenband. Dafür
+hat Android *Ziehen zu*, *Entfernen* und *Zurück*, die iOS dort nicht
+führt. Beides muss auf iOS angeglichen werden.
+
 ---
 
 ### AP-05 · Werkzeugleisten angleichen · Kern: nein

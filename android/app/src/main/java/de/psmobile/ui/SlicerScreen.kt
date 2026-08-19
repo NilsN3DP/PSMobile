@@ -587,6 +587,37 @@ private fun SlicerContent(
                     )
 
                     /*
+                     * Leiste am ausgewaehlten Objekt, schwebend ueber
+                     * dem Bett - dieselbe wie im Simple Mode.
+                     *
+                     * Im Advanced Mode fehlte sie, und damit war jeder
+                     * Handgriff am Objekt ein Weg nach rechts ins
+                     * Seitenband. iOS hat das im August geaendert
+                     * (AdvancedWorkspaceView.swift), Android nicht.
+                     *
+                     * Sitzt bewusst HIER, innerhalb der Viewport-Box:
+                     * die ist bereits genau der freie Bereich, ohne
+                     * Werkzeugleiste und Bettleiste darueber. Wer sie
+                     * eine Ebene hoeher haengt, muss den Abstand nach
+                     * oben raten - genau der Fehler, der auf iOS zweimal
+                     * nachgebessert werden musste.
+                     */
+                    if (!previewMode && selected != null && surfaceMode == null) {
+                        SimpleObjectBar(
+                            service = service,
+                            obj = selected,
+                            beds = beds,
+                            onClearSelection = {
+                                selectedId = null
+                                selectedIds = emptySet()
+                            },
+                            modifier = Modifier
+                                .align(Alignment.TopCenter)
+                                .padding(top = 10.dp),
+                        )
+                    }
+
+                    /*
                      * Namensschilder an den Betten. Ohne sie waeren in
                      * der raeumlichen Darstellung alle Betten gleich
                      * und man wuesste beim Ziehen nicht, wohin.
