@@ -2316,65 +2316,97 @@ internal fun BedSelector(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         strip.items.forEach { bed ->
+            // Name, Objektzahl, Schloss - und das X nur bei einem leeren
+            // Bett. Umbenennen liegt im langen Druck: es ist selten, und
+            // als sichtbarer Knopf hat es die Kapsel breiter gemacht, als
+            // der Name Platz hatte. Wortgleich zu `bettKapsel` in
+            // BedSelector.swift.
             Row(
-                Modifier.clip(RoundedCornerShape(Corners.FIELD.dp))
-                    .background(if (bed.active) PrusaColors.Orange else PrusaColors.PanelRaised),
+                Modifier
+                    .clip(RoundedCornerShape(Corners.FIELD.dp))
+                    .background(PrusaColors.PanelRaised)
+                    .border(
+                        1.dp,
+                        // Dezenter als das volle Orange der uebrigen
+                        // Knoepfe: das aktive Bett ist ein Zustand, den
+                        // man staendig im Blick hat, kein Befehl.
+                        if (bed.active) PrusaColors.Orange.copy(alpha = 0.6f)
+                        else Color.Transparent,
+                        RoundedCornerShape(Corners.FIELD.dp),
+                    ),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-            Text(
-                "${bed.name} · ${bed.objectCount}",
-                color = if (bed.active) Color.White else PrusaColors.TextPrimary,
-                fontSize = 14.sp,
-                fontWeight = if (bed.active) FontWeight.SemiBold else FontWeight.Normal,
-                modifier = Modifier
-                    .height(psTouch(50))
-                    .clip(RoundedCornerShape(Corners.FIELD.dp))
-                    .combinedClickable(
-                        enabled = true,
-                        onClick = { if (!bed.active) onSelect(bed.id) },
-                        onLongClick = { renameId = bed.id; renameText = bed.name },
+                Row(
+                    Modifier
+                        .heightIn(min = psTouch(40))
+                        .combinedClickable(
+                            enabled = bed.canSelect,
+                            onClick = { if (!bed.active) onSelect(bed.id) },
+                            onLongClick = { renameId = bed.id; renameText = bed.name },
+                        )
+                        .padding(start = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    Text(
+                        bed.name,
+                        color = if (bed.active) PrusaColors.Orange else PrusaColors.TextPrimary,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Medium,
+                        maxLines = 1,
                     )
-                    .padding(horizontal = 16.dp, vertical = 14.dp),
-            )
-            IconButton(onClick = { onToggleLock(bed.id) }, modifier = Modifier.size(44.dp)) {
-                Icon(if (bed.locked) Icons.Default.Lock else Icons.Default.LockOpen,
-                    contentDescription = advancedText("Toggle bed lock", "Bettsperre umschalten"),
-                    tint = if (bed.active) Color.White else PrusaColors.TextMuted)
-            }
-            IconButton(onClick = { renameId = bed.id; renameText = bed.name }, modifier = Modifier.size(44.dp)) {
-                Icon(Icons.Default.Edit, contentDescription = advancedText("Rename bed", "Bett umbenennen"),
-                    tint = if (bed.active) Color.White else PrusaColors.TextMuted)
-            }
+                    Text(
+                        "${bed.objectCount}",
+                        color = PrusaColors.TextMuted,
+                        fontSize = 10.sp,
+                    )
+                }
+                Box(
+                    Modifier
+                        .size(width = psTouch(26), height = psTouch(40))
+                        .clickable(enabled = bed.canToggleLock) { onToggleLock(bed.id) },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        if (bed.locked) Icons.Default.Lock else Icons.Default.LockOpen,
+                        contentDescription = advancedText("Toggle bed lock", "Bettsperre umschalten"),
+                        tint = PrusaColors.TextMuted,
+                        modifier = Modifier.size(14.dp),
+                    )
+                }
+                if (bed.canRemove) {
+                    Box(
+                        Modifier
+                            .size(width = psTouch(24), height = psTouch(40))
+                            .clickable { onRemove(bed.id) },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(
+                            Icons.Default.Close,
+                            contentDescription = advancedText("Remove bed", "Bett entfernen"),
+                            tint = PrusaColors.TextMuted,
+                            modifier = Modifier.size(12.dp),
+                        )
+                    }
+                } else {
+                    Spacer(Modifier.width(3.dp))
+                }
             }
         }
 
         Box(
             Modifier
-                .size(50.dp)
+                .size(width = psTouch(40), height = psTouch(38))
                 .clip(RoundedCornerShape(Corners.FIELD.dp))
                 .background(PrusaColors.PanelRaised)
                 .clickable(enabled = strip.canAdd, onClick = onAdd),
             contentAlignment = Alignment.Center,
         ) {
-            Icon(Icons.Default.Add, contentDescription = advancedText("Add print bed", "Druckbett hinzufügen"),
-                 tint = PrusaColors.TextPrimary)
-        }
-
-        // Frueher stand hier ein Papierkorb, der das *aktive* Bett
-        // entfernte. Der Weg in die Uebersicht tut dasselbe genauer:
-        // dort steht das X an dem Bett, das es entfernt.
-        Box(
-            Modifier
-                .size(50.dp)
-                .clip(RoundedCornerShape(Corners.FIELD.dp))
-                .background(PrusaColors.PanelRaised)
-                .clickable { zeigeListe = true },
-            contentAlignment = Alignment.Center,
-        ) {
             Icon(
-                Icons.Default.GridView,
-                contentDescription = advancedText("All beds", "Alle Betten"),
-                tint = PrusaColors.TextMuted,
+                Icons.Default.Add,
+                contentDescription = advancedText("Add print bed", "Druckbett hinzufügen"),
+                tint = PrusaColors.Orange,
+                modifier = Modifier.size(16.dp),
             )
         }
     }

@@ -789,13 +789,21 @@ entfällt dann — er tut, was der Eintrag in der Übersicht genauer tut.
 Übersicht, in der jedes Bett Stift, Schloss und X hat, und *Bett
 hinzufügen* darunter steht.
 
-**Stand: erledigt** (19.08.). Das Blatt liegt jetzt vor der
-Zweig-Entscheidung und ist aus beiden erreichbar; in der breiten Reihe
-führt ein Gitter-Knopf hinein, der frühere globale Papierkorb ist weg.
-Belegt am Emulator: mit zwei Betten zeigt *Bett 2* Schloss, Stift und
-**X**, *Bett 1* nur Schloss und Stift — es trägt ein Objekt, und der
-gemeinsame `BedStripContract` verbietet das Entfernen. Auf iOS gilt
-dieselbe Regel aus demselben Vertrag.
+**Erster Anlauf war die falsche Stelle.** Ich hatte das Blatt aus dem
+schmalen Zweig auf dem Tablet erreichbar gemacht — iOS zeigt dort aber
+gar kein Blatt. Die „Bettübersicht", die Nils meint, ist die
+**Kapselreihe selbst**: `bettKapsel` in `BedSelector.swift:153ff`.
+
+**Stand: erledigt** (19.08.). Die Kapsel auf Android liest jetzt wie
+drüben — Name, Objektzahl als kleine Zahl, Schloss, und **X nur bei
+einem leeren Bett**. Kein Stift mehr: Umbenennen liegt im langen Druck,
+weil es selten ist und der Knopf die Kapsel breiter machte, als der Name
+Platz hatte. Das aktive Bett ist nicht mehr voll orange gefüllt, sondern
+`PanelRaised` mit orangem Rand und orangem Namen — es ist ein Zustand,
+kein Befehl. Das *+* am Ende ist klein und orange.
+
+Belegt am Emulator gegen ein Foto vom iPad: `Bed 1  1  🔓` ohne X (trägt
+ein Objekt), `Bed 2  0  🔓  ×` aktiv mit Rand, dahinter das *+*.
 
 ---
 
