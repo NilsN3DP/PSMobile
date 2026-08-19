@@ -52,7 +52,7 @@ sondern die Absprache währenddessen.
 | iOS Advanced: Werkzeugleiste, Objektbaum | Claude | steht, 4 Tests |
 | Bemalen: Stützen, Naht, MMU | Claude | steht auf iOS, 2 Tests |
 | Sonderwerte auf iOS (Bett, Reinigung) | Claude | zwei von fünf |
-| Gleichstand Android ↔ iOS | Claude | Plan in `00-gleichstand-implementierungsplan.md`, AP-01/02/03/06/07/08/09/18 fertig |
+| Gleichstand Android ↔ iOS | Claude | Plan in `00-gleichstand-implementierungsplan.md`, AP-01/02/03/06/07/08/09/18 fertig, AP-05 bis auf die Schiene |
 
 ---
 
@@ -258,6 +258,44 @@ kurze Rueckfragen und liegen schon im `AlertDialog` aus `ui/theme`, der
 gefasst waeren sie groesser als ihre Frage. `RemoteSliceScreen` ersetzt
 weiterhin den Bildschirm; es hat auf iOS kein Gegenstueck, deshalb sagt
 der Vergleich dort nichts.
+
+### Claude — AP-05, obere Leiste und die Fusszeile der Schiene
+
+Die obere Leiste liest jetzt *Start | Neu · Oeffnen · Projekte · Sichern
+· Sichern unter · Vorschau | Simple*, unten stehen nur noch Zurueck/Vor
+und die Blickwinkel, und unten in der Werkzeugschiene stehen *Drucker*
+und *App-Einstellungen*. Commit `c41a1ba`, am Emulator belegt.
+
+Drei Entscheidungen, die keine reine Uebertragung waren:
+
+**Oeffnen** fuehrt in denselben Dateiwaehler wie Import. iOS hat dafuer
+zwei Knoepfe (Modell/Projekt); unter Android fragt das System bei einer
+3MF ohnehin nach, ob sie als Projekt oder nur als Objekte hereinkommt -
+dieselbe Unterscheidung, eine Stelle weniger.
+
+**Der Vorschau-Umschalter** ist von unten nach oben gewandert. Unten
+stand er zwischen Oben/Vorn/Hinten, also zwischen lauter Blickwinkeln -
+das Umschalten zwischen Bett und Werkzeugwegen ist aber ein
+Arbeitsschritt und kein Blickwinkel.
+
+**Sichern unter bleibt.** Im Plan stand, iOS frage beim Sichern nach dem
+Namen und brauche deshalb keinen zweiten Knopf. Unter Android kommt der
+Name aus dem Systemdialog, und ein offenes Projekt still zu
+ueberschreiben ist dort das erwartete Verhalten. Ein Knopf, der bei
+jedem Sichern den Systemdialog aufruft, waere schlechter statt gleicher.
+Steht als bewusste Ausnahme im Plan.
+
+**Zwei Stolpersteine beim Umbau:** `MODEL_MIME_TYPES` liegt im Paket
+`de.psmobile`, nicht in `de.psmobile.ui` - aus der Oberflaeche heraus
+also qualifiziert. Und mein Einfuegepunkt fuer den Projekte-Dialog lag
+oberhalb der Zustandsdeklaration, die er benutzt; in Compose faellt das
+erst beim Uebersetzen auf, weil beides in derselben Funktion steht.
+
+**Offen an AP-05:** *Stuetzen* und *Naht* in der Schiene, *Trennen* als
+Untermenue, *Anordnen* per Tipp und Halten. Alle drei mit konkretem
+Vorgehen im Plan - inklusive des Hinweises, dass die Schiene aus
+PrusaSlicers eigener `toolbar.json` aufgebaut wird und die beiden
+Malwerkzeuge dort nicht vorkommen.
 
 ---
 

@@ -16,7 +16,7 @@ das, was eine neue Sitzung als Erstes liest — hier steht, wo genau
 weitergemacht wird, ohne dass jemand die Historie durchsuchen muss.
 
 **Zuletzt geändert:** 19.08.2026 · Zweig
-`codex/ios-android-parity-implementation` · letzter Commit `1e785c0`
+`codex/ios-android-parity-implementation` · letzter Commit `c41a1ba`
 
 ### Wo die Arbeit liegt
 
@@ -78,34 +78,46 @@ ab; von dort gehört sie in die Arbeitskopie kopiert. Achtung: `du` meldet
 - **AP-04** Objektleiste steht im Advanced Mode (`78ecc90`). Offen: iOS
   führt die Griffe *Verschieben · Drehen · Skalieren · Kein* am Anfang
   derselben Leiste, Android hat sie getrennt.
-- **AP-05** Zurück/Vor unten, „3D" statt „Iso" (`f489a48`). Offen:
-  *Öffnen* und *Projekte* in der oberen Leiste, *Stützen* und *Naht* in
-  der Schiene, *Trennen* als Untermenü, Fußzeile mit Drucker und
-  App-Einstellungen.
+- **AP-05** Zurück/Vor unten, „3D" statt „Iso" (`f489a48`); obere
+  Leiste mit *Öffnen*, *Projekte* und dem Vorschau-Umschalter, Fußzeile
+  der Schiene mit *Drucker* und *App-Einstellungen* (`c41a1ba`). Offen:
+  *Stützen* und *Naht* in der Schiene, *Trennen* als Untermenü,
+  *Anordnen* per Tipp und Halten.
 - **AP-09** Das Muster steht und ist in der Materialauswahl im Einsatz.
   Offen: dieselbe Behandlung für *Keine Druckeinstellungen vorhanden*.
 
 ### Als Nächstes
 
-**AP-05 zu Ende bringen.** Kein Kernbau nötig. *Zurück* und *Vor* stehen
-schon unten, die Ansicht heißt „3D" (`f489a48`); es fehlt der Rest der
-Leisten.
+**AP-05 zu Ende bringen — die linke Schiene.** Kein Kernbau nötig. Die
+obere Leiste und die Fußzeile stehen seit `c41a1ba`; es fehlen drei
+Einträge in der Schiene selbst.
 
 Konkret, in dieser Reihenfolge:
 
-1. **Obere Leiste**: *Öffnen* und *Projekte* aufnehmen. Beim Sichern
-   nach dem Namen fragen, statt *Sichern* und *Sichern unter* als zwei
-   Knöpfe zu führen — so macht es iOS, und der zweite Knopf wird dann
-   überflüssig.
-2. **Linke Schiene**: *Stützen* und *Naht* fehlen ganz; beide gibt es
-   im Kern längst (Bemalen ist gebunden, siehe `e2f9dad`).
-3. *Zu Objekten* und *Zu Volumen* zu einem Eintrag **Trennen** mit
-   Untermenü zusammenfassen. *Anordnen* öffnet per Tipp **und Halten**.
-4. **Fußzeile der Schiene**: *Drucker* und *App-Einstellungen*, wie auf
-   iOS. Beide schweben seit `1e785c0` ohnehin schon.
+1. **Stützen und Naht** in die Schiene. Beide gibt es im Kern längst —
+   `PsmCore.PaintTool.SUPPORT` und `.SEAM`, das Malen ist seit
+   `e2f9dad` gebunden. In `SlicerScreen` setzt `surfaceMode` schon
+   heute den Malmodus; die Schiene braucht nur zwei Einträge, die
+   dasselbe tun wie die Knöpfe im Seitenband unter *Tools*.
+   Achtung: die Schiene wird aus `PsUi.toolbar` (PrusaSlicers eigener
+   `toolbar.json`) aufgebaut — diese beiden sind dort **nicht** drin
+   und gehören deshalb hinter die Schleife, nicht hinein.
+2. *Zu Objekten* und *Zu Volumen* zu einem Eintrag **Trennen** mit
+   Untermenü zusammenfassen. Das Untermenü ist ein `DropdownMenu` und
+   gehört damit in `ScaledOverlay` (Regeltest).
+3. **Anordnen** öffnet per Tipp *und Halten*: Tipp ordnet an, Halten
+   öffnet die Optionen (alle Betten, Rotation erlauben) — auf iOS ist
+   das ein Popover am Knopf, siehe `faf4729`.
+
+**Bewusste Ausnahme, nicht vergessen:** *Sichern unter* bleibt als
+eigener Knopf. iOS fragt beim Sichern nach dem Namen; unter Android
+kommt der Name aus dem Systemdialog, und ein offenes Projekt still zu
+überschreiben ist dort das erwartete Verhalten. Ein Knopf, der bei jedem
+Sichern den Systemdialog aufruft, wäre schlechter, nicht gleicher.
 
 Danach **AP-04** zu Ende — dafür muss aber der Mac erreichbar sein, weil
-die Angleichung dort auf der iOS-Seite passiert.
+die Angleichung dort auf der iOS-Seite passiert. Er ist ab dem
+20.08. wieder da.
 
 ### Worauf zu achten ist
 
@@ -122,8 +134,9 @@ die Angleichung dort auf der iOS-Seite passiert.
 
 ### Blockiert
 
-- **Der Mac** unter `192.168.1.107` antwortet nicht. Damit liegen die
-  iOS-Seite von AP-02 (~160 Stellen) und der ganze Abschnitt Z still.
+- **Der Mac** unter `192.168.1.107` antwortet nicht — er ist ab dem
+  **20.08.2026** wieder da. Bis dahin liegen die iOS-Seite von AP-02
+  (~160 Stellen), der Rest von AP-04 und der ganze Abschnitt Z still.
   Geschriebener, aber ungebauter Swift-Code zählt nicht als erledigt.
 - **AP-19 Hochformat** ist nicht geschätzt, weil Android dort nie
   gelaufen ist. Erst ansehen, dann planen.
