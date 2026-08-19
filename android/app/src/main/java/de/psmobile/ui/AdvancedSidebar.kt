@@ -643,6 +643,32 @@ internal fun Sidebar(
             )
         }
 
+        // Nur sinnvoll, wenn es ueberhaupt etwas zu verteilen gibt.
+        // Waehrend des Laufs steht hier, welches Bett gerade dran ist -
+        // ohne die zweite Zahl saehe man beim dritten von fuenf Betten
+        // dieselben 40 Prozent wie beim ersten und wuesste nicht, warum
+        // es wieder von vorn anfaengt.
+        if (beds.size > 1) {
+            val bettLauf by service.bettFortschritt.collectAsState()
+            Text(
+                bettLauf?.let { (i, n) ->
+                    PsUi.appText("Bed $i/$n", "Bett $i/$n")
+                } ?: PsUi.appText("Slice all beds", "Alle Betten slicen"),
+                color = PrusaColors.Orange,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Medium,
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(Corners.CARD.dp))
+                    .clickable(enabled = bettLauf == null && !isRunning) {
+                        service.startSliceAlleBetten()
+                    }
+                    .heightIn(min = psTouch(40))
+                    .padding(vertical = 11.dp),
+            )
+        }
+
         // An `progress` haengen statt an einem eigenen Zustand: nach
         // "Bett leeren" faellt progress auf Idle zurueck, damit
         // verschwinden Senden und Export mit. Befund B5.

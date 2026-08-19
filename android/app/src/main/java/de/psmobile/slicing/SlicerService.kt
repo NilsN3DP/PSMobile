@@ -65,6 +65,7 @@ class SlicerService : Service() {
         private const val CHANNEL_ID = "psm_slicing"
         private const val NOTIFICATION_ID = 1
         const val ACTION_START_SLICE = "de.psmobile.action.START_SLICE"
+        const val ACTION_START_SLICE_ALL = "de.psmobile.action.START_SLICE_ALL"
         const val ACTION_CANCEL_SLICE = "de.psmobile.action.CANCEL_SLICE"
 
         // Dieselben Schluesselnamen wie iOS (SlicerModel.remoteSliceHostKey/
@@ -365,6 +366,27 @@ class SlicerService : Service() {
     var lastGcode: File? = null
         private set
 
+    /**
+     * Bei "alle Betten schneiden" eine Datei je Bett mit Objekten.
+     *
+     * Gegenstueck zu `gcodeURLs` in SlicerModel.swift. Beim einzelnen
+     * Schnitt bleibt die Liste leer - dann ist [lastGcode] die Antwort.
+     */
+    private val _gcodeDateien = MutableStateFlow<List<File>>(emptyList())
+    val gcodeDateien: StateFlow<List<File>> = _gcodeDateien.asStateFlow()
+
+    /**
+     * Waehrend alle Betten geschnitten werden: welches gerade dran ist
+     * und wie viele es sind. Sonst null.
+     *
+     * Der Fortschritt in [Progress] gehoert dem einzelnen Schnitt; ohne
+     * diese zweite Zahl saehe man beim dritten von fuenf Betten
+     * dieselben 40 Prozent wie beim ersten und wuesste nicht, warum es
+     * wieder von vorn anfaengt.
+     */
+    private val _bettFortschritt = MutableStateFlow<Pair<Int, Int>?>(null)
+    val bettFortschritt: StateFlow<Pair<Int, Int>?> = _bettFortschritt.asStateFlow()
+
     override fun onBind(intent: Intent?): IBinder = binder
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -387,6 +409,18 @@ class SlicerService : Service() {
                     buildNotification(0, getString(R.string.slice_starting)),
                 )
                 if (remoteSliceEnabled) runSliceRemote(startId) else runSlice(startId)
+            }
+            ACTION_START_SLICE_ALL -> {
+                if (sliceCommandActive) {
+                    return START_NOT_STICKY
+                }
+                sliceCommandActive = true
+                cancelRequestedByCommand = false
+                startForeground(
+                    NOTIFICATION_ID,
+                    buildNotification(0, getString(R.string.slice_starting)),
+                )
+                runSliceAlleBetten(startId)
             }
             ACTION_CANCEL_SLICE -> {
                 cancelRequestedByCommand = true
@@ -1819,6 +1853,98 @@ class SlicerService : Service() {
             this,
             Intent(this, SlicerService::class.java).setAction(ACTION_START_SLICE),
         )
+    }
+
+    /** Alle Betten mit Objekten nacheinander schneiden. */
+    fun startSliceAlleBetten() {
+        ContextCompat.startForegroundService(
+            this,
+            Intent(this, SlicerService::class.java).setAction(ACTION_START_SLICE_ALL),
+        )
+    }
+
+    /**
+     * Ein Schnitt je Bett, in der Reihenfolge der Betten.
+     *
+     * Der Kern kennt immer nur ein aktives Bett - deshalb waehlt die
+     * Schleife jedes Bett aus, schneidet und legt die Datei weg. Am Ende
+     * steht wieder das Bett aktiv, von dem aus gestartet wurde: wer
+     * "alle" waehlt, will nicht danach auf dem letzten stehen.
+     *
+     * Vorlage: `SlicerModel.sliceAll()` (SlicerModel.swift:1635ff).
+     */
+    private fun runSliceAlleBetten(startId: Int) {
+        if (_progress.value is Progress.Running) return
+        val ziele = _beds.value.filter { it.objectCount > 0 }.map { it.index }
+        val ausgangsbett = _beds.value.firstOrNull { it.active }?.index
+        if (ziele.isEmpty()) {
+            _progress.value = Progress.Failed(SimpleModeState.text(
+                "No bed has any objects.", "Auf keinem Bett liegt etwas."))
+            sliceCommandActive = false
+            stopForeground(STOP_FOREGROUND_REMOVE)
+            stopSelfResult(startId)
+            return
+        }
+
+        invalidateSliceResult()
+        _gcodeDateien.value = emptyList()
+        val t0 = System.nanoTime()
+
+        scope.launch {
+            try {
+                val c = ensureCore()
+                val dateien = mutableListOf<File>()
+                var letzteStats: PsmCore.SliceStats? = null
+
+                for ((lauf, bett) in ziele.withIndex()) {
+                    if (cancelRequestedByCommand) {
+                        _progress.value = Progress.Cancelled
+                        return@launch
+                    }
+                    _bettFortschritt.value = (lauf + 1) to ziele.size
+                    selectBed(bett)
+                    c.startSlice { percent, stage ->
+                        _progress.value = Progress.Running(percent, stage)
+                        updateNotification(percent, stage)
+                        false
+                    }
+                    when (c.awaitSlice()) {
+                        PsmCore.SliceState.DONE -> {
+                            val out = File(filesDir, "bett-${bett + 1}.gcode")
+                            c.exportGcode(out.absolutePath)
+                            dateien += out
+                            letzteStats = c.sliceStats()
+                        }
+                        PsmCore.SliceState.CANCELLED -> {
+                            _progress.value = Progress.Cancelled
+                            return@launch
+                        }
+                        else -> {
+                            _progress.value = Progress.Failed(c.lastError())
+                            return@launch
+                        }
+                    }
+                }
+
+                ausgangsbett?.let { selectBed(it) }
+                _gcodeDateien.value = dateien
+                // Damit "G-Code sichern" auch nach diesem Lauf etwas
+                // findet: die letzte Datei ist die des zuletzt
+                // geschnittenen Betts.
+                lastGcode = dateien.lastOrNull()
+                val secs = (System.nanoTime() - t0) / 1_000_000_000.0
+                _progress.value = Progress.Done(letzteStats, secs)
+                meldeDiagnose(erfolgreich = true, sekunden = secs, weg = "local-alle", fehler = null)
+            } catch (t: Throwable) {
+                val fehler = t.message ?: SimpleModeState.text("unknown error", "unbekannter Fehler")
+                _progress.value = Progress.Failed(fehler)
+            } finally {
+                _bettFortschritt.value = null
+                sliceCommandActive = false
+                stopForeground(STOP_FOREGROUND_REMOVE)
+                stopSelfResult(latestCommandStartId.coerceAtLeast(startId))
+            }
+        }
     }
 
     private fun runSlice(startId: Int) {
