@@ -50,8 +50,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.layout.widthIn
 import de.psmobile.shared.ui.Corners
 import de.psmobile.core.PsmCore
+import de.psmobile.slicing.SlicerService
+import de.psmobile.ui.theme.AlertDialog
 import de.psmobile.ui.theme.psTouch
 import de.psmobile.ui.theme.PrusaColors
 import de.psmobile.ui.theme.ScaledOverlay
@@ -78,6 +81,14 @@ fun SettingsScreen(
     onClose: () -> Unit,
     onSettingChanged: () -> Unit = {},
     onTabChange: (String) -> Unit = {},
+    // Das geltende Profil und was daran offen ist. Vorgaben, damit
+    // Vorschauen und Tests den Bildschirm weiterhin ohne Dienst bauen
+    // koennen - dann bleibt der Kopf einfach leer.
+    presetNames: List<String> = emptyList(),
+    selectedPreset: String = "",
+    changes: List<SlicerService.Profilaenderung> = emptyList(),
+    onSelectPreset: (String) -> Unit = {},
+    onDiscardChanges: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -130,8 +141,14 @@ fun SettingsScreen(
     // jeweiligen Auswahlfeld hinein und musste zum Bett zurueck, um den
     // Bereich zu wechseln. Am Desktop sind es Reiter; hier auch.
     Row(
-        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())
-            .background(PrusaColors.Panel),
+        Modifier.fillMaxWidth().background(PrusaColors.Panel),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+    // Zurueck und die Reiter scrollen fuer sich. Was rechts steht -
+    // Profilname und Zaehler - darf nicht mitwandern: es ist die
+    // Auskunft darueber, woran man gerade arbeitet.
+    Row(
+        Modifier.weight(1f).horizontalScroll(rememberScrollState()),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
@@ -165,6 +182,21 @@ fun SettingsScreen(
                 )
             }
         }
+    }
+    ProfilKopf(
+        profil = selectedPreset,
+        profile = presetNames,
+        aenderungen = changes,
+        titel = PsUi.tr(
+            when (tab) {
+                "print" -> "Print settings"
+                "filament" -> "Filament settings"
+                else -> "Printer settings"
+            },
+        ),
+        onSelect = onSelectPreset,
+        onVerwerfen = onDiscardChanges,
+    )
     }
     HorizontalDivider(color = PrusaColors.Divider)
 
@@ -869,4 +901,260 @@ private fun FavoritesPanel(
             }
         }
     }
+}
+
+/**
+ * Rechts im Kopf: welches Profil gerade bearbeitet wird - und was daran
+ * gegenueber dem gespeicherten Stand offen ist.
+ *
+ * Beides stand vorher nur im Advanced-Seitenband. Wer aus dem Simple
+ * Mode hierher kam, sah drei Reiter und sonst nichts: nicht, welches
+ * Profil er gerade veraendert, und keinen Weg zu einem anderen, ohne
+ * den Bildschirm zu verlassen.
+ *
+ * Der Zaehler erscheint erst, wenn es etwas zurueckzusetzen gibt. Ein
+ * Knopf ohne Wirkung ist eine Frage, die man sich stellt und auf die
+ * man keine Antwort bekommt.
+ */
+@Composable
+private fun ProfilKopf(
+    profil: String,
+    profile: List<String>,
+    aenderungen: List<SlicerService.Profilaenderung>,
+    titel: String,
+    onSelect: (String) -> Unit,
+    onVerwerfen: () -> Unit,
+) {
+    var sucheOffen by remember { mutableStateOf(false) }
+    var rueckfrage by remember { mutableStateOf(false) }
+
+    if (profil.isNotBlank()) {
+        Row(
+            Modifier
+                .clickable(enabled = profile.isNotEmpty()) { sucheOffen = true }
+                .heightIn(min = psTouch(44))
+                .padding(horizontal = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                profil,
+                color = PrusaColors.TextMuted,
+                fontSize = 13.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.widthIn(max = 220.dp),
+            )
+            // PrusaSlicers Symbolsatz hat keine Lupe; der Trichter ist
+            // dort das Zeichen fuers Filtern. Eigene Symbole kommen
+            // nicht dazu - siehe E-12.
+            PsIcon(
+                "funnel.svg",
+                Modifier.padding(start = 6.dp).size(14.dp),
+                tint = ColorFilter.tint(PrusaColors.TextMuted),
+            )
+        }
+    }
+
+    if (aenderungen.isNotEmpty()) {
+        Row(
+            Modifier
+                .padding(end = 10.dp)
+                .clip(RoundedCornerShape(Corners.FIELD.dp))
+                .background(PrusaColors.PanelRaised)
+                .clickable { rueckfrage = true }
+                .heightIn(min = psTouch(40))
+                .padding(horizontal = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            PsIcon(
+                "undo_toolbar.svg",
+                Modifier.size(14.dp),
+                tint = ColorFilter.tint(PrusaColors.Orange),
+            )
+            Text(
+                "${aenderungen.size}",
+                color = PrusaColors.Orange,
+                fontSize = 12.sp,
+                modifier = Modifier.padding(start = 4.dp),
+            )
+        }
+    }
+
+    if (sucheOffen) {
+        ProfilsucheDialog(
+            titel = titel,
+            profile = profile,
+            gewaehlt = profil,
+            onClose = { sucheOffen = false },
+            onSelect = {
+                sucheOffen = false
+                onSelect(it)
+            },
+        )
+    }
+
+    if (rueckfrage) {
+        AlertDialog(
+            onDismissRequest = { rueckfrage = false },
+            containerColor = PrusaColors.Panel,
+            titleContentColor = PrusaColors.TextPrimary,
+            textContentColor = PrusaColors.TextPrimary,
+            title = {
+                Text(
+                    PsUi.appText(
+                        "Reset profile to its saved values?",
+                        "Profil auf seine gespeicherten Werte zurücksetzen?",
+                    ),
+                    color = PrusaColors.TextPrimary,
+                )
+            },
+            // Die Liste, nicht nur die Zahl: "sieben Werte" beantwortet
+            // nicht die Frage, ob die eine Aenderung dabei ist, an der
+            // einem liegt.
+            text = {
+                Column(
+                    Modifier.heightIn(max = 260.dp).verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    aenderungen.forEach { a ->
+                        Column {
+                            Text(a.bezeichnung, color = PrusaColors.TextPrimary, fontSize = 13.sp)
+                            Text(
+                                a.vorher + "  →  " + a.jetzt,
+                                color = PrusaColors.TextMuted,
+                                fontSize = 11.sp,
+                            )
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Text(
+                    PsUi.appText(
+                        "Reset ${aenderungen.size} values",
+                        "${aenderungen.size} Werte zurücksetzen",
+                    ),
+                    color = PrusaColors.Danger,
+                    fontSize = 14.sp,
+                    modifier = Modifier
+                        .clickable {
+                            rueckfrage = false
+                            onVerwerfen()
+                        }
+                        .heightIn(min = psTouch(44))
+                        .padding(horizontal = 12.dp, vertical = 12.dp),
+                )
+            },
+            dismissButton = {
+                Text(
+                    PsUi.appText("Cancel", "Abbrechen"),
+                    color = PrusaColors.TextMuted,
+                    fontSize = 14.sp,
+                    modifier = Modifier
+                        .clickable { rueckfrage = false }
+                        .heightIn(min = psTouch(44))
+                        .padding(horizontal = 12.dp, vertical = 12.dp),
+                )
+            },
+        )
+    }
+}
+
+/**
+ * Profilsuche - dieselbe Filterregel wie im Advanced-Seitenband.
+ *
+ * [filterPresetOptions] steht dort schon und wird hier nur genutzt:
+ * zwei Suchen, die verschieden filtern, waeren zwei Antworten auf
+ * dieselbe Frage.
+ */
+@Composable
+private fun ProfilsucheDialog(
+    titel: String,
+    profile: List<String>,
+    gewaehlt: String,
+    onClose: () -> Unit,
+    onSelect: (String) -> Unit,
+) {
+    var suche by remember { mutableStateOf("") }
+    val treffer = filterPresetOptions(profile, suche)
+
+    AlertDialog(
+        onDismissRequest = onClose,
+        containerColor = PrusaColors.Panel,
+        titleContentColor = PrusaColors.TextPrimary,
+        textContentColor = PrusaColors.TextPrimary,
+        title = { Text(titel, color = PrusaColors.TextPrimary) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(Corners.FIELD.dp))
+                        .background(PrusaColors.PanelRaised)
+                        .heightIn(min = psTouch(44))
+                        .padding(horizontal = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Box(Modifier.weight(1f)) {
+                        if (suche.isEmpty()) {
+                            Text(
+                                PsUi.appText("Search", "Suchen"),
+                                color = PrusaColors.TextMuted,
+                                fontSize = 13.sp,
+                            )
+                        }
+                        BasicTextField(
+                            value = suche,
+                            onValueChange = { suche = it },
+                            singleLine = true,
+                            textStyle = TextStyle(
+                                color = PrusaColors.TextPrimary,
+                                fontSize = 13.sp,
+                            ),
+                            cursorBrush = SolidColor(PrusaColors.Orange),
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
+                }
+                Column(
+                    Modifier.heightIn(max = 320.dp).verticalScroll(rememberScrollState()),
+                ) {
+                    if (treffer.isEmpty()) {
+                        Text(
+                            PsUi.appText("No matching profiles", "Keine passenden Profile"),
+                            color = PrusaColors.TextMuted,
+                            fontSize = 13.sp,
+                        )
+                    }
+                    treffer.forEach { name ->
+                        val aktiv = name == gewaehlt
+                        Text(
+                            name,
+                            color = if (aktiv) PrusaColors.Orange else PrusaColors.TextPrimary,
+                            fontSize = 13.sp,
+                            fontWeight = if (aktiv) FontWeight.SemiBold else FontWeight.Normal,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { onSelect(name) }
+                                .heightIn(min = psTouch(44))
+                                .padding(vertical = 12.dp),
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Text(
+                PsUi.appText("Close", "Schließen"),
+                color = PrusaColors.TextMuted,
+                fontSize = 14.sp,
+                modifier = Modifier
+                    .clickable(onClick = onClose)
+                    .heightIn(min = psTouch(44))
+                    .padding(horizontal = 12.dp, vertical = 12.dp),
+            )
+        },
+    )
 }

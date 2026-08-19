@@ -795,6 +795,67 @@ class SlicerService : Service() {
             }
     }
 
+    /** Eine Aenderung am Profil, mit lesbarem Namen. */
+    data class Profilaenderung(
+        val art: PsmCore.PresetType,
+        val key: String,
+        val bezeichnung: String,
+        val vorher: String,
+        val jetzt: String,
+    )
+
+    /**
+     * Alles, was gegenueber den gewaehlten Profilen geaendert ist.
+     *
+     * Ueber alle drei Sammlungen: wer an der Schichthoehe und am Filament
+     * dreht, hat zwei geaenderte Profile, und beide gehoeren in dieselbe
+     * Rueckfrage.
+     *
+     * Der lesbare Name kommt aus dem Kern, nicht aus einer Liste hier -
+     * "fill_pattern" sagt niemandem etwas, "Fuellmuster" schon. Fehlt er,
+     * bleibt der Schluessel stehen; eine leere Zeile waere schlechter.
+     *
+     * Gegenstueck zu `SlicerModel.profilaenderungen()` auf iOS.
+     */
+    fun profilaenderungen(): List<Profilaenderung> {
+        val c = core ?: return emptyList()
+        val stand = _presets.value
+        return listOf(
+            PsmCore.PresetType.PRINT,
+            PsmCore.PresetType.FILAMENT,
+            PsmCore.PresetType.PRINTER,
+        ).flatMap { art ->
+            stand.changes(art).map { wert ->
+                val bezeichnung = runCatching { c.configMeta(wert.key)?.label }
+                    .getOrNull()
+                    ?.takeIf { it.isNotBlank() }
+                Profilaenderung(
+                    art = art,
+                    key = wert.key,
+                    bezeichnung = bezeichnung ?: wert.key,
+                    vorher = wert.was,
+                    jetzt = wert.now,
+                )
+            }
+        }
+    }
+
+    /** Zurueck auf die Werte der Profile - in allen drei Sammlungen. */
+    fun profilaenderungenVerwerfen() {
+        val c = core ?: return
+        listOf(
+            PsmCore.PresetType.PRINT,
+            PsmCore.PresetType.FILAMENT,
+            PsmCore.PresetType.PRINTER,
+        ).forEach { art ->
+            runCatching { c.discardChanges(art) }
+                .onFailure { Log.w(TAG, "Aenderungen verwerfen ($art): ${it.message}") }
+        }
+        refreshPresets()
+        refreshObjects()
+        notifyConfigChanged()
+    }
+
     /** Ungespeicherte Werte verwerfen und danach ein anderes Profil waehlen. */
     fun discardPresetChangesAndSelect(type: PsmCore.PresetType, name: String) {
         val c = core ?: return

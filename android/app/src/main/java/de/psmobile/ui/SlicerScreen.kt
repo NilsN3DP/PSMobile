@@ -304,6 +304,35 @@ private fun SlicerContent(
                 onClose = { service.showBed(); service.refreshQuickSettings() },
                 onSettingChanged = { service.notifyConfigChanged() },
                 onTabChange = { service.showScreen(SlicerService.Screen.Settings(it)) },
+                presetNames = when (tab) {
+                    "print" -> presets.prints
+                    "filament" -> presets.filaments
+                    else -> presets.printers
+                },
+                selectedPreset = when (tab) {
+                    "print" -> presets.selectedPrint
+                    "filament" -> presets.selectedFilament
+                    else -> presets.selectedPrinter
+                },
+                // Ueber alle drei Sammlungen, nicht nur den offenen
+                // Reiter: wer am Filament und an der Schichthoehe
+                // gedreht hat, soll beides in derselben Rueckfrage
+                // sehen. Gemerkt am Konfigurationsstand - sonst geht
+                // die Liste bei jeder Neuzeichnung ueber die Grenze.
+                changes = remember(configRevision, presets) {
+                    service.profilaenderungen()
+                },
+                onSelectPreset = { name ->
+                    service.selectPreset(
+                        when (tab) {
+                            "print" -> PsmCore.PresetType.PRINT
+                            "filament" -> PsmCore.PresetType.FILAMENT
+                            else -> PsmCore.PresetType.PRINTER
+                        },
+                        name,
+                    )
+                },
+                onDiscardChanges = { service.profilaenderungenVerwerfen() },
             )
             return
         }
