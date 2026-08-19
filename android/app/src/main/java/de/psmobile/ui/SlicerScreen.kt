@@ -273,35 +273,60 @@ private fun SlicerContent(
     var confirmReloadProject by remember { mutableStateOf(false) }
     var confirmLeaveProject by remember { mutableStateOf(false) }
 
+    // AP-06: Diese drei ersetzten bisher die Platte. Jetzt schweben sie
+    // darueber - man sieht am Rand, dass es weiter um dieses Projekt
+    // geht, und findet sich beim Zurueckkommen sofort wieder zurecht.
     if (showColorMix) {
-        ColorMixScreen(service = service, onClose = service::showBed)
-        return
+        SchwebenderDialog(
+            kennung = "dialog.farbmischung",
+            onClose = service::showBed,
+            maxBreite = 900.dp,
+        ) {
+            ColorMixScreen(service = service, onClose = service::showBed)
+        }
     }
 
     if (showPrinters) {
-        PrintersScreen(
-            presetNames = presets.printers,
-            onClose = {
-                service.refreshPresets()
-                service.showBed()
-                linkPrinters = de.psmobile.net.PrinterStore.all(ctx)
-            },
-            onPickBackupFolder = onPickBackupFolder,
-            onReopenSetup = { service.reopenSetup() },
-        )
-        return
+        val druckerSchliessen = {
+            service.refreshPresets()
+            service.showBed()
+            linkPrinters = de.psmobile.net.PrinterStore.all(ctx)
+        }
+        SchwebenderDialog(
+            kennung = "dialog.drucker",
+            onClose = druckerSchliessen,
+            maxBreite = 900.dp,
+        ) {
+            PrintersScreen(
+                presetNames = presets.printers,
+                onClose = druckerSchliessen,
+                onPickBackupFolder = onPickBackupFolder,
+                onReopenSetup = { service.reopenSetup() },
+            )
+        }
     }
 
-    // Vollbild-Einstellungen wie die Tabs im Desktop-Fenster.
+    // Die Einstellungen sind die Seite, auf der der Kontextverlust am
+    // groessten war: drei Reiter, zwoelf Seiten, und danach die Frage,
+    // wo man eigentlich herkam.
     settingsTab?.let { tab ->
         service.coreOrNull?.let { core ->
+          val einstellungenSchliessen = {
+            service.showBed()
+            service.refreshQuickSettings()
+          }
+          SchwebenderDialog(
+            kennung = "dialog.einstellungen",
+            onClose = einstellungenSchliessen,
+            maxBreite = 1200.dp,
+          ) {
             SettingsScreen(
                 core = core,
                 tab = tab,
                 mode = settingsMode,
                 onModeChange = { settingsMode = it },
                 configRevision = configRevision,
-                onClose = { service.showBed(); service.refreshQuickSettings() },
+                onClose = einstellungenSchliessen,
                 onSettingChanged = { service.notifyConfigChanged() },
                 onTabChange = { service.showScreen(SlicerService.Screen.Settings(it)) },
                 presetNames = when (tab) {
@@ -334,7 +359,7 @@ private fun SlicerContent(
                 },
                 onDiscardChanges = { service.profilaenderungenVerwerfen() },
             )
-            return
+          }
         }
     }
 
