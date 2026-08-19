@@ -67,6 +67,7 @@ ab; von dort gehört sie in die Arbeitskopie kopiert. Achtung: `du` meldet
 | AP-03 Vorschau | `3377a96` | `0:30 · 3.59 m · 10.7 g`, Chips grauen aus |
 | AP-07 Materialauswahl | `875a655` | Typ-Filter PLA blendet auf vier Karten ein |
 | AP-06 Schwebende Dialoge | `469203a`, `1e785c0` | Einstellungen als Karte über dem Bett, Rand 104/120/80 px |
+| AP-22 Alle Betten schneiden | `6bd3438` | `bett-1.gcode`, 53020 Bytes |
 | AP-20 Bereiche statt Reiter | `2e5f5ec` | drei Einstellungszeilen, vier Überschriften, Schneiden-Block außerhalb |
 | AP-08 Einstellungskopf | `bb47ae1` | Profilname mit Trichter, Zähler `1`, Rückfrage nennt „Perimeters 2 → 4" |
 | AP-09 Leere Zustände | `875a655` | `LeeresPanel` als Muster |
@@ -89,10 +90,20 @@ ab; von dort gehört sie in die Arbeitskopie kopiert. Achtung: `du` meldet
 
 ### Als Nächstes
 
-**AP-22 · Alle Betten schneiden**, zusammen mit **AP-11 Slice-Blatt** —
-sonst entstehen Dateien, die niemand sieht. Kein Kernbau. Vorgehen steht
-in beiden Paketen; die Vorlage ist `SlicerModel.sliceAll()`
-(`SlicerModel.swift:1635ff`).
+**AP-11 · Slice-Blatt.** Kein Kernbau. Seit `6bd3438` entstehen beim
+Schneiden aller Betten Dateien, die niemand sieht — das ist jetzt der
+dringendste Punkt.
+
+Konkret:
+
+1. `SlicerService.gcodeDateien` steht bereit (eine Datei je Bett).
+   Im Slice-Blatt (`SimpleSliceSheet.kt`) und im Ergebnisblock der
+   Seitenleiste je Datei eine Zeile mit Namen und eigenem
+   *Senden*-Knopf.
+2. *Alle exportieren* daneben — auf iOS `SliceSheet.swift:88ff`.
+3. Wortwahl: iOS sagt **„Export G-code"**, nicht *Sichern*. Im
+   Advanced-Block steht das schon richtig, im Simple-Blatt noch nicht.
+4. Hinweis, wenn eine Datei nicht geschrieben werden konnte.
 
 Danach **AP-05 zu Ende bringen — die linke Schiene.** Kein Kernbau nötig. Die
 obere Leiste und die Fußzeile stehen seit `c41a1ba`; es fehlen drei
@@ -834,8 +845,18 @@ die Dateien in `gcodeURLs` — plus Summen für Zeit und Gramm.
 3. Der zweite Knopf unter *Slice now*, nur bei mehr als einem Bett.
 
 **Hängt zusammen mit AP-11**: das Slice-Blatt braucht dann eine Zeile je
-G-Code-Datei und *Alle exportieren*. Beides zusammen bearbeiten, sonst
-entstehen Dateien, die niemand sieht.
+G-Code-Datei und *Alle exportieren*.
+
+**Stand: Dienst und Knopf erledigt** (20.08., `6bd3438`).
+`startSliceAlleBetten()` läuft über einen eigenen Service-Befehl, nimmt
+alle Betten mit Objekten, legt `bett-N.gcode` ab und stellt am Ende das
+Ausgangsbett wieder her. Der Knopf steht unter *Slice now*, nur bei mehr
+als einem Bett, und liest während des Laufs *Bett i/n*.
+
+Belegt am Emulator: nach dem Tippen entsteht `files/bett-1.gcode`
+(53020 Bytes), der Lauf endet auf *Fertig*, *Export G-code* erscheint.
+
+**Offen:** die Dateien sind noch unsichtbar — das ist AP-11.
 
 ---
 
@@ -873,7 +894,8 @@ Braucht einen erreichbaren Mac.
 | 4 | AP-04 Objektleiste | nein |
 | 5 | AP-07 Materialauswahl | nein |
 | 6 | AP-09 Leere Zustände | nein |
-| 7 | AP-20 Bereiche statt Reiter | `2e5f5ec` | drei Einstellungszeilen, vier Überschriften, Schneiden-Block außerhalb |
+| 7 | AP-22 Alle Betten schneiden | `6bd3438` | `bett-1.gcode`, 53020 Bytes |
+| AP-20 Bereiche statt Reiter | `2e5f5ec` | drei Einstellungszeilen, vier Überschriften, Schneiden-Block außerhalb |
 | AP-08 Einstellungskopf | nein |
 | 8 | AP-06 Schwebende Dialoge | nein |
 | 9 | AP-05 Werkzeugleisten | nein |

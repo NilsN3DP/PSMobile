@@ -297,6 +297,33 @@ Vorgehen im Plan - inklusive des Hinweises, dass die Schiene aus
 PrusaSlicers eigener `toolbar.json` aufgebaut wird und die beiden
 Malwerkzeuge dort nicht vorkommen.
 
+### Claude — AP-22: alle Betten schneiden
+
+Nils' Meldung, gebaut in der Nachtschleife. `startSliceAlleBetten()`
+geht ueber einen eigenen Service-Befehl wie der einzelne Schnitt; die
+Schleife nimmt alle Betten mit Objekten, schneidet jedes und legt
+`bett-N.gcode` ab. Am Ende steht wieder das Bett aktiv, von dem aus
+gestartet wurde.
+
+Commit `6bd3438`. Belegt am Emulator: nach dem Tippen liegt
+`files/bett-1.gcode` mit 53020 Bytes da, und *Export G-code* erscheint.
+
+**Zwei Dinge, die auffielen.** Der Prozentwert faengt je Bett von vorn
+an - ohne einen zweiten Zaehler saehe man beim dritten von fuenf Betten
+dieselben 40 Prozent wie beim ersten. Deshalb `bettFortschritt` neben
+`Progress`. Und `selectBed()` ruft `invalidateSliceResult()`, was
+`lastGcode` loescht; die Datei wird deshalb erst nach der Schleife
+gesetzt.
+
+**Ein Fehler beim Einbauen:** mein Einfuegepunkt lag zwischen
+`var lastGcode` und dessen `private set`. Kotlin meldete daraufhin „A
+'val' property cannot have a setter" an einer ganz anderen Zeile - die
+Fehlermeldung zeigte auf die Folge, nicht auf die Ursache. Vor dem
+Einfuegen die zwei Zeilen unter dem Anker mitlesen.
+
+**Offen:** die Dateien sind noch unsichtbar. Das ist AP-11 und steht als
+naechster Schritt im Plan.
+
 ---
 
 ## 2026-08-03
