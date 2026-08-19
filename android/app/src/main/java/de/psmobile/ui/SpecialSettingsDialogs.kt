@@ -25,6 +25,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import de.psmobile.shared.ui.Corners
 import de.psmobile.ui.theme.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -1082,7 +1083,7 @@ private fun LargeDialog(
         ScaledOverlay {
             Surface(
                 color = PrusaColors.Background,
-                shape = RoundedCornerShape(18.dp),
+                shape = RoundedCornerShape(Corners.SHEET.dp),
                 modifier = Modifier.fillMaxWidth(0.92f).fillMaxHeight(0.90f).widthIn(max = 980.dp),
             ) {
                 Column(

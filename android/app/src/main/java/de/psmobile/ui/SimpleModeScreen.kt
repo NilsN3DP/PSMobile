@@ -79,6 +79,7 @@ import de.psmobile.slicing.SlicerService
 import de.psmobile.ui.theme.PrusaColors
 import de.psmobile.ui.theme.ScaledOverlay
 import de.psmobile.ui.theme.uiScaleFor
+import de.psmobile.shared.ui.Corners
 import de.psmobile.shared.rules.AdhesionAdvice
 import de.psmobile.shared.rules.SimpleModeState
 import de.psmobile.shared.rules.SliceSummary
@@ -397,7 +398,7 @@ fun SimpleModeScreen(
         if (objects.isEmpty()) {
             Button(
                 onClick = onPickFile,
-                shape = RoundedCornerShape(2.dp),
+                shape = RoundedCornerShape(Corners.FIELD.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = PrusaColors.Orange),
                 modifier = Modifier.align(Alignment.BottomEnd).padding(end = 12.dp, bottom = workspaceActionBottom + 12.dp).heightIn(min = 56.dp),
             ) { Text("＋ " + st("Add model", "Modell hinzufügen")) }
@@ -436,7 +437,7 @@ fun SimpleModeScreen(
             androidx.compose.material3.Surface(
                 modifier = Modifier.align(Alignment.BottomCenter).padding(16.dp),
                 color = PrusaColors.PanelRaised,
-                shape = RoundedCornerShape(8.dp),
+                shape = RoundedCornerShape(Corners.CARD.dp),
             ) {
                 Text(message, color = PrusaColors.TextPrimary,
                     modifier = Modifier.padding(14.dp).clickable { service.clearToolMessage() })
@@ -653,7 +654,7 @@ private fun SimpleToolbarButton(
 ) = Button(
     onClick = onClick,
     enabled = enabled,
-    shape = RoundedCornerShape(1.dp),
+    shape = RoundedCornerShape(Corners.FIELD.dp),
     colors = ButtonDefaults.buttonColors(
         containerColor = if (selected) PrusaColors.Orange else PrusaColors.Panel,
         contentColor = if (selected) PrusaColors.Background else PrusaColors.TextPrimary,
@@ -783,7 +784,7 @@ private fun SimpleOverlay(
                 }
             ),
             color = PrusaColors.Panel,
-            shape = RoundedCornerShape(3.dp),
+            shape = RoundedCornerShape(Corners.SHEET.dp),
             shadowElevation = 12.dp,
         ) {
             Column(
