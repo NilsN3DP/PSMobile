@@ -129,6 +129,22 @@ dass beide Fassungen auseinandergelaufen sind.
   `PreviewRange` liegt im gemeinsamen Modul mit sechs Tests.
 - **AP-04**, **AP-05** teilweise — siehe Plan.
 
+### Claude — AP-07 Materialauswahl, und ein Planungsfehler
+
+Die Auswahl zeigt jetzt Suchfeld, Typ-Knoepfe als echten Filter,
+Farbpunkte der haeufigsten Farben und Karten mit einer echten Spule.
+Die Regeln dafuer lagen seit langem als `FilamentCatalog` im
+gemeinsamen Modul und wurden nur von iOS benutzt.
+
+Commit `875a655`. Belegt: Typ-Filter PLA blendet von neun Typen auf vier
+Karten ein.
+
+**Planungsfehler, der auffiel:** im Plan stand bei AP-07 „kein Kernbau
+noetig". Falsch — `psm_preset_option_at` war nicht gebunden, und ohne
+das gibt es weder Typ noch Farbe je Profil. Beim Einplanen zuerst
+pruefen, ob die Datenquelle ueberhaupt erreichbar ist, nicht nur ob die
+Oberflaeche Compose ist.
+
 **Nicht angefasst und bewusst so:** die iOS-Seite von AP-02 und der
 ganze Abschnitt Z. Der Mac unter `192.168.1.107` antwortet nicht.
 Geschriebener, aber ungebauter Swift-Code zählt nicht.

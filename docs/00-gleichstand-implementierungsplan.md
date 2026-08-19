@@ -16,18 +16,20 @@ das, was eine neue Sitzung als Erstes liest — hier steht, wo genau
 weitergemacht wird, ohne dass jemand die Historie durchsuchen muss.
 
 **Zuletzt geändert:** 19.08.2026 · Zweig
-`codex/ios-android-parity-implementation` · letzter Commit `d52450e`
+`codex/ios-android-parity-implementation` · letzter Commit `875a655`
 
 ### Erledigt
 
-| Paket | Commit | Beleg |
+| Paket | Commit | Beleg am Emulator |
 |---|---|---|
 | AP-01 Zielflächen | `75c8dd1` | 118 Stellen, `psTouch()` |
 | AP-02 Eckenradien (Android) | `75c8dd1`, `11c7ebb` | 164 Stellen, keine rohen Radien mehr |
-| AP-03 Vorschau | `3377a96` | Emulator: `0:30 · 3.59 m · 10.7 g`, Chips grauen aus |
+| AP-03 Vorschau | `3377a96` | `0:30 · 3.59 m · 10.7 g`, Chips grauen aus |
+| AP-07 Materialauswahl | `875a655` | Typ-Filter PLA blendet auf vier Karten ein |
+| AP-09 Leere Zustände | `875a655` | `LeeresPanel` als Muster |
 | AP-18 Bindungen | `27ac6eb`, `1eb4c97` | 26 fehlende Funktionen → noch 2 |
-| Bemalen (Strich, Füllmodi) | `e2f9dad`, `9da2adf` | Emulator: Spur statt Punkt |
-| Bettzuordnung beim Ziehen | `6f17c85` | Emulator: `Bed 1 · 0 / Bed 2 · 1` |
+| Bemalen (Strich, Füllmodi) | `e2f9dad`, `9da2adf` | Spur statt Punkt, 1358 Facetten |
+| Bettzuordnung beim Ziehen | `6f17c85` | `Bed 1 · 0 / Bed 2 · 1` |
 
 ### Teilweise
 
@@ -38,26 +40,28 @@ weitergemacht wird, ohne dass jemand die Historie durchsuchen muss.
   *Öffnen* und *Projekte* in der oberen Leiste, *Stützen* und *Naht* in
   der Schiene, *Trennen* als Untermenü, Fußzeile mit Drucker und
   App-Einstellungen.
+- **AP-09** Das Muster steht und ist in der Materialauswahl im Einsatz.
+  Offen: dieselbe Behandlung für *Keine Druckeinstellungen vorhanden*.
 
 ### Als Nächstes
 
-**AP-07 · Materialauswahl.** Kein Kernbau nötig, `psm_preset_option_at`
-ist seit `27ac6eb` gebunden.
+**AP-08 · Einstellungskopf.** Kein Kernbau nötig.
 
 Konkret:
 
-1. `SlicerService`: einen Katalog bauen, wie `SlicerModel.filamentCatalog()`
-   auf iOS (`SlicerModel.swift:536`) — je Profil
-   `presetOption(FILAMENT, name, "filament_type")` und
-   `"filament_colour"`, Ergebnis merken, sonst läuft es bei jedem
-   Tastendruck im Suchfeld neu.
-2. `SimpleModeScreen.kt:1039ff` auf `FilamentCatalog.filter()` umstellen.
-3. Farbpunkte aus `FilamentCatalog.colors()`, Typ-Knöpfe als echter
-   Filter statt Suchtext-Setzer.
-4. Karten mit Hersteller, Typ, Farbe und Spule (Ring mit Loch).
-5. Schalter *inkompatible zeigen*, standardmäßig aus.
+1. `SlicerService`: `profilaenderungen()` als Gegenstück zu
+   `SlicerModel.profilaenderungen()` (iOS `SlicerModel.swift:556ff`) —
+   je geänderter Wert Typ, Schlüssel, Bezeichnung, vorher, jetzt. Die
+   Zahlen dafür liegen schon in `_presets.value.*Changes`.
+2. `SettingsScreen.kt` ab Zeile 125: in die Reiterzeile den Namen des
+   geltenden Profils mit Lupe aufnehmen; Tipp öffnet die Profilsuche.
+3. Die Suche selbst gibt es schon als `filterPresetOptions` im
+   Advanced-Seitenband — wiederverwenden, nicht neu bauen.
+4. Daneben der Zähler der geänderten Werte, Tipp öffnet eine Rückfrage
+   vor dem Zurücksetzen.
 
-Danach **AP-08 · Einstellungskopf** — ebenfalls ohne Kernbau.
+Danach **AP-06 · Schwebende Dialoge** — ebenfalls ohne Kernbau, und die
+Änderung mit der größten Breitenwirkung, die noch aussteht.
 
 ### Worauf zu achten ist
 
@@ -67,7 +71,10 @@ Danach **AP-08 · Einstellungskopf** — ebenfalls ohne Kernbau.
   eigenen Fenster und erben die gestauchte Dichte nicht. Ein Regeltest
   wacht darüber.
 - **`psTouch()` statt fester dp-Höhen** an allem, was man antippt.
+- **`Corners.SHEET/CARD/FIELD/PILL`** statt roher Radien.
 - **Kein Paket gilt als fertig ohne Bildschirmfoto vom Emulator.**
+- Der Katalog in `filamentCatalog()` wird gemerkt. Wer die Profilliste
+  ändert, muss ihn nicht selbst verwerfen — er hängt an den Namen.
 
 ### Blockiert
 
@@ -375,6 +382,10 @@ herausführt.
 | Keine Druckeinstellungen vorhanden | Druckeinstellungen einrichten |
 
 **Zustand Android** Leere Fläche, kein Weg heraus.
+
+**Stand: teilweise** (19.08., `875a655`). `LeeresPanel` steht als Muster
+und ist in der Materialauswahl im Einsatz. Offen: dieselbe Behandlung
+für *Keine Druckeinstellungen vorhanden*.
 
 ---
 
