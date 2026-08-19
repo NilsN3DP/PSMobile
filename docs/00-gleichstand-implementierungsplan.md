@@ -67,6 +67,7 @@ ab; von dort gehört sie in die Arbeitskopie kopiert. Achtung: `du` meldet
 | AP-03 Vorschau | `3377a96` | `0:30 · 3.59 m · 10.7 g`, Chips grauen aus |
 | AP-07 Materialauswahl | `875a655` | Typ-Filter PLA blendet auf vier Karten ein |
 | AP-06 Schwebende Dialoge | `469203a`, `1e785c0` | Einstellungen als Karte über dem Bett, Rand 104/120/80 px |
+| AP-20 Bereiche statt Reiter | `2e5f5ec` | drei Einstellungszeilen, vier Überschriften, Schneiden-Block außerhalb |
 | AP-08 Einstellungskopf | `bb47ae1` | Profilname mit Trichter, Zähler `1`, Rückfrage nennt „Perimeters 2 → 4" |
 | AP-09 Leere Zustände | `875a655` | `LeeresPanel` als Muster |
 | AP-18 Bindungen | `27ac6eb`, `1eb4c97` | 26 fehlende Funktionen → noch 2 |
@@ -88,11 +89,7 @@ ab; von dort gehört sie in die Arbeitskopie kopiert. Achtung: `du` meldet
 
 ### Als Nächstes
 
-**AP-20 · Rechter Bereich: Bereiche statt Reiter.** Von Nils gemeldet
-und die groesste sichtbare Abweichung der Anordnung. Kein Kernbau
-noetig. Vorgehen steht im Paket.
-
-Danach **AP-05 zu Ende bringen — die linke Schiene.** Kein Kernbau nötig. Die
+**AP-05 zu Ende bringen — die linke Schiene.** Kein Kernbau nötig. Die
 obere Leiste und die Fußzeile stehen seit `c41a1ba`; es fehlen drei
 Einträge in der Schiene selbst.
 
@@ -722,6 +719,12 @@ Einstellungszeilen, Trennlinie, vier aufklappbare Bereiche mit
 sichtbaren Überschriften, unten der Schneiden-Block — und ein
 Bildschirmfoto zeigt dieselbe Reihenfolge wie auf iOS.
 
+**Stand: erledigt** (19.08., `2e5f5ec`, `e0d…`). Belegt am Emulator:
+Kopfzeile, *Print Settings · Filament Settings · Printer Settings*,
+Trennlinie, `PROFILES` offen, darunter `OBJECTS`, `EDIT` und `TOOLS` als
+Überschriften mit Pfeil — *Bearbeiten* und *Werkzeuge* ohne Auswahl
+gedämpft statt verschwunden —, unten der Schneiden-Block.
+
 ---
 
 ## Z · Wo umgekehrt iOS nachzieht
@@ -758,7 +761,8 @@ Braucht einen erreichbaren Mac.
 | 4 | AP-04 Objektleiste | nein |
 | 5 | AP-07 Materialauswahl | nein |
 | 6 | AP-09 Leere Zustände | nein |
-| 7 | AP-08 Einstellungskopf | nein |
+| 7 | AP-20 Bereiche statt Reiter | `2e5f5ec` | drei Einstellungszeilen, vier Überschriften, Schneiden-Block außerhalb |
+| AP-08 Einstellungskopf | nein |
 | 8 | AP-06 Schwebende Dialoge | nein |
 | 9 | AP-05 Werkzeugleisten | nein |
 | 10 | AP-10 Anordnen | ja |
