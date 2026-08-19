@@ -1,478 +1,377 @@
-# Gleichstand der Oberflächen — Befund und Umsetzungsplan
+# Gleichstand der Oberflächen — vollständiger Befund und Umsetzungsplan
 
-Stand 19.08.2026. Grundlage ist ein Abgleich Datei für Datei: alle 176
-Bedienelement-Kennungen aus `ios/PSMobile` gegen die Android-Oberfläche,
-und alle 188 Funktionen der C-Schnittstelle gegen `android/jni/psm_jni.cpp`.
+Stand 19.08.2026. **iOS ist die Referenz.** Alles hier beschreibt, was
+Android nachziehen muss, damit beide denselben Stand haben. Die wenigen
+Fälle, in denen Android weiter ist, stehen in Abschnitt Z.
 
-Ergebnis: **26 Kernfunktionen, die iOS benutzt und Android nicht bindet.**
-Daraus folgen sechs Unterschiede in der Bedienung, dazu drei reine
-Oberflächenunterschiede ohne Kernbezug und drei Punkte, an denen
-umgekehrt iOS hinterherhängt.
+## Wie dieser Befund entstanden ist
 
-Ein zweiter Durchgang (Abschnitt K) vergleicht die Ausarbeitung statt
-der Funktionen und findet sieben weitere Stellen, an denen Android
-dünner ist. Ein dritter (Abschnitt L) liest die Historie: **neunzig
-Commits fassen `ios/` an, ohne `android/` anzufassen** — darunter neun
-Gestaltungsentscheidungen, die nie zurückkamen.
+Vier Durchgänge, weil die ersten drei zu grob waren:
 
-Damit sind es **24 Schritte**, nicht die fünf aus meinem ersten Bericht.
-Wer nur den Zustand vergleicht, findet fehlende Funktionen. Wer die
-Historie liest, findet auch die Entscheidungen, die auf Android in der
-älteren Fassung stehengeblieben sind.
+1. **Begriffe** — gibt es auf Android etwas, das dieselbe Aufgabe erfüllt?
+   Findet fehlende Funktionen, sonst nichts.
+2. **C-Schnittstelle** — alle 188 Funktionen gegen `android/jni/psm_jni.cpp`.
+   Mechanisch und erschöpfend. **26 Funktionen fehlen.**
+3. **Historie** — `git log --since="30 days" -- ios/`: **90 Commits fassen
+   `ios/` an, ohne `android/` anzufassen**, zusammen **~5.700 geänderte
+   Zeilen in 27 Ansichtsdateien**.
+4. **Quelltext Datei für Datei** — die Fassung, aus der dieses Papier
+   besteht.
 
-Was gleich ist, steht am Ende — damit klar ist, was nicht mehr geprüft
-werden muss.
+Was der Quelltext **nicht** hergibt: Abstände, Rhythmus, Übergänge. Die
+iOS-App habe ich nie gesehen; der Mac ist nicht erreichbar. Für
+Gestaltungsfragen im engeren Sinn brauche ich Bildschirmfotos — siehe
+ganz unten.
 
 ---
 
-## A · Vorschau: Statistik und Legende fehlen ganz
+# 1 · Grundlagen, die überall wirken
 
-**iOS** (`FinalPreviewPanel.swift`, in Simple und Advanced verwendet)
+## 1.1 Zielflächen schrumpfen unter das Mindestmaß
 
-- Statistikzeile: Druckzeit, Filament in Metern, Gramm, Z-Bereich der
-  gewählten Schichten.
-- Legende: Umschalter *Merkmale ↔ Extruder*, darunter je ein Chip mit
-  Farbpunkt. Antippen blendet diese Rolle bzw. diesen Extruder aus und
-  wieder ein.
+iOS rechnet jedes Maß einzeln um und **deckelt Zielflächen bei 44 pt**:
 
-**Android** — nichts davon.
+```swift
+func pt(_ v: CGFloat)         -> CGFloat { v * factor }
+func font(_ v: CGFloat)       -> CGFloat { v * PSScale.fontScaleFor(factor) }
+func touch(_ v: CGFloat = 44) -> CGFloat { max(pt(v), 44) }   // ← Deckel
+```
+
+Android staucht stattdessen die Dichte global im Theme. Die Schrift ist
+gedämpft (`FONT_FOLLOW = 0.6`, identisch zu iOS) — **Zielflächen sind es
+nicht.** Bei `MIN_SCALE = 0.7` wird aus einem 48-dp-Knopf ein
+33,6-dp-Knopf.
+
+**Umsetzung**: ein `PsTouch`-Gegenstück zu `ps.touch()`, das die
+Stauchung für Zielflächen rückgängig macht, und alle festen
+Knopfhöhen darauf umstellen.
+
+Das ist die Änderung mit der größten Breitenwirkung im ganzen Papier.
+
+## 1.2 Zoll-Einheiten
+
+`KEY_UNITS_IMPERIAL` wertet nur `ios/Screens/SettingField.swift` aus. Auf
+Android steht der Schalter in der Liste „nur iOS" und ist versteckt.
+
+---
+
+# 2 · Advanced Mode
+
+## 2.1 Schwebende Objektleiste über dem Bett
+
+Die größte Einzeländerung. iOS zeigt `SimpleObjectBarView` **auch im
+Advanced Mode** schwebend über dem Bett, sobald ein Objekt ausgewählt
+ist. Im Quelltext steht warum:
+
+> Im Advanced Mode fehlte sie — dort war jeder Handgriff ein Weg nach
+> rechts.
+
+Inhalt: Verschieben · Drehen · Skalieren · Kein — dann Schneiden ·
+Teilen · Klonen · Ablegen · Hinlegen · Auf Fläche · Einpassen ·
+Entfernen.
+
+Android benutzt `SimpleObjectBar` **nur** in `SimpleModeScreen`.
+
+## 2.2 Obere Werkzeugleiste
+
+| iOS | Android |
+|---|---|
+| Start │ Neu · Öffnen · **Projekte** · Sichern · **Vorschau** │ Simple · **Leiste** | Start · Neu · Sichern · **Sichern unter** · Simple · Einstellungen |
+
+Android fehlen **Öffnen**, **Projekte** (alle Projekte), der
+**Vorschau-Umschalter** und der **Leiste-Umschalter**. iOS fragt beim
+Sichern nach dem Namen, statt einen zweiten Knopf zu führen.
+
+## 2.3 Untere Ansichtsleiste
+
+iOS: **Zurück · Vor** │ 3D · Oben · Vorn · Hinten · Links · Rechts
+
+> Zurück und Vor stehen am Anfang der unteren Leiste: sie sind das, was
+> man am häufigsten braucht, und unten links liegt der Daumen ohnehin.
+
+Android hat Rückgängig und Wiederholen in der **linken Schiene**, also
+diagonal am weitesten weg vom Daumen.
+
+Dazu die Wortwahl:
+
+> Nicht „Iso": der Name ist in der CAD-Welt richtig und sonst nirgends.
+
+Android sagt **Iso**, iOS **3D**.
+
+## 2.4 Werkzeugschiene links
+
+| | iOS | Android |
+|---|---|---|
+| Einträge | Import · Löschen · **Leeren** · **Anordnen** · Kopieren · Einfügen · +Kopie · −Kopie · **Trennen** (Untermenü) · **Stützen** · **Naht** | löschen · kopieren · mehr · weniger · in Objekte · in Volumen · Schichten · einfügen · zurück · vor · hinzufügen |
+| Fußzeile | **Drucker · App-Einstellungen** | — |
+
+*Trennen* fasst „Zu Objekten" und „Zu Volumen" in einem Untermenü
+zusammen (`d4cf9a1`); Android führt beide nebeneinander. *Anordnen*
+öffnet auf iOS per Tipp **und Halten**.
+
+## 2.5 Zweiter Regler in der Vorschau
+
+iOS hat **zwei** `DualHandleSlider`:
+
+- links senkrecht — Schichtbereich
+- unten waagerecht — **Werkzeugweg innerhalb der Schicht**
+
+> wie der Desktop-Regler unter dem Bett
+
+Android hat nur den senkrechten. Der zweite braucht
+`psm_viewport_set_move_range` und `psm_viewport_move_range_bounds`.
+
+## 2.6 Vorschau: Statistik und Legende fehlen ganz
+
+- **Statistik**: Druckzeit, Filament in Metern, Gramm, Z-Bereich.
+- **Legende**: Umschalter *Merkmale ↔ Extruder*, darunter je ein Chip
+  mit Farbpunkt zum Aus- und Einblenden.
+- **Verbrauch je Werkzeug** ab zwei Extrudern: Farbfeld, `T1`, cm³ im
+  Modell, getrennt der Anteil im Reinigungsturm.
 
 Nicht gebunden: `psm_preview_snapshot_get`, `psm_preview_role_at`,
 `psm_preview_extruder_at`, `psm_preview_layer_at`,
 `psm_viewport_set_preview_view`, `psm_viewport_set_role_visible`,
-`psm_viewport_set_extruder_visible`, `psm_slice_load_gcode_for_preview`.
+`psm_viewport_set_extruder_visible`, `psm_slice_load_gcode_for_preview`,
+`psm_slice_extruder_count`, `psm_slice_extruder_at`.
 
-**Umsetzung**
+Die Bereichsrechnung (`PreviewRange.swift`) gehört ins gemeinsame Modul,
+damit beide Seiten dieselbe Zahl zeigen. Der Unit-Test dafür existiert
+auf iOS schon.
 
-1. JNI: die acht Funktionen binden. Der Schnappschuss geht wie
-   `nativeSurfacePick` als Tab-getrennte Zeichenkette zurück, die Listen
-   je Eintrag eine Zeile — kein eigener JNI-Objektbau.
-2. `PsmCore.kt`: `PreviewSnapshot`, `PreviewRole`, `PreviewExtruder`,
-   `PreviewLayerMetrics` als Datenklassen, spiegelbildlich zu
-   `PsmCore.swift`.
-3. `PsmViewport.kt`: `previewView`, `setRoleVisible`, `setExtruderVisible`.
-4. Gemeinsames Modul: die Bereichsrechnung aus `PreviewRange.swift` nach
-   `shared/rules/PreviewRange.kt` ziehen, damit beide Seiten dieselbe
-   Zahl zeigen. Der Unit-Test dafür existiert auf iOS schon.
-5. Compose: `PreviewStatsRow` und `PreviewLegendPicker` neu, in
-   `SlicerScreen` unter dem Viewport und in `SimpleSliceSheet`.
+## 2.7 Inspector öffnet sich nach der Auswahl
 
-Aufwand: groß. Größter sichtbarer Gewinn.
+Vier Anläufe auf iOS (`3e45739`, `cb08ec1`, `bda94c2`, `8a53aa3`): nach
+einer Auswahl klappt der Bearbeiten-Bereich von selbst auf, und der Fokus
+bleibt beim Blättern layoutstabil. Auf Android muss man den Reiter selbst
+wählen.
 
----
+## 2.8 Einstellungen und Dialoge schweben über der Platte
 
-## B · Verbrauch je Werkzeug
+> Die Einstellungen schweben über der Platte statt sie zu ersetzen: mit
+> einem Rand ringsherum sieht man, dass es weiter um dieses Projekt geht.
 
-**iOS** zeigt nach dem Slicen je Extruder eine Zeile: Farbfeld, `T1`,
-Volumen im Modell in cm³, und getrennt davon der Anteil im Reinigungsturm
-(`AdvancedWorkspaceView.swift:832ff`). Erst ab zwei Extrudern — bei
-einfarbigem Druck stünde dieselbe Zahl zweimal da.
-
-**Android** — fehlt.
-
-Nicht gebunden: `psm_slice_extruder_count`, `psm_slice_extruder_at`.
-
-**Umsetzung**: beide binden, `ExtruderUsage`-Datenklasse, Zeile in den
-Vorschaubereich aus A. Klein, sobald A steht.
+Abgedunkelter Hintergrund, Tipp daneben schließt, 10 pt Rand auf schmalen
+und 28 pt auf breiten Geräten. Dasselbe Muster (`SchwebenderDialog`) gilt
+für **Ersteinrichtung**, **App-Einstellungen**, **Profilwechsel** und
+**ZIP-Modus**. Android zeigt überall Vollbildseiten.
 
 ---
 
-## C · Anordnen ohne Optionen
+# 3 · Betten
 
-**iOS** öffnet ein Popover am Knopf (`BedSelector.swift:450ff`):
-Zielmodus *aktuelles Bett ↔ alle Betten*, Liste der Zielbetten mit
-Schloss und Objektzahl, Abstand 0–50 mm in Halbschritten, Schalter
-*Drehen erlauben*, und danach ein Ergebnistext.
+## 3.1 Anordnen ohne Optionen
 
-**Android** hat einen Knopf, der `arrange()` mit Abstand 0 und ohne
-Drehen aufruft. Keine Rückmeldung.
+iOS öffnet ein Popover am Knopf: Zielmodus *aktuelles Bett ↔ alle
+Betten*, Zielbettliste mit Schloss und Objektzahl, Abstand 0–50 mm in
+Halbschritten, Schalter *Drehen erlauben*, danach ein Ergebnistext.
 
-Nicht gebunden: `psm_arrange_bed_ex` (liefert zusätzlich `psm_arrange_info`
-mit Status, Objekt- und Instanzzahl und meldet *gesperrt* und *voll* als
-eigene Fehler).
+Android ruft `arrange()` mit Abstand 0, ohne Drehen, ohne Rückmeldung.
+`psm_arrange_bed_ex` (mit `psm_arrange_info`: Status, Objekt- und
+Instanzzahl, eigene Fehler für *gesperrt* und *voll*) ist nicht gebunden.
 
-**Umsetzung**: `nativeArrangeBedEx` binden, Dialog nachbauen. Der
-gemeinsame `BedStripContract` prüft die Verfügbarkeit bereits — die
-Entscheidung *anordnen möglich?* muss nicht doppelt entstehen.
+## 3.2 Bettleiste
 
----
+Drei Umbauten auf iOS, keiner auf Android:
 
-## D · Adaptive Schichthöhe
-
-**iOS** hat im Schichthöhen-Editor einen Qualitätsregler und
-*Berechnen* (`LayerProfileView.swift:191ff`) — PrusaSlicers adaptive
-Schichthöhe.
-
-**Android** kann im selben Editor nur Punkte von Hand setzen.
-
-Nicht gebunden: `psm_model_layer_profile_adaptive`.
-
-**Umsetzung**: binden, Regler und Knopf ergänzen. Klein.
+- **raus aus dem Easy Mode** (`04b2c3d`) — dort störte sie mehr als sie half
+- **Kapselreihe** im Advanced (`c4402bb`)
+- **Sperren, Umbenennen, Entfernen ins Kontextmenü** (`c4402bb`)
 
 ---
 
-## E · ZIP-Import fehlt
+# 4 · Simple Mode
 
-**iOS** öffnet eine `.zip` (typisch von Printables), entpackt die Modelle
-und fragt danach, in welchem Modus es weitergeht (`ZipModusDialog`).
+## 4.1 Leere Zustände
 
-**Android** lässt das Format nicht einmal zu.
+iOS hat dafür ein Muster (`leeresPanel`): eine Aussage plus den Knopf,
+der herausführt.
 
-Nicht gebunden: `psm_zip_extract_models`.
-
-**Umsetzung**: binden, `zip` in `ModelFormats` aufnehmen, Auswahl-Dialog
-*Simple ↔ Advanced* nachbauen, Intent-Filter in `AndroidManifest.xml`
-erweitern.
-
----
-
-## F · Materialauswahl ist auf Android eine Liste
-
-**iOS** (`MaterialAuswahlView.swift`) filtert über Suchfeld, Typ-Knöpfe
-und **Farbpunkte** der häufigsten Farben im Bestand und zeigt Karten mit
-Hersteller, Typ, Farbe und einer Spulen-Grafik. Dazu ein Schalter
-*inkompatible Profile zeigen*.
-
-**Android** (`SimpleModeScreen.kt:1039ff`) hat ein Suchfeld, Typ-Knöpfe,
-die bloß den Suchtext setzen, und eine Liste der ersten fünfzehn Treffer.
-
-Kein Kernproblem: `FilamentCatalog` mit `types()`, `colors()` und
-`filter()` liegt seit langem in `android/shared` und wird auf Android
-nicht benutzt.
-
-**Umsetzung**: die Auswahl auf `FilamentCatalog` umstellen, Farbpunkte
-und Karten bauen. Rein Compose, kein Bauen des Kerns nötig.
-
----
-
-## G · Einstellungskopf ohne Profilsuche und ohne Zurücksetzen
-
-**iOS** zeigt im Kopf der Einstellungsseiten den Namen des geltenden
-Profils mit Lupe — antippen öffnet die Profilsuche — und daneben einen
-Zähler der gegenüber dem gespeicherten Profil geänderten Werte mit
-Rückfrage vor dem Zurücksetzen (`SettingsView.swift:95ff`).
-
-**Android** hat dort nur *Zurück* und die drei Reiter.
-
-Die Profilsuche selbst gibt es auf Android schon, aber nur im
-Advanced-Seitenband (`filterPresetOptions`).
-
-**Umsetzung**: Kopfzeile ergänzen, vorhandene Suche wiederverwenden,
-`profilaenderungen()` als Gegenstück in `SlicerService`.
-
----
-
-## H · Druckerauswahl: Karten gegen Suchliste
-
-**iOS** zeigt Drucker als Karten, in Simple und Advanced dieselbe Ansicht
-(`DruckerAuswahlView.swift`). Im Code steht ausdrücklich, dass die
-Klappliste mit rohen Profilnamen genau deshalb ersetzt wurde.
-
-**Android** öffnet im Advanced einen Dialog mit Suchliste
-(`AdvancedSidebar.kt:891`).
-
-**Umsetzung**: Kartenansicht nachbauen und für die Druckerzeile
-verwenden. Filament und Druckeinstellungen bleiben Suchlisten — dort sind
-es hunderte Einträge, und iOS macht es genauso.
-
----
-
-## I · Kleinere Kernlücken ohne eigenen Bildschirm
-
-Gebunden werden sollten außerdem, weil iOS sie benutzt:
-
-| Funktion | Wofür |
+| Lage | Knopf |
 |---|---|
-| `psm_viewport_gesture_begin` | Eine Geste = ein Rückgängig-Schritt. Android klammert stattdessen selbst über `beginHistory`; das funktioniert, ist aber ein zweiter Weg für dieselbe Sache. |
-| `psm_viewport_set_move_range`, `psm_viewport_move_range_bounds` | Grenzen beim Ziehen, damit ein Objekt nicht ins Nichts wandert. |
-| `psm_viewport_gizmo_axis_screen`, `psm_viewport_get_gizmo` | Achsenbeschriftung am Griff. |
-| `psm_viewport_active_layer_visualization`, `psm_viewport_active_paint_visualization` | Legenden zu Schichthöhen und Bemalung. |
-| `psm_slice_result_is_current`, `psm_slice_accept_remote_gcode` | Fernslicen: fertiges G-Code übernehmen, statt lokal neu zu rechnen. |
-| `psm_model_lay_on_facet_instance` | Auf Fläche legen für genau diese Kopie statt immer Instanz 0. |
-| `psm_model_bed_state` | Feinere Auskunft als `outside_bed`: schneidet den Rand / ganz daneben / unter dem Bett. |
-| `psm_design_revision`, `psm_preset_option_at` | Innereien, kein eigenes Bedienelement. |
+| Kein Material vorhanden | **Advanced Mode öffnen** |
+| Keine Druckeinstellungen vorhanden | **Druckeinstellungen einrichten** |
+
+Auf Android: leere Fläche, kein Weg heraus.
+
+## 4.2 Material je Extruder
+
+Abschnitt **„Je Extruder"** in der Materialseite. Fehlt auf Android.
+
+## 4.3 Größenverhältnis je Objekt
+
+Ein kleines Kästchen mit dem Größenverhältnis in **beiden** Objektlisten
+(`0befe95`). Fehlt.
+
+## 4.4 Projekt weitergeben
+
+iOS teilt das **Projekt (.3mf)** aus dem Projektpanel, dazu die **Platte**
+und **alle G-Code-Dateien auf einmal**. Android teilt nur eine
+G-Code-Datei und das Protokoll.
 
 ---
 
-## J · Wo umgekehrt iOS hinterherhängt
+# 5 · Material und Profile
 
-Der Gleichstand gilt in beide Richtungen.
+## 5.1 Materialauswahl ist auf Android eine Liste
 
-1. **Sonderwerte in den Einstellungen.** Android hat Bettform,
-   Reinigungsmatrix, **Ramming**, **Ersetzungen** und
-   **Kompatibilitätsregeln** sowie das Hochladen von Bettmodell und
-   -textur (`SpecialSettingsDialogs.kt`). iOS kennt nur Bettform und
-   Reinigungsmatrix (`SettingsView.swift:277f`).
-2. **Fuzzy Skin bemalen** — am 19.08. auf iOS nachgezogen, gebaut ist es
-   noch nicht (Mac war nicht erreichbar).
-3. **Blockieren bei der Naht** — auf Android fehlte der Zustand, auf iOS
-   wurde er fälschlich auch für Fuzzy angeboten. Beides am 19.08.
-   korrigiert.
+iOS: Suchfeld · **Typ-Knöpfe als echter Filter** · **Farbpunkte der
+häufigsten Farben im Bestand** · Karten mit Hersteller, Typ, Farbe und
+**einer echten Spule** (Ring mit Loch, `b9795d2`) · Schalter *inkompatible
+zeigen*, standardmäßig aus (`61c1b47`).
 
----
+Android: Suchfeld, Typ-Knöpfe die nur den Suchtext setzen, Liste der
+ersten fünfzehn Treffer.
 
-## K · Zweiter Durchgang: Ausarbeitung statt Funktionen
+`FilamentCatalog` mit `types()`, `colors()` und `filter()` liegt seit
+langem in `android/shared` — **und wird auf Android nicht benutzt.**
 
-Der erste Durchgang verglich Konzepte und Kernfunktionen. Er findet, was
-ganz fehlt, aber nicht, wo dieselbe Sache auf Android duenner ausfaellt.
-Der zweite Durchgang vergleicht deshalb den Textbestand beider Seiten
-Bildschirm fuer Bildschirm.
+## 5.2 Einstellungskopf
 
-### K1 · Slice-Blatt
+iOS: Profilname mit **Lupe** → Profilsuche, daneben ein **Zähler der
+geänderten Werte** mit Rückfrage vor dem Zurücksetzen.
+Android: nur *Zurück* und die drei Reiter.
 
-iOS zeigt nach dem Slicen mehr als einen Sichern-Knopf
-(`SliceSheet.swift:79ff`):
+## 5.3 Druckerauswahl als Karten
 
-- **„Geslict in 2:14"** — wie lange es gedauert hat.
-- **Mehrere G-Code-Dateien** bei Mehrbett: eine Zeile je Datei mit
-  eigenem *Senden*-Knopf, dazu *Alle exportieren*.
-- **An Drucker senden** direkt aus dem Blatt.
-- Ein Hinweis, wenn der G-Code nicht geschrieben werden konnte.
-
-Android hat *G-Code sichern* und *Schliessen*. Senden geht nur ueber
-einen anderen Weg, die Dauer steht nirgends, und bei mehreren Betten
-gibt es keine Liste.
-
-### K2 · ColorMix-Vorschau
-
-iOS zeigt die gemischte Farbe vor dem Speichern (`ColorMixView.swift:92`)
-und meldet, wenn sie nicht gespeichert werden konnte. Android speichert
-blind.
-
-### K3 · Leere Zustaende im Simple Mode
-
-iOS hat ein eigenes Muster dafuer (`leeresPanel`): eine Aussage plus den
-Knopf, der aus der Lage herausfuehrt.
-
-- *Kein Material vorhanden* → **Advanced Mode oeffnen**
-- *Keine Druckeinstellungen vorhanden* → **Druckeinstellungen einrichten**
-
-Auf Android fehlen beide. Wer in diese Lage geraet, sieht eine leere
-Flaeche ohne Weg heraus.
-
-### K4 · Material je Extruder im Simple Mode
-
-iOS hat in der Materialseite einen Abschnitt **„Je Extruder"**
-(`SimpleModeView.swift:1028`). Android nicht.
-
-### K5 · Projekt weitergeben
-
-iOS kann das Projekt (`.3mf`) aus dem Projektpanel weitergeben, ebenso
-die Platte und alle G-Code-Dateien auf einmal. Android kann nur den
-G-Code einer Datei und das Protokoll teilen.
-
-### K6 · Reinigungsturm sitzt woanders
-
-Kein Verlust, aber ein Unterschied: iOS stellt X, Y und Drehung des
-Reinigungsturms direkt in die Extruderbank, wo man ohnehin arbeitet.
-Android versteckt sie in den Projektwerkzeugen.
-
-### K7 · Teile-Liste
-
-iOS zeigt je Teil den Typ im Klartext — *Teil, Aussparung, Modifikator,
-Stuetzensperre, Stuetzenzwang*. Android zeigt den Typnamen ebenfalls,
-aber die Liste liegt im Werkzeuge-Reiter statt neben den Objektwerten.
-Gleicher Inhalt, anderer Ort.
+iOS zeigt Drucker als Karten, in beiden Modi. Im Quelltext steht warum:
+die Klappliste mit rohen Profilnamen war auf einem Gerät nicht bedienbar.
+Android öffnet einen Dialog mit Suchliste.
 
 ---
 
-## L · Dritter Durchgang: was die Historie zeigt
+# 6 · Slicen
 
-Die beiden ersten Durchgaenge lesen den Zustand. Der dritte liest die
-Entstehung — und der ist der ehrlichste.
+## 6.1 Slice-Blatt
 
-    git log --since="21 days ago" -- ios/
+iOS nach dem Slicen:
 
-**Neunzig Commits fassen ios/ an, ohne android/ anzufassen.** Der groesste
-Teil davon ist der Aufbau der Plattform selbst und ihre Tests; die gab es
-vorher nicht, und dafuer gibt es auf Android kein Gegenstueck. Aber rund
-ein Dutzend davon sind **Gestaltungsentscheidungen**, die nie
-zurueckgekommen sind. Genau die faellt niemand auf, der nur den Zustand
-vergleicht: auf Android steht dort nichts Falsches, es steht nur noch die
-aeltere Fassung.
+- **„Geslict in 2:14"**
+- bei Mehrbett **eine Zeile je G-Code-Datei** mit eigenem *Senden*-Knopf
+- **Alle exportieren**
+- **An Drucker senden** direkt aus dem Blatt
+- Hinweis, wenn die Datei nicht geschrieben werden konnte
 
-### L1 · Schwebende Dialoge statt Vollbildseiten
+Android: *G-Code sichern*, *Schließen*.
 
-Commits `8eb97e0`, `f85c169`, `170b014`, `e1e74a0` (05.08.)
+## 6.2 Wortwahl
 
-Auf iOS liegen **Ersteinrichtung**, **App-Einstellungen**,
-**Profilwechsel** und **ZIP-Modus** als Dialog ueber dem Arbeitsbereich
-(`SchwebenderDialog`). Man sieht, wohin man zurueckkehrt. Auf Android
-sind es Vollbildseiten.
-
-### L2 · Griffe schwebend statt permanent oben
-
-Commit `94a53aa` (06.08.)
-
-Move, Rotate und Scale wurden von einer festen Leiste oben zu einer
-kompakten, schwebenden Gruppe. Im selben Commit wanderten **Drucker und
-App-Einstellungen nach unten links in die Werkzeugschiene**.
-
-### L3 · Bettleiste
-
-Commits `04b2c3d`, `c4402bb` (06.08.)
-
-Die Bettleiste flog **aus dem Easy Mode heraus** — dort stoerte sie mehr
-als sie half. Im Advanced wurde sie eine **Kapselreihe**, und Sperren,
-Umbenennen und Entfernen zogen ins **Kontextmenue**. **Arrange oeffnet
-per Tipp und Halten.**
-
-### L4 · Separate-Menue statt Doppelung
-
-Commit `d4cf9a1` (06.08.)
-
-*In Objekte teilen* und *In Volumen teilen* wurden zu einem
-Separate-Menue zusammengefasst. Android hat weiterhin zwei Knoepfe
-nebeneinander.
-
-### L5 · Groessenverhaeltnis je Objekt
-
-Commit `0befe95` (04.08.)
-
-iOS zeigt in beiden Objektlisten ein kleines Kaestchen mit dem
-Groessenverhaeltnis (`SimpleModelSheetView.swift:288`). Android nicht.
-
-### L6 · Inkompatible Filamente
-
-Commits `2213e04`, `61c1b47` (06.08.)
-
-Erst **gekennzeichnet statt versteckt**, dann **standardmaessig
-ausgeblendet mit Umschalter**. Auf Android gibt es die Einstellung im
-Kern, aber keinen Umschalter an der Materialauswahl.
-
-### L7 · „Export G-Code" statt „Save"
-
-Commit `2213e04` (06.08.)
-
-Bewusste Wortwahl: die Datei verlaesst die App. Android sagt weiterhin
-*G-Code sichern*.
-
-### L8 · Schmale Geraete
-
-Commits `2213e04`, `12f5b52` (06.08.)
-
-Die **iPad-Seitenleiste bleibt auch hochkant ausgeklappt**, und die
-**iPhone-Vorschau wurde scrollbar**, weil der untere Schichtregler sonst
-aus dem Bottom-Sheet fiel. Auf Android ist das Verhalten im Hochformat
-nie geprueft worden.
-
-### L9 · Advanced-Inspector
-
-Commits `3e45739`, `cb08ec1`, `bda94c2`, `8a53aa3` (05.08.)
-
-Nach einer Auswahl **oeffnet sich der Bearbeiten-Bereich von selbst**,
-und der Fokus bleibt beim Blaettern layoutstabil. Vier Anlaeufe, bis es
-sass — auf Android ist keiner davon angekommen.
+**„Export G-Code"** statt *Sichern* (`2213e04`) — bewusst, weil die Datei
+die App verlässt.
 
 ---
 
-## M · Was diese Untersuchung NICHT belegen kann
+# 7 · Weitere fehlende Funktionen
 
-Drei Durchgaenge, drei Mal laenger geworden. Damit die Liste nicht ein
-viertes Mal waechst, hier die Grenze der Methode.
-
-### Die Zahl
-
-    ~5.700 geaenderte Zeilen in 27 iOS-Ansichtsdateien,
-    aus Commits, die android/ nie angefasst haben.
-
-Verteilt auf: AdvancedWorkspaceView 1021 · BedSelector 838 ·
-SimpleModeView 654 · AdvancedObjectInspectorView 428 · ColorMixView 394 ·
-PaintView 351 · SpecialValueEditors 302 · FinalPreviewPanel 291 ·
-WerkzeugSchiene 169 · SimpleObjectBarView 138 · SettingsView 129 ·
-ProfileSearchSheet 123 · MaterialAuswahlView 104 · PSScale 98 · und
-dreizehn weitere.
-
-Gelesen habe ich davon den **Zustand** von rund zwei Dritteln. Die
-**Diffs** habe ich nicht gelesen — nur die Commit-Betreffs.
-
-### Was das kostet: ein Beispiel
-
-`WerkzeugSchiene.swift` (169 geaenderte Zeilen) hatte ich bis zuletzt
-nie geoeffnet. Beim ersten Blick:
-
-| | iOS | Android |
+| | Fehlt auf Android | Kernfunktion |
 |---|---|---|
-| Eintraege | Import, Delete, **Clear**, **Arrange**, Copy, Paste, + copy, − copy, **Separate** (Untermenue), **Supports**, **Seam** | delete, copy, more, fewer, splitobjects, splitvolumes, layersediting, paste, undo, redo, add |
-| Fusszeile | **Drucker**, **App-Einstellungen** | — |
+| 7.1 | **ZIP-Import** samt Modusfrage | `psm_zip_extract_models` |
+| 7.2 | **Adaptive Schichthöhe** (Qualitätsregler + Berechnen) | `psm_model_layer_profile_adaptive` |
+| 7.3 | **ColorMix-Vorschau** vor dem Speichern | — |
+| 7.4 | Fernslicen: **fertiges G-Code übernehmen** | `psm_slice_accept_remote_gcode`, `psm_slice_result_is_current` |
+| 7.5 | Auf Fläche legen **je Kopie** | `psm_model_lay_on_facet_instance` |
+| 7.6 | Zuggrenzen · Achsenbeschriftung am Griff · Legenden zu Schichthöhe und Bemalung | `psm_viewport_set_move_range`, `psm_viewport_move_range_bounds`, `psm_viewport_gizmo_axis_screen`, `psm_viewport_get_gizmo`, `psm_viewport_active_layer_visualization`, `psm_viewport_active_paint_visualization`, `psm_viewport_gesture_begin` |
+| 7.7 | Feinere Bettlage als `outside_bed` | `psm_model_bed_state` |
+| 7.8 | Innereien ohne Bedienelement | `psm_design_revision`, `psm_preset_option_at` |
 
-Andere Reihenfolge, andere Eintraege, in beide Richtungen. Eine Datei,
-ein Blick, ein neuer Befund. Das ist der Grund, warum ich nicht sagen
-kann, die Liste sei vollstaendig.
+## 7.9 Reinigungsturm sitzt woanders
 
-### Die eigentliche Grenze
-
-**Ich habe die iOS-App nie gesehen.** Der Mac unter `192.168.1.107`
-antwortet nicht, und alles, was in diesem Papier ueber iOS steht, ist aus
-dem Quelltext erschlossen.
-
-Quelltextvergleich findet fehlende Funktionen und fehlende
-Bedienelemente. Er findet **nicht**: Abstaende, Rhythmus, Uebergaenge,
-wie sich etwas anfuehlt. Genau darum ging die Frage aber.
-
-### Was die Liste schliessen wuerde
-
-1. **Die 5.700 Zeilen Diff lesen**, nicht den Zustand. Ohne Mac machbar,
-   mehrere Stunden.
-2. **Den Mac hochbringen** und beide Apps Bildschirm fuer Bildschirm
-   nebeneinander stellen, im Quer- und im Hochformat. Ohne das bleibt
-   jede Aussage ueber das Aussehen geraten.
-
-Bis dahin gilt: **belegbar vollstaendig ist genau eine Aussage** — die
-26 nicht gebundenen Kernfunktionen. Dieser Vergleich ist mechanisch und
-erschoepfend. Alles andere in diesem Papier ist *bisher gefunden*.
+iOS: X, Y und Drehung direkt in der Extruderbank, wo man ohnehin ist.
+Android: in den Projektwerkzeugen.
 
 ---
 
-## Reihenfolge
+# 8 · Hochformat und schmale Geräte
 
-Nach sichtbarem Gewinn je Aufwand, und so, dass jeder Schritt für sich
-prüfbar ist:
+iOS hat dafür ausdrückliche Zweige:
 
-| # | Schritt | Kern neu bauen? |
-|---|---|---|
-| 1 | **A** Vorschau: Statistik und Legende | ja |
-| 2 | **B** Verbrauch je Werkzeug | ja, zusammen mit 1 |
-| 3 | **F** Materialauswahl | nein |
-| 4 | **G** Einstellungskopf | nein |
-| 5 | **C** Anordnen mit Optionen | ja |
-| 6 | **D** Adaptive Schichthöhe | ja, zusammen mit 5 |
-| 7 | **H** Druckerkarten | nein |
-| 8 | **E** ZIP-Import | ja |
-| 9 | **K1** Slice-Blatt: Dauer, Dateiliste, Senden | nein |
-| 10 | **K3** Leere Zustaende im Simple Mode | nein |
-| 11 | **K4** Material je Extruder | nein |
-| 12 | **K5** Projekt und Platte weitergeben | nein |
-| 13 | **K2** ColorMix-Vorschau | nein |
-| 14 | **K6** Reinigungsturm in die Extruderbank | nein |
-| 15 | **L1** Schwebende Dialoge | nein |
-| 16 | **L3** Bettleiste: Easy Mode, Kapseln, Kontextmenue | nein |
-| 17 | **L2** Griffe schwebend, Drucker/Einstellungen unten links | nein |
-| 18 | **L9** Inspector oeffnet nach Auswahl | nein |
-| 19 | **L6** Inkompatible Filamente mit Umschalter | nein |
-| 20 | **L5** Groessenverhaeltnis je Objekt | nein |
-| 21 | **L4** Separate-Menue, **L7** Wortwahl | nein |
-| 22 | **L8** Hochformat pruefen und nachziehen | nein |
-| 23 | **I** restliche Bindungen | ja |
-| 24 | **J** iOS nachziehen | nein, aber der Mac muss erreichbar sein |
+- `schmal` — kein iPad **und** Fenster schmaler als 760 pt
+- `leisteUnten` — im Hochformat die Leiste unten andocken statt rechts
+- Seitenleiste höchstens **zwei Fünftel** der Breite
+- **iPad-Seitenleiste bleibt auch hochkant ausgeklappt** (`2213e04`)
+- **iPhone-Vorschau scrollbar**, sonst fiel der untere Regler aus dem
+  Bottom-Sheet (`12f5b52`)
+- Bettwähler und Seitenleiste dürfen nicht gleichzeitig schweben — sonst
+  kollidieren Stift- und Schloss-Knöpfe
 
-Die Schritte ohne Kernbau (3, 4, 7) lassen sich erledigen, während ein
-Kernbau läuft, statt auf ihn zu warten.
-
-Jeder Schritt endet gleich: bauen, auf dem Emulator ansehen, und den
-Beleg als Bildschirmfoto festhalten. Ohne das gilt er nicht als fertig.
+Android hat zwei Schalter (`compactNavigation`, `tightChrome`) und ist
+**im Hochformat nie geprüft worden**. Hier erwarte ich weitere Befunde,
+die nur am Gerät sichtbar werden.
 
 ---
 
-## Geprüft und gleich
+# Z · Wo Android weiter ist
 
-Startseite mit Zuletzt-Kacheln · Simple Mode · Bettleiste und
-Bettauswahl · Objektleiste · Werkzeugschiene · Extruderbank ·
-Schichtregler, auch senkrecht am Rand · Farbwechsel-, Pause- und
-G-Code-Marken · Modifier hinzufügen · Schneiden · Vereinfachen ·
-Zerlegen · Text und SVG prägen · ColorMix · Fernslicen mit
-QR-Kopplung · Drucker verwalten · Ersteinrichtung · App-Einstellungen ·
-Selbsttest · Absturzprotokoll teilen · Projekt und Ergebnis weitergeben ·
-Objektliste mit Suche und Mehrfachauswahl · Profil unter Namen sichern ·
-Bettform- und Reinigungsmatrix-Editor · Bemalen (seit 19.08.) ·
-Mehrbett-Darstellung samt Bettzuordnung beim Ziehen (seit 19.08.).
+1. **Sonderwerte**: Bettform, Reinigungsmatrix, **Ramming**,
+   **Ersetzungen**, **Kompatibilitätsregeln**, Hochladen von Bettmodell
+   und -textur. iOS kennt nur die ersten beiden.
+2. **Fuzzy Skin bemalen** — am 19.08. auf iOS nachgezogen, noch nicht
+   gebaut.
+3. **Blockieren bei der Naht** — am 19.08. auf beiden Seiten korrigiert.
+
+---
+
+# Reihenfolge
+
+Zuerst, was jeden Bildschirm betrifft. Dann nach sichtbarem Gewinn.
+Schritte ohne Kernbau laufen, während der Unraid baut.
+
+| # | Schritt | Kern | Abschnitt |
+|---|---|---|---|
+| 1 | Zielflächen deckeln | — | 1.1 |
+| 2 | Vorschau: Statistik, Legende, Verbrauch je Werkzeug | ja | 2.6 |
+| 3 | Schwebende Objektleiste im Advanced | — | 2.1 |
+| 4 | Materialauswahl auf `FilamentCatalog` | — | 5.1 |
+| 5 | Leere Zustände Simple Mode | — | 4.1 |
+| 6 | Einstellungskopf: Profilsuche, Zurücksetzen | — | 5.2 |
+| 7 | Schwebende Dialoge statt Vollbildseiten | — | 2.8 |
+| 8 | Werkzeugleisten: obere, untere, linke Schiene | — | 2.2–2.4 |
+| 9 | Anordnen mit Optionen | ja | 3.1 |
+| 10 | Adaptive Schichthöhe | ja | 7.2 |
+| 11 | Zweiter Regler in der Vorschau | ja | 2.5 |
+| 12 | Bettleiste: Easy Mode, Kapseln, Kontextmenü | — | 3.2 |
+| 13 | Slice-Blatt: Dauer, Dateiliste, Senden | — | 6.1 |
+| 14 | Druckerkarten | — | 5.3 |
+| 15 | Inspector öffnet nach Auswahl | — | 2.7 |
+| 16 | Projekt und Platte weitergeben | — | 4.4 |
+| 17 | Größenverhältnis je Objekt | — | 4.3 |
+| 18 | Material je Extruder | — | 4.2 |
+| 19 | ColorMix-Vorschau | — | 7.3 |
+| 20 | ZIP-Import | ja | 7.1 |
+| 21 | Reinigungsturm in die Extruderbank | — | 7.9 |
+| 22 | Zoll-Einheiten | — | 1.2 |
+| 23 | Restliche Bindungen | ja | 7.4–7.8 |
+| 24 | Hochformat prüfen und nachziehen | — | 8 |
+| 25 | iOS nachziehen (braucht den Mac) | — | Z |
+
+Jeder Schritt endet gleich: bauen, Emulator, Bildschirmfoto. Ohne den
+Beleg gilt er nicht als fertig.
+
+---
+
+# Geprüft und gleich
+
+Startseite mit Zuletzt-Kacheln · Objektleiste im Simple Mode ·
+Extruderbank samt Farbwahl mit eigenem Hexwert · Schichtregler senkrecht
+am Rand · Farbwechsel-, Pause- und G-Code-Marken · Modifier hinzufügen ·
+Schneiden · Vereinfachen · Zerlegen · Text und SVG prägen · Extruder je
+Teil · Objektliste mit Suche und Mehrfachauswahl · Profil unter Namen
+sichern · Bettform- und Reinigungsmatrix-Editor · gesperrte Einstellung
+mit Begründung · Fernslicen mit QR-Kopplung · Drucker verwalten ·
+Ersteinrichtung · App-Einstellungen · Selbsttest · Absturzprotokoll
+teilen · Bemalen (19.08.) · Mehrbett samt Bettzuordnung beim Ziehen
+(19.08.).
+
+---
+
+# Was ich für den Rest brauche
+
+Fünf Bildschirmfotos von iOS wären am nützlichsten, weil daraus genau
+das hervorgeht, was im Quelltext nicht steht — Abstände,
+Größenverhältnisse, Anordnung:
+
+1. **Advanced Mode mit ausgewähltem Objekt** — die schwebende Leiste
+2. **Vorschau nach dem Slicen** — Statistik und Legende
+3. **Materialauswahl** — Farbpunkte, Karten, Spule
+4. **Simple Mode, Seite Einstellungen**
+5. **Hochformat auf dem iPhone** — Advanced Mode
