@@ -734,6 +734,25 @@ gedämpft statt verschwunden —, unten der Schneiden-Block.
 
 ---
 
+### AP-23 · Werkzeugbereich: erst gestalten, dann angleichen · Kern: nein
+
+**Von Nils gemeldet** (19.08.): „die ganzen Tools sehen noch
+unterschiedlich aus, aber ehrlich gesagt sehen sie auf iOS auch noch
+nicht gut aus."
+
+Damit greift der Grundsatz hier **nicht**: Android an iOS anzugleichen
+hiesse, eine Gestaltung zu übernehmen, die auf keiner der beiden Seiten
+überzeugt. Das ist der eine Fall, in dem Nachziehen der falsche Schritt
+wäre.
+
+**Vorgehen** Erst entscheiden, wie der Bereich aussehen soll — dann auf
+beiden Seiten gleichzeitig bauen. Bis dahin bleibt der Werkzeugbereich
+so, wie er ist; er wird nicht Stück für Stück an iOS herangeschoben.
+
+**Braucht** eine Vorgabe von Nils und, für die iOS-Hälfte, den Mac.
+
+---
+
 ### AP-21 · Bettübersicht: entfernen je Bett · Kern: nein
 
 **Von Nils gemeldet** (19.08.): „bei iOS habe ich in der Bettübersicht
@@ -769,6 +788,14 @@ entfällt dann — er tut, was der Eintrag in der Übersicht genauer tut.
 **Fertig wenn** Auf dem Tablet führt ein Weg von der Bettreihe in eine
 Übersicht, in der jedes Bett Stift, Schloss und X hat, und *Bett
 hinzufügen* darunter steht.
+
+**Stand: erledigt** (19.08.). Das Blatt liegt jetzt vor der
+Zweig-Entscheidung und ist aus beiden erreichbar; in der breiten Reihe
+führt ein Gitter-Knopf hinein, der frühere globale Papierkorb ist weg.
+Belegt am Emulator: mit zwei Betten zeigt *Bett 2* Schloss, Stift und
+**X**, *Bett 1* nur Schloss und Stift — es trägt ein Objekt, und der
+gemeinsame `BedStripContract` verbietet das Entfernen. Auf iOS gilt
+dieselbe Regel aus demselben Vertrag.
 
 ---
 

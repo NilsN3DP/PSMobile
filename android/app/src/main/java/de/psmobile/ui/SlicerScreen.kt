@@ -2189,40 +2189,11 @@ internal fun BedSelector(
         )
     }
 
-    if (schmal) {
-        var zeigeListe by remember { mutableStateOf(false) }
-        Row(
-            modifier
-                .clip(RoundedCornerShape(Corners.FIELD.dp))
-                .background(PrusaColors.PanelRaised)
-                .clickable { zeigeListe = true }
-                .padding(horizontal = 12.dp, vertical = 8.dp)
-                .heightIn(min = psTouch(44)),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(7.dp),
-        ) {
-            Icon(
-                if (active.locked) Icons.Default.Lock else Icons.Default.Layers,
-                contentDescription = null,
-                tint = PrusaColors.TextPrimary,
-                modifier = Modifier.size(16.dp),
-            )
-            Column {
-                Text(
-                    active.name,
-                    color = PrusaColors.TextPrimary,
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.SemiBold,
-                )
-                Text(
-                    advancedText("${active.objectCount} objects", "${active.objectCount} Objekte"),
-                    color = PrusaColors.TextMuted,
-                    fontSize = 10.sp,
-                )
-            }
-            Spacer(Modifier.weight(1f, fill = false))
-            Icon(Icons.Default.KeyboardArrowDown, contentDescription = null, tint = PrusaColors.TextMuted, modifier = Modifier.size(18.dp))
-        }
+    // Die Bettuebersicht gehoert zu beiden Zweigen. Sie lag frueher nur
+    // im schmalen: auf dem Tablet gab es dadurch keinen Weg zu einer
+    // Liste, in der jedes Bett einzeln umbenannt, gesperrt und entfernt
+    // werden kann - genau das, was iOS im Bettwaehler zeigt.
+    var zeigeListe by remember { mutableStateOf(false) }
         if (zeigeListe) {
             ModalBottomSheet(onDismissRequest = { zeigeListe = false }, containerColor = PrusaColors.Background) {
                 ScaledOverlay {
@@ -2298,6 +2269,40 @@ internal fun BedSelector(
                 }
                 }
             }
+
+    if (schmal) {
+        Row(
+            modifier
+                .clip(RoundedCornerShape(Corners.FIELD.dp))
+                .background(PrusaColors.PanelRaised)
+                .clickable { zeigeListe = true }
+                .padding(horizontal = 12.dp, vertical = 8.dp)
+                .heightIn(min = psTouch(44)),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(7.dp),
+        ) {
+            Icon(
+                if (active.locked) Icons.Default.Lock else Icons.Default.Layers,
+                contentDescription = null,
+                tint = PrusaColors.TextPrimary,
+                modifier = Modifier.size(16.dp),
+            )
+            Column {
+                Text(
+                    active.name,
+                    color = PrusaColors.TextPrimary,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                Text(
+                    advancedText("${active.objectCount} objects", "${active.objectCount} Objekte"),
+                    color = PrusaColors.TextMuted,
+                    fontSize = 10.sp,
+                )
+            }
+            Spacer(Modifier.weight(1f, fill = false))
+            Icon(Icons.Default.KeyboardArrowDown, contentDescription = null, tint = PrusaColors.TextMuted, modifier = Modifier.size(18.dp))
+        }
         }
         return
     }
@@ -2355,18 +2360,22 @@ internal fun BedSelector(
                  tint = PrusaColors.TextPrimary)
         }
 
-        if (active.canRemove) {
-            Box(
-                Modifier
-                    .size(50.dp)
-                    .clip(RoundedCornerShape(Corners.FIELD.dp))
-                    .background(PrusaColors.PanelRaised)
-                .clickable { onRemove(active.id) },
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(Icons.Default.Delete, contentDescription = advancedText("Remove active print bed", "Aktives Druckbett entfernen"),
-                     tint = PrusaColors.TextMuted)
-            }
+        // Frueher stand hier ein Papierkorb, der das *aktive* Bett
+        // entfernte. Der Weg in die Uebersicht tut dasselbe genauer:
+        // dort steht das X an dem Bett, das es entfernt.
+        Box(
+            Modifier
+                .size(50.dp)
+                .clip(RoundedCornerShape(Corners.FIELD.dp))
+                .background(PrusaColors.PanelRaised)
+                .clickable { zeigeListe = true },
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                Icons.Default.GridView,
+                contentDescription = advancedText("All beds", "Alle Betten"),
+                tint = PrusaColors.TextMuted,
+            )
         }
     }
 }
