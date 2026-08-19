@@ -38,7 +38,11 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.GridView
+import androidx.compose.material.icons.filled.FolderOpen
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Print
+import androidx.compose.material.icons.filled.ViewInAr
 import androidx.compose.material.icons.filled.InsertDriveFile
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Layers
@@ -174,6 +178,7 @@ fun SlicerScreen(
     onRepairStl: () -> Unit,
     onConvertGcode: () -> Unit,
     onAddSvg: (Int, Float, PsmCore.VolumeType) -> Unit,
+    onOpenRecent: (String) -> Unit = {},
     onControllerReady: (SceneController) -> Unit = {},
 ) {
     if (service == null) {
@@ -202,6 +207,7 @@ fun SlicerScreen(
         onRepairStl = onRepairStl,
         onConvertGcode = onConvertGcode,
         onAddSvg = onAddSvg,
+        onOpenRecent = onOpenRecent,
         onControllerReady = onControllerReady,
     )
 }
@@ -226,6 +232,7 @@ private fun SlicerContent(
     onRepairStl: () -> Unit,
     onConvertGcode: () -> Unit,
     onAddSvg: (Int, Float, PsmCore.VolumeType) -> Unit,
+    onOpenRecent: (String) -> Unit = {},
     onControllerReady: (SceneController) -> Unit = {},
 ) {
     // Mehrere Dateien auf einmal: eine Baugruppe besteht selten aus
@@ -272,6 +279,7 @@ private fun SlicerContent(
     var confirmNewProject by remember { mutableStateOf(false) }
     var confirmReloadProject by remember { mutableStateOf(false) }
     var confirmLeaveProject by remember { mutableStateOf(false) }
+    var zeigeProjekte by remember { mutableStateOf(false) }
 
     // AP-06: Diese drei ersetzten bisher die Platte. Jetzt schweben sie
     // darueber - man sieht am Rand, dass es weiter um dieses Projekt
@@ -363,6 +371,22 @@ private fun SlicerContent(
         }
     }
 
+    if (zeigeProjekte) {
+        SchwebenderDialog(
+            kennung = "dialog.projekte",
+            onClose = { zeigeProjekte = false },
+            maxBreite = 700.dp,
+        ) {
+            ProjekteListe(
+                onOeffnen = { uri ->
+                    zeigeProjekte = false
+                    onOpenRecent(uri)
+                },
+                onClose = { zeigeProjekte = false },
+            )
+        }
+    }
+
     val selected = objects.firstOrNull { it.id == selectedId }
     // Die Höhe ist Objekt-spezifisch. Nicht cachen: Der Layer-Dialog kann
     // das Profil bei unverändertem Objekt-ID direkt ändern. Die Anzeige im
@@ -432,6 +456,26 @@ private fun SlicerContent(
     var previewView by remember { mutableStateOf(PsmViewport.PreviewView.FEATURE) }
     var hiddenRoles by remember { mutableStateOf(emptySet<Int>()) }
     var hiddenExtruders by remember { mutableStateOf(emptySet<Int>()) }
+    // Der Vorschau-Umschalter steht oben in der Werkzeugleiste, wie auf
+    // iOS. Frueher sass er unten neben den Blickwinkeln; das Umschalten
+    // zwischen Bett und Werkzeugwegen ist aber keine Frage der Ansicht,
+    // sondern des Arbeitsschritts.
+    val vorschauUmschalten = { zeigen: Boolean ->
+        if (zeigen) {
+            sceneController.enterPreview { n ->
+                layerCount = n
+                layerLo = 0
+                layerHi = (n - 1).coerceAtLeast(0)
+                previewMode = n > 0
+                previewData = if (n > 0) service.previewData() else null
+                hiddenRoles = emptySet()
+                hiddenExtruders = emptySet()
+            }
+        } else {
+            sceneController.enterEditor()
+            previewMode = false
+        }
+    }
     var surfaceMode by remember { mutableStateOf<SurfaceToolMode?>(null) }
     var measureStart by remember { mutableStateOf<PsmViewport.SurfaceHit?>(null) }
     var measureText by remember { mutableStateOf<String?>(null) }
@@ -525,6 +569,8 @@ private fun SlicerContent(
 
         Row(Modifier.fillMaxSize()) {
             ToolStrip(
+                onPrinters = { service.showScreen(SlicerService.Screen.Printers) },
+                onAppSettings = onAppSettings,
                 hasSelection = selectedIds.isNotEmpty(),
                 // Die Quelle darf auf einem anderen Bett liegen. Der Core
                 // kennt alle Betten, waehrend `objects` nur das aktive zeigt.
@@ -586,11 +632,16 @@ private fun SlicerContent(
                     onReload = if (canReloadProject) {
                         { confirmReloadProject = true }
                     } else null,
+                    onOpen = { picker.launch(de.psmobile.MODEL_MIME_TYPES) },
+                    onProjects = { zeigeProjekte = true },
+                    previewOn = previewMode,
+                    previewEnabled = layerCount > 0 ||
+                        progress is SlicerService.Progress.Done,
+                    onTogglePreview = { vorschauUmschalten(!previewMode) },
                     onOpenSimple = onOpenSimple,
                     onHome = {
                         if (service.hasUnsavedChanges) confirmLeaveProject = true else onHome()
                     },
-        onAppSettings = onAppSettings,
                     actionsEnabled = progress !is SlicerService.Progress.Running,
                     showInspectorAction = !permanentInspector,
                     inspectorOpen = inspectorOpen,
@@ -772,24 +823,6 @@ private fun SlicerContent(
                         horizontalArrangement = Arrangement.spacedBy(10.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        ViewModeTabs(
-                            preview = previewMode,
-                            previewEnabled = layerCount > 0 ||
-                                progress is SlicerService.Progress.Done,
-                            onSelect = { wantPreview ->
-                                if (wantPreview) {
-                                    sceneController.enterPreview { n ->
-                                        layerCount = n
-                                        layerLo = 0
-                                        layerHi = (n - 1).coerceAtLeast(0)
-                                        previewMode = n > 0
-                                    }
-                                } else {
-                                    sceneController.enterEditor()
-                                    previewMode = false
-                                }
-                            },
-                        )
                         ViewBar(
                             controller = sceneController,
                             canUndo = history.undoCount > 0,
@@ -1185,6 +1218,8 @@ private fun SchrittKnopf(
 
 @Composable
 private fun ToolStrip(
+    onPrinters: () -> Unit,
+    onAppSettings: () -> Unit,
     hasSelection: Boolean,
     canPaste: Boolean,
     canUndo: Boolean,
@@ -1217,6 +1252,57 @@ private fun ToolStrip(
                           (tool.name != "redo" || canRedo)
             ToolButton(tool, enabled) { onTool(tool.name) }
         }
+
+        // Fusszeile wie auf iOS: Drucker und App-Einstellungen stehen
+        // unten links in der Schiene. Vorher lagen sie oben in der
+        // Werkzeugleiste zwischen den Projektknoepfen - dort standen
+        // zwei Dinge nebeneinander, die nichts miteinander zu tun haben.
+        Spacer(Modifier.height(10.dp))
+        HorizontalDivider(color = PrusaColors.Divider)
+        Spacer(Modifier.height(6.dp))
+        SchienenFuss(Icons.Default.Print, advancedText("Printers", "Drucker"), onPrinters)
+        SchienenFuss(Icons.Default.Settings, advancedText("App settings", "App-Einstellungen"), onAppSettings)
+    }
+}
+
+/**
+ * Ein Fusszeilen-Eintrag der Werkzeugschiene.
+ *
+ * Flacher als die Werkzeuge darueber: was hier steht, gehoert nicht zum
+ * Werkstueck, sondern zum Programm.
+ */
+@Composable
+private fun SchienenFuss(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    onClick: () -> Unit,
+) {
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .heightIn(min = psTouch(52))
+            .clip(RoundedCornerShape(Corners.CARD.dp))
+            .clickable(onClick = onClick)
+            .padding(vertical = 4.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+    ) {
+        Icon(
+            icon,
+            contentDescription = null,
+            tint = PrusaColors.TextMuted,
+            modifier = Modifier.size(22.dp),
+        )
+        Text(
+            label,
+            color = PrusaColors.TextMuted,
+            fontSize = 9.5.sp,
+            lineHeight = 11.sp,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 2.dp),
+        )
     }
 }
 
@@ -1926,9 +2012,13 @@ private fun WorkspaceBar(
     onSave: () -> Unit,
     onSaveAs: () -> Unit,
     onReload: (() -> Unit)?,
+    onOpen: () -> Unit,
+    onProjects: () -> Unit,
+    previewOn: Boolean,
+    previewEnabled: Boolean,
+    onTogglePreview: () -> Unit,
     onOpenSimple: () -> Unit,
     onHome: () -> Unit,
-    onAppSettings: () -> Unit,
     actionsEnabled: Boolean,
     showInspectorAction: Boolean,
     inspectorOpen: Boolean,
@@ -1960,18 +2050,29 @@ private fun WorkspaceBar(
             WerkzeugKnopf(Icons.Default.Home, advancedText("Start", "Start"), enabled = actionsEnabled, onClick = onHome)
             WerkzeugTrenner()
             WerkzeugKnopf(Icons.Default.InsertDriveFile, advancedText("New", "Neu"), enabled = actionsEnabled, onClick = onNew)
+            // Oeffnen fuehrt in denselben Dateiwaehler wie Import. Bei
+            // einer 3MF fragt Android danach, ob sie als Projekt oder
+            // nur als Objekte hereinkommt - genau die Unterscheidung,
+            // die iOS ueber zwei getrennte Knoepfe macht.
+            WerkzeugKnopf(Icons.Default.FolderOpen, advancedText("Open", "Öffnen"), enabled = actionsEnabled, onClick = onOpen)
+            WerkzeugKnopf(Icons.Default.History, advancedText("Projects", "Projekte"), enabled = actionsEnabled, onClick = onProjects)
             WerkzeugKnopf(Icons.Default.Save, advancedText("Save", "Sichern"), enabled = actionsEnabled, onClick = onSave)
             WerkzeugKnopf(Icons.Default.SaveAs, advancedText("Save as", "Sichern unter"), enabled = actionsEnabled, onClick = onSaveAs)
             if (onReload != null) {
                 WerkzeugKnopf(Icons.Default.Refresh, advancedText("Reload", "Neu laden"), enabled = actionsEnabled, onClick = onReload)
             }
+            // Bett und Vorschau sind zwei Arbeitsschritte, kein
+            // Blickwinkel - deshalb hier oben und nicht unten bei
+            // Oben/Vorn/Hinten.
+            WerkzeugKnopf(
+                if (previewOn) Icons.Default.ViewInAr else Icons.Default.Layers,
+                if (previewOn) advancedText("Bed", "Bett") else advancedText("Preview", "Vorschau"),
+                enabled = previewEnabled,
+                active = previewOn,
+                onClick = onTogglePreview,
+            )
             WerkzeugTrenner()
             WerkzeugKnopf(Icons.Default.Bolt, "Simple", enabled = actionsEnabled, onClick = onOpenSimple)
-            // Wer den Startmodus fest eingestellt hat, sieht die
-            // Startseite nie wieder - ohne diesen Weg waere die
-            // Einstellung nicht mehr erreichbar, die ihn dorthin
-            // gebracht hat.
-            WerkzeugKnopf(Icons.Default.Settings, advancedText("Settings", "Einstellungen"), enabled = actionsEnabled, onClick = onAppSettings)
             Spacer(Modifier.weight(1f))
             if (showInspectorAction) {
                 WerkzeugKnopf(
@@ -2269,3 +2370,112 @@ internal fun BedSelector(
         }
     }
 }
+
+/**
+ * Die zuletzt gesicherten Projekte, ohne den Umweg ueber die Startseite.
+ *
+ * Gegenstueck zum Knopf *Projekte* in `AdvancedWorkspaceView.swift`.
+ * Vorher fuehrte der einzige Weg zu einem aelteren Projekt ueber
+ * *Start* - und damit an der Frage vorbei, ob das offene Projekt
+ * gesichert ist.
+ *
+ * Die Liste ist dieselbe wie auf der Startseite
+ * ([RecentProjectsStore]); zwei Listen mit verschiedenem Inhalt waeren
+ * zwei Antworten auf dieselbe Frage.
+ */
+@Composable
+private fun ProjekteListe(
+    onOeffnen: (String) -> Unit,
+    onClose: () -> Unit,
+) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val projekte = remember { de.psmobile.net.RecentProjectsStore.alle(context) }
+
+    Column(
+        Modifier
+            .fillMaxSize()
+            .background(PrusaColors.Background)
+            .padding(20.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                advancedText("Projects", "Projekte"),
+                color = PrusaColors.TextPrimary,
+                fontSize = 17.sp,
+                fontWeight = FontWeight.SemiBold,
+            )
+            Spacer(Modifier.weight(1f))
+            Text(
+                advancedText("Close", "Schließen"),
+                color = PrusaColors.TextMuted,
+                fontSize = 14.sp,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(Corners.FIELD.dp))
+                    .clickable(onClick = onClose)
+                    .heightIn(min = psTouch(44))
+                    .padding(horizontal = 12.dp, vertical = 12.dp),
+            )
+        }
+        HorizontalDivider(color = PrusaColors.Divider)
+
+        if (projekte.isEmpty()) {
+            // Kein leerer Kasten: eine Aussage und der Weg, der
+            // herausfuehrt - dasselbe Muster wie im Simple Mode (AP-09).
+            Text(
+                advancedText(
+                    "Nothing saved yet. A project appears here once it has been saved as 3MF.",
+                    "Noch nichts gesichert. Ein Projekt erscheint hier, sobald es als 3MF gesichert wurde.",
+                ),
+                color = PrusaColors.TextMuted,
+                fontSize = 13.sp,
+            )
+        } else {
+            Column(
+                Modifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                projekte.forEach { eintrag ->
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(Corners.FIELD.dp))
+                            .background(PrusaColors.PanelRaised)
+                            .clickable { onOeffnen(eintrag.uri) }
+                            .heightIn(min = psTouch(56))
+                            .padding(horizontal = 14.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        Icon(
+                            Icons.Default.InsertDriveFile,
+                            contentDescription = null,
+                            tint = PrusaColors.TextMuted,
+                            modifier = Modifier.size(18.dp),
+                        )
+                        Text(
+                            eintrag.name,
+                            color = PrusaColors.TextPrimary,
+                            fontSize = 14.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f),
+                        )
+                        Text(
+                            projektDatum(eintrag.zeitstempelMs),
+                            color = PrusaColors.TextMuted,
+                            fontSize = 11.sp,
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** Datum und Uhrzeit in der Schreibweise des Geraets. */
+private fun projektDatum(ms: Long): String =
+    java.text.DateFormat.getDateTimeInstance(
+        java.text.DateFormat.SHORT,
+        java.text.DateFormat.SHORT,
+    ).format(java.util.Date(ms))

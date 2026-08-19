@@ -382,6 +382,7 @@ class MainActivity : ComponentActivity() {
                                 arrayOf("image/svg+xml", "text/xml")
                             )
                         },
+                        onOpenRecent = { uri -> openRecentProject(uri, alsAdvanced = true) },
                         onControllerReady = { advancedSceneController = it },
                     )
                 }
