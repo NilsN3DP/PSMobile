@@ -539,6 +539,28 @@ Abweichung abgebrochen - so faellt es auf, bevor die Datei geschrieben
 ist. Und was aus einer Datei herauswandert, braucht oft nur `internal`
 statt eines Umzugs: `ProjectNumberField` blieb, wo es war.
 
+### Claude — AP-17 a: weitergeben statt nur speichern
+
+Plattenexport, repariertes STL und gewandelter G-Code landeten ueber den
+Systemdialog in einer Datei - und damit war Schluss. iOS bietet an
+derselben Stelle „Weitergeben · <Dateiname>" an, also den Weg in eine
+andere App. Der Dienst merkt sich jetzt die zuletzt geschriebene Datei
+und macht sie ueber den FileProvider teilbar; die Projektwerkzeuge
+zeigen den Knopf mit dem Dateinamen darin.
+
+Das Speichern ueber den Systemdialog bleibt, wie es ist - es kommt nur
+der zweite Weg dazu.
+
+Commit `18817d5`. **Noch nicht am Bildschirm belegt:** der Knopf
+erscheint erst nach einem Export, und dorthin fuehrt der Weg durch den
+Systemdialog. Der naechste Durchgang macht genau das und haelt es fest;
+solange steht das Paket im Plan als „gebaut, aber nicht belegt".
+
+Das ist bewusst so notiert. Ein Paket, das gebaut aussieht und nie
+angesehen wurde, ist die haeufigste Art, sich selbst zu belegen - der
+Plan sagt seit dem ersten Tag, dass ohne Bildschirmfoto nichts fertig
+ist.
+
 ---
 
 ## 2026-08-03

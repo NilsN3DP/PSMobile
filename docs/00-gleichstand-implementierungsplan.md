@@ -93,22 +93,23 @@ ab; von dort gehört sie in die Arbeitskopie kopiert. Achtung: `du` meldet
 
 ### Als Nächstes
 
-**AP-17 a · Projekt, Platte und alle G-Code-Dateien weitergeben.** Kein
-Kernbau. Die Mehrfach-Weitergabe der G-Codes steht seit AP-11
-(`shareGcodes`); es fehlt derselbe Weg für das Projekt (.3mf) und die
-Platte. Vorher nachsehen, was drüben heute steht — bei c war die
-Planzeile schon wieder überholt.
+**AP-17 a fertig belegen.** Der Knopf *Weitergeben · <Dateiname>* steht
+seit `18817d5` in den Projektwerkzeugen, erscheint aber erst nach einem
+Export — und dorthin führt der Weg durch den Systemdialog. Also am
+Emulator: Objekt wählen → Bereich *Werkzeuge* → *Platte exportieren* →
+im Systemdialog speichern → der Knopf muss danach dastehen. Erst dann
+gilt das Paket als fertig.
 
-Danach **d** (ColorMix-Vorschau vor dem Speichern, Fehlermeldung beim
-Sichern).
+Danach **AP-17 d** (ColorMix-Vorschau vor dem Speichern, Fehlermeldung
+beim Sichern) — der letzte Punkt ohne Kernbau.
 
-Damit sind alle Pakete ohne Kernbau zu. Es bleiben:
+Danach bleiben nur noch:
 
 - **AP-10** Anordnen mit Optionen, **AP-13** adaptive Schichthöhe,
   **AP-14** zweiter Regler, **AP-17 g** ZIP-Import — je ein Kernbau
   (20–25 min auf dem Unraid).
 - **AP-04**, **AP-02 iOS** und Abschnitt **Z** — brauchen den Mac.
-- **AP-19** Hochformat und **AP-23** Werkzeugbereich — zurückgestellt.
+- **AP-19** und **AP-23** — zurückgestellt.
 
 ### Worauf zu achten ist
 
@@ -682,7 +683,7 @@ Griffen direkt unter den drei Einstellungszeilen.
 
 | | Ziel | Kern |
 |---|---|---|
-| a | Projekt (.3mf), Platte und alle G-Code-Dateien weitergeben | nein |
+| a | Projekt (.3mf), Platte und alle G-Code-Dateien weitergeben — G-Codes seit `c63e329`, Platte und Werkzeugergebnisse seit `18817d5` **gebaut, aber noch nicht am Bildschirm belegt** | nein |
 | b | ~~Größenverhältnis je Objekt in beiden Listen~~ — **erledigt** (20.08., `d919c3d`) | nein |
 | c | ~~Abschnitt „Je Extruder" in der Simple-Materialseite~~ — **überholt.** Android hat dort die *Materialpalette*: Kacheln je Kopf mit Farbe und Material, *Alle setzen* und eine Farbreihe. iOS zeigt an derselben Stelle nur eine Liste mit Farbfeld und Menü. Nichts nachzuziehen — umgekehrt ist es ein Z-Punkt. | nein |
 | d | ColorMix-Vorschau vor dem Speichern, Fehlermeldung beim Sichern | nein |
