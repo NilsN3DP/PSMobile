@@ -1062,6 +1062,7 @@ private fun SlicerContent(
                         sceneController.scaleTool = on
                     },
                     vorschauBand = vorschauBand,
+                    onEditor = { vorschauUmschalten(false) },
                     modifier = Modifier.width(inspectorWidth).fillMaxHeight(),
                 )
             }
@@ -1146,6 +1147,7 @@ private fun SlicerContent(
                     sceneController.scaleTool = on
                 },
                 vorschauBand = vorschauBand,
+                onEditor = { vorschauUmschalten(false) },
                 onClose = { inspectorOpen = false },
                 modifier = Modifier
                     .align(Alignment.CenterEnd)

@@ -84,6 +84,7 @@ import androidx.compose.foundation.shape.CircleShape
 import de.psmobile.shared.rules.FilamentCatalog
 import de.psmobile.shared.ui.Corners
 import de.psmobile.shared.rules.AdhesionAdvice
+import de.psmobile.shared.rules.PreviewRange
 import de.psmobile.shared.rules.SimpleModeState
 import de.psmobile.shared.rules.SliceSummary
 import de.psmobile.shared.rules.EasyModeState
@@ -141,6 +142,12 @@ fun SimpleModeScreen(
     // wie "G-Code": onStartSlice. Er versprach also etwas anderes, als er
     // tat - eine Vorschau gab es im Simple Mode ueberhaupt nicht.
     var previewMode by remember { mutableStateOf(false) }
+    // Zahlen und Legende gehoeren zum Ergebnis, nicht zur Kamera:
+    // einmal holen, wenn die Vorschau steht.
+    var previewData by remember { mutableStateOf<SlicerService.PreviewData?>(null) }
+    var previewView by remember { mutableStateOf(PsmViewport.PreviewView.FEATURE) }
+    var hiddenRoles by remember { mutableStateOf(emptySet<Int>()) }
+    var hiddenExtruders by remember { mutableStateOf(emptySet<Int>()) }
     var layerCount by remember { mutableStateOf(0) }
     var layerLo by remember { mutableStateOf(0) }
     var layerHi by remember { mutableStateOf(0) }
@@ -176,6 +183,9 @@ fun SimpleModeScreen(
                 layerLo = 0
                 layerHi = (n - 1).coerceAtLeast(0)
                 previewMode = n > 0
+                previewData = if (n > 0) service.previewData() else null
+                hiddenRoles = emptySet()
+                hiddenExtruders = emptySet()
             }
         }
     }
@@ -192,6 +202,7 @@ fun SimpleModeScreen(
                 controller.enterEditor()
                 previewMode = false
                 layerCount = 0
+                previewData = null
             }
         }
     }
@@ -202,6 +213,7 @@ fun SimpleModeScreen(
             controller.enterEditor()
             previewMode = false
             layerCount = 0
+            previewData = null
         } else if (progress is SlicerService.Progress.Done) {
             // Das Ergebnis passt noch zur Szene, das Hinsehen kostet nichts.
             controller.enterPreview { n ->
@@ -209,6 +221,9 @@ fun SimpleModeScreen(
                 layerLo = 0
                 layerHi = (n - 1).coerceAtLeast(0)
                 previewMode = n > 0
+                previewData = if (n > 0) service.previewData() else null
+                hiddenRoles = emptySet()
+                hiddenExtruders = emptySet()
             }
         } else {
             val gruende = SliceSummary.blockers(
@@ -381,8 +396,70 @@ fun SimpleModeScreen(
                 },
                 modifier = Modifier
                     .align(Alignment.CenterStart)
-                    .padding(start = 12.dp, top = 12.dp, bottom = 96.dp),
+                    // Unter der Kopfzeile anfangen, nicht am
+                    // Bildschirmrand: der obere Griff lag sonst in der
+                    // Statusleiste, und seine Zahl stand im Uhrzeit-Feld.
+                    .padding(
+                        start = 12.dp,
+                        // Unter der Bettleiste, nicht daneben: sie steht
+                        // links oben, und der obere Griff sass sonst
+                        // mitten in der Kapsel "Bett 1".
+                        top = statusTop + if (compactChrome) 176.dp else 208.dp,
+                        bottom = 96.dp,
+                    ),
             )
+        }
+        // Rechts oder unten - das entscheidet die Breite des
+        // Bildschirms, nicht die Anordnung der Werkzeugleiste. Drueben
+        // ist es die Unterscheidung iPad/iPhone.
+        val schmalerBildschirm =
+            androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp < 840
+
+        // Zahlen und Legende der Vorschau.
+        //
+        // iOS hat sie hier seit langem (`FinalPreviewPanel.swift`), auf
+        // Android fehlten sie im Simple Mode ganz - man sah die Wege,
+        // aber nicht, was sie kosten, und ausblenden liess sich nichts.
+        // Auf breiten Geraeten am rechten Rand, auf schmalen unten;
+        // dieselbe Unterscheidung wie drueben zwischen iPad und iPhone.
+        //
+        // Den Schichtbereich fuehrt die Karte auf iOS als zwei Regler
+        // mit; hier nicht: der senkrechte Regler steht schon am linken
+        // Rand, und zweimal dieselbe Einstellung ist eine zu viel.
+        previewData?.let { daten ->
+            if (previewMode) {
+                SimpleVorschauKarte(
+                    daten = daten,
+                    schichten = PreviewRange(layerCount)
+                        .withLower(layerLo)
+                        .withUpper(layerHi),
+                    view = previewView,
+                    hiddenRoles = hiddenRoles,
+                    hiddenExtruders = hiddenExtruders,
+                    schmal = schmalerBildschirm,
+                    onView = {
+                        previewView = it
+                        controller.setPreviewView(it)
+                    },
+                    onToggleRole = { rolle ->
+                        val sichtbar = rolle in hiddenRoles
+                        hiddenRoles = if (sichtbar) hiddenRoles - rolle
+                                      else hiddenRoles + rolle
+                        controller.setRoleVisible(rolle, sichtbar)
+                    },
+                    onToggleExtruder = { e ->
+                        val sichtbar = e in hiddenExtruders
+                        hiddenExtruders = if (sichtbar) hiddenExtruders - e
+                                          else hiddenExtruders + e
+                        controller.setExtruderVisible(e, sichtbar)
+                    },
+                    onEditor = vorschauZeigen,
+                    modifier = Modifier.align(
+                        if (schmalerBildschirm) Alignment.BottomCenter
+                        else Alignment.CenterEnd
+                    ),
+                )
+            }
         }
         if (panel == SimplePanel.WORKSPACE) {
             SimpleWerkzeugSpalte(
@@ -1555,5 +1632,82 @@ private fun SimpleDarkSystemBars(window: Window) {
         window.navigationBarColor = PrusaColors.Background.value.toInt()
         WindowCompat.getInsetsController(window, window.decorView).apply { isAppearanceLightStatusBars = false; isAppearanceLightNavigationBars = false }
         onDispose { }
+    }
+}
+
+
+/**
+ * Die Vorschau-Karte im Simple Mode.
+ *
+ * Vorlage: `FinalPreviewPanel.swift`. Auf breiten Geraeten steht sie am
+ * rechten Rand, auf schmalen unten - drueben ist das die
+ * Unterscheidung zwischen iPad und iPhone.
+ *
+ * Kopfzeile mit dem Weg zurueck, dann die Zahlen, dann die Legende.
+ * Der Schichtbereich fehlt bewusst: der senkrechte Regler am linken
+ * Rand macht dasselbe, und zweimal dieselbe Einstellung ist eine zu
+ * viel.
+ */
+@Composable
+private fun SimpleVorschauKarte(
+    daten: SlicerService.PreviewData,
+    schichten: PreviewRange,
+    view: PsmViewport.PreviewView,
+    hiddenRoles: Set<Int>,
+    hiddenExtruders: Set<Int>,
+    schmal: Boolean,
+    onView: (PsmViewport.PreviewView) -> Unit,
+    onToggleRole: (Int) -> Unit,
+    onToggleExtruder: (Int) -> Unit,
+    onEditor: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier
+            // Am rechten Rand steht schon die Werkzeugspalte; die Karte
+            // legt sich nicht darueber, sondern daneben.
+            .padding(
+                start = 12.dp,
+                end = if (schmal) 12.dp else 84.dp,
+                top = 12.dp,
+                bottom = 12.dp,
+            )
+            .then(if (schmal) Modifier.fillMaxWidth() else Modifier.width(330.dp))
+            .heightIn(max = 520.dp)
+            .background(PrusaColors.Panel, RoundedCornerShape(Corners.CARD.dp))
+            .border(1.dp, PrusaColors.Divider, RoundedCornerShape(Corners.CARD.dp))
+            .verticalScroll(rememberScrollState())
+            .padding(12.dp),
+        verticalArrangement = Arrangement.spacedBy(9.dp),
+    ) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                st("Final G-code", "Finaler G-Code"),
+                color = PrusaColors.TextPrimary,
+                style = MaterialTheme.typography.titleSmall,
+                modifier = Modifier.weight(1f),
+            )
+            Text(
+                st("Editor", "Editor"),
+                color = PrusaColors.Orange,
+                fontSize = 13.sp,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(Corners.FIELD.dp))
+                    .background(PrusaColors.PanelRaised)
+                    .clickable(onClick = onEditor)
+                    .heightIn(min = psTouch(40))
+                    .padding(horizontal = 12.dp, vertical = 10.dp),
+            )
+        }
+        PreviewStatsRow(range = schichten, data = daten)
+        PreviewLegendPicker(
+            data = daten,
+            view = view,
+            hiddenRoles = hiddenRoles,
+            hiddenExtruders = hiddenExtruders,
+            onView = onView,
+            onToggleRole = onToggleRole,
+            onToggleExtruder = onToggleExtruder,
+        )
     }
 }

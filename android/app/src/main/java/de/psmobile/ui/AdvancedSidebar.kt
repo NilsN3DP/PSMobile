@@ -176,6 +176,8 @@ internal fun Sidebar(
      * man gerade ist.
      */
     vorschauBand: (@Composable () -> Unit)? = null,
+    /** Zurueck in den Editor - der Knopf steht in der Kopfzeile der Vorschau. */
+    onEditor: (() -> Unit)? = null,
     onClose: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
@@ -285,7 +287,10 @@ internal fun Sidebar(
         ) {
             Column(Modifier.weight(1f)) {
                 Text(
-                    if (vorschauBand != null) PsUi.appText("Preview", "Vorschau")
+                    // Wortlaut von drueben: dort heisst der Block
+                    // „G-code preview" (`AdvancedWorkspaceView.swift`,
+                    // `vorschauInhalt`).
+                    if (vorschauBand != null) PsUi.appText("G-code preview", "G-Code-Vorschau")
                     else PsUi.appText("Workspace", "Arbeitsbereich"),
                     color = PrusaColors.TextPrimary,
                     fontSize = 18.sp,
@@ -300,6 +305,23 @@ internal fun Sidebar(
                     } ?: PsUi.appText("No print bed", "Kein Druckbett"),
                     color = PrusaColors.TextMuted,
                     fontSize = 12.sp,
+                )
+            }
+            // Der Weg zurueck gehoert neben die Ueberschrift, nicht nur
+            // in die obere Leiste: wer rechts liest, sucht dort weiter.
+            // Genauso drueben, wo der Knopf „Editor" heisst.
+            if (vorschauBand != null && onEditor != null) {
+                Text(
+                    PsUi.appText("Editor", "Editor"),
+                    color = PrusaColors.Orange,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(Corners.FIELD.dp))
+                        .background(PrusaColors.PanelRaised)
+                        .clickable(onClick = onEditor)
+                        .heightIn(min = psTouch(40))
+                        .padding(horizontal = 12.dp, vertical = 10.dp),
                 )
             }
             onClose?.let { close ->

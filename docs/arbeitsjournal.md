@@ -58,6 +58,43 @@ sondern die Absprache währenddessen.
 
 ## 2026-08-20
 
+### Claude — AP-24 zu Ende, und eine Korrektur an mir selbst
+
+Gestern hatte ich in Abschnitt Z geschrieben, iOS lege Zahlen und
+Legende schwebend ueber das Bett und muesse nachziehen. **Das war
+falsch.** `AdvancedWorkspaceView.vorschauInhalt` zeigt sie laengst im
+rechten Band, und `FinalPreviewPanel.swift` sagt es im Quelltext
+ausdruecklich: „Nur noch fuer den Simple Mode - der Advanced Mode zeigt
+Statistik und Legende stattdessen direkt im rechten Menueband". Android
+war der Nachzuegler, nicht iOS. Der Eintrag ist korrigiert.
+
+Was iOS wirklich noch nicht tut, ist das *Ausblenden* des Editors: dort
+steht die Vorschau unter dem Editorinhalt, hier ersetzt sie ihn. Das ist
+Nils' Vorgabe, und in dieser Richtung zieht iOS nach.
+
+**Zwei Dinge aus dem Vergleich uebernommen.** Erstens heisst der Block
+drueben „G-code preview", nicht „Preview" - so heisst er hier jetzt
+auch. Zweitens traegt er dort einen Knopf *Editor* als Rueckweg. Den
+gab es hier nicht; man musste quer ueber den Bildschirm in die obere
+Leiste. Jetzt steht er neben der Ueberschrift, in beiden Modi.
+
+**Und der Simple Mode war keine offene Frage.** Ich hatte notiert, wohin
+die Legende dort gehoert, muesse Nils entscheiden. Falsch: iOS hat eine
+feste Antwort. Auf breiten Geraeten steht die Karte am rechten Rand, auf
+schmalen unten - drueben iPad gegen iPhone, hier die Bildschirmbreite.
+Kopfzeile *Finaler G-Code*, derselbe *Editor*-Knopf, darunter Zahlen und
+Legende. Den Schichtbereich fuehrt iOS dort als zwei Regler mit; hier
+nicht, weil der senkrechte Regler am linken Rand dasselbe tut.
+
+**Zwei Kollisionen, beide erst am Bildschirmfoto zu sehen.** Die Karte
+lag ueber der Werkzeugspalte am rechten Rand. Und der senkrechte
+Schichtregler fing am Bildschirmrand an: sein oberer Griff sass in der
+Statusleiste, die Zahl „198" stand neben der Uhrzeit. Der erste
+Korrekturversuch schob ihn genau in die Kapsel *Bett 1* - erst der
+zweite sass. Das war kein neuer Fehler, der Regler stand im Simple Mode
+immer schon so; aufgefallen ist es erst, als daneben etwas anderes
+Ordentliches stand.
+
 ### Claude — AP-24: rechts steht jetzt entweder der Editor oder die Vorschau
 
 Nils, waehrend ich am Abgleich sass: das schwebende Menue ueber dem Bett

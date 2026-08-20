@@ -83,6 +83,7 @@ ab; von dort gehört sie in die Arbeitskopie kopiert. Achtung: `du` meldet
 | AP-09 Leere Zustände | `875a655` | `LeeresPanel` als Muster |
 | AP-18 Bindungen | `27ac6eb`, `1eb4c97` | 26 fehlende Funktionen → noch 2 |
 | Bemalen (Strich, Füllmodi) | `e2f9dad`, `9da2adf` | Spur statt Punkt, 1358 Facetten |
+| AP-24 Simple-Vorschau + Editor-Knopf | (dieser Commit) | *Finaler G-Code* rechts am Rand, *Editor* führt zurück |
 | AP-24 Viewer statt schwebender Karte | `5ab12eb` | Band sagt *Preview*, Legende bricht um, über dem Bett steht nichts |
 | AP-11 Slice-Blatt (Simple) | `feb230a` | *Send to printer* unter dem Export, Hinweis wenn nichts geschrieben wurde |
 | Kleinigkeiten | `86c1842` | *Sliced in <1s* statt *0m*; *Wipe into infill* statt deutscher Beschriftung |
@@ -116,10 +117,10 @@ Reihenfolge — die muss man sich weiter ansehen.
 
 **Neu von Nils (20.08.):** das schwebende Menü über dem Bett soll weg,
 und rechts soll zwischen einer **Viewer-** und einer **Editor**-Ansicht
-umgeschaltet werden. Umgesetzt als **AP-24**, im Advanced Mode fertig
-und belegt. Offen bleibt dort der Simple Mode, der die Vorschau-Legende
-bisher gar nicht hat — wohin sie dort gehört, ist eine Entscheidung für
-Nils.
+umgeschaltet werden. Umgesetzt als **AP-24**, in beiden Modi
+fertig und belegt. Der Simple Mode hatte die Vorschau-Legende gar nicht;
+wohin sie gehört, war keine offene Frage, sondern steht in
+`FinalPreviewPanel.swift`.
 
 Ebenfalls von ihm vorgemerkt: **iOS fehlt der Werkzeugweg-Regler** aus
 AP-14. Steht als Punkt 7 in Abschnitt Z, braucht den Mac.
@@ -1093,10 +1094,27 @@ Die Legende bricht jetzt um (`FlowRow`) statt seitwärts zu scrollen: im
 schmaleren Band lief die Reihe rechts aus dem Bild, und ein waagerechter
 Schieber ohne sichtbaren Rand sieht aus wie abgeschnittener Text.
 
-**Offen:** Der **Simple Mode** hat die Vorschau-Legende gar nicht — dort
-gibt es weder Zahlen noch Merkmalswahl. iOS hat beides in beiden Modi.
-Wo sie im Simple Mode hingehört (eigenes Panel neben *Projects ·
-Printer · Material · Settings*?), ist eine Entscheidung für Nils.
+**Der Weg zurück steht in der Kopfzeile.** Neben *G-Code-Vorschau*
+liegt ein Knopf *Editor* — wortgleich mit drüben
+(`AdvancedWorkspaceView.vorschauInhalt`). Wer rechts liest, sucht dort
+weiter; die obere Leiste allein war ein Weg quer über den Bildschirm.
+
+**Simple Mode: erledigt** (20.08.). Erst als offene Frage notiert — zu
+Unrecht: iOS hat dafür eine feste Antwort, `FinalPreviewPanel.swift`.
+Auf breiten Geräten steht die Karte am rechten Rand, auf schmalen
+unten; drüben ist das die Unterscheidung iPad/iPhone, hier die
+Bildschirmbreite (< 840 dp). Kopfzeile *Finaler G-Code* mit demselben
+*Editor*-Knopf, darunter die Zahlen und die Legende.
+
+Den Schichtbereich führt iOS in dieser Karte als zwei Regler mit —
+hier nicht: der senkrechte Regler steht schon am linken Rand, und
+zweimal dieselbe Einstellung ist eine zu viel.
+
+**Zwei Kollisionen dabei behoben:** die Karte lag über der
+Werkzeugspalte am rechten Rand (jetzt 84 dp Abstand), und der
+senkrechte Schichtregler begann am Bildschirmrand statt unter der
+Kopfzeile — sein oberer Griff saß in der Statusleiste, nach dem ersten
+Korrekturversuch mitten in der Kapsel *Bett 1*.
 
 ---
 
@@ -1128,10 +1146,15 @@ Braucht einen erreichbaren Mac.
    `…_move_range_bounds` gebunden sind. Android hat ihn seit AP-14
    (`ed84cd5`); von Nils ausdrücklich zum Nachziehen vorgemerkt
    (20.08.).
-8. **Rechts Viewer statt schwebender Karte.** Siehe AP-24: das rechte
-   Band schaltet zwischen *Arbeitsbereich* und *Vorschau* um, statt die
-   Zahlen und die Legende über das Bett zu legen. iOS legt sie dort
-   ebenfalls schwebend ab und zieht nach.
+8. **Rechts umschalten statt nebeneinanderlegen.** *Korrektur vom
+   20.08.:* hier stand, iOS lege Zahlen und Legende schwebend über das
+   Bett. Das ist falsch — `AdvancedWorkspaceView.vorschauInhalt` zeigt
+   sie längst im rechten Band, und `FinalPreviewPanel.swift` sagt es im
+   Quelltext ausdrücklich. Android war der Nachzügler, nicht iOS.
+   Was iOS **noch nicht** tut: den Editor dabei *ausblenden*. Drüben
+   steht die Vorschau unter dem Editorinhalt, hier ersetzt sie ihn —
+   das ist Nils' Vorgabe vom 20.08. („zwischen Viewer und Editor hin
+   und her switchen"). Diese Richtung zieht iOS nach.
 9. **Auswahlblatt überlappt die Seitenleiste.** Das Filamentblatt ist ein
    `.sheet` und schneidet auf dem iPad die rechte Seitenleiste mitten im
    Wort. Der Advanced-Einstellungsdialog macht es richtig und legt einen
@@ -1171,7 +1194,7 @@ abgelegten `.so` (geprüft 20.08.2026).
 | 22 | AP-22 Alle Betten schneiden | nein | fertig |
 | 23 | AP-19 Hochformat | nein | zurückgestellt |
 | 24 | AP-23 Werkzeugbereich | nein | zurückgestellt, braucht eine Entscheidung |
-| 25 | AP-24 Rechts: Viewer statt Editor | nein | fertig (Advanced), Simple offen |
+| 25 | AP-24 Rechts: Viewer statt Editor | nein | fertig |
 | 26 | Z iOS nachziehen | Mac | offen |
 
 ---
