@@ -1271,6 +1271,47 @@ class SlicerService : Service() {
             .onSuccess { arranged -> if (arranged) { refreshObjects(); invalidateSliceResult() } }
     }
 
+    /**
+     * Ein bestimmtes Bett anordnen, mit Abstand und Drehen.
+     *
+     * Anders als [arrange] meldet der Kern hier, *warum* nichts
+     * passiert ist - gesperrt, leer oder voll - und wie viele Instanzen
+     * betroffen waren. Die Oberflaeche schreibt daraus einen Satz statt
+     * einen Fehlercode zu zeigen (AP-10).
+     */
+    fun arrangeBett(
+        index: Int,
+        gapMm: Float,
+        drehenErlaubt: Boolean,
+    ): PsmCore.ArrangeResult? {
+        val c = core ?: return null
+        val ergebnis = runCatching { c.arrangeBed(index, gapMm, drehenErlaubt) }
+            .onFailure { Log.w(TAG, "Bett ${index + 1} anordnen", it) }
+            .getOrNull()
+        if (ergebnis?.ok == true) {
+            refreshObjects()
+            invalidateSliceResult()
+        }
+        return ergebnis
+    }
+
+    /** Alle Betten der Reihe nach. Gibt zurueck, wie viele neu lagen. */
+    fun arrangeAlleBetten(gapMm: Float, drehenErlaubt: Boolean): Int {
+        val c = core ?: return 0
+        var geordnet = 0
+        _beds.value.forEach { bett ->
+            val r = runCatching { c.arrangeBed(bett.index, gapMm, drehenErlaubt) }
+                .onFailure { Log.w(TAG, "Bett ${bett.index + 1} anordnen", it) }
+                .getOrNull()
+            if (r?.ok == true && r.status == PsmCore.ArrangeStatus.ARRANGED) geordnet++
+        }
+        if (geordnet > 0) {
+            refreshObjects()
+            invalidateSliceResult()
+        }
+        return geordnet
+    }
+
     fun dropToBed(id: Int) {
         if (!checkBedUnlocked(activeBedIndex(), SimpleModeState.text("Drop to bed", "Aufs Bett legen"))) return
         runCatching { core?.dropToBed(id) }

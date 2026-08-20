@@ -56,6 +56,63 @@ sondern die Absprache währenddessen.
 
 ---
 
+## 2026-08-20
+
+### Claude — AP-10: Anordnen mit Optionen, und ein Kernbau, den es nicht brauchte
+
+Der Plan sagte fuer AP-10 „Kern: ja" und gab die Reihenfolge vor:
+Bindung schreiben, Kern bauen (20-25 min auf dem Unraid), dann die
+Oberflaeche. Vor dem Anstossen habe ich nachgesehen, was schon da ist -
+und die Bindung stand bereits: `psm_arrange_bed_ex` in
+`core/include/psmobile_core.h:426`, `nativeArrangeBedEx` in
+`android/jni/psm_jni.cpp:1527`, `PsmCore.arrangeBed(...)` samt
+`ArrangeStatus` und `ArrangeResult` in Kotlin. Und `grep -ac
+nativeArrangeBedEx` auf der abgelegten `libpsmobile_core.so` findet sie
+auch dort. Der Kernbau war schlicht nicht noetig.
+
+Dasselbe gilt fuer die drei anderen Pakete, die der Plan als
+kernpflichtig fuehrte: `nativeLayerProfileAdaptive` (AP-13),
+`nativeSetMoveRange` und `nativeMoveRangeBounds` (AP-14) sowie
+`nativeZipExtractModels` (AP-17 g) sind alle in der `.so`. **Kein Paket
+im Plan braucht mehr einen Kernbau.** Das ist inzwischen der dritte Fall
+nach AP-12 und AP-17 b/c, in dem der Plan aelter war als der Quelltext.
+Die Regel steht dort jetzt zum dritten Mal: im Quelltext von heute
+nachsehen, nicht in der Historie.
+
+**Was gebaut wurde.** `AnordnenPanel.kt` haengt als kleines Feld am
+*Anordnen*-Knopf der Schiene und geht beim Halten auf; Tippen ordnet
+weiter sofort an. Vorher war Halten mit „aktuelles Bett" belegt - das war
+dieselbe Operation unter anderem Namen und ist jetzt eine Zeile im Feld.
+Darin: Zielmodus *Current bed / All beds*, die Zielbettliste mit Schloss
+und Objektzahl, Abstand 0-50 mm in Halbschritten, *Allow rotation*, und
+darunter der Ergebnissatz. Wie drueben, wo dasselbe als Popover am Knopf
+haengt (`BedSelector.swift`, `ArrangePanel`).
+
+**Zwei Quellen, sauber getrennt.** Die Frage „darf ich ueberhaupt?"
+beantwortet der gemeinsame `BedStripContract`, nicht die Ansicht - dafuer
+kam `AndroidBedStripAdapter.arrangeFuer(...)` dazu, das den Vertrag mit
+dem Zielbett als aktivem fragt. Genau die Drehung, die
+`arrangeAvailability(for:)` auf iOS macht. Die Meldung *danach* kommt vom
+Kern: `ArrangeStatus` unterscheidet *leer*, *gesperrt* und *voll*, sonst
+saehe der Nutzer bei einem vollen Bett dieselbe Zeile wie bei einem
+leeren.
+
+Im Dienst dazu `arrangeBett(index, gap, drehen)` und
+`arrangeAlleBetten(gap, drehen)`; das alte `arrange()` bleibt fuer den
+Tipp auf den Knopf.
+
+Belegt am Emulator mit zwei Betten: Ziel Bett 2 (leer) meldet „Bed 2 is
+empty. There is nothing to arrange.", Ziel Bett 1 meldet „Bed 1: 1
+instances arranged." - wortgleich mit `ArrangePanel.anordnen()`.
+
+**Nebenbefund im Plan.** Die Tabelle unter „Reihenfolge" war zerschossen:
+eine frueher eingefuegte Zeile hatte die Zeilen aus „Erledigt" mehrfach
+hineinkopiert, sodass Nummern und Pakete nicht mehr zusammenpassten. Sie
+ist neu geschrieben, mit einer Spalte *Stand* und den Paketen AP-20 bis
+AP-23, die vorher ganz fehlten.
+
+---
+
 ## 2026-08-19
 
 ### Claude — Bemalen ging nicht, und warum das kein Einzelfall war

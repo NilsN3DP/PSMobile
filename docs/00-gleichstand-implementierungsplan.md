@@ -15,8 +15,8 @@ und die Quelltextkommentare.
 das, was eine neue Sitzung als Erstes liest — hier steht, wo genau
 weitergemacht wird, ohne dass jemand die Historie durchsuchen muss.
 
-**Zuletzt geändert:** 19.08.2026 · Zweig
-`codex/ios-android-parity-implementation` · letzter Commit `c41a1ba`
+**Zuletzt geändert:** 20.08.2026 · Zweig
+`codex/ios-android-parity-implementation` · letzter Commit `234088f`
 
 ### Wo die Arbeit liegt
 
@@ -83,6 +83,7 @@ ab; von dort gehört sie in die Arbeitskopie kopiert. Achtung: `du` meldet
 | AP-09 Leere Zustände | `875a655` | `LeeresPanel` als Muster |
 | AP-18 Bindungen | `27ac6eb`, `1eb4c97` | 26 fehlende Funktionen → noch 2 |
 | Bemalen (Strich, Füllmodi) | `e2f9dad`, `9da2adf` | Spur statt Punkt, 1358 Facetten |
+| AP-10 Anordnen mit Optionen | (dieser Commit) | *Bed 2 is empty…* und *Bed 1: 1 instances arranged.* im Feld am Knopf |
 | Bettzuordnung beim Ziehen | `6f17c85` | `Bed 1 · 0 / Bed 2 · 1` |
 
 ### Teilweise
@@ -95,35 +96,32 @@ ab; von dort gehört sie in die Arbeitskopie kopiert. Achtung: `du` meldet
 
 ### Als Nächstes
 
-**Damit ist alles zu, was ohne Kernbau und ohne Mac geht.** Von den
-Android-Paketen bleiben nur noch die vier mit Kernbau.
-
-**AP-10 · Anordnen mit Optionen** ist davon das größte fehlende Stück
-und der nächste Schritt. Kernbau nötig, also zuerst anstoßen:
+**Kein Paket braucht mehr einen Kernbau.** Der Plan behauptete das für
+AP-10, AP-13, AP-14 und AP-17 g — geprüft am 20.08.: die Bindungen
+stehen längst in `android/jni/psm_jni.cpp` und sind in der abgelegten
+`libpsmobile_core.so` enthalten:
 
 ```bash
-ssh -i ~/.ssh/unraid_aipp root@100.109.46.54
-cd "/mnt/user/N3DP/KI Projekte/psmobile-parity-buildhost/repo"
-bash build/scripts/build-core.sh && bash build/scripts/stage-native.sh
+grep -ac nativeArrangeBedEx android/app/src/main/java/../jniLibsFixed/x86_64/libpsmobile_core.so
 ```
 
-Achtung: die Bindung gehört in `android/jni/psm_jni.cpp`, und die
-Änderung muss **vor** dem Kernbau dort stehen — sonst baut man die alte
-Fassung. Danach die `.so` aus `jniLibsFixed` in die Arbeitskopie holen.
+liefert für `nativeArrangeBedEx`, `nativeLayerProfileAdaptive`,
+`nativeSetMoveRange`, `nativeMoveRangeBounds` und
+`nativeZipExtractModels` jeweils einen Treffer. Was fehlt, ist die
+Kotlin- und Oberflächenseite. Das ist derselbe Fehler wie bei AP-12 und
+AP-17 b/c: **im Quelltext von heute nachsehen, nicht in der Historie.**
 
-Konkret:
+Damit bleiben, alle ohne Kern und ohne Mac:
 
-1. `psm_arrange_bed_ex` mit `psm_arrange_info` binden (Status, Objekt-
-   und Instanzzahl; meldet *gesperrt* und *voll* als eigene Fehler).
-2. Ein Panel am *Anordnen*-Knopf: Zielmodus *aktuelles Bett ↔ alle
-   Betten*, Zielbettliste mit Schloss und Objektzahl, Abstand 0–50 mm in
-   Halbschritten, Schalter *Drehen erlauben*, danach ein Ergebnistext.
-3. Die Verfügbarkeit kommt aus dem gemeinsamen `BedStripContract` — die
-   Entscheidung „anordnen möglich?" darf nicht doppelt entstehen.
-
-Danach **AP-13** (adaptive Schichthöhe), **AP-14** (zweiter Regler) und
-**AP-17 g** (ZIP-Import) — alle drei mit demselben Kernbau abgedeckt,
-wenn ihre Bindungen vorher zusammen eingebaut werden.
+- **AP-13 · adaptive Schichthöhe.** `nativeLayerProfileAdaptive` ist
+  gebunden und in `PsmCore` erreichbar. Fehlt: der Qualitätsregler samt
+  Vorschau in der Seitenleiste.
+- **AP-14 · zweiter Regler** (Werkzeugweg innerhalb der Schicht).
+  `nativeSetMoveRange` und `nativeMoveRangeBounds` haben noch keine
+  Kotlin-Deklaration — die gehört in `PsmCore` neben
+  `nativeLayerProfileAdaptive`, danach der zweite Regler an der Vorschau.
+- **AP-17 g · ZIP-Import.** `zipExtractModels` steht in `PsmCore`, der
+  Weg vom Dateiwähler dorthin fehlt.
 
 **AP-04**, **AP-02 iOS** und Abschnitt **Z** brauchen den Mac.
 **AP-19** und **AP-23** sind zurückgestellt.
@@ -538,7 +536,7 @@ für *Keine Druckeinstellungen vorhanden*.
 
 ---
 
-### AP-10 · Anordnen mit Optionen · Kern: ja
+### AP-10 · Anordnen mit Optionen · Kern: nein
 
 **Fundstelle iOS** `BedSelector.swift:450ff`, Popover am Knopf:
 Zielmodus *aktuelles Bett ↔ alle Betten*, Zielbettliste mit Schloss und
@@ -548,12 +546,31 @@ danach ein Ergebnistext.
 **Zustand Android** Ein Knopf, `arrange()` mit Abstand 0, ohne Drehen,
 ohne Rückmeldung.
 
-**Nicht gebunden** `psm_arrange_bed_ex` mit `psm_arrange_info` (Status,
-Objekt- und Instanzzahl; meldet *gesperrt* und *voll* als eigene Fehler)
+**Bindung** `psm_arrange_bed_ex` mit `psm_arrange_info` (Status,
+Objekt- und Instanzzahl; meldet *gesperrt* und *voll* als eigene
+Fehler). Der Plan führte sie als fehlend — sie stand längst in
+`android/jni/psm_jni.cpp:1527` und in `PsmCore.arrangeBed(…)`, und die
+abgelegte `.so` enthält sie. **Kein Kernbau.**
 
 **Hinweis** Der gemeinsame `BedStripContract` prüft die Verfügbarkeit
 bereits. Die Entscheidung „anordnen möglich?" darf nicht doppelt
 entstehen.
+
+**Stand: fertig** (20.08.). `AnordnenPanel.kt` hängt als Feld am
+*Anordnen*-Knopf und öffnet sich beim Halten; Tippen ordnet weiter
+sofort an. Darin: Zielmodus *Current bed ↔ All beds*, Zielbettliste mit
+Schloss und Objektzahl, Abstand 0–50 mm in Halbschritten, *Allow
+rotation*, danach der Ergebnissatz.
+
+Die Verfügbarkeit kommt aus dem Vertrag, nicht aus der Ansicht:
+`AndroidBedStripAdapter.arrangeFuer(…)` fragt ihn mit dem Zielbett als
+aktivem — dieselbe Drehung wie `arrangeAvailability(for:)` drüben. Die
+Meldung *danach* kommt vom Kern (`ArrangeStatus`), damit *voll* und
+*gesperrt* unterscheidbar bleiben.
+
+Belegt am Emulator: mit Bett 2 als Ziel „Bed 2 is empty. There is
+nothing to arrange.", mit Bett 1 „Bed 1: 1 instances arranged." —
+wortgleich mit `ArrangePanel.anordnen()`.
 
 ---
 
@@ -969,76 +986,37 @@ Braucht einen erreichbaren Mac.
 
 ## Reihenfolge
 
-| # | Paket | Kern |
-|---|---|---|
-| 1 | AP-01 Zielflächen | nein |
-| 2 | AP-02 Eckenradien | nein |
-| 3 | AP-03 Vorschau | ja |
-| 4 | AP-04 Objektleiste | nein |
-| 5 | AP-07 Materialauswahl | nein |
-| 6 | AP-09 Leere Zustände | nein |
-| 7 | AP-17 d ColorMix-Vorschau | `492799b` | Vorschau `#ED6941` vor dem Speichern |
-| AP-17 a Weitergeben | `18817d5`, `5605ea0` | *Share · PSMobile-Druckbett.stl* nach dem Export |
-| AP-17 e Reinigungsturm | `431d961` | steht unter der Extruderbank |
-| AP-17 f Zoll-Einheiten | `bcb4361` | `0.0039 in` statt `0.1 mm` |
-| AP-17 b Größenverhältnis | `d919c3d` | Kästchen in der Objektliste |
-| AP-15 Druckerkarten | `50de001` | Karte mit Modell, Zustand, Düse |
-| AP-16 Inspector | `82f3fa8` | Auswahl zeigt EDIT samt Griffen |
-| AP-12 Bettleiste | `f03c7b0` | langer Druck zeigt *Rename* |
-| AP-05 Werkzeugleisten | `f489a48`, `c41a1ba`, `f0c314a` | Schiene mit Trennen, Stützen, Naht |
-| AP-11 Slice-Blatt | `8afd69d`, `c63e329` | `2 G-code files`, *Export all*, Zeile je Datei |
-| AP-22 Alle Betten schneiden | `6bd3438` | `bett-1.gcode`, 53020 Bytes |
-| AP-20 Bereiche statt Reiter | `2e5f5ec` | drei Einstellungszeilen, vier Überschriften, Schneiden-Block außerhalb |
-| AP-08 Einstellungskopf | nein |
-| 8 | AP-06 Schwebende Dialoge | nein |
-| 9 | AP-17 d ColorMix-Vorschau | `492799b` | Vorschau `#ED6941` vor dem Speichern |
-| AP-17 a Weitergeben | `18817d5`, `5605ea0` | *Share · PSMobile-Druckbett.stl* nach dem Export |
-| AP-17 e Reinigungsturm | `431d961` | steht unter der Extruderbank |
-| AP-17 f Zoll-Einheiten | `bcb4361` | `0.0039 in` statt `0.1 mm` |
-| AP-17 b Größenverhältnis | `d919c3d` | Kästchen in der Objektliste |
-| AP-15 Druckerkarten | `50de001` | Karte mit Modell, Zustand, Düse |
-| AP-16 Inspector | `82f3fa8` | Auswahl zeigt EDIT samt Griffen |
-| AP-12 Bettleiste | `f03c7b0` | langer Druck zeigt *Rename* |
-| AP-05 Werkzeugleisten | nein |
-| 10 | AP-10 Anordnen | ja |
-| 11 | AP-13 Adaptive Schichthöhe | ja |
-| 12 | AP-14 Zweiter Regler | ja |
-| 13 | AP-17 d ColorMix-Vorschau | `492799b` | Vorschau `#ED6941` vor dem Speichern |
-| AP-17 a Weitergeben | `18817d5`, `5605ea0` | *Share · PSMobile-Druckbett.stl* nach dem Export |
-| AP-17 e Reinigungsturm | `431d961` | steht unter der Extruderbank |
-| AP-17 f Zoll-Einheiten | `bcb4361` | `0.0039 in` statt `0.1 mm` |
-| AP-17 b Größenverhältnis | `d919c3d` | Kästchen in der Objektliste |
-| AP-15 Druckerkarten | `50de001` | Karte mit Modell, Zustand, Düse |
-| AP-16 Inspector | `82f3fa8` | Auswahl zeigt EDIT samt Griffen |
-| AP-12 Bettleiste | nein |
-| 14 | AP-17 d ColorMix-Vorschau | `492799b` | Vorschau `#ED6941` vor dem Speichern |
-| AP-17 a Weitergeben | `18817d5`, `5605ea0` | *Share · PSMobile-Druckbett.stl* nach dem Export |
-| AP-17 e Reinigungsturm | `431d961` | steht unter der Extruderbank |
-| AP-17 f Zoll-Einheiten | `bcb4361` | `0.0039 in` statt `0.1 mm` |
-| AP-17 b Größenverhältnis | `d919c3d` | Kästchen in der Objektliste |
-| AP-15 Druckerkarten | `50de001` | Karte mit Modell, Zustand, Düse |
-| AP-16 Inspector | `82f3fa8` | Auswahl zeigt EDIT samt Griffen |
-| AP-12 Bettleiste | `f03c7b0` | langer Druck zeigt *Rename* |
-| AP-05 Werkzeugleisten | `f489a48`, `c41a1ba`, `f0c314a` | Schiene mit Trennen, Stützen, Naht |
-| AP-11 Slice-Blatt | nein |
-| 15 | AP-17 d ColorMix-Vorschau | `492799b` | Vorschau `#ED6941` vor dem Speichern |
-| AP-17 a Weitergeben | `18817d5`, `5605ea0` | *Share · PSMobile-Druckbett.stl* nach dem Export |
-| AP-17 e Reinigungsturm | `431d961` | steht unter der Extruderbank |
-| AP-17 f Zoll-Einheiten | `bcb4361` | `0.0039 in` statt `0.1 mm` |
-| AP-17 b Größenverhältnis | `d919c3d` | Kästchen in der Objektliste |
-| AP-15 Druckerkarten | nein |
-| 16 | AP-17 d ColorMix-Vorschau | `492799b` | Vorschau `#ED6941` vor dem Speichern |
-| AP-17 a Weitergeben | `18817d5`, `5605ea0` | *Share · PSMobile-Druckbett.stl* nach dem Export |
-| AP-17 e Reinigungsturm | `431d961` | steht unter der Extruderbank |
-| AP-17 f Zoll-Einheiten | `bcb4361` | `0.0039 in` statt `0.1 mm` |
-| AP-17 b Größenverhältnis | `d919c3d` | Kästchen in der Objektliste |
-| AP-15 Druckerkarten | `50de001` | Karte mit Modell, Zustand, Düse |
-| AP-16 Inspector | nein |
-| 17 | AP-17 a–f Kleinere Pakete | nein |
-| 18 | AP-17 g ZIP-Import | ja |
-| 19 | AP-18 Restliche Bindungen | ja |
-| 20 | AP-19 Hochformat | nein |
-| 21 | Z iOS nachziehen | Mac |
+Die Spalte *Kern* sagt, ob ein Kernbau nötig ist. Sie stand für vier
+Pakete auf „ja" und war falsch — die Bindungen lagen längst in der
+abgelegten `.so` (geprüft 20.08.2026).
+
+| # | Paket | Kern | Stand |
+|---|---|---|---|
+| 1 | AP-01 Zielflächen | nein | fertig |
+| 2 | AP-02 Eckenradien (Android) | nein | fertig |
+| 3 | AP-03 Vorschau | nein | fertig |
+| 4 | AP-04 Objektleiste | nein | teilweise, Rest braucht den Mac |
+| 5 | AP-07 Materialauswahl | nein | fertig |
+| 6 | AP-09 Leere Zustände | nein | teilweise |
+| 7 | AP-08 Einstellungskopf | nein | fertig |
+| 8 | AP-06 Schwebende Dialoge | nein | fertig |
+| 9 | AP-05 Werkzeugleisten | nein | fertig |
+| 10 | AP-10 Anordnen mit Optionen | nein | fertig |
+| 11 | AP-13 Adaptive Schichthöhe | nein | offen |
+| 12 | AP-14 Zweiter Regler | nein | offen |
+| 13 | AP-12 Bettleiste | nein | fertig |
+| 14 | AP-11 Slice-Blatt | nein | fertig |
+| 15 | AP-15 Druckerkarten | nein | fertig |
+| 16 | AP-16 Inspector | nein | fertig |
+| 17 | AP-17 a–f Kleinere Pakete | nein | fertig |
+| 18 | AP-17 g ZIP-Import | nein | offen |
+| 19 | AP-18 Restliche Bindungen | nein | fertig bis auf zwei |
+| 20 | AP-20 Bereiche statt Reiter | nein | fertig |
+| 21 | AP-21 Bettübersicht | nein | fertig |
+| 22 | AP-22 Alle Betten schneiden | nein | fertig |
+| 23 | AP-19 Hochformat | nein | zurückgestellt |
+| 24 | AP-23 Werkzeugbereich | nein | zurückgestellt, braucht eine Entscheidung |
+| 25 | Z iOS nachziehen | Mac | offen |
 
 ---
 

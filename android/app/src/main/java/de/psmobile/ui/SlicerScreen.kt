@@ -105,6 +105,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.window.Popup
+import androidx.compose.ui.window.PopupProperties
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.zIndex
 import de.psmobile.core.PsmViewport
@@ -587,6 +590,9 @@ private fun SlicerContent(
                     progress !is SlicerService.Progress.Running,
                 canRedo = history.canRedo &&
                     progress !is SlicerService.Progress.Running,
+                anordnenPanel = { schliessen ->
+                    AnordnenPanel(service, schliessen)
+                },
             ) { name ->
                 // Zuordnung nach den Werkzeugnamen aus GLCanvas3D.cpp
                 when (name) {
@@ -1236,6 +1242,8 @@ private fun ToolStrip(
     canPaste: Boolean,
     canUndo: Boolean,
     canRedo: Boolean,
+    /** Wird beim Halten des Anordnen-Knopfs gezeigt; siehe [AnordnenPanel]. */
+    anordnenPanel: @Composable (onClose: () -> Unit) -> Unit,
     onTool: (String) -> Unit,
 ) {
     val tools = PsUi.toolbar
@@ -1257,6 +1265,11 @@ private fun ToolStrip(
         "arrangecurrent", "splitobjects", "splitvolumes",
     )
     var trennenOffen by remember { mutableStateOf(false) }
+    var anordnenOffen by remember { mutableStateOf(false) }
+    // Das Feld soll neben der Schiene stehen, nicht auf ihr.
+    val versatz = with(LocalDensity.current) {
+        IntOffset(TOOL_RAIL_WIDTH.roundToPx(), 0)
+    }
 
     Column(
         Modifier
@@ -1274,10 +1287,23 @@ private fun ToolStrip(
                           (tool.name != "undo" || canUndo) &&
                           (tool.name != "redo" || canRedo)
             if (tool.name == "arrange") {
-                // Tipp ordnet alle Betten an, Halten nur das aktuelle -
-                // dieselbe Doppelbelegung wie drueben.
-                ToolButton(tool, enabled, onLongClick = { onTool("arrangecurrent") }) {
-                    onTool("arrange")
+                // Tipp ordnet das aktive Bett an, Halten oeffnet die
+                // Optionen - drueben haengt dasselbe Feld als Popover am
+                // selben Knopf.
+                Box {
+                    ToolButton(tool, enabled, onLongClick = { anordnenOffen = true }) {
+                        onTool("arrange")
+                    }
+                    if (anordnenOffen) {
+                        Popup(
+                            alignment = Alignment.TopStart,
+                            offset = versatz,
+                            onDismissRequest = { anordnenOffen = false },
+                            properties = PopupProperties(focusable = true),
+                        ) {
+                            ScaledOverlay { anordnenPanel { anordnenOffen = false } }
+                        }
+                    }
                 }
             } else {
                 ToolButton(tool, enabled) { onTool(tool.name) }

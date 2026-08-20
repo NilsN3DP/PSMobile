@@ -32,6 +32,24 @@ object AndroidBedStripAdapter {
             beds.indexOfFirst { it.active },
         )
 
+    /**
+     * Verfuegbarkeit fuer ein beliebiges Zielbett, nicht nur das aktive.
+     *
+     * Der Vertrag beantwortet die Frage immer fuer das aktive Bett -
+     * fuer ein anderes Ziel fragt man ihn deshalb mit diesem Bett als
+     * aktivem. Genauso auf iOS (`BedSelector.swift`,
+     * `arrangeAvailability(for:)`), damit die Antwort nicht zweimal
+     * entsteht.
+     */
+    fun arrangeFuer(
+        beds: List<AndroidBedSnapshot>,
+        fallback: String,
+        index: Int,
+    ): ArrangeAvailability {
+        val gedreht = beds.map { it.copy(active = it.index == index) }
+        return state(gedreht, fallback).arrange
+    }
+
     fun arrange(beds: List<AndroidBedSnapshot>, fallback: String): ArrangeDecision {
         val state = state(beds, fallback)
         val name = state.items[state.activeIndex].name
