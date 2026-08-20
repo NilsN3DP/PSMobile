@@ -67,6 +67,7 @@ ab; von dort gehört sie in die Arbeitskopie kopiert. Achtung: `du` meldet
 | AP-03 Vorschau | `3377a96` | `0:30 · 3.59 m · 10.7 g`, Chips grauen aus |
 | AP-07 Materialauswahl | `875a655` | Typ-Filter PLA blendet auf vier Karten ein |
 | AP-06 Schwebende Dialoge | `469203a`, `1e785c0` | Einstellungen als Karte über dem Bett, Rand 104/120/80 px |
+| AP-05 Werkzeugleisten | `f489a48`, `c41a1ba`, `f0c314a` | Schiene mit Trennen, Stützen, Naht |
 | AP-11 Slice-Blatt | `8afd69d`, `c63e329` | `2 G-code files`, *Export all*, Zeile je Datei |
 | AP-22 Alle Betten schneiden | `6bd3438` | `bett-1.gcode`, 53020 Bytes |
 | AP-20 Bereiche statt Reiter | `2e5f5ec` | drei Einstellungszeilen, vier Überschriften, Schneiden-Block außerhalb |
@@ -81,45 +82,26 @@ ab; von dort gehört sie in die Arbeitskopie kopiert. Achtung: `du` meldet
 - **AP-04** Objektleiste steht im Advanced Mode (`78ecc90`). Offen: iOS
   führt die Griffe *Verschieben · Drehen · Skalieren · Kein* am Anfang
   derselben Leiste, Android hat sie getrennt.
-- **AP-05** Zurück/Vor unten, „3D" statt „Iso" (`f489a48`); obere
-  Leiste mit *Öffnen*, *Projekte* und dem Vorschau-Umschalter, Fußzeile
-  der Schiene mit *Drucker* und *App-Einstellungen* (`c41a1ba`). Offen:
-  *Stützen* und *Naht* in der Schiene, *Trennen* als Untermenü,
-  *Anordnen* per Tipp und Halten.
 - **AP-09** Das Muster steht und ist in der Materialauswahl im Einsatz.
   Offen: dieselbe Behandlung für *Keine Druckeinstellungen vorhanden*.
 
 ### Als Nächstes
 
-**AP-05 zu Ende bringen — die linke Schiene.** Kein Kernbau. Die obere
-Leiste und die Fußzeile stehen seit `c41a1ba`; es fehlen drei Einträge
-in der Schiene selbst. Vorgehen steht im Paket.
+**AP-12 · Bettleiste.** Kein Kernbau. Drei Umbauten, die auf iOS schon
+passiert sind:
 
-Danach **AP-05 zu Ende bringen — die linke Schiene.** Kein Kernbau nötig. Die
-obere Leiste und die Fußzeile stehen seit `c41a1ba`; es fehlen drei
-Einträge in der Schiene selbst.
+1. Die Bettleiste **raus aus dem Easy Mode** (`04b2c3d`) — dort störte
+   sie mehr, als sie half.
+2. Im Advanced die **Kapselreihe** (`c4402bb`) — steht seit AP-21.
+3. **Sperren, Umbenennen, Entfernen ins Kontextmenü** (`c4402bb`).
+   Umbenennen liegt auf Android schon im langen Druck; Sperren und
+   Entfernen stehen noch als eigene Knöpfe. Vor dem Verschieben prüfen,
+   was iOS heute wirklich zeigt — das Foto vom iPad zeigt Schloss und X
+   sichtbar in der Kapsel, der Quelltext nennt das Kontextmenü nur
+   zusätzlich.
 
-Konkret, in dieser Reihenfolge:
-
-1. **Stützen und Naht** in die Schiene. Beide gibt es im Kern längst —
-   `PsmCore.PaintTool.SUPPORT` und `.SEAM`, das Malen ist seit
-   `e2f9dad` gebunden. In `SlicerScreen` setzt `surfaceMode` schon
-   heute den Malmodus; die Schiene braucht nur zwei Einträge, die
-   dasselbe tun wie die Knöpfe im Seitenband unter *Tools*.
-   Achtung: die Schiene wird aus `PsUi.toolbar` (PrusaSlicers eigener
-   `toolbar.json`) aufgebaut — diese beiden sind dort **nicht** drin
-   und gehören deshalb hinter die Schleife, nicht hinein.
-2. *Zu Objekten* und *Zu Volumen* zu einem Eintrag **Trennen** mit
-   Untermenü zusammenfassen. Das Untermenü ist ein `DropdownMenu` und
-   gehört damit in `ScaledOverlay` (Regeltest).
-3. **Anordnen** öffnet per Tipp *und Halten*: Tipp ordnet an, Halten
-   öffnet die Optionen (alle Betten, Rotation erlauben) — auf iOS ist
-   das ein Popover am Knopf, siehe `faf4729`.
-
-**Zu *Sichern unter*:** der Knopf bleibt auf Android und iOS bekommt
-keinen. Der Name kommt unter Android aus dem Systemdialog, ein offenes
-Projekt still zu überschreiben ist dort das erwartete Verhalten — ein
-systemeigener Unterschied, und die sind erlaubt (siehe Grundsatz).
+Danach **AP-15 · Druckerauswahl als Karten** und **AP-16 · Inspector
+öffnet nach der Auswahl**, beide ohne Kernbau.
 
 Danach **AP-04** zu Ende — dafür muss aber der Mac erreichbar sein, weil
 die Angleichung dort auf der iOS-Seite passiert. Er ist ab dem
@@ -400,6 +382,20 @@ Dazu die Wortwahl: iOS nennt die Ansicht **3D**, nicht *Iso* —
 
 *Trennen* fasst „Zu Objekten" und „Zu Volumen" zusammen. *Anordnen*
 öffnet per Tipp **und Halten**.
+
+**Stand: erledigt** (20.08., `f489a48`, `c41a1ba`, `f0c314a`). Obere
+Leiste, untere Leiste, Fußzeile und Schiene stehen.
+
+Die Schiene liest jetzt: Import · Löschen · Leeren · Anordnen ·
+Kopieren · Einfügen · +Kopie · −Kopie · Optionen · **Trennen** ·
+**Stützen** · **Naht**, darunter die Fußzeile mit Drucker und
+App-Einstellungen. *Anordnen* nimmt beim Tippen alle Betten und beim
+Halten nur das aktuelle — der eigene Knopf *Aktuelles Bett* entfällt.
+Das Trennen-Menü zeigt *To objects* und *To parts*.
+
+*Stützen* und *Naht* kommen nicht aus PrusaSlicers `toolbar.json` — als
+Leistenknopf gibt es sie dort nicht —, sondern von Hand hinter der
+Schleife. Zweites Tippen legt das Werkzeug wieder weg.
 
 ---
 
@@ -913,7 +909,8 @@ Braucht einen erreichbaren Mac.
 | 4 | AP-04 Objektleiste | nein |
 | 5 | AP-07 Materialauswahl | nein |
 | 6 | AP-09 Leere Zustände | nein |
-| 7 | AP-11 Slice-Blatt | `8afd69d`, `c63e329` | `2 G-code files`, *Export all*, Zeile je Datei |
+| 7 | AP-05 Werkzeugleisten | `f489a48`, `c41a1ba`, `f0c314a` | Schiene mit Trennen, Stützen, Naht |
+| AP-11 Slice-Blatt | `8afd69d`, `c63e329` | `2 G-code files`, *Export all*, Zeile je Datei |
 | AP-22 Alle Betten schneiden | `6bd3438` | `bett-1.gcode`, 53020 Bytes |
 | AP-20 Bereiche statt Reiter | `2e5f5ec` | drei Einstellungszeilen, vier Überschriften, Schneiden-Block außerhalb |
 | AP-08 Einstellungskopf | nein |
@@ -923,7 +920,8 @@ Braucht einen erreichbaren Mac.
 | 11 | AP-13 Adaptive Schichthöhe | ja |
 | 12 | AP-14 Zweiter Regler | ja |
 | 13 | AP-12 Bettleiste | nein |
-| 14 | AP-11 Slice-Blatt | nein |
+| 14 | AP-05 Werkzeugleisten | `f489a48`, `c41a1ba`, `f0c314a` | Schiene mit Trennen, Stützen, Naht |
+| AP-11 Slice-Blatt | nein |
 | 15 | AP-15 Druckerkarten | nein |
 | 16 | AP-16 Inspector | nein |
 | 17 | AP-17 a–f Kleinere Pakete | nein |

@@ -381,6 +381,36 @@ ein Bild machen, statt am Ende zu raten.
 Sekundenlauf „0m". Unter einer Minute gehoeren Sekunden dorthin; die
 Regel liegt im gemeinsamen Modul und betrifft damit beide Seiten.
 
+### Claude — AP-05 zu Ende: die linke Schiene
+
+*Stuetzen* und *Naht* stehen jetzt in der Schiene, *Zu Objekten* und
+*Zu Volumen* sind zu **Trennen** mit Untermenue zusammengefasst, und
+*Anordnen* nimmt beim Tippen alle Betten, beim Halten nur das aktuelle -
+der eigene Knopf *Aktuelles Bett* entfaellt damit.
+
+Commit `f0c314a`. Belegt am Emulator: die Schiene liest Import ·
+Loeschen · Leeren · Anordnen · Kopieren · Einfuegen · +Kopie · -Kopie ·
+Optionen · Trennen · Stuetzen · Naht, darunter Drucker und
+App-Einstellungen; das Trennen-Menue zeigt *To objects* und *To parts*.
+
+**Was dabei zu beachten war:** die Schiene wird aus PrusaSlicers eigener
+`toolbar.json` aufgebaut. *Stuetzen* und *Naht* kommen dort als
+Leistenknopf nicht vor - sie gehoeren hinter die Schleife, nicht hinein.
+Die drei zusammengefassten Eintraege (`arrangecurrent`, `splitobjects`,
+`splitvolumes`) fallen dagegen aus der Schleife heraus.
+
+**Zwei Kleinigkeiten:** `combinedClickable` verlangt ein ausdrueckliches
+`@OptIn(ExperimentalFoundationApi)` - die Datei hatte den Import schon,
+aber nur an einer anderen Funktion. Und die Beschriftung des
+Trennen-Knopfes kam weiter aus `shortToolLabel("splitobjects")` und las
+deshalb erst „Objekte"; den Tooltip zu aendern reicht nicht.
+
+**Ein Fehler in der Buchfuehrung:** beim Fortschreiben des Plans habe
+ich den Abschnitt „Als Naechstes" ersetzt, ohne zu sehen, dass der
+alte AP-05-Text darunter weiterlief - der Abschnitt nannte AP-05
+danach zweimal. Beim Ersetzen ganzer Abschnitte den Bereich zwischen
+zwei Ueberschriften nehmen, nicht ein Textstueck daraus.
+
 ---
 
 ## 2026-08-03
