@@ -83,6 +83,7 @@ ab; von dort gehört sie in die Arbeitskopie kopiert. Achtung: `du` meldet
 | AP-09 Leere Zustände | `875a655` | `LeeresPanel` als Muster |
 | AP-18 Bindungen | `27ac6eb`, `1eb4c97` | 26 fehlende Funktionen → noch 2 |
 | Bemalen (Strich, Füllmodi) | `e2f9dad`, `9da2adf` | Spur statt Punkt, 1358 Facetten |
+| AP-11 Slice-Blatt (Simple) | (dieser Commit) | *Send to printer* unter dem Export, Hinweis wenn nichts geschrieben wurde |
 | Kleinigkeiten | `86c1842` | *Sliced in <1s* statt *0m*; *Wipe into infill* statt deutscher Beschriftung |
 | AP-17 g ZIP-Import | `7298439` | *2 models came from a ZIP archive.*, Bett zeigt 3 Objekte |
 | AP-14 Zweiter Regler | `ed84cd5` | Werkzeugweg 10–7189 unten, Schichtregler links |
@@ -100,7 +101,19 @@ ab; von dort gehört sie in die Arbeitskopie kopiert. Achtung: `du` meldet
 
 ### Als Nächstes
 
-**Ohne den Mac ist nichts mehr offen.** Alle Android-Pakete des Plans
+**Nachtrag vom 20.08.:** „Nichts mehr offen" stimmte nicht ganz. Ein
+Abgleich der Beschriftungen Bildschirm für Bildschirm (iOS `st(…)` gegen
+Android `appText(…)`) hat gezeigt, dass **AP-11 nur zur Hälfte umgesetzt
+war**: gebaut wurde es in der Advanced-Seitenleiste, die Vorlage im Plan
+(`Screens/SliceSheet.swift`) ist aber das **Simple-Mode-Blatt** — und
+dort fehlten *An Drucker senden*, die Zeile je Datei und der Hinweis,
+wenn keine Datei entstand. Das ist nachgeholt, siehe AP-11.
+
+Der Abgleich läuft als Skript und lässt sich wiederholen; er findet
+fehlende und zusätzliche Bedienelemente, sagt aber nichts über die
+Reihenfolge — die muss man sich weiter ansehen.
+
+**Sonst ist ohne den Mac nichts mehr offen.** Alle Android-Pakete des Plans
 sind zu; die Behauptung „Kern: ja" bei AP-10, AP-13, AP-14 und AP-17 g
 war in allen vier Fällen falsch — die Bindungen lagen längst in
 `android/jni/psm_jni.cpp` und in der abgelegten `libpsmobile_core.so`.
@@ -593,7 +606,29 @@ wortgleich mit `ArrangePanel.anordnen()`.
 **Wortwahl** iOS sagt **„Export G-Code"**, nicht *Sichern* — die Datei
 verlässt die Anwendung.
 
-**Stand: teilweise** (20.08., `8afd69d`). Im Ergebnisblock der
+**Stand: fertig** (20.08.). Zuerst nur zur Hälfte: der Block entstand
+in der Advanced-Seitenleiste (`8afd69d`, `c63e329`), die Vorlage
+`Screens/SliceSheet.swift` ist aber das **Simple-Mode-Blatt**. Dort
+fehlten bis zuletzt *An Drucker senden*, die Zeile je Datei und der
+Hinweis auf nicht geschriebene Dateien. Nachgeholt; der Aufbau folgt
+jetzt `SliceSheet.swift:88ff`:
+
+- mehrere Dateien → Zahl, *Alle exportieren*, dann eine Zeile je Datei
+  (*Senden*, wenn genau ein Drucker eingerichtet ist, sonst
+  *Exportieren*),
+- genau eine Datei → *G-Code exportieren*, darunter *An Drucker senden*,
+- keine Datei → der Grund statt eines Knopfs, der ins Leere führt.
+
+Die einzelne Datei kommt aus `lastGcode`, nicht aus `gcodeDateien`: die
+Liste füllt nur ein Lauf über alle Betten. Ein erster Versuch hing am
+Listenumfang und zeigte nach einem gewöhnlichen Schnitt „Der G-Code ließ
+sich nicht schreiben." — obwohl die Datei da war.
+
+Belegt am Emulator mit einem eingerichteten Drucker: *Export G-code*
+prominent, darunter *Send to printer*, darunter *Close* — dieselbe
+Reihenfolge wie drüben.
+
+Vorher (`8afd69d`): Im Ergebnisblock der
 Seitenleiste stehen jetzt die Zahl der Dateien und je eine Zeile mit
 Namen und eigenem Knopf — *Senden*, wenn genau ein Drucker eingerichtet
 ist, sonst *Exportieren*. Dafür nehmen `sendToPrinter(...)` und

@@ -347,6 +347,7 @@ class MainActivity : ComponentActivity() {
                         onShareGcode = {
                             svc.shareableGcodeUri()?.let { uri -> shareGcode(uri) }
                         },
+                        onShareOneGcode = { uri -> shareGcode(uri) },
                         onShareAllGcode = { shareGcodes(svc.shareableGcodeUris()) },
                         onSaveProject = { saveProject(saveAs = false) },
                         onRemoteSettings = { showRemoteSlice = true },

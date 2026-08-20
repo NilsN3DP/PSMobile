@@ -106,6 +106,8 @@ fun SimpleModeScreen(
     onSaveProject: () -> Unit,
     onRemoteSettings: () -> Unit = {},
     onShareGcode: () -> Unit = {},
+    /** Eine einzelne Datei aus der Liste weitergeben (Mehrbett). */
+    onShareOneGcode: (android.net.Uri) -> Unit = {},
     onShareAllGcode: () -> Unit = {},
     onControllerReady: (SceneController) -> Unit = {},
 ) {
@@ -428,12 +430,24 @@ fun SimpleModeScreen(
         if (progress !is SlicerService.Progress.Idle &&
             progress !is SlicerService.Progress.Stale) {
             val gcodeDateien by service.gcodeDateien.collectAsState()
+            val nichtGeschrieben by service.nichtGeschrieben.collectAsState()
+            // Nur mit genau einem eingerichteten Drucker steht das
+            // Senden direkt im Blatt; sonst waere unklar, wohin.
+            val kontext = androidx.compose.ui.platform.LocalContext.current
+            val linkPrinters = remember { de.psmobile.net.PrinterStore.all(kontext) }
             SimpleSliceSheet(
                 progress = progress,
                 onCancel = service::cancelSlice,
                 onClose = service::dismissProgress,
                 onShare = onShareGcode,
-                dateien = gcodeDateien.size,
+                gcodeDateien = gcodeDateien,
+                einzelDatei = service.lastGcode,
+                nichtGeschrieben = nichtGeschrieben,
+                linkPrinters = linkPrinters,
+                onSend = { datei -> linkPrinters.singleOrNull()
+                    ?.let { service.sendToPrinter(it, false, datei) } },
+                onShareOne = { datei ->
+                    service.shareableGcodeUri(datei)?.let(onShareOneGcode) },
                 onShareAll = onShareAllGcode,
             )
         }

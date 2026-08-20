@@ -58,6 +58,44 @@ sondern die Absprache währenddessen.
 
 ## 2026-08-20
 
+### Claude — AP-11 war nur zur Haelfte umgesetzt
+
+Der Plan sagte, ohne den Mac sei nichts mehr offen. Statt zu warten habe
+ich die Beschriftungen Bildschirm fuer Bildschirm gegeneinander gehalten:
+ein kleines Skript zieht aus den iOS-Dateien alle `st("…", "…")` und aus
+den Android-Dateien alle `appText("…", "…")` und zeigt, was auf einer
+Seite steht und auf der anderen fehlt. Ueber die *Reihenfolge* sagt das
+nichts - fehlende und zusaetzliche Bedienelemente findet es zuverlaessig.
+
+Der ertragreiche Treffer: **`SliceSheet.swift` gegen
+`SimpleSliceSheet.kt`.** Auf iOS standen dort „Send", „Send to printer"
+und „The G-Code could not be written.", auf Android keines davon.
+
+Der Grund ist eine Verwechslung beim Bauen von AP-11. Der Plan nennt als
+Vorlage `Screens/SliceSheet.swift` - das ist das **Simple-Mode-Blatt**.
+Gebaut wurde der Block aber im **Advanced-Seitenband**, weil dort das
+Ergebnis steht. Beides ist fuer sich richtig, nur war danach das
+Simple-Blatt aermer als drueben, und der Plan hielt AP-11 fuer fertig.
+
+Jetzt folgt das Blatt dem Aufbau von drueben: bei mehreren Dateien die
+Zahl, ein Sammelexport und eine Zeile je Datei; bei einer Datei der
+Export und darunter das Senden; und wenn gar keine Datei entstand, der
+Grund statt eines Knopfs, der ins Leere fuehrt.
+
+**Ein Fehler dabei, der zeigt, warum man hinsehen muss.** Zuerst hing die
+Fallunterscheidung an der Laenge von `gcodeDateien`. Die Liste fuellt
+aber nur ein Lauf ueber *alle* Betten; ein gewoehnlicher Schnitt legt
+seine eine Datei in `lastGcode` ab. Ergebnis: nach einem normalen
+Schnitt stand „Der G-Code liess sich nicht schreiben." unter Zahlen, die
+belegten, dass er sehr wohl geschrieben worden war. Am Bildschirmfoto
+sofort zu sehen, im Quelltext nicht.
+
+Belegt am Emulator. Fuer den Drucker-Fall habe ich einen Testdrucker
+direkt in die Preferences geschrieben (`run-as de.psmobile`), das
+Bildschirmfoto gemacht und ihn wieder entfernt - die Alternative waere
+gewesen, die halbe Druckereinrichtung durchzuklicken. Ergebnis: *Export
+G-code* prominent, darunter *Send to printer*, darunter *Close*.
+
 ### Claude — Zwei Kleinigkeiten, die beim Testen aufgefallen sind
 
 **„Geslict in 0m".** Der Satz im Slice-Blatt nennt, wie lange der

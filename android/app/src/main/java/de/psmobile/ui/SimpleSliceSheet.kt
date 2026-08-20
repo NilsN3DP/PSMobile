@@ -52,10 +52,23 @@ internal fun SimpleSliceSheet(
     onCancel: () -> Unit,
     onClose: () -> Unit,
     onShare: () -> Unit,
-    /** Wie viele G-Code-Dateien der letzte Lauf ergeben hat. */
-    dateien: Int = 0,
+    /**
+     * Die G-Code-Dateien des letzten Laufs, in der Reihenfolge der
+     * Betten. Nur ein Lauf ueber *alle* Betten fuellt sie; ein
+     * gewoehnlicher Schnitt legt seine eine Datei in [einzelDatei] ab.
+     */
+    gcodeDateien: List<java.io.File> = emptyList(),
+    /** Das Ergebnis eines gewoehnlichen Schnitts, sonst null. */
+    einzelDatei: java.io.File? = null,
+    /** Dateien, die sich nicht schreiben liessen. */
+    nichtGeschrieben: List<String> = emptyList(),
+    /** Eingerichtete PrusaLink-Drucker; ohne sie entfaellt das Senden. */
+    linkPrinters: List<de.psmobile.net.PrusaLink.Printer> = emptyList(),
+    onSend: (java.io.File) -> Unit = {},
+    onShareOne: (java.io.File) -> Unit = {},
     onShareAll: () -> Unit = {},
 ) {
+    val dateien = gcodeDateien.size
     val laeuft = progress is SlicerService.Progress.Running
 
     Box(
@@ -108,26 +121,110 @@ internal fun SimpleSliceSheet(
                         fontSize = 12.sp,
                     )
                     progress.stats?.let { Zahlen(it) }
+                    // Der Aufbau darunter folgt `SliceSheet.swift:88ff`:
+                    // bei mehreren Dateien erst die Zahl, dann ein
+                    // Sammelexport, dann eine Zeile je Datei; bei einer
+                    // Datei der Export und darunter das Senden; und wenn
+                    // gar keine Datei entstand, der Grund statt eines
+                    // Knopfs, der ins Leere fuehrt.
+                    val ziel = linkPrinters.singleOrNull()
                     if (dateien > 1) {
                         Text(
                             st("$dateien G-code files", "$dateien G-Code-Dateien"),
                             color = PrusaColors.TextMuted,
                             fontSize = 12.sp,
                         )
-                    }
-                    Button(
-                        onClick = if (dateien > 1) onShareAll else onShare,
-                        shape = RoundedCornerShape(Corners.FIELD.dp),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = PrusaColors.Orange,
-                        ),
-                        modifier = Modifier.fillMaxWidth().heightIn(min = psTouch(50)),
-                    ) {
-                        // "Exportieren", nicht "Sichern": die Datei
-                        // verlaesst die Anwendung. Wortwahl von iOS.
+                        Button(
+                            onClick = onShareAll,
+                            shape = RoundedCornerShape(Corners.FIELD.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = PrusaColors.Orange,
+                            ),
+                            modifier = Modifier.fillMaxWidth().heightIn(min = psTouch(50)),
+                        ) { Text(st("Export all", "Alle exportieren")) }
+
+                        // Alle Betten teilen sich heute ein Druckerprofil,
+                        // deshalb bekommt PrusaLink jede Datei einzeln vom
+                        // selben Drucker angeboten - dieselbe Begruendung
+                        // steht drueben im Quelltext.
+                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            gcodeDateien.forEach { datei ->
+                                Row(
+                                    Modifier
+                                        .fillMaxWidth()
+                                        .background(
+                                            PrusaColors.PanelRaised,
+                                            RoundedCornerShape(Corners.FIELD.dp),
+                                        )
+                                        .clickable {
+                                            if (ziel != null) onSend(datei)
+                                            else onShareOne(datei)
+                                        }
+                                        .heightIn(min = psTouch(40))
+                                        .padding(horizontal = 10.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    Text(
+                                        datei.name,
+                                        color = PrusaColors.TextPrimary,
+                                        fontSize = 12.sp,
+                                        maxLines = 1,
+                                        modifier = Modifier.weight(1f),
+                                    )
+                                    Text(
+                                        if (ziel != null) st("Send", "Senden")
+                                        else st("Export", "Exportieren"),
+                                        color = PrusaColors.Orange,
+                                        fontSize = 12.sp,
+                                    )
+                                }
+                            }
+                        }
+                    } else if (einzelDatei != null) {
+                        Button(
+                            onClick = onShare,
+                            shape = RoundedCornerShape(Corners.FIELD.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = PrusaColors.Orange,
+                            ),
+                            modifier = Modifier.fillMaxWidth().heightIn(min = psTouch(50)),
+                        ) {
+                            // "Exportieren", nicht "Sichern": die Datei
+                            // verlaesst die Anwendung. Wortwahl von iOS.
+                            Text(st("Export G-code", "G-Code exportieren"))
+                        }
+                        if (ziel != null) {
+                            TextButton(
+                                onClick = { onSend(einzelDatei) },
+                                modifier = Modifier.fillMaxWidth(),
+                            ) {
+                                Text(
+                                    st("Send to printer", "An Drucker senden"),
+                                    color = PrusaColors.Orange,
+                                )
+                            }
+                        }
+                    } else {
+                        // Ein Export-Knopf ohne Datei dahinter waere die
+                        // schlechteste Auskunft: man tippt, und nichts
+                        // passiert.
                         Text(
-                            if (dateien > 1) st("Export all", "Alle exportieren")
-                            else st("Export G-code", "G-Code exportieren")
+                            st(
+                                "The G-code could not be written.",
+                                "Der G-Code ließ sich nicht schreiben.",
+                            ),
+                            color = PrusaColors.Danger,
+                            fontSize = 12.sp,
+                        )
+                    }
+                    if (nichtGeschrieben.isNotEmpty()) {
+                        Text(
+                            st(
+                                "Not written: ${nichtGeschrieben.joinToString(", ")}",
+                                "Nicht geschrieben: ${nichtGeschrieben.joinToString(", ")}",
+                            ),
+                            color = PrusaColors.Danger,
+                            fontSize = 12.sp,
                         )
                     }
                     TextButton(onClick = onClose, modifier = Modifier.fillMaxWidth()) {
