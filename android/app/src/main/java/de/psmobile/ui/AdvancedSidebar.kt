@@ -83,9 +83,12 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInParent
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.input.pointer.pointerInput
@@ -209,14 +212,29 @@ internal fun Sidebar(
     //
     // TOOLS wird beim Auswaehlen nicht angetastet: wer gerade malt und
     // ein anderes Objekt antippt, wird nicht aus dem Werkzeug gerissen.
+    // Wo der Bearbeiten-Bereich im Band steht. Aufklappen allein reicht
+    // nicht: bei offenen Profilen liegt er unterhalb des sichtbaren
+    // Fensters, und man sieht nach dem Antippen eines Objekts scheinbar
+    // nichts. iOS scrollt an derselben Stelle nach
+    // (`bearbeitenFokussierenWennNoetig`).
+    var bearbeitenY by remember { mutableStateOf(0) }
+
     LaunchedEffect(selected?.id) {
-        offeneBereiche = if (selected == null) {
+        if (selected == null) {
             // Ohne Auswahl haben Bearbeiten und Werkzeuge nichts zu
             // zeigen - zu, aber sichtbar, damit man weiss, dass es sie
             // gibt.
-            offeneBereiche - InspectorSection.TRANSFORM - InspectorSection.TOOLS
-        } else {
-            offeneBereiche + InspectorSection.TRANSFORM
+            offeneBereiche =
+                offeneBereiche - InspectorSection.TRANSFORM - InspectorSection.TOOLS
+            return@LaunchedEffect
+        }
+        offeneBereiche = offeneBereiche + InspectorSection.TRANSFORM
+        // Ein Bild abwarten: vor dem naechsten Layout steht die neue
+        // Position des Bereichs noch nicht fest, und man scrollte an
+        // die Stelle, an der er vor dem Aufklappen lag.
+        withFrameNanos { }
+        if (bearbeitenY > 0) {
+            runCatching { inspectorScroll.animateScrollTo(bearbeitenY) }
         }
     }
 
@@ -579,6 +597,9 @@ internal fun Sidebar(
                 offen = InspectorSection.TRANSFORM in offeneBereiche,
                 moeglich = selected != null,
                 onToggle = { offeneBereiche = umschalten(offeneBereiche, InspectorSection.TRANSFORM) },
+                modifier = Modifier.onGloballyPositioned {
+                    bearbeitenY = it.positionInParent().y.toInt()
+                },
             ) { selected?.let { obj ->
                     Text(
                         obj.name.ifBlank { advancedText("Object ${obj.id}", "Objekt ${obj.id}") },
@@ -985,10 +1006,11 @@ private fun Bereich(
     offen: Boolean,
     moeglich: Boolean,
     onToggle: () -> Unit,
+    modifier: Modifier = Modifier,
     inhalt: @Composable () -> Unit,
 ) {
     val sichtbarOffen = offen && moeglich
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(
             Modifier
                 .fillMaxWidth()
