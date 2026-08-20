@@ -83,6 +83,7 @@ ab; von dort gehört sie in die Arbeitskopie kopiert. Achtung: `du` meldet
 | AP-09 Leere Zustände | `875a655` | `LeeresPanel` als Muster |
 | AP-18 Bindungen | `27ac6eb`, `1eb4c97` | 26 fehlende Funktionen → noch 2 |
 | Bemalen (Strich, Füllmodi) | `e2f9dad`, `9da2adf` | Spur statt Punkt, 1358 Facetten |
+| AP-28 Schiene: *Options* raus | (dieser Commit) | Trennen folgt direkt auf *− Kopie*, wie drüben |
 | AP-27 Standardwerte nach der Einrichtung | `ebcb986` | *Prusament PLA @COREONE* und *Gyroid* nach frischer Einrichtung |
 | AP-26 Schichtprofil ehrlich | `ec82032` | *Not valid* statt erfundener Vorschau, Erklärzeile darüber |
 | AP-25 Selbsttest | `712baa1` | *Run all checks*, Abbrechen mit übersprungenen Schritten, *Cancelled* |
@@ -1290,6 +1291,34 @@ erster Test durchsuchte `commonMain` nicht.
 
 ---
 
+### AP-28 · Werkzeugschiene: *Options* gehört nicht hinein · Kern: nein
+
+**Gefunden am 20.08.** beim Vergleich der Schienenreihenfolge.
+
+`toolbar.json` führt `settings` als Leisteneintrag, und Android nahm ihn
+als *Options* in die Schiene. Die drei Profilseiten stehen aber seit
+AP-20 oben im rechten Band, und die Regel dazu steht im Quelltext:
+**oben in die Werkzeugleiste gehört, was auf den Viewport wirkt.** Ein
+zweiter Weg zu denselben Seiten machte die Schiene länger und die Regel
+unwahr.
+
+Drüben steht er aus demselben Grund nicht in der Schiene. Dort folgt
+*Trennen* direkt auf *− Kopie* — und genau so sieht es jetzt auch hier
+aus.
+
+**Stand: fertig** (20.08.). Belegt am Emulator: Import · Delete · Clear
+· Arrange · Copy · Paste · + copy · − copy · **Split** · Supports · Seam
+· (Fußzeile). Die drei Profilseiten bleiben oben im Band erreichbar.
+
+**Geprüft, unterschiedlich gelöst — kein Handlungsbedarf:** iOS hat in
+der Schiene einen dritten Pinsel *MMU*. Android bietet dasselbe als
+Extruderreihe im Band unter *Fläche* an, wo man gleich sieht, **welcher**
+Extruder gemalt wird. Die Android-Fassung ist die auskunftsfreudigere;
+hier wird nicht angeglichen, sondern es bleibt bei zwei Wegen zum selben
+Ziel, bis AP-23 den Werkzeugbereich ohnehin neu ordnet.
+
+---
+
 ## Z · Wo umgekehrt iOS nachzieht
 
 Braucht einen erreichbaren Mac.
@@ -1331,7 +1360,14 @@ Braucht einen erreichbaren Mac.
    und was nicht („Gerät und Version, keine Kontodaten und keine
    Netzwerkadressen"); iOS sagt nur, dass es die letzten Warnungen sind.
    Die Android-Fassung ist die bessere.
-10. **Auswahlblatt überlappt die Seitenleiste.** Das Filamentblatt ist ein
+10. **Die Werkzeugschiene steht drüben fest verdrahtet.**
+    `WerkzeugSchiene.swift` sagt im Kopf, Reihenfolge und Namen kämen
+    aus `toolbar.json` — tatsächlich steht die Liste als Swift-Literal
+    darin. Android liest die Datei wirklich (`PsUi.readToolbar`). Ändert
+    sich `toolbar.json`, folgt nur eine Seite. Die Reihenfolge stimmt
+    heute überein (AP-28), aber sie stimmt aus Zufall, nicht aus
+    Konstruktion.
+11. **Auswahlblatt überlappt die Seitenleiste.** Das Filamentblatt ist ein
    `.sheet` und schneidet auf dem iPad die rechte Seitenleiste mitten im
    Wort. Der Advanced-Einstellungsdialog macht es richtig und legt einen
    Schleier über den ganzen Bereich.
@@ -1374,7 +1410,8 @@ abgelegten `.so` (geprüft 20.08.2026).
 | 26 | AP-25 Selbsttest angleichen | nein | fertig |
 | 27 | AP-26 Schichtprofil ehrlich | nein | fertig |
 | 28 | AP-27 Standardwerte nach der Einrichtung | nein | fertig |
-| 29 | Z iOS nachziehen | Mac | offen |
+| 29 | AP-28 Schiene: Options raus | nein | fertig |
+| 30 | Z iOS nachziehen | Mac | offen |
 
 ---
 

@@ -58,6 +58,40 @@ sondern die Absprache währenddessen.
 
 ## 2026-08-20
 
+### Claude — AP-28: ein Knopf, der die eigene Regel widerlegte
+
+Nach den Regeln habe ich die **Reihenfolge der Werkzeugschiene**
+verglichen - Nils' urspruengliche Klage war ja, die Anordnung laufe
+auseinander.
+
+Der erste Befund betrifft iOS und braucht den Mac:
+`WerkzeugSchiene.swift` sagt im Kopf, Reihenfolge und Namen kaemen aus
+`toolbar.json`. Darunter steht die Liste als Swift-Literal. Android
+liest die Datei wirklich. Aendert sich `toolbar.json`, folgt nur eine
+Seite - die Reihenfolge stimmt heute, aber aus Zufall, nicht aus
+Konstruktion. Steht als Punkt 10 in Abschnitt Z.
+
+Der zweite Befund lag hier. `toolbar.json` fuehrt `settings`, und
+Android nahm ihn als *Options* in die Schiene. Seit AP-20 stehen die
+drei Profilseiten aber oben im rechten Band, und die Regel dazu steht im
+eigenen Quelltext: **oben in die Werkzeugleiste gehoert, was auf den
+Viewport wirkt.** Der Knopf war ein zweiter Weg zu denselben Seiten -
+er machte die Schiene laenger und die Regel unwahr.
+
+Jetzt ist er weg, und *Trennen* folgt direkt auf *- Kopie*, genau wie
+drueben. Erreichbar sind die Profilseiten unveraendert oben im Band.
+
+Das war der angenehme Fall: die Begruendung stand schon im Projekt, sie
+wurde nur an einer Stelle nicht befolgt. Kein Abwaegen noetig.
+
+**Einen dritten Unterschied habe ich stehen lassen.** iOS hat in der
+Schiene einen Pinsel *MMU*. Android bietet dasselbe als Extruderreihe im
+Band an, wo man gleich sieht, *welcher* Extruder gemalt wird - die
+auskunftsfreudigere Fassung. Hier anzugleichen hiesse, etwas
+Schlechteres zu bauen, und AP-23 ordnet den Werkzeugbereich ohnehin neu.
+Steht als „geprueft, unterschiedlich geloest" im Plan, damit es niemand
+fuer ein Versaeumnis haelt.
+
 ### Claude — AP-27: zwei Geraete, zwei Ergebnisse aus derselben Einrichtung
 
 Der Beschriftungsabgleich ist ausgeschoepft, also habe ich anders

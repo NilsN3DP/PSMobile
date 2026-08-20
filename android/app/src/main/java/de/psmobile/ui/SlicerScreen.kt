@@ -1321,9 +1321,18 @@ private fun ToolStrip(
     // iOS - dort steht die Begruendung in `bettKapsel`s Nachbarschaft:
     // sichtbare Knoepfe fuer seltene Faelle machen die Schiene breiter,
     // als der haeufige Fall es braucht.
+    //
+    // "settings" faellt aus einem anderen Grund weg: die drei
+    // Profilseiten stehen oben im rechten Band, und die Schiene traegt
+    // nach der eigenen Regel aus AP-20 nur, was auf den Viewport wirkt.
+    // Ein zweiter Weg zu denselben Seiten machte die Schiene laenger
+    // und die Regel unwahr. Drueben steht er aus demselben Grund nicht
+    // in der Schiene - dort folgt Trennen direkt auf "- Kopie", und
+    // genau so sieht es jetzt auch hier aus.
     val notYet = setOf(
         "layersediting", "undo", "redo",
         "arrangecurrent", "splitobjects", "splitvolumes",
+        "settings",
     )
     var trennenOffen by remember { mutableStateOf(false) }
     var anordnenOffen by remember { mutableStateOf(false) }
