@@ -67,6 +67,7 @@ ab; von dort gehört sie in die Arbeitskopie kopiert. Achtung: `du` meldet
 | AP-03 Vorschau | `3377a96` | `0:30 · 3.59 m · 10.7 g`, Chips grauen aus |
 | AP-07 Materialauswahl | `875a655` | Typ-Filter PLA blendet auf vier Karten ein |
 | AP-06 Schwebende Dialoge | `469203a`, `1e785c0` | Einstellungen als Karte über dem Bett, Rand 104/120/80 px |
+| AP-17 a Weitergeben | `18817d5`, `5605ea0` | *Share · PSMobile-Druckbett.stl* nach dem Export |
 | AP-17 e Reinigungsturm | `431d961` | steht unter der Extruderbank |
 | AP-17 f Zoll-Einheiten | `bcb4361` | `0.0039 in` statt `0.1 mm` |
 | AP-17 b Größenverhältnis | `d919c3d` | Kästchen in der Objektliste |
@@ -93,21 +94,16 @@ ab; von dort gehört sie in die Arbeitskopie kopiert. Achtung: `du` meldet
 
 ### Als Nächstes
 
-**AP-17 a fertig belegen.** Der Knopf *Weitergeben · <Dateiname>* steht
-seit `18817d5` in den Projektwerkzeugen, erscheint aber erst nach einem
-Export — und dorthin führt der Weg durch den Systemdialog. Also am
-Emulator: Objekt wählen → Bereich *Werkzeuge* → *Platte exportieren* →
-im Systemdialog speichern → der Knopf muss danach dastehen. Erst dann
-gilt das Paket als fertig.
+**AP-17 d · ColorMix-Vorschau vor dem Speichern**, dazu eine
+Fehlermeldung beim Sichern. Der letzte Punkt ohne Kernbau. Vorher
+nachsehen, was drüben heute steht.
 
-Danach **AP-17 d** (ColorMix-Vorschau vor dem Speichern, Fehlermeldung
-beim Sichern) — der letzte Punkt ohne Kernbau.
-
-Danach bleiben nur noch:
+Danach ist alles ohne Kernbau zu. Es bleiben:
 
 - **AP-10** Anordnen mit Optionen, **AP-13** adaptive Schichthöhe,
   **AP-14** zweiter Regler, **AP-17 g** ZIP-Import — je ein Kernbau
-  (20–25 min auf dem Unraid).
+  (20–25 min auf dem Unraid, `build/scripts/build-core.sh` und
+  `stage-native.sh`).
 - **AP-04**, **AP-02 iOS** und Abschnitt **Z** — brauchen den Mac.
 - **AP-19** und **AP-23** — zurückgestellt.
 
@@ -121,6 +117,9 @@ Danach bleiben nur noch:
 - **`psTouch()` statt fester dp-Höhen** an allem, was man antippt.
 - **`Corners.SHEET/CARD/FIELD/PILL`** statt roher Radien.
 - **Kein Paket gilt als fertig ohne Bildschirmfoto vom Emulator.**
+- **Das rechte Band scrollt nur auf langsame Wischer.** `adb shell input
+  swipe … 900` (Millisekunden) bewegt es; ein schneller Wisch (250 ms)
+  wird verschluckt, und man haelt die Leiste faelschlich fuer festgefahren.
 - Der Katalog in `filamentCatalog()` wird gemerkt. Wer die Profilliste
   ändert, muss ihn nicht selbst verwerfen — er hängt an den Namen.
 
@@ -683,7 +682,7 @@ Griffen direkt unter den drei Einstellungszeilen.
 
 | | Ziel | Kern |
 |---|---|---|
-| a | Projekt (.3mf), Platte und alle G-Code-Dateien weitergeben — G-Codes seit `c63e329`, Platte und Werkzeugergebnisse seit `18817d5` **gebaut, aber noch nicht am Bildschirm belegt** | nein |
+| a | ~~Projekt (.3mf), Platte und alle G-Code-Dateien weitergeben~~ — **erledigt** (20.08., `c63e329`, `18817d5`, `5605ea0`) | nein |
 | b | ~~Größenverhältnis je Objekt in beiden Listen~~ — **erledigt** (20.08., `d919c3d`) | nein |
 | c | ~~Abschnitt „Je Extruder" in der Simple-Materialseite~~ — **überholt.** Android hat dort die *Materialpalette*: Kacheln je Kopf mit Farbe und Material, *Alle setzen* und eine Farbreihe. iOS zeigt an derselben Stelle nur eine Liste mit Farbfeld und Menü. Nichts nachzuziehen — umgekehrt ist es ein Z-Punkt. | nein |
 | d | ColorMix-Vorschau vor dem Speichern, Fehlermeldung beim Sichern | nein |
@@ -957,7 +956,8 @@ Braucht einen erreichbaren Mac.
 | 4 | AP-04 Objektleiste | nein |
 | 5 | AP-07 Materialauswahl | nein |
 | 6 | AP-09 Leere Zustände | nein |
-| 7 | AP-17 e Reinigungsturm | `431d961` | steht unter der Extruderbank |
+| 7 | AP-17 a Weitergeben | `18817d5`, `5605ea0` | *Share · PSMobile-Druckbett.stl* nach dem Export |
+| AP-17 e Reinigungsturm | `431d961` | steht unter der Extruderbank |
 | AP-17 f Zoll-Einheiten | `bcb4361` | `0.0039 in` statt `0.1 mm` |
 | AP-17 b Größenverhältnis | `d919c3d` | Kästchen in der Objektliste |
 | AP-15 Druckerkarten | `50de001` | Karte mit Modell, Zustand, Düse |
@@ -969,7 +969,8 @@ Braucht einen erreichbaren Mac.
 | AP-20 Bereiche statt Reiter | `2e5f5ec` | drei Einstellungszeilen, vier Überschriften, Schneiden-Block außerhalb |
 | AP-08 Einstellungskopf | nein |
 | 8 | AP-06 Schwebende Dialoge | nein |
-| 9 | AP-17 e Reinigungsturm | `431d961` | steht unter der Extruderbank |
+| 9 | AP-17 a Weitergeben | `18817d5`, `5605ea0` | *Share · PSMobile-Druckbett.stl* nach dem Export |
+| AP-17 e Reinigungsturm | `431d961` | steht unter der Extruderbank |
 | AP-17 f Zoll-Einheiten | `bcb4361` | `0.0039 in` statt `0.1 mm` |
 | AP-17 b Größenverhältnis | `d919c3d` | Kästchen in der Objektliste |
 | AP-15 Druckerkarten | `50de001` | Karte mit Modell, Zustand, Düse |
@@ -979,13 +980,15 @@ Braucht einen erreichbaren Mac.
 | 10 | AP-10 Anordnen | ja |
 | 11 | AP-13 Adaptive Schichthöhe | ja |
 | 12 | AP-14 Zweiter Regler | ja |
-| 13 | AP-17 e Reinigungsturm | `431d961` | steht unter der Extruderbank |
+| 13 | AP-17 a Weitergeben | `18817d5`, `5605ea0` | *Share · PSMobile-Druckbett.stl* nach dem Export |
+| AP-17 e Reinigungsturm | `431d961` | steht unter der Extruderbank |
 | AP-17 f Zoll-Einheiten | `bcb4361` | `0.0039 in` statt `0.1 mm` |
 | AP-17 b Größenverhältnis | `d919c3d` | Kästchen in der Objektliste |
 | AP-15 Druckerkarten | `50de001` | Karte mit Modell, Zustand, Düse |
 | AP-16 Inspector | `82f3fa8` | Auswahl zeigt EDIT samt Griffen |
 | AP-12 Bettleiste | nein |
-| 14 | AP-17 e Reinigungsturm | `431d961` | steht unter der Extruderbank |
+| 14 | AP-17 a Weitergeben | `18817d5`, `5605ea0` | *Share · PSMobile-Druckbett.stl* nach dem Export |
+| AP-17 e Reinigungsturm | `431d961` | steht unter der Extruderbank |
 | AP-17 f Zoll-Einheiten | `bcb4361` | `0.0039 in` statt `0.1 mm` |
 | AP-17 b Größenverhältnis | `d919c3d` | Kästchen in der Objektliste |
 | AP-15 Druckerkarten | `50de001` | Karte mit Modell, Zustand, Düse |
@@ -993,11 +996,13 @@ Braucht einen erreichbaren Mac.
 | AP-12 Bettleiste | `f03c7b0` | langer Druck zeigt *Rename* |
 | AP-05 Werkzeugleisten | `f489a48`, `c41a1ba`, `f0c314a` | Schiene mit Trennen, Stützen, Naht |
 | AP-11 Slice-Blatt | nein |
-| 15 | AP-17 e Reinigungsturm | `431d961` | steht unter der Extruderbank |
+| 15 | AP-17 a Weitergeben | `18817d5`, `5605ea0` | *Share · PSMobile-Druckbett.stl* nach dem Export |
+| AP-17 e Reinigungsturm | `431d961` | steht unter der Extruderbank |
 | AP-17 f Zoll-Einheiten | `bcb4361` | `0.0039 in` statt `0.1 mm` |
 | AP-17 b Größenverhältnis | `d919c3d` | Kästchen in der Objektliste |
 | AP-15 Druckerkarten | nein |
-| 16 | AP-17 e Reinigungsturm | `431d961` | steht unter der Extruderbank |
+| 16 | AP-17 a Weitergeben | `18817d5`, `5605ea0` | *Share · PSMobile-Druckbett.stl* nach dem Export |
+| AP-17 e Reinigungsturm | `431d961` | steht unter der Extruderbank |
 | AP-17 f Zoll-Einheiten | `bcb4361` | `0.0039 in` statt `0.1 mm` |
 | AP-17 b Größenverhältnis | `d919c3d` | Kästchen in der Objektliste |
 | AP-15 Druckerkarten | `50de001` | Karte mit Modell, Zustand, Düse |

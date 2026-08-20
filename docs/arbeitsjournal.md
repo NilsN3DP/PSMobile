@@ -561,6 +561,24 @@ angesehen wurde, ist die haeufigste Art, sich selbst zu belegen - der
 Plan sagt seit dem ersten Tag, dass ohne Bildschirmfoto nichts fertig
 ist.
 
+### Claude — AP-17 a belegt
+
+Der Weg am Emulator: Objekt waehlen, Bereich *Werkzeuge*, „Bed as STL",
+im Systemdialog speichern - danach steht „Share · <Datei>" im Band.
+Commit `5605ea0`.
+
+**Dabei aufgefallen:** der Knopf las den Namen aus dem Zwischenspeicher
+(`druckbett-106695083330542.stl`). Die Eindeutigkeit gehoert dorthin,
+aber niemand will sie im Knopf lesen - er zeigt jetzt den Namen, unter
+dem gespeichert wurde.
+
+**Und eine Werkzeugerkenntnis, die eine halbe Runde gekostet hat:** das
+rechte Band schien festgefahren - vier Anlaeufe mit `input swipe`
+bewegten nichts, und ich habe schon an einer Regression aus AP-16
+gezweifelt. Es lag an der Wischdauer: 250 ms wird als Fling verschluckt,
+900 ms scrollt sauber. Steht jetzt im Plan unter „Worauf zu achten ist",
+damit der naechste nicht dieselbe Fehlersuche macht.
+
 ---
 
 ## 2026-08-03
