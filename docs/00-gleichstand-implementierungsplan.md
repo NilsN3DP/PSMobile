@@ -16,7 +16,7 @@ das, was eine neue Sitzung als Erstes liest — hier steht, wo genau
 weitergemacht wird, ohne dass jemand die Historie durchsuchen muss.
 
 **Zuletzt geändert:** 20.08.2026 · Zweig
-`codex/ios-android-parity-implementation` · letzter Commit `86c1842`
+`codex/ios-android-parity-implementation` · letzter Commit `feb230a`
 
 ### Wo die Arbeit liegt
 
@@ -83,7 +83,7 @@ ab; von dort gehört sie in die Arbeitskopie kopiert. Achtung: `du` meldet
 | AP-09 Leere Zustände | `875a655` | `LeeresPanel` als Muster |
 | AP-18 Bindungen | `27ac6eb`, `1eb4c97` | 26 fehlende Funktionen → noch 2 |
 | Bemalen (Strich, Füllmodi) | `e2f9dad`, `9da2adf` | Spur statt Punkt, 1358 Facetten |
-| AP-11 Slice-Blatt (Simple) | (dieser Commit) | *Send to printer* unter dem Export, Hinweis wenn nichts geschrieben wurde |
+| AP-11 Slice-Blatt (Simple) | `feb230a` | *Send to printer* unter dem Export, Hinweis wenn nichts geschrieben wurde |
 | Kleinigkeiten | `86c1842` | *Sliced in <1s* statt *0m*; *Wipe into infill* statt deutscher Beschriftung |
 | AP-17 g ZIP-Import | `7298439` | *2 models came from a ZIP archive.*, Bett zeigt 3 Objekte |
 | AP-14 Zweiter Regler | `ed84cd5` | Werkzeugweg 10–7189 unten, Schichtregler links |
