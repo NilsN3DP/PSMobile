@@ -514,6 +514,31 @@ das Blatt war diesmal nicht gescrollt - der Tipp landete auf „Deutsch",
 und die App stand ploetzlich auf Deutsch. Vor jedem Tipp in ein Blatt,
 das gescrollt sein kann, ein frisches Bild machen.
 
+### Claude — AP-17 c und e: einmal nichts zu tun, einmal umgeraeumt
+
+**c war ueberholt.** Der Plan verlangte einen Abschnitt „Je Extruder" in
+der Simple-Materialseite. Android hat dort laengst die *Materialpalette*:
+Kacheln je Kopf mit Farbe und Material, dazu *Alle setzen* und eine
+Farbreihe. iOS zeigt an derselben Stelle nur eine Liste mit Farbfeld und
+Menue - die Android-Fassung ist die reichere. Also nichts nachzuziehen;
+der Punkt steht jetzt umgekehrt in Abschnitt Z.
+
+**e war echt.** Der Reinigungsturm stand unter den Projektwerkzeugen,
+zwischen Plattenexport und eigenem G-Code - dabei ist er nur bei
+mehreren Koepfen ueberhaupt eine Frage. Er steht jetzt direkt unter der
+Extruderbank und erscheint erst ab zwei Extrudern, wie auf iOS.
+
+Commit `431d961`. Belegt am Emulator: WIPE TOWER mit X 180.0, Y 140.0,
+Rotation 0.0 und „Apply wipe tower" unter der Bank.
+
+**Zum Verschieben von Quelltext, zum zweiten Mal:** ich habe wieder
+versucht, einen Block per Index zu schneiden, und wieder war die
+Bereichsgrenze falsch. Diesmal habe ich vor dem Schnitt die drei
+Randzeilen geprueft (Anfang, Ende, Trenner danach) und bei
+Abweichung abgebrochen - so faellt es auf, bevor die Datei geschrieben
+ist. Und was aus einer Datei herauswandert, braucht oft nur `internal`
+statt eines Umzugs: `ProjectNumberField` blieb, wo es war.
+
 ---
 
 ## 2026-08-03

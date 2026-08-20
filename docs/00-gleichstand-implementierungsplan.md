@@ -67,6 +67,7 @@ ab; von dort gehört sie in die Arbeitskopie kopiert. Achtung: `du` meldet
 | AP-03 Vorschau | `3377a96` | `0:30 · 3.59 m · 10.7 g`, Chips grauen aus |
 | AP-07 Materialauswahl | `875a655` | Typ-Filter PLA blendet auf vier Karten ein |
 | AP-06 Schwebende Dialoge | `469203a`, `1e785c0` | Einstellungen als Karte über dem Bett, Rand 104/120/80 px |
+| AP-17 e Reinigungsturm | `431d961` | steht unter der Extruderbank |
 | AP-17 f Zoll-Einheiten | `bcb4361` | `0.0039 in` statt `0.1 mm` |
 | AP-17 b Größenverhältnis | `d919c3d` | Kästchen in der Objektliste |
 | AP-15 Druckerkarten | `50de001` | Karte mit Modell, Zustand, Düse |
@@ -92,18 +93,22 @@ ab; von dort gehört sie in die Arbeitskopie kopiert. Achtung: `du` meldet
 
 ### Als Nächstes
 
-**AP-17 c · Abschnitt „Je Extruder" in der Simple-Materialseite.** Kein
-Kernbau. Vorher wie immer nachsehen, was drüben heute im Quelltext
-steht — bei AP-12 und AP-17 b war die Planzeile jeweils überholt.
+**AP-17 a · Projekt, Platte und alle G-Code-Dateien weitergeben.** Kein
+Kernbau. Die Mehrfach-Weitergabe der G-Codes steht seit AP-11
+(`shareGcodes`); es fehlt derselbe Weg für das Projekt (.3mf) und die
+Platte. Vorher nachsehen, was drüben heute steht — bei c war die
+Planzeile schon wieder überholt.
 
-Danach **e** (Reinigungsturm X, Y, Drehung in die Extruderbank statt in
-die Projektwerkzeuge), **a** (Projekt/Platte/G-Codes weitergeben) und
-**d** (ColorMix-Vorschau vor dem Speichern).
+Danach **d** (ColorMix-Vorschau vor dem Speichern, Fehlermeldung beim
+Sichern).
 
-**AP-04** und Abschnitt **Z** brauchen den Mac. **AP-10**, **AP-13**,
-**AP-14** und **AP-17 g** brauchen einen Kernbau (20–25 min auf dem
-Unraid) — davon ist AP-10 (Anordnen mit Optionen) das größte fehlende
-Stück.
+Damit sind alle Pakete ohne Kernbau zu. Es bleiben:
+
+- **AP-10** Anordnen mit Optionen, **AP-13** adaptive Schichthöhe,
+  **AP-14** zweiter Regler, **AP-17 g** ZIP-Import — je ein Kernbau
+  (20–25 min auf dem Unraid).
+- **AP-04**, **AP-02 iOS** und Abschnitt **Z** — brauchen den Mac.
+- **AP-19** Hochformat und **AP-23** Werkzeugbereich — zurückgestellt.
 
 ### Worauf zu achten ist
 
@@ -679,9 +684,9 @@ Griffen direkt unter den drei Einstellungszeilen.
 |---|---|---|
 | a | Projekt (.3mf), Platte und alle G-Code-Dateien weitergeben | nein |
 | b | ~~Größenverhältnis je Objekt in beiden Listen~~ — **erledigt** (20.08., `d919c3d`) | nein |
-| c | Abschnitt „Je Extruder" in der Simple-Materialseite | nein |
+| c | ~~Abschnitt „Je Extruder" in der Simple-Materialseite~~ — **überholt.** Android hat dort die *Materialpalette*: Kacheln je Kopf mit Farbe und Material, *Alle setzen* und eine Farbreihe. iOS zeigt an derselben Stelle nur eine Liste mit Farbfeld und Menü. Nichts nachzuziehen — umgekehrt ist es ein Z-Punkt. | nein |
 | d | ColorMix-Vorschau vor dem Speichern, Fehlermeldung beim Sichern | nein |
-| e | Reinigungsturm (X, Y, Drehung) in die Extruderbank statt in die Projektwerkzeuge | nein |
+| e | ~~Reinigungsturm (X, Y, Drehung) in die Extruderbank~~ — **erledigt** (20.08., `431d961`) | nein |
 | f | ~~Zoll-Einheiten (`KEY_UNITS_IMPERIAL`)~~ — **erledigt** (20.08., `bcb4361`) | nein |
 | g | ZIP-Import samt Modusfrage | ja |
 
@@ -930,7 +935,11 @@ Braucht einen erreichbaren Mac.
    Angleichung auf der Android-Seite. Falls sich beim Umbau zeigt, dass
    iOS eine Stelle besser löst oder umgekehrt, gehört die Rückrichtung
    hierher.
-6. **Auswahlblatt überlappt die Seitenleiste.** Das Filamentblatt ist ein
+6. **Materialpalette statt bloßer Liste.** Android zeigt im Simple
+   Mode je Kopf eine Kachel mit Farbe und Material, dazu *Alle setzen*
+   und eine Farbreihe; iOS hat dort nur eine Liste mit Farbfeld und
+   Menü. Die Android-Fassung ist die reichere — hier zieht iOS nach.
+7. **Auswahlblatt überlappt die Seitenleiste.** Das Filamentblatt ist ein
    `.sheet` und schneidet auf dem iPad die rechte Seitenleiste mitten im
    Wort. Der Advanced-Einstellungsdialog macht es richtig und legt einen
    Schleier über den ganzen Bereich.
@@ -947,7 +956,8 @@ Braucht einen erreichbaren Mac.
 | 4 | AP-04 Objektleiste | nein |
 | 5 | AP-07 Materialauswahl | nein |
 | 6 | AP-09 Leere Zustände | nein |
-| 7 | AP-17 f Zoll-Einheiten | `bcb4361` | `0.0039 in` statt `0.1 mm` |
+| 7 | AP-17 e Reinigungsturm | `431d961` | steht unter der Extruderbank |
+| AP-17 f Zoll-Einheiten | `bcb4361` | `0.0039 in` statt `0.1 mm` |
 | AP-17 b Größenverhältnis | `d919c3d` | Kästchen in der Objektliste |
 | AP-15 Druckerkarten | `50de001` | Karte mit Modell, Zustand, Düse |
 | AP-16 Inspector | `82f3fa8` | Auswahl zeigt EDIT samt Griffen |
@@ -958,7 +968,8 @@ Braucht einen erreichbaren Mac.
 | AP-20 Bereiche statt Reiter | `2e5f5ec` | drei Einstellungszeilen, vier Überschriften, Schneiden-Block außerhalb |
 | AP-08 Einstellungskopf | nein |
 | 8 | AP-06 Schwebende Dialoge | nein |
-| 9 | AP-17 f Zoll-Einheiten | `bcb4361` | `0.0039 in` statt `0.1 mm` |
+| 9 | AP-17 e Reinigungsturm | `431d961` | steht unter der Extruderbank |
+| AP-17 f Zoll-Einheiten | `bcb4361` | `0.0039 in` statt `0.1 mm` |
 | AP-17 b Größenverhältnis | `d919c3d` | Kästchen in der Objektliste |
 | AP-15 Druckerkarten | `50de001` | Karte mit Modell, Zustand, Düse |
 | AP-16 Inspector | `82f3fa8` | Auswahl zeigt EDIT samt Griffen |
@@ -967,22 +978,26 @@ Braucht einen erreichbaren Mac.
 | 10 | AP-10 Anordnen | ja |
 | 11 | AP-13 Adaptive Schichthöhe | ja |
 | 12 | AP-14 Zweiter Regler | ja |
-| 13 | AP-17 f Zoll-Einheiten | `bcb4361` | `0.0039 in` statt `0.1 mm` |
+| 13 | AP-17 e Reinigungsturm | `431d961` | steht unter der Extruderbank |
+| AP-17 f Zoll-Einheiten | `bcb4361` | `0.0039 in` statt `0.1 mm` |
 | AP-17 b Größenverhältnis | `d919c3d` | Kästchen in der Objektliste |
 | AP-15 Druckerkarten | `50de001` | Karte mit Modell, Zustand, Düse |
 | AP-16 Inspector | `82f3fa8` | Auswahl zeigt EDIT samt Griffen |
 | AP-12 Bettleiste | nein |
-| 14 | AP-17 f Zoll-Einheiten | `bcb4361` | `0.0039 in` statt `0.1 mm` |
+| 14 | AP-17 e Reinigungsturm | `431d961` | steht unter der Extruderbank |
+| AP-17 f Zoll-Einheiten | `bcb4361` | `0.0039 in` statt `0.1 mm` |
 | AP-17 b Größenverhältnis | `d919c3d` | Kästchen in der Objektliste |
 | AP-15 Druckerkarten | `50de001` | Karte mit Modell, Zustand, Düse |
 | AP-16 Inspector | `82f3fa8` | Auswahl zeigt EDIT samt Griffen |
 | AP-12 Bettleiste | `f03c7b0` | langer Druck zeigt *Rename* |
 | AP-05 Werkzeugleisten | `f489a48`, `c41a1ba`, `f0c314a` | Schiene mit Trennen, Stützen, Naht |
 | AP-11 Slice-Blatt | nein |
-| 15 | AP-17 f Zoll-Einheiten | `bcb4361` | `0.0039 in` statt `0.1 mm` |
+| 15 | AP-17 e Reinigungsturm | `431d961` | steht unter der Extruderbank |
+| AP-17 f Zoll-Einheiten | `bcb4361` | `0.0039 in` statt `0.1 mm` |
 | AP-17 b Größenverhältnis | `d919c3d` | Kästchen in der Objektliste |
 | AP-15 Druckerkarten | nein |
-| 16 | AP-17 f Zoll-Einheiten | `bcb4361` | `0.0039 in` statt `0.1 mm` |
+| 16 | AP-17 e Reinigungsturm | `431d961` | steht unter der Extruderbank |
+| AP-17 f Zoll-Einheiten | `bcb4361` | `0.0039 in` statt `0.1 mm` |
 | AP-17 b Größenverhältnis | `d919c3d` | Kästchen in der Objektliste |
 | AP-15 Druckerkarten | `50de001` | Karte mit Modell, Zustand, Düse |
 | AP-16 Inspector | nein |
