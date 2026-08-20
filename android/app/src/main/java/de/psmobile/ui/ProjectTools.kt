@@ -40,49 +40,11 @@ internal fun ProjectTools(
     onRepairStl: () -> Unit,
     onConvertGcode: () -> Unit,
 ) {
-    var wipe by remember { mutableStateOf(service.wipeTower()) }
-    var wipeX by remember(wipe) { mutableStateOf(NumberCodec.oneDecimal(wipe.x)) }
-    var wipeY by remember(wipe) { mutableStateOf(NumberCodec.oneDecimal(wipe.y)) }
-    var wipeRotation by remember(wipe) {
-        mutableStateOf(NumberCodec.oneDecimal(wipe.rotationDegrees))
-    }
     var gcodes by remember { mutableStateOf(service.customGcodes()) }
     var editIndex by remember { mutableStateOf<Int?>(null) }
     var addingGcode by remember { mutableStateOf(false) }
 
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        ProjectHeading("Wipe-Tower")
-        Row(
-            Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-        ) {
-            ProjectNumberField("X · mm", wipeX, { wipeX = it }, Modifier.weight(1f))
-            ProjectNumberField("Y · mm", wipeY, { wipeY = it }, Modifier.weight(1f))
-            ProjectNumberField(
-                PsUi.appText("Rotation · °", "Drehung · °"),
-                wipeRotation,
-                { wipeRotation = it },
-                Modifier.weight(1f),
-            )
-        }
-        val x = NumberCodec.parseFloat(wipeX)
-        val y = NumberCodec.parseFloat(wipeY)
-        val rotation = NumberCodec.parseFloat(wipeRotation)
-        Button(
-            onClick = {
-                if (x != null && y != null && rotation != null) {
-                    wipe = PsmCore.WipeTower(x, y, rotation)
-                    service.setWipeTower(wipe)
-                }
-            },
-            enabled = x != null && y != null && rotation != null,
-            modifier = Modifier.fillMaxWidth().height(psTouch(50)),
-            colors = ButtonDefaults.buttonColors(
-                containerColor = PrusaColors.PanelRaised,
-            ),
-        ) { Text(PsUi.appText("Apply wipe tower", "Wipe-Tower übernehmen")) }
-
-        HorizontalDivider(color = PrusaColors.Divider)
         ProjectHeading(PsUi.appText("Custom G-code by height", "Custom G-Code nach Höhe"))
         if (gcodes.isEmpty()) {
             Text(
@@ -304,7 +266,7 @@ private fun ProjectHeading(text: String) {
 }
 
 @Composable
-private fun ProjectNumberField(
+internal fun ProjectNumberField(
     label: String,
     value: String,
     onValue: (String) -> Unit,

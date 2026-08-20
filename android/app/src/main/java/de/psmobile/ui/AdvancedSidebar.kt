@@ -436,6 +436,15 @@ internal fun Sidebar(
                             onColor = { index, color -> service.setExtruderColor(index, color) },
                             onPickFilament = { index -> filamentPickerIndex = index },
                         )
+
+                        // Position und Drehung des Reinigungsturms
+                        // gehoeren zu den Koepfen, nicht zu den
+                        // Projektwerkzeugen: ohne zwei Koepfe gibt es
+                        // keinen Turm. Genauso auf iOS, siehe
+                        // ExtruderBank.swift.
+                        if (presets.extruders.size > 1) {
+                            Reinigungsturm(service)
+                        }
                     }
 
                     HorizontalDivider(
@@ -1523,4 +1532,58 @@ private fun ProgressBlock(progress: SlicerService.Progress) {
         )
     }
     Spacer(Modifier.height(2.dp))
+}
+
+
+/**
+ * Position und Drehung des Reinigungsturms.
+ *
+ * Stand auf Android unter den Projektwerkzeugen, wo er zwischen
+ * Plattenexport und eigenem G-Code lag - dabei ist er nur bei mehreren
+ * Koepfen ueberhaupt eine Frage. iOS hat ihn deshalb in der
+ * Extruderbank (`ExtruderBank.swift:58ff`).
+ */
+@Composable
+private fun Reinigungsturm(service: SlicerService) {
+    var turm by remember { mutableStateOf(service.wipeTower()) }
+    var x by remember(turm) { mutableStateOf(NumberCodec.oneDecimal(turm.x)) }
+    var y by remember(turm) { mutableStateOf(NumberCodec.oneDecimal(turm.y)) }
+    var drehung by remember(turm) {
+        mutableStateOf(NumberCodec.oneDecimal(turm.rotationDegrees))
+    }
+
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        SectionLabel(PsUi.appText("Wipe tower", "Reinigungsturm"))
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            ProjectNumberField("X · mm", x, { x = it }, Modifier.weight(1f))
+            ProjectNumberField("Y · mm", y, { y = it }, Modifier.weight(1f))
+            ProjectNumberField(
+                PsUi.appText("Rotation · °", "Drehung · °"),
+                drehung,
+                { drehung = it },
+                Modifier.weight(1f),
+            )
+        }
+        val px = NumberCodec.parseFloat(x)
+        val py = NumberCodec.parseFloat(y)
+        val pd = NumberCodec.parseFloat(drehung)
+        Button(
+            onClick = {
+                if (px != null && py != null && pd != null) {
+                    turm = PsmCore.WipeTower(px, py, pd)
+                    service.setWipeTower(turm)
+                }
+            },
+            enabled = px != null && py != null && pd != null,
+            modifier = Modifier.fillMaxWidth().height(psTouch(48)),
+            shape = RoundedCornerShape(Corners.FIELD.dp),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = PrusaColors.PanelRaised,
+                contentColor = PrusaColors.TextPrimary,
+            ),
+        ) { Text(PsUi.appText("Apply wipe tower", "Reinigungsturm übernehmen")) }
+    }
 }
