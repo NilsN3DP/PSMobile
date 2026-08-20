@@ -658,6 +658,18 @@ internal fun LayerProfileToolPage(
             fontWeight = FontWeight.SemiBold,
         )
         Text(
+            // Was eine Zeile ueberhaupt bedeutet - drueben steht der
+            // Satz seit langem unter der Ueberschrift
+            // (`LayerProfileView.swift:38`). Ohne ihn muss man aus zwei
+            // Spalten raten, ob "Z" der Anfang oder das Ende gilt.
+            PsUi.appText(
+                "From this height, the given layer thickness applies.",
+                "Ab dieser Höhe gilt die angegebene Schichtdicke.",
+            ),
+            color = PrusaColors.TextMuted,
+            fontSize = 12.sp,
+        )
+        Text(
             PsUi.appText("Fine areas are orange, coarse areas grey.", "Feine Bereiche sind orange, grobe grau."),
             color = PrusaColors.TextMuted,
             fontSize = 12.sp,
@@ -728,9 +740,28 @@ private fun LayerProfilePreview(
     segments: List<LayerPreviewSegment>,
     objectHeight: Double,
 ) {
-    val display = if (segments.isEmpty()) {
-        layerProfilePreviewSegments(objectHeight, listOf(0.0 to 0.2))
-    } else segments
+    // Bis hierhin stand bei ungueltiger Eingabe ein *erfundenes* Profil
+    // da - ein Ersatzband aus 0.0/0.2 mm, das aussah wie ein gueltiges
+    // Ergebnis. Das ist schlimmer als eine leere Flaeche: es zeigt
+    // etwas, das der Nutzer nie eingegeben hat, und verschweigt, dass
+    // *Uebernehmen* deshalb grau bleibt. Drueben steht dort schlicht
+    // "Nicht gueltig" (`LayerProfileView.swift:109`).
+    if (segments.isEmpty()) {
+        Box(
+            Modifier.fillMaxWidth().height(62.dp)
+                .clip(RoundedCornerShape(Corners.FIELD.dp))
+                .background(PrusaColors.PanelRaised),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                PsUi.appText("Not valid", "Nicht gültig"),
+                color = PrusaColors.TextMuted,
+                fontSize = 12.sp,
+            )
+        }
+        return
+    }
+    val display = segments
     Row(
         Modifier.fillMaxWidth().height(62.dp)
             .clip(RoundedCornerShape(Corners.FIELD.dp))

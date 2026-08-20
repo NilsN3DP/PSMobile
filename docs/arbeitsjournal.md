@@ -58,6 +58,38 @@ sondern die Absprache währenddessen.
 
 ## 2026-08-20
 
+### Claude — AP-26: die Vorschau, die etwas zeigte, das niemand eingegeben hatte
+
+Der erweiterte Abgleich meldete fuer das Schichtprofil vier Zeilen, die
+nur auf iOS stehen. Drei davon habe ich nachgesehen und verworfen. Die
+vierte war ein echter Fund, und ein unangenehmer.
+
+**Bei ungueltiger Eingabe erfand Android eine Vorschau.** Stand im
+Z-Feld etwas Unlesbares oder liefen die Werte nicht aufwaerts, dann
+setzte die Vorschau ersatzweise ein Band aus 0.0 / 0.2 mm ein und zeigte
+„1 height ranges · 0.20 mm" - wie ein gueltiges Ergebnis. Man sah eine
+Vorschau fuer etwas, das man nie eingegeben hatte, und erfuhr nicht,
+warum *Uebernehmen* grau blieb.
+
+Eine leere Flaeche sagt nichts. Eine falsche Flaeche sagt etwas
+Falsches. Drueben steht dort schlicht „Nicht gueltig" - jetzt hier auch.
+
+Dazu die Erklaerzeile, die drueben unter der Ueberschrift steht: „Ab
+dieser Hoehe gilt die angegebene Schichtdicke." Ohne sie muss man aus
+zwei Spalten raten, ob *Z* den Anfang oder das Ende meint.
+
+**Drei Fehlalarme, alle nachgesehen statt geglaubt.** Beim eigenen
+G-Code meldete das Skript, Android fehlten *Pause*, *Tool*, *Code*. In
+Wahrheit hat Android alle fuenf Typen mit demselben Wortlaut - „Pause"
+steht dort nur einsprachig, und darum sieht das Muster es nicht. Bei
+Objektinspektor, Profilsuche und Vorschaukarte liegen die Beschriftungen
+auf Android schlicht in anderen Dateien als im Paar genannt.
+
+Das ist die dritte Runde mit demselben Muster: **das Skript zeigt, wo
+man hinsehen soll, nicht was zu tun ist.** Der Satz steht jetzt im Plan
+neben den verworfenen Zeilen, damit der naechste nicht anfaengt zu
+buegeln.
+
 ### Claude — AP-25: der Selbsttest, und ein Fehlurteil unterwegs
 
 Die Paarliste des Abgleichs kannte mehrere Bildschirme gar nicht, weil

@@ -83,6 +83,7 @@ ab; von dort gehört sie in die Arbeitskopie kopiert. Achtung: `du` meldet
 | AP-09 Leere Zustände | `875a655` | `LeeresPanel` als Muster |
 | AP-18 Bindungen | `27ac6eb`, `1eb4c97` | 26 fehlende Funktionen → noch 2 |
 | Bemalen (Strich, Füllmodi) | `e2f9dad`, `9da2adf` | Spur statt Punkt, 1358 Facetten |
+| AP-26 Schichtprofil ehrlich | (dieser Commit) | *Not valid* statt erfundener Vorschau, Erklärzeile darüber |
 | AP-25 Selbsttest | `712baa1` | *Run all checks*, Abbrechen mit übersprungenen Schritten, *Cancelled* |
 | Beschriftungen angeglichen | `e25e22d` | *Export log* statt *Share log*, *Recent* statt *RECENT* |
 | AP-24 Simple-Vorschau + Editor-Knopf | `091fc03` | *Finaler G-Code* rechts am Rand, *Editor* führt zurück |
@@ -1196,6 +1197,43 @@ ist ein Werkzeug für die Entwicklung.
 
 ---
 
+### AP-26 · Schichtprofil: erfundene Vorschau raus · Kern: nein
+
+**Gefunden am 20.08.** im Abgleich `LayerProfileView.swift` gegen
+`GeometryTools.kt`.
+
+**Der Befund** Wenn die Eingabe nicht gültig war (Z nicht lesbar, Werte
+nicht steigend), zeigte Android **ein erfundenes Profil**: ein
+Ersatzband aus 0.0 / 0.2 mm, dargestellt als „1 height ranges · 0.20
+mm". Das sah aus wie ein gültiges Ergebnis. Der Nutzer sah eine
+Vorschau für etwas, das er nie eingegeben hatte, und erfuhr nicht,
+warum *Übernehmen* grau blieb.
+
+Das ist schlimmer als eine leere Fläche: eine leere Fläche sagt nichts,
+eine falsche Fläche sagt etwas Falsches.
+
+**Stand: fertig** (20.08.). Zwei Änderungen:
+
+1. Bei ungültiger Eingabe steht dort jetzt **„Nicht gültig"** —
+   wortgleich mit `LayerProfileView.swift:109`.
+2. Über der Liste steht der Satz **„Ab dieser Höhe gilt die angegebene
+   Schichtdicke."** Drüben steht er seit langem unter der Überschrift;
+   ohne ihn muss man aus zwei Spalten raten, ob *Z* den Anfang oder das
+   Ende meint.
+
+**Geprüft und verworfen** — der Abgleich meldete drei weitere
+Unterschiede, die keine sind:
+
+- *Eigener G-Code*: Android hat alle fünf Typen (Farbwechsel, Pause,
+  Werkzeugwechsel, Vorlage, Eigener Code) mit demselben Wortlaut. Das
+  Skript sah `"Pause"` nicht, weil es dort einsprachig steht.
+- *Objektinspektor*, *Profilsuche*, *Vorschaukarte*: die Beschriftungen
+  liegen auf Android in anderen Dateien als im Paar genannt. Ein
+  Dateipaar-Vergleich kann das nicht wissen — beim Lesen der Liste
+  gehört jede Zeile nachgesehen.
+
+---
+
 ## Z · Wo umgekehrt iOS nachzieht
 
 Braucht einen erreichbaren Mac.
@@ -1278,7 +1316,8 @@ abgelegten `.so` (geprüft 20.08.2026).
 | 24 | AP-23 Werkzeugbereich | nein | zurückgestellt, braucht eine Entscheidung |
 | 25 | AP-24 Rechts: Viewer statt Editor | nein | fertig |
 | 26 | AP-25 Selbsttest angleichen | nein | fertig |
-| 27 | Z iOS nachziehen | Mac | offen |
+| 27 | AP-26 Schichtprofil ehrlich | nein | fertig |
+| 28 | Z iOS nachziehen | Mac | offen |
 
 ---
 
