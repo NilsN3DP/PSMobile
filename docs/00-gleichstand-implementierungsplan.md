@@ -67,6 +67,7 @@ ab; von dort gehört sie in die Arbeitskopie kopiert. Achtung: `du` meldet
 | AP-03 Vorschau | `3377a96` | `0:30 · 3.59 m · 10.7 g`, Chips grauen aus |
 | AP-07 Materialauswahl | `875a655` | Typ-Filter PLA blendet auf vier Karten ein |
 | AP-06 Schwebende Dialoge | `469203a`, `1e785c0` | Einstellungen als Karte über dem Bett, Rand 104/120/80 px |
+| AP-12 Bettleiste | `f03c7b0` | langer Druck zeigt *Rename* |
 | AP-05 Werkzeugleisten | `f489a48`, `c41a1ba`, `f0c314a` | Schiene mit Trennen, Stützen, Naht |
 | AP-11 Slice-Blatt | `8afd69d`, `c63e329` | `2 G-code files`, *Export all*, Zeile je Datei |
 | AP-22 Alle Betten schneiden | `6bd3438` | `bett-1.gcode`, 53020 Bytes |
@@ -87,25 +88,20 @@ ab; von dort gehört sie in die Arbeitskopie kopiert. Achtung: `du` meldet
 
 ### Als Nächstes
 
-**AP-12 · Bettleiste.** Kein Kernbau. Drei Umbauten, die auf iOS schon
-passiert sind:
+**AP-16 · Inspector öffnet nach der Auswahl.** Kein Kernbau, klein.
+Vier Anläufe auf iOS (`3e45739`, `cb08ec1`, `bda94c2`, `8a53aa3`): nach
+einer Auswahl klappt der Bearbeiten-Bereich von selbst auf, und der
+Fokus bleibt beim Blättern layoutstabil. Auf Android klappt *Bearbeiten*
+seit AP-20 zwar auf, scrollt aber nicht dorthin — bei offenen Profilen
+liegt es unterhalb des sichtbaren Bereichs.
 
-1. Die Bettleiste **raus aus dem Easy Mode** (`04b2c3d`) — dort störte
-   sie mehr, als sie half.
-2. Im Advanced die **Kapselreihe** (`c4402bb`) — steht seit AP-21.
-3. **Sperren, Umbenennen, Entfernen ins Kontextmenü** (`c4402bb`).
-   Umbenennen liegt auf Android schon im langen Druck; Sperren und
-   Entfernen stehen noch als eigene Knöpfe. Vor dem Verschieben prüfen,
-   was iOS heute wirklich zeigt — das Foto vom iPad zeigt Schloss und X
-   sichtbar in der Kapsel, der Quelltext nennt das Kontextmenü nur
-   zusätzlich.
+Danach **AP-15 · Druckerauswahl als Karten** — die Klappliste durch
+Karten ersetzen, Filament und Druckprofil bleiben bewusst Suchlisten.
 
-Danach **AP-15 · Druckerauswahl als Karten** und **AP-16 · Inspector
-öffnet nach der Auswahl**, beide ohne Kernbau.
+Danach **AP-17 a–f**, die kleineren Pakete ohne Kernbau.
 
-Danach **AP-04** zu Ende — dafür muss aber der Mac erreichbar sein, weil
-die Angleichung dort auf der iOS-Seite passiert. Er ist ab dem
-20.08. wieder da.
+**AP-04** und Abschnitt **Z** brauchen den Mac; er ist ab dem 20.08.
+wieder da.
 
 ### Worauf zu achten ist
 
@@ -581,11 +577,28 @@ beide Plattformen, weil die Regel im gemeinsamen Modul liegt.
 
 ### AP-12 · Bettleiste · Kern: nein
 
-Drei Umbauten auf iOS, keiner auf Android:
+Drei Umbauten auf iOS:
 
-- raus aus dem Easy Mode (`04b2c3d`) — dort störte sie mehr als sie half
-- Kapselreihe im Advanced (`c4402bb`)
-- Sperren, Umbenennen, Entfernen ins Kontextmenü (`c4402bb`)
+- ~~raus aus dem Easy Mode (`04b2c3d`)~~ — **überholt.** Drei Tage
+  später hat `6875fd2` („unify multi-bed presentation rules",
+  09.08.) die Leiste dort wieder eingesetzt. iOS zeigt sie heute im
+  Simple Mode, Android auch. Nichts zu tun.
+- Kapselreihe im Advanced (`c4402bb`) — steht seit AP-21.
+- Sperren, Umbenennen, Entfernen ins Kontextmenü (`c4402bb`) — teils.
+  Schloss und X stehen bei iOS **sichtbar** in der Kapsel (Foto vom
+  iPad, `bettKapsel:190ff`), das Kontextmenü kommt zusätzlich.
+
+**Stand: erledigt** (20.08., `f03c7b0`). Der lange Druck öffnet jetzt
+ein Menü mit *Umbenennen* und — bei einem leeren Bett — *Entfernen*,
+statt sofort ins Umbenennen zu springen.
+
+Belegt am Emulator: langer Druck auf *Bed 1* zeigt *Rename*; *Remove*
+fehlt dort richtig, weil das Bett ein Objekt trägt.
+
+**Lehre für den Plan:** ein Commit-Verweis allein sagt nur, was einmal
+passiert ist. `04b2c3d` stand hier als Aufgabe, obwohl iOS die
+Entscheidung drei Tage später zurückgenommen hatte. Vor dem Nachbauen
+prüfen, was drüben **heute** im Quelltext steht.
 
 ---
 
@@ -909,18 +922,21 @@ Braucht einen erreichbaren Mac.
 | 4 | AP-04 Objektleiste | nein |
 | 5 | AP-07 Materialauswahl | nein |
 | 6 | AP-09 Leere Zustände | nein |
-| 7 | AP-05 Werkzeugleisten | `f489a48`, `c41a1ba`, `f0c314a` | Schiene mit Trennen, Stützen, Naht |
+| 7 | AP-12 Bettleiste | `f03c7b0` | langer Druck zeigt *Rename* |
+| AP-05 Werkzeugleisten | `f489a48`, `c41a1ba`, `f0c314a` | Schiene mit Trennen, Stützen, Naht |
 | AP-11 Slice-Blatt | `8afd69d`, `c63e329` | `2 G-code files`, *Export all*, Zeile je Datei |
 | AP-22 Alle Betten schneiden | `6bd3438` | `bett-1.gcode`, 53020 Bytes |
 | AP-20 Bereiche statt Reiter | `2e5f5ec` | drei Einstellungszeilen, vier Überschriften, Schneiden-Block außerhalb |
 | AP-08 Einstellungskopf | nein |
 | 8 | AP-06 Schwebende Dialoge | nein |
-| 9 | AP-05 Werkzeugleisten | nein |
+| 9 | AP-12 Bettleiste | `f03c7b0` | langer Druck zeigt *Rename* |
+| AP-05 Werkzeugleisten | nein |
 | 10 | AP-10 Anordnen | ja |
 | 11 | AP-13 Adaptive Schichthöhe | ja |
 | 12 | AP-14 Zweiter Regler | ja |
 | 13 | AP-12 Bettleiste | nein |
-| 14 | AP-05 Werkzeugleisten | `f489a48`, `c41a1ba`, `f0c314a` | Schiene mit Trennen, Stützen, Naht |
+| 14 | AP-12 Bettleiste | `f03c7b0` | langer Druck zeigt *Rename* |
+| AP-05 Werkzeugleisten | `f489a48`, `c41a1ba`, `f0c314a` | Schiene mit Trennen, Stützen, Naht |
 | AP-11 Slice-Blatt | nein |
 | 15 | AP-15 Druckerkarten | nein |
 | 16 | AP-16 Inspector | nein |

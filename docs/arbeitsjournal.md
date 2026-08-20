@@ -411,6 +411,23 @@ alte AP-05-Text darunter weiterlief - der Abschnitt nannte AP-05
 danach zweimal. Beim Ersetzen ganzer Abschnitte den Bereich zwischen
 zwei Ueberschriften nehmen, nicht ein Textstueck daraus.
 
+### Claude — AP-12, und ein Planpunkt, der ueberholt war
+
+Der lange Druck auf ein Bett oeffnet jetzt ein Menue mit *Umbenennen*
+und, bei einem leeren Bett, *Entfernen* - vorher sprang er sofort ins
+Umbenennen. Commit `f03c7b0`, am Emulator belegt.
+
+**Der eigentliche Fund war ein anderer.** AP-12 verlangte als Erstes,
+die Bettleiste aus dem Easy Mode zu nehmen, mit Verweis auf `04b2c3d`
+vom 6. August. Ein Blick in die heutige `SimpleModeView.swift` zeigt sie
+dort aber wieder - `6875fd2` vom 9. August hat sie zurueckgeholt. Haette
+ich den Punkt einfach abgearbeitet, waere Android um eine Leiste aermer
+gewesen, die iOS laengst wieder hat.
+
+**Daraus fuer den Plan:** ein Commit-Verweis sagt nur, was einmal
+passiert ist. Vor dem Nachbauen pruefen, was drueben *heute* im
+Quelltext steht - `git log -S` auf die Datei kostet zehn Sekunden.
+
 ---
 
 ## 2026-08-03
