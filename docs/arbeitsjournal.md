@@ -324,6 +324,34 @@ Einfuegen die zwei Zeilen unter dem Anker mitlesen.
 **Offen:** die Dateien sind noch unsichtbar. Das ist AP-11 und steht als
 naechster Schritt im Plan.
 
+### Claude — AP-11: die Dateien aus dem Mehrbett-Schnitt sind sichtbar
+
+Seit AP-22 entstanden beim Schneiden aller Betten mehrere Dateien - man
+sah aber nur „Fertig" und hatte keinen Weg zu vier von fuenf. Der
+Ergebnisblock zeigt jetzt die Zahl und je eine Zeile mit Namen und
+eigenem Knopf.
+
+Commit `8afd69d`. Belegt am Emulator: Wuerfel per Kopieren/Einfuegen auf
+zwei Betten, dann *2 G-code files* mit `bett-1.gcode` und
+`bett-2.gcode`; beide liegen mit 53020 Bytes in `files/`.
+
+**Zwei Dinge, die beim Bauen auffielen.** Der Name auf dem Drucker kam
+bisher aus `output_filename_format` - bei fuenf Betten waere das fuenfmal
+derselbe Name gewesen, und der zweite Auftrag haette den ersten
+ueberschrieben. Bei mehreren Dateien traegt der Auftrag deshalb den
+Dateinamen. Und `shareableGcodeUri` raeumte den share-Ordner jedes Mal
+leer; bei mehreren Dateien haette das Teilen der zweiten die erste
+geloescht.
+
+**Ein Werkzeugfehler, der Zeit gekostet hat:** mein Ersetzungsanker
+`val dst = File(outDir, suggestedGcodeName())` kam zweimal vor - einmal
+im Teilen, einmal im USB-Export. Das Skript hat es gemeldet statt blind
+zu ersetzen; die Pruefung auf genau eine Fundstelle hat sich zum zweiten
+Mal bezahlt gemacht.
+
+**Offen an AP-11:** *Alle exportieren*, die Wortwahl im Simple-Blatt und
+der Hinweis bei einem Schreibfehler. Steht im Plan.
+
 ---
 
 ## 2026-08-03

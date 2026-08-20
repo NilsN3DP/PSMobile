@@ -90,20 +90,21 @@ ab; von dort gehört sie in die Arbeitskopie kopiert. Achtung: `du` meldet
 
 ### Als Nächstes
 
-**AP-11 · Slice-Blatt.** Kein Kernbau. Seit `6bd3438` entstehen beim
-Schneiden aller Betten Dateien, die niemand sieht — das ist jetzt der
-dringendste Punkt.
+**AP-11 zu Ende bringen.** Kein Kernbau. Die Seitenleiste zeigt die
+Dateien seit `8afd69d`; es fehlen drei kleinere Stücke.
 
 Konkret:
 
-1. `SlicerService.gcodeDateien` steht bereit (eine Datei je Bett).
-   Im Slice-Blatt (`SimpleSliceSheet.kt`) und im Ergebnisblock der
-   Seitenleiste je Datei eine Zeile mit Namen und eigenem
-   *Senden*-Knopf.
-2. *Alle exportieren* daneben — auf iOS `SliceSheet.swift:88ff`.
-3. Wortwahl: iOS sagt **„Export G-code"**, nicht *Sichern*. Im
-   Advanced-Block steht das schon richtig, im Simple-Blatt noch nicht.
-4. Hinweis, wenn eine Datei nicht geschrieben werden konnte.
+1. **Simple-Blatt** (`SimpleSliceSheet.kt`): *Sichern* heißt dort noch
+   so — iOS sagt **„Export G-code"**, weil die Datei die Anwendung
+   verlässt. Dazu dieselbe Dateizahl und Zeilenliste wie in der
+   Seitenleiste, wenn mehr als eine Datei vorliegt.
+2. **Alle exportieren**: `MainActivity` braucht ein Gegenstück zu
+   `shareGcode(uri)` mit `ACTION_SEND_MULTIPLE`; der Dienst kann die
+   URIs über `shareableGcodeUri(datei)` je Datei liefern.
+3. **Hinweis bei Schreibfehler**: `runSliceAlleBetten` bricht heute beim
+   ersten Fehler ab; iOS nennt die Datei, die nicht geschrieben werden
+   konnte, und macht weiter.
 
 Danach **AP-05 zu Ende bringen — die linke Schiene.** Kein Kernbau nötig. Die
 obere Leiste und die Fußzeile stehen seit `c41a1ba`; es fehlen drei
@@ -561,6 +562,21 @@ entstehen.
 
 **Wortwahl** iOS sagt **„Export G-Code"**, nicht *Sichern* — die Datei
 verlässt die Anwendung.
+
+**Stand: teilweise** (20.08., `8afd69d`). Im Ergebnisblock der
+Seitenleiste stehen jetzt die Zahl der Dateien und je eine Zeile mit
+Namen und eigenem Knopf — *Senden*, wenn genau ein Drucker eingerichtet
+ist, sonst *Exportieren*. Dafür nehmen `sendToPrinter(...)` und
+`shareableGcodeUri(...)` jetzt eine bestimmte Datei.
+
+Belegt am Emulator: Würfel auf zwei Betten, danach *2 G-code files*,
+`bett-1.gcode` und `bett-2.gcode` mit je einem Knopf, beide Dateien mit
+53020 Bytes in `files/`.
+
+**Offen:** *Alle exportieren* als Mehrfach-Teilen (`ACTION_SEND_MULTIPLE`
+in `MainActivity`), die Wortwahl im Simple-Blatt (*Sichern* →
+*Export G-code*) samt Dateizahl, und ein Hinweis, wenn eine Datei nicht
+geschrieben werden konnte.
 
 ---
 
