@@ -83,6 +83,7 @@ ab; von dort gehört sie in die Arbeitskopie kopiert. Achtung: `du` meldet
 | AP-09 Leere Zustände | `875a655` | `LeeresPanel` als Muster |
 | AP-18 Bindungen | `27ac6eb`, `1eb4c97` | 26 fehlende Funktionen → noch 2 |
 | Bemalen (Strich, Füllmodi) | `e2f9dad`, `9da2adf` | Spur statt Punkt, 1358 Facetten |
+| AP-14 Zweiter Regler | (dieser Commit) | Werkzeugweg 10–7189 unten, Schichtregler links |
 | AP-13 Adaptive Schichthöhe | `0418edc` | *Compute* füllt 81 Höhenbereiche, *Apply* wird aktiv |
 | AP-10 Anordnen mit Optionen | `ae316ed` | *Bed 2 is empty…* und *Bed 1: 1 instances arranged.* im Feld am Knopf |
 | Bettzuordnung beim Ziehen | `6f17c85` | `Bed 1 · 0 / Bed 2 · 1` |
@@ -114,10 +115,6 @@ AP-17 b/c: **im Quelltext von heute nachsehen, nicht in der Historie.**
 
 Damit bleiben, alle ohne Kern und ohne Mac:
 
-- **AP-14 · zweiter Regler** (Werkzeugweg innerhalb der Schicht).
-  `nativeSetMoveRange` und `nativeMoveRangeBounds` haben noch keine
-  Kotlin-Deklaration — die gehört in `PsmCore` neben
-  `nativeLayerProfileAdaptive`, danach der zweite Regler an der Vorschau.
 - **AP-17 g · ZIP-Import.** `zipExtractModels` steht in `PsmCore`, der
   Weg vom Dateiwähler dorthin fehlt.
 
@@ -681,7 +678,7 @@ ranges · 0.20 mm · 0.25 mm …", *Apply* ist aktiv.
 
 ---
 
-### AP-14 · Zweiter Regler in der Vorschau · Kern: ja
+### AP-14 · Zweiter Regler in der Vorschau · Kern: nein
 
 iOS hat zwei `DualHandleSlider`: links senkrecht den Schichtbereich,
 unten waagerecht den **Werkzeugweg innerhalb der Schicht** —
@@ -690,8 +687,35 @@ unten waagerecht den **Werkzeugweg innerhalb der Schicht** —
 
 Android hat nur den senkrechten.
 
-**Nicht gebunden** `psm_viewport_set_move_range`,
-`psm_viewport_move_range_bounds`
+**Bindung** `psm_viewport_set_move_range` und
+`psm_viewport_move_range_bounds` standen bereits in `PsmViewport.kt`
+(Zeile 195ff) — nur gerufen hat sie niemand. **Kein Kernbau.**
+
+**Stand: fertig** (20.08.). Zwei Änderungen, beide an der Anordnung:
+
+1. Der **senkrechte** Schichtregler steht jetzt **links** am Bett, wie
+   der Desktop-Regler und wie drüben. Er saß rechts, an derselben Kante
+   wie die Seitenleiste.
+2. Darunter der **waagerechte** Regler für den Werkzeugweg innerhalb der
+   sichtbaren Schichten — `WegSlider`, zwei Griffe wie beim
+   `LayerSlider`, nur liegend.
+
+Die Grenzen kommen vom Kern, nicht vom Nutzer, und gelten immer nur für
+den gerade sichtbaren Schichtbereich. Deshalb liefert
+`SceneController.setLayerRange(lo, hi, onBounds)` sie im selben Zug
+zurück: getrennt gerufen arbeitete man mit den Grenzen von gestern. Die
+Antwort kommt über einen Rückruf, weil der Viewport auf dem GL-Faden
+läuft — genau wie in `ViewportView.swift`. Übernommen wird nur, was sich
+wirklich geändert hat, sonst überschreibt jeder Bildaufbau eine laufende
+Ziehgeste (derselbe Vorbehalt steht in `AdvancedWorkspaceView.swift`).
+
+Die Statistikkarte weicht beiden aus: links um den senkrechten Regler
+herum, unten um den waagerechten.
+
+Belegt am Emulator: nach dem Schnitt steht unten *10 … 2617*; ein Zug am
+senkrechten Regler auf Schicht 127 macht daraus *10 … 160x*, und ein Zug
+am rechten Griff auf *7189* schneidet die Werkzeugwege im Bild sichtbar
+ab.
 
 ---
 
@@ -1026,7 +1050,7 @@ abgelegten `.so` (geprüft 20.08.2026).
 | 9 | AP-05 Werkzeugleisten | nein | fertig |
 | 10 | AP-10 Anordnen mit Optionen | nein | fertig |
 | 11 | AP-13 Adaptive Schichthöhe | nein | fertig |
-| 12 | AP-14 Zweiter Regler | nein | offen |
+| 12 | AP-14 Zweiter Regler | nein | fertig |
 | 13 | AP-12 Bettleiste | nein | fertig |
 | 14 | AP-11 Slice-Blatt | nein | fertig |
 | 15 | AP-15 Druckerkarten | nein | fertig |

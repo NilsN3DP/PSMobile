@@ -92,7 +92,29 @@ class SceneController {
         run { it.mode = PsmViewport.Mode.EDITOR }
     }
 
-    fun setLayerRange(lo: Int, hi: Int) = run { it.setLayerRange(lo, hi) }
+    /**
+     * Schichtbereich setzen und melden, welche Werkzeugwege danach
+     * sichtbar sind.
+     *
+     * Beides gehoert zusammen: die Grenzen des zweiten Reglers gelten
+     * immer nur fuer den gerade gesetzten Schichtbereich. Getrennt
+     * gerufen liefe man Gefahr, mit Grenzen von gestern zu arbeiten.
+     * Die Antwort kommt ueber den Rueckruf, weil der Viewport auf dem
+     * GL-Faden arbeitet - genau wie drueben in `ViewportView.swift`.
+     */
+    fun setLayerRange(lo: Int, hi: Int, onBounds: ((IntRange?) -> Unit)? = null) {
+        val v = view ?: return
+        v.queueEvent {
+            holder?.viewport?.let { vp ->
+                vp.setLayerRange(lo, hi)
+                val grenzen = runCatching { vp.moveRangeBounds() }.getOrNull()
+                onBounds?.let { melden -> v.post { melden(grenzen) } }
+            }
+        }
+        v.requestRender()
+    }
+
+    fun setMoveRange(first: Int, last: Int) = run { it.setMoveRange(first, last) }
 
     /**
      * Solange das Skalieren-Werkzeug aktiv ist, greift die Spreizgeste

@@ -58,6 +58,48 @@ sondern die Absprache währenddessen.
 
 ## 2026-08-20
 
+### Claude — AP-14: der zweite Regler, und der erste wechselt die Seite
+
+Die Vorschau hatte auf Android nur den senkrechten Schichtregler, und
+der stand rechts - an derselben Kante wie die Seitenleiste. iOS hat ihn
+links, wie den Desktop-Regler links vom Bett, und darunter einen
+zweiten, waagerechten: welcher Ausschnitt der Werkzeugwege innerhalb der
+sichtbaren Schichten gezeigt wird.
+
+Beides steht jetzt auch hier. Der neue `WegSlider` ist derselbe Regler
+wie der senkrechte, nur liegend - zwei Griffe, Zahl am Griff.
+
+Die Bindung war wieder schon da: `nativeSetMoveRange` und
+`nativeMoveRangeBounds` stehen seit langem in `PsmViewport.kt`, nur
+gerufen hat sie niemand. Kein Kernbau. Damit ist das der dritte Fall
+heute; die Spalte „Kern" im Plan stand fuer vier Pakete auf „ja" und war
+bei allen vieren falsch.
+
+**Warum die Grenzen zum Schichtbereich gehoeren.** Wie viele
+Werkzeugwege es gibt, haengt davon ab, welche Schichten gerade sichtbar
+sind - jede Aenderung am senkrechten Regler aendert auch die Spanne des
+waagerechten. Getrennt gerufen arbeitete man mit den Grenzen von
+gestern. `SceneController.setLayerRange(lo, hi, onBounds)` liefert sie
+deshalb im selben Zug zurueck, ueber einen Rueckruf, weil der Viewport
+auf dem GL-Faden laeuft. Genau wie `ViewportView.swift` es macht.
+Uebernommen wird nur, was sich wirklich geaendert hat - sonst
+ueberschreibt jeder Bildaufbau eine laufende Ziehgeste; der Vorbehalt
+steht so auch drueben im Quelltext.
+
+Beim Oeffnen der Vorschau gibt es noch keine Ziehgeste und damit keinen
+Anlass zu fragen. Deshalb fragt `wegAnfragen(n)` einmal nach, sobald der
+Schichtbereich steht - sonst saehe man den zweiten Regler erst, nachdem
+man den ersten angefasst hat.
+
+Belegt am Emulator: nach dem Schnitt steht unten *10 … 2617*; ein Zug am
+senkrechten Regler auf Schicht 127 macht daraus *10 … 160x* - die
+Grenzen ziehen also nach -, und ein Zug am rechten Griff auf *7189*
+schneidet die Werkzeugwege im Bild sichtbar ab.
+
+Ein Fehlversuch dazwischen war meiner, nicht der App: der erste Wisch
+lag knapp neben dem Regler und drehte die Kamera. Wer hier misst, nimmt
+die Koordinaten aus einem frischen Bildschirmfoto.
+
 ### Claude — AP-13: adaptiv rechnen, und warum „Übernehmen" grau blieb
 
 Die Stützstellenliste fuer variable Schichthoehen hatte auf Android nur

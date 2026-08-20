@@ -454,6 +454,36 @@ private fun SlicerContent(
     var layerCount by remember { mutableStateOf(0) }
     var layerLo by remember { mutableStateOf(0) }
     var layerHi by remember { mutableStateOf(0) }
+    // Der zweite Regler: Werkzeugweg innerhalb der sichtbaren
+    // Schichten. Die Grenzen kommen vom Kern und aendern sich mit jedem
+    // Schichtbereich; gesetzt wird nur, was der Finger daraus macht.
+    var wegGrenzen by remember { mutableStateOf<IntRange?>(null) }
+    var wegLo by remember { mutableStateOf(0) }
+    var wegHi by remember { mutableStateOf(0) }
+
+    /**
+     * Die Grenzen des zweiten Reglers vom Kern holen.
+     *
+     * Gilt immer nur fuer den gerade sichtbaren Schichtbereich, also
+     * beim Oeffnen der Vorschau und nach jedem Zug am Schichtregler.
+     * Nur bei wirklich neuen Grenzen zuruecksetzen - sonst
+     * ueberschreibt jeder Bildaufbau eine laufende Ziehgeste
+     * (derselbe Vorbehalt wie in `AdvancedWorkspaceView.swift`).
+     */
+    val wegUebernehmen = { grenzen: IntRange? ->
+        if (wegGrenzen != grenzen) {
+            wegGrenzen = grenzen
+            wegLo = grenzen?.first ?: 0
+            wegHi = grenzen?.last ?: 0
+        }
+    }
+    val wegAnfragen = { anzahl: Int ->
+        if (anzahl > 0) {
+            sceneController.setLayerRange(0, anzahl - 1, wegUebernehmen)
+        } else {
+            wegGrenzen = null
+        }
+    }
     /*
      * Was die Vorschau ueber das Ergebnis weiss - Statistik und
      * Legende. Erst nach dem Slicen vorhanden, deshalb nullable.
@@ -476,10 +506,12 @@ private fun SlicerContent(
                 previewData = if (n > 0) service.previewData() else null
                 hiddenRoles = emptySet()
                 hiddenExtruders = emptySet()
+                wegAnfragen(n)
             }
         } else {
             sceneController.enterEditor()
             previewMode = false
+            wegGrenzen = null
         }
     }
     var surfaceMode by remember { mutableStateOf<SurfaceToolMode?>(null) }
@@ -513,11 +545,13 @@ private fun SlicerContent(
                 previewData = if (n > 0) service.previewData() else null
                 hiddenRoles = emptySet()
                 hiddenExtruders = emptySet()
+                wegAnfragen(n)
             }
         } else if (previewMode) {
             sceneController.enterEditor()
             previewMode = false
             layerCount = 0
+            wegGrenzen = null
         }
     }
 
@@ -847,18 +881,43 @@ private fun SlicerContent(
                     }
 
                     if (previewMode && layerCount > 1) {
+                        // Linker Rand, wie der Desktop-Regler links vom
+                        // Bett und wie drueben. Er stand hier rechts,
+                        // an derselben Kante wie die Seitenleiste.
                         LayerSlider(
                             count = layerCount,
                             low = layerLo,
                             high = layerHi,
                             onChange = { lo, hi ->
                                 layerLo = lo; layerHi = hi
-                                sceneController.setLayerRange(lo, hi)
+                                sceneController.setLayerRange(lo, hi, wegUebernehmen)
                             },
                             modifier = Modifier
-                                .align(Alignment.CenterEnd)
-                                .padding(end = 12.dp, top = 12.dp, bottom = 84.dp),
+                                .align(Alignment.CenterStart)
+                                .padding(start = 12.dp, top = 12.dp, bottom = 84.dp),
                         )
+                    }
+
+                    // Unterer Rand: Werkzeugweg innerhalb der Schicht,
+                    // waagerecht - wie der Desktop-Regler unter dem Bett
+                    // und wie drueben (`AdvancedWorkspaceView.swift`).
+                    wegGrenzen?.let { grenzen ->
+                        if (previewMode && grenzen.first < grenzen.last) {
+                            WegSlider(
+                                grenzen = grenzen,
+                                low = wegLo,
+                                high = wegHi,
+                                onChange = { lo, hi ->
+                                    wegLo = lo; wegHi = hi
+                                    sceneController.setMoveRange(lo, hi)
+                                },
+                                modifier = Modifier
+                                    .align(Alignment.BottomCenter)
+                                    // Links bleibt der senkrechte Regler
+                                    // stehen, unten die Ansichtsleiste.
+                                    .padding(start = 104.dp, end = 40.dp, bottom = 84.dp),
+                            )
+                        }
                     }
 
                     /*
@@ -879,7 +938,14 @@ private fun SlicerContent(
                                     .align(Alignment.BottomStart)
                                     // Ueber der Ansichtsleiste, nicht auf ihr:
                                     // sonst verdeckt die Legende Oben/Vorn/Links.
-                                    .padding(start = 12.dp, end = 12.dp, bottom = 84.dp)
+                                    // Und rechts vom senkrechten Regler, seit
+                                    // der links steht - sonst laege die Karte
+                                    // ueber seinem unteren Griff.
+                                    .padding(
+                                        start = if (layerCount > 1) 84.dp else 12.dp,
+                                        end = 12.dp,
+                                        bottom = if (wegGrenzen != null) 140.dp else 84.dp,
+                                    )
                                     .widthIn(max = 520.dp)
                                     .background(
                                         PrusaColors.Panel.copy(alpha = 0.94f),
@@ -2702,3 +2768,112 @@ private fun projektDatum(ms: Long): String =
         java.text.DateFormat.SHORT,
         java.text.DateFormat.SHORT,
     ).format(java.util.Date(ms))
+
+
+/**
+ * Waagerechter Regler unter dem Bett: welcher Ausschnitt der
+ * Werkzeugwege innerhalb der sichtbaren Schichten gezeigt wird.
+ *
+ * Zwei Griffe wie beim [LayerSlider], nur liegend. Die Grenzen kommen
+ * vom Kern (`psm_viewport_move_range_bounds`) und wechseln mit dem
+ * Schichtbereich - deshalb nimmt der Regler sie als Parameter und haelt
+ * keine eigene Vorstellung davon, wie viele Wege es gibt.
+ */
+@Composable
+private fun WegSlider(
+    grenzen: IntRange,
+    low: Int,
+    high: Int,
+    onChange: (Int, Int) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val track = 6.dp
+    val thumb = 28.dp
+
+    val density = LocalDensity.current
+    val thumbPx = with(density) { thumb.toPx() }
+    var breite by remember { mutableStateOf(1f) }
+    // Welchen Griff der Finger gepackt hat - waehrend eines Zuges fest,
+    // sonst springt der Regler bei eng beieinander liegenden Griffen.
+    var dragLinks by remember { mutableStateOf(true) }
+
+    val usable = (breite - thumbPx).coerceAtLeast(1f)
+    val spanne = (grenzen.last - grenzen.first).coerceAtLeast(1)
+
+    fun toWeg(x: Float): Int =
+        grenzen.first + (((x - thumbPx / 2f) / usable).coerceIn(0f, 1f) * spanne).roundToInt()
+
+    fun toCenter(weg: Int): Float =
+        thumbPx / 2f + ((weg - grenzen.first).toFloat() / spanne) * usable
+
+    Box(
+        modifier
+            .fillMaxWidth()
+            .height(thumb + 20.dp)
+            .onSizeChanged { breite = it.width.toFloat().coerceAtLeast(1f) }
+            .pointerInput(grenzen) {
+                detectDragGestures(
+                    onDragStart = { p ->
+                        val w = toWeg(p.x)
+                        dragLinks = kotlin.math.abs(w - low) <= kotlin.math.abs(w - high)
+                        if (dragLinks) onChange(w.coerceAtMost(high), high)
+                        else onChange(low, w.coerceAtLeast(low))
+                    },
+                ) { change, _ ->
+                    val w = toWeg(change.position.x)
+                    if (dragLinks) onChange(w.coerceAtMost(high), high)
+                    else onChange(low, w.coerceAtLeast(low))
+                    change.consume()
+                }
+            },
+    ) {
+        with(density) {
+            val linksC = toCenter(low)
+            val rechtsC = toCenter(high)
+
+            Box(
+                Modifier
+                    .align(Alignment.CenterStart)
+                    .padding(start = (thumbPx / 2f).toDp())
+                    .width(usable.toDp())
+                    .height(track)
+                    .clip(RoundedCornerShape(track / 2))
+                    .background(PrusaColors.Panel.copy(alpha = 0.88f)),
+            )
+            Box(
+                Modifier
+                    .align(Alignment.CenterStart)
+                    .padding(start = linksC.toDp())
+                    .width((rechtsC - linksC).coerceAtLeast(0f).toDp())
+                    .height(track)
+                    .background(PrusaColors.Orange),
+            )
+            listOf(low to linksC, high to rechtsC).forEach { (weg, centerPx) ->
+                Box(
+                    Modifier
+                        .align(Alignment.CenterStart)
+                        .padding(start = (centerPx - thumbPx / 2f).coerceAtLeast(0f).toDp())
+                        .size(thumb)
+                        .clip(RoundedCornerShape(thumb / 2))
+                        .background(PrusaColors.Orange)
+                        .border(2.dp, Color.White, RoundedCornerShape(thumb / 2)),
+                )
+                Text(
+                    "$weg",
+                    color = Color.White,
+                    fontSize = 11.sp,
+                    // Am rechten Ende bliebe sonst kein Platz mehr, und
+                    // die Zahl braeche in zwei Zeilen um.
+                    maxLines = 1,
+                    softWrap = false,
+                    modifier = Modifier
+                        .align(Alignment.BottomStart)
+                        .padding(start = (centerPx - 12.dp.toPx()).coerceAtLeast(0f).toDp())
+                        .clip(RoundedCornerShape(Corners.FIELD.dp))
+                        .background(PrusaColors.Panel.copy(alpha = 0.88f))
+                        .padding(horizontal = 5.dp, vertical = 2.dp),
+                )
+            }
+        }
+    }
+}
