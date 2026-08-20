@@ -187,6 +187,10 @@ internal fun Sidebar(
     var headEditorRequest by remember { mutableStateOf(0) }
     var layerEditorObjectId by remember { mutableStateOf<Int?>(null) }
     val inspectorScroll = rememberScrollState()
+    // Abschaltbar in den App-Einstellungen, wie drueben - die
+    // Vorschau kostet Platz, und auf schmalen Geraeten ist die
+    // Zeile ohnehin eng.
+    val zeigeVorschau = remember(objects.size) { service.thumbnailsEnabled() }
     val toolMessage by service.toolMessage.collectAsState()
 
     fun requestPresetSwitch(
@@ -545,6 +549,7 @@ internal fun Sidebar(
                         visibleObjects.forEach { obj ->
                             ObjectTreeRow(
                                 obj = obj,
+                                zeigeVorschau = zeigeVorschau,
                                 volumes = volumes[obj.id].orEmpty(),
                                 extruderOptions = extruderOptions,
                                 isSelected = obj.id in selectedIds,
@@ -1227,6 +1232,7 @@ private fun PresetCombo(
 @Composable
 private fun ObjectTreeRow(
     obj: PsmCore.ObjectInfo,
+    zeigeVorschau: Boolean,
     volumes: List<PsmCore.VolumeInfo>,
     extruderOptions: List<ExtruderChoice>,
     isSelected: Boolean,
@@ -1283,7 +1289,12 @@ private fun ObjectTreeRow(
                 onCheckedChange = { onToggleSelection() },
                 modifier = Modifier.size(48.dp),
             )
-            Column(Modifier.weight(1f)) {
+            // Dasselbe Kaestchen wie im Modelle-Blatt: flache Platten und
+            // hohe Tuerme lassen sich damit in der Liste unterscheiden,
+            // statt dass alle Zeilen gleich aussehen. iOS zeigt es in
+            // beiden Listen (`0befe95`), Android bisher nur im Blatt.
+            if (zeigeVorschau) ObjectProportionThumb(obj)
+            Column(Modifier.weight(1f).padding(start = 6.dp)) {
                 Text(
                     obj.name.ifBlank { advancedText("Object ${obj.id}", "Objekt ${obj.id}") },
                     color = PrusaColors.TextPrimary,

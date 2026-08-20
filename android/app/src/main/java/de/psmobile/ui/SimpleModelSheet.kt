@@ -338,7 +338,7 @@ private fun SimpleModelRow(
  * statt dass alle Zeilen gleich aussehen.
  */
 @Composable
-private fun ObjectProportionThumb(obj: PsmCore.ObjectInfo) {
+internal fun ObjectProportionThumb(obj: PsmCore.ObjectInfo) {
     val w = obj.sizeMm.first.coerceAtLeast(0.1f)
     val d = obj.sizeMm.second.coerceAtLeast(0.1f)
     val h = obj.sizeMm.third.coerceAtLeast(0.1f)
