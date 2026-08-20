@@ -579,6 +579,28 @@ gezweifelt. Es lag an der Wischdauer: 250 ms wird als Fling verschluckt,
 900 ms scrollt sauber. Steht jetzt im Plan unter „Worauf zu achten ist",
 damit der naechste nicht dieselbe Fehlersuche macht.
 
+### Claude — AP-17 d: die Mischfarbe steht jetzt vor dem Speichern da
+
+Man waehlte zwei Koepfe und einen Anteil und tippte auf „hinzufuegen" -
+welche Farbe dabei herauskommt, sah man erst danach in der Liste. Jetzt
+steht die Vorschau darueber: Farbfeld und Hexwert, gerechnet vom
+gemeinsamen `ColorMixCodec`, also dieselbe Zahl wie drueben.
+
+Commit `492799b`. Belegt am Emulator: T1 und T2 bei 50 % ergeben
+`#ED6941`, danach steht „Virtual extruder 6 · T1: 50 % · T2: 50 %" in
+der Liste.
+
+**Vorschau und Rezept aus derselben Rechnung.** Zwei getrennte Wege
+waeren die naheliegende Falle: die Vorschau zeigt eine Farbe, gespeichert
+wird eine andere, und niemand merkt es, bis der Druck laeuft. Das Rezept
+traegt die Farbe jetzt mit, wie auf iOS.
+
+**Damit ist alles zu, was ohne Kernbau und ohne Mac geht.** Was bleibt,
+steht im Plan: vier Pakete mit Kernbau, die Mac-Sachen und die beiden
+zurueckgestellten. Fuer den naechsten Schritt (AP-10) habe ich die
+Reihenfolge in den Plan geschrieben - Bindung zuerst, dann Kernbau, sonst
+baut man die alte Fassung.
+
 ---
 
 ## 2026-08-03
