@@ -58,4 +58,33 @@ class LayerProfileTest {
         val drei = LayerProfile.addPoint(zwei, 20.0)
         assertEquals(2, LayerProfile.removePoint(drei, 1).size)
     }
+
+    @Test
+    fun `doppelte Z-Werte aus dem Kern werden zusammengezogen`() {
+        // psm_model_layer_profile_adaptive liefert eine Treppe: an der
+        // Stufe stehen zwei Paare mit demselben z. Roh uebernommen
+        // waeren die Z-Werte nicht mehr streng steigend und canApply
+        // faende das Profil ungueltig - der Nutzer saehe nur einen
+        // grauen Uebernehmen-Knopf.
+        val punkte = listOf(
+            LayerProfile.Point(0.0, 0.2),
+            LayerProfile.Point(0.2, 0.2),
+            LayerProfile.Point(0.2, 0.25),
+            LayerProfile.Point(0.45, 0.25),
+        )
+        val zeilen = LayerProfile.fromPoints(20.0, punkte)
+        assertEquals(listOf("0.0", "0.20", "0.45"), zeilen.map { it.z })
+        // Ab der Stufe gilt die neue Dicke, nicht die alte.
+        assertEquals("0.25", zeilen[1].height)
+        assertTrue(LayerProfile.canApply(zeilen))
+    }
+
+    @Test
+    fun `bleibt nach dem Zusammenziehen nur ein Punkt, greifen die Vorgaben`() {
+        val punkte = listOf(
+            LayerProfile.Point(0.0, 0.2),
+            LayerProfile.Point(0.0, 0.3),
+        )
+        assertEquals(LayerProfile.defaults(20.0), LayerProfile.fromPoints(20.0, punkte))
+    }
 }

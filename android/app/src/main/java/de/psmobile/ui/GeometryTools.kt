@@ -632,6 +632,8 @@ internal fun GeometryTools(
 internal fun LayerProfileToolPage(
     objectHeight: Double,
     initial: List<Pair<Double, Double>>,
+    /** Rechnet das Profil aus der Geometrie; siehe [AdaptivZeile]. */
+    onAdaptiv: (Float) -> List<Pair<Double, Double>>,
     onBack: () -> Unit,
     onApply: (List<Pair<Double, Double>>) -> Unit,
     onReset: () -> Unit,
@@ -661,6 +663,12 @@ internal fun LayerProfileToolPage(
             fontSize = 12.sp,
         )
         LayerProfilePreview(editor.previewSegments, objectHeight)
+        AdaptivZeile { guete ->
+            val berechnet = onAdaptiv(guete)
+            if (berechnet.isNotEmpty()) {
+                editor = LayerProfileEditorState.fromProfile(objectHeight, berechnet)
+            }
+        }
         Column(
             Modifier.weight(1f).verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -1405,6 +1413,55 @@ private fun PaintSlider(
             color = PrusaColors.TextPrimary,
             fontSize = 12.sp,
             modifier = Modifier.width(56.dp),
+        )
+    }
+}
+
+
+/**
+ * Aus der Geometrie rechnen statt Stuetzstellen von Hand zu setzen.
+ *
+ * Der Regler steht von fein nach grob, wie am Desktop; *Berechnen*
+ * fuellt nur die Zeilen darunter. Angewendet wird erst mit dem
+ * bestehenden *Uebernehmen* - sonst haette dieselbe Seite zwei Wege,
+ * die Aenderung wirksam zu machen. Genauso drueben
+ * (`LayerProfileView.swift`, `adaptiv`).
+ */
+@Composable
+private fun AdaptivZeile(onBerechnen: (Float) -> Unit) {
+    var guete by remember { mutableStateOf(0.5f) }
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text(
+                PsUi.appText("Adaptive", "Adaptiv"),
+                color = PrusaColors.TextMuted,
+                fontSize = 12.sp,
+            )
+            Slider(
+                value = guete,
+                onValueChange = { guete = it },
+                modifier = Modifier.weight(1f),
+            )
+            TextButton(
+                onClick = { onBerechnen(guete) },
+                modifier = Modifier.height(psTouch(40)),
+            ) {
+                Text(
+                    PsUi.appText("Compute", "Berechnen"),
+                    color = PrusaColors.Orange,
+                )
+            }
+        }
+        Text(
+            PsUi.appText(
+                "Fine and smooth on the left, coarse and fast on the right.",
+                "Links fein und glatt, rechts grob und schnell.",
+            ),
+            color = PrusaColors.TextMuted,
+            fontSize = 10.sp,
         )
     }
 }

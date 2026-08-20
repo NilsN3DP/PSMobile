@@ -58,6 +58,41 @@ sondern die Absprache währenddessen.
 
 ## 2026-08-20
 
+### Claude — AP-13: adaptiv rechnen, und warum „Übernehmen" grau blieb
+
+Die Stützstellenliste fuer variable Schichthoehen hatte auf Android nur
+den Weg von Hand. Jetzt steht darueber eine Zeile *Adaptiv* mit Regler
+und *Berechnen*, wie drueben (`LayerProfileView.swift`). *Berechnen*
+fuellt nur die Zeilen; wirksam wird es erst mit dem bestehenden
+*Uebernehmen* - sonst haette dieselbe Seite zwei Wege zum selben Ziel.
+
+Die Bindung war, wie bei AP-10, laengst da: `nativeLayerProfileAdaptive`
+im JNI und `PsmCore.adaptiveLayerProfile(...)` in Kotlin. Kein Kernbau.
+
+**Und dann blieb „Uebernehmen" grau.** Das war kein Fehler in der neuen
+Zeile. Der Kern liefert das Profil als Treppe: an einer Stufe stehen
+zwei Paare mit demselben z. Gemessen an einem 20-mm-Wuerfel: 83 Paare,
+darin `(0.2, 0.2)` und `(0.2, 0.25)` direkt hintereinander - das eine ist
+das Ende des alten Bandes, das andere der Anfang des neuen. Roh
+uebernommen sind die Z-Werte nicht mehr streng steigend, und
+`LayerProfile.canApply` haelt das Profil fuer ungueltig. Der Nutzer
+saehe nur einen grauen Knopf und keinen Grund.
+
+`fromPoints` zieht doppelte z jetzt zusammen und behaelt den **letzten**
+Eintrag - ab dieser Hoehe gilt die neue Dicke. Wichtig ist, *wo* das
+steht: in der gemeinsamen Regel, nicht in der Android-Ansicht. iOS ruft
+dieselbe Funktion und haette denselben grauen Knopf gehabt, sobald dort
+jemand *Berechnen* drueckt. Zwei Tests im `shared`-Modul decken beide
+Faelle ab (Zusammenziehen, und was passiert, wenn danach nur ein Punkt
+uebrig bleibt).
+
+Nebenbei kam `LayerProfileEditorState` von seiner eigenen Umrechnung weg
+- es baute die Zeilen vorher selbst aus `z.toString()`. Jetzt geht auch
+das durch die Regel; eine Rechnung weniger, die auseinanderlaufen kann.
+
+Belegt am Emulator: *Compute* macht aus den 83 Kernpunkten „81 height
+ranges · 0.20 mm · 0.25 mm …", und *Apply* ist aktiv.
+
 ### Claude — AP-10: Anordnen mit Optionen, und ein Kernbau, den es nicht brauchte
 
 Der Plan sagte fuer AP-10 „Kern: ja" und gab die Reihenfolge vor:

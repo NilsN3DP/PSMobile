@@ -101,12 +101,32 @@ object LayerProfile {
             rows.toMutableList().also { it[index] = Row(z, height) }
         }
 
-    fun fromPoints(objectHeight: Double, points: List<Point>): List<Row> =
-        if (points.isEmpty()) {
-            defaults(objectHeight)
-        } else {
-            points.map { Row(decimal(it.z), decimal(it.height)) }
+    /**
+     * Kernausgabe in Zeilen.
+     *
+     * Der Kern liefert das Profil als Treppe: an einer Stelle koennen
+     * zwei Paare mit demselben z stehen - das alte Ende und der neue
+     * Anfang. `psm_model_layer_profile_adaptive` tut das reihenweise
+     * (gemessen: 83 Paare, darin z=0.2 zweimal). Uebernaehme man sie
+     * roh, waeren die Z-Werte nicht mehr streng steigend, [canApply]
+     * saehe falsch aus, und *Uebernehmen* bliebe grau, ohne dass jemand
+     * erklaeren koennte warum.
+     *
+     * Deshalb bleibt je z der **letzte** Eintrag stehen: ab dieser
+     * Hoehe gilt die neue Dicke. Das Runden auf zwei Stellen kann
+     * benachbarte Stellen ebenfalls zusammenfallen lassen - auch dann
+     * gewinnt die spaetere.
+     */
+    fun fromPoints(objectHeight: Double, points: List<Point>): List<Row> {
+        if (points.isEmpty()) return defaults(objectHeight)
+        val zeilen = LinkedHashMap<String, Row>()
+        points.sortedBy { it.z }.forEach { punkt ->
+            val z = decimal(punkt.z)
+            zeilen[z] = Row(z, decimal(punkt.height))
         }
+        val ergebnis = zeilen.values.toList()
+        return if (ergebnis.size >= 2) ergebnis else defaults(objectHeight)
+    }
 
     /** Komma wie Punkt annehmen - je nach Tastatur kommt beides. */
     private fun zahl(text: String): Double? =

@@ -333,6 +333,9 @@ internal fun Sidebar(
             LayerProfileToolPage(
                 objectHeight = selected.sizeMm.third.toDouble(),
                 initial = service.layerProfile(editingLayersFor),
+                onAdaptiv = { guete ->
+                    service.adaptivesLayerProfile(editingLayersFor, guete)
+                },
                 onBack = { layerEditorObjectId = null },
                 onApply = { points ->
                     service.setLayerProfile(editingLayersFor, points)

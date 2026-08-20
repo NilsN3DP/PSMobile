@@ -83,6 +83,7 @@ ab; von dort gehört sie in die Arbeitskopie kopiert. Achtung: `du` meldet
 | AP-09 Leere Zustände | `875a655` | `LeeresPanel` als Muster |
 | AP-18 Bindungen | `27ac6eb`, `1eb4c97` | 26 fehlende Funktionen → noch 2 |
 | Bemalen (Strich, Füllmodi) | `e2f9dad`, `9da2adf` | Spur statt Punkt, 1358 Facetten |
+| AP-13 Adaptive Schichthöhe | (dieser Commit) | *Compute* füllt 81 Höhenbereiche, *Apply* wird aktiv |
 | AP-10 Anordnen mit Optionen | `ae316ed` | *Bed 2 is empty…* und *Bed 1: 1 instances arranged.* im Feld am Knopf |
 | Bettzuordnung beim Ziehen | `6f17c85` | `Bed 1 · 0 / Bed 2 · 1` |
 
@@ -113,9 +114,6 @@ AP-17 b/c: **im Quelltext von heute nachsehen, nicht in der Historie.**
 
 Damit bleiben, alle ohne Kern und ohne Mac:
 
-- **AP-13 · adaptive Schichthöhe.** `nativeLayerProfileAdaptive` ist
-  gebunden und in `PsmCore` erreichbar. Fehlt: der Qualitätsregler samt
-  Vorschau in der Seitenleiste.
 - **AP-14 · zweiter Regler** (Werkzeugweg innerhalb der Schicht).
   `nativeSetMoveRange` und `nativeMoveRangeBounds` haben noch keine
   Kotlin-Deklaration — die gehört in `PsmCore` neben
@@ -647,14 +645,39 @@ prüfen, was drüben **heute** im Quelltext steht.
 
 ---
 
-### AP-13 · Adaptive Schichthöhe · Kern: ja
+### AP-13 · Adaptive Schichthöhe · Kern: nein
 
 **Fundstelle iOS** `LayerProfileView.swift:191ff` — Qualitätsregler und
 *Berechnen*.
 
 **Zustand Android** Nur Punkte von Hand.
 
-**Nicht gebunden** `psm_model_layer_profile_adaptive`
+**Bindung** `psm_model_layer_profile_adaptive` stand längst in JNI und
+in `PsmCore.adaptiveLayerProfile(…)`. **Kein Kernbau.**
+
+**Stand: fertig** (20.08.). Über der Stützstellenliste steht jetzt eine
+Zeile *Adaptiv* mit Regler und *Berechnen*, darunter der Satz „Links
+fein und glatt, rechts grob und schnell." — wortgleich mit
+`LayerProfileView.swift`. *Berechnen* füllt nur die Zeilen; angewendet
+wird wie beim Profil von Hand erst mit *Übernehmen*, damit dieselbe
+Seite nicht zwei Wege hat, wirksam zu werden.
+
+**Dabei gefunden: die Treppe des Kerns.**
+`psm_model_layer_profile_adaptive` liefert das Profil als Treppe — an
+einer Stufe stehen zwei Paare mit demselben z (gemessen: 83 Paare, z=0.2
+zweimal). Roh übernommen sind die Z-Werte nicht mehr streng steigend,
+`LayerProfile.canApply` findet das Profil ungültig, und *Übernehmen*
+bleibt grau, ohne dass jemand erklären könnte warum. `fromPoints`
+zieht doppelte z jetzt zusammen und behält den **letzten** Eintrag: ab
+dieser Höhe gilt die neue Dicke.
+
+Das steht in der **gemeinsamen** Regel, nicht in der Ansicht — iOS ruft
+dieselbe `fromPoints` und hatte denselben Fehler. Zwei Tests decken es
+ab. `LayerProfileEditorState` rechnete die Umwandlung bis dahin selbst;
+sie geht jetzt auch dort durch die Regel.
+
+Belegt am Emulator: *Compute* macht aus den 83 Kernpunkten „81 height
+ranges · 0.20 mm · 0.25 mm …", *Apply* ist aktiv.
 
 ---
 
@@ -1002,7 +1025,7 @@ abgelegten `.so` (geprüft 20.08.2026).
 | 8 | AP-06 Schwebende Dialoge | nein | fertig |
 | 9 | AP-05 Werkzeugleisten | nein | fertig |
 | 10 | AP-10 Anordnen mit Optionen | nein | fertig |
-| 11 | AP-13 Adaptive Schichthöhe | nein | offen |
+| 11 | AP-13 Adaptive Schichthöhe | nein | fertig |
 | 12 | AP-14 Zweiter Regler | nein | offen |
 | 13 | AP-12 Bettleiste | nein | fertig |
 | 14 | AP-11 Slice-Blatt | nein | fertig |

@@ -1852,6 +1852,21 @@ class SlicerService : Service() {
     fun layerProfile(id: Int): List<Pair<Double, Double>> =
         core?.layerProfile(id).orEmpty()
 
+    /**
+     * Das adaptive Profil aus der Geometrie rechnen.
+     *
+     * Fuellt nur die Vorschau - angewendet wird wie beim Profil von Hand
+     * erst mit *Uebernehmen*. Genauso drueben
+     * (`LayerProfileView.swift`, `adaptiv`).
+     *
+     * @param quality 0 grob und schnell bis 1 fein und glatt.
+     */
+    fun adaptivesLayerProfile(id: Int, quality: Float): List<Pair<Double, Double>> =
+        core?.runCatching { adaptiveLayerProfile(id, quality) }
+            ?.onFailure { Log.w(TAG, "Adaptives Schichtprofil", it) }
+            ?.getOrNull()
+            .orEmpty()
+
     fun setLayerProfile(id: Int, values: List<Pair<Double, Double>>) =
         withObject(id, SimpleModeState.text("Variable layer height", "Variable Schichthöhe")) {
             it.setLayerProfile(id, values)

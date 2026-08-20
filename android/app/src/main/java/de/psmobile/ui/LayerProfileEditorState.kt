@@ -1,5 +1,7 @@
 package de.psmobile.ui
 
+import de.psmobile.shared.rules.LayerProfile
+
 /**
  * Pure editor state for variable layer heights. Keeping validation outside
  * Compose makes every layout (dialog, inspector or full page) behave alike.
@@ -39,12 +41,19 @@ internal data class LayerProfileEditorState(
             objectHeight.coerceAtLeast(0.01).toString() to "0.20",
         )
 
+        /**
+         * Aus Kernpunkten. Die Umrechnung steht in der gemeinsamen
+         * Regel, nicht hier: der Kern liefert Treppenstufen mit
+         * doppelten Z-Werten, und wie man die zusammenzieht, darf nicht
+         * davon abhaengen, welche App gerade fragt.
+         */
         fun fromProfile(objectHeight: Double, points: List<Pair<Double, Double>>) =
             LayerProfileEditorState(
                 objectHeight = objectHeight,
-                rows = points.ifEmpty { listOf(0.0 to 0.20) +
-                    listOf(objectHeight.coerceAtLeast(0.01) to 0.20) }
-                    .map { (z, height) -> z.toString() to height.toString() },
+                rows = LayerProfile.fromPoints(
+                    objectHeight,
+                    points.map { (z, height) -> LayerProfile.Point(z, height) },
+                ).map { it.z to it.height },
             )
     }
 }
