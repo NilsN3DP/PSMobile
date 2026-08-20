@@ -487,6 +487,33 @@ zweite Quelle nach dem heutigen Quelltext. Hier stand die Richtung sogar
 in der Commit-Nachricht - wer nur die Zeile im Plan liest, baut in die
 falsche Richtung.
 
+### Claude — AP-17 f: der Zoll-Schalter tut endlich etwas
+
+Der Schalter stand in der gemeinsamen Liste, wurde auf Android aber von
+niemandem gelesen - deshalb war er ausgeblendet, mit dem Vermerk „wieder
+hereinnehmen, sobald Android sie umsetzt". Jetzt rechnet
+`SettingsScreen` um: Felder mit der Einheit „mm" zeigen Zoll und nehmen
+Zoll entgegen, der Kern bekommt weiterhin nur Millimeter.
+
+Commit `bcb4361`. Belegt am Emulator: mit dem Schalter an steht bei
+*Layer height* „0.0039 in" statt „0.1 mm".
+
+**Nur Laengen.** Prozentwerte und Temperaturen bleiben, was sie sind -
+auf iOS heisst die Pruefung `istLaenge`, und genau diese Einschraenkung
+war dort der Grund, warum es ueberhaupt eingebaut wurde.
+
+**Ein Horcher auf die Preferences** haelt die Anzeige aktuell, wenn der
+Schalter umgelegt wird, waehrend die Einstellungsseite offen ist - seit
+AP-06 schweben die App-Einstellungen darueber. Drueben ist genau das
+einmal schiefgegangen: ein Millimeterwert unter dem Etikett „in", und
+das naechste Speichern haette ihn nochmals mit 25,4 multipliziert.
+
+**Beim Bedienen des Emulators verlaufen:** ich habe die Bedienelemente
+im App-Einstellungen-Blatt aus einem alten Bildschirmfoto angetippt, aber
+das Blatt war diesmal nicht gescrollt - der Tipp landete auf „Deutsch",
+und die App stand ploetzlich auf Deutsch. Vor jedem Tipp in ein Blatt,
+das gescrollt sein kann, ein frisches Bild machen.
+
 ---
 
 ## 2026-08-03
