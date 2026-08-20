@@ -377,16 +377,24 @@ internal fun Sidebar(
                         )
                     } else {
                     // Beschriftungen wie im Original, uebersetzt aus dessen Katalog.
+                    // Beim Drucker Karten statt Klappliste - dieselbe
+                    // Ansicht wie im Simple Mode (DruckerAuswahl.kt).
+                    // Filament und Druckeinstellungen bleiben Suchlisten:
+                    // dort sind es hunderte Eintraege, und iOS macht es
+                    // genauso.
                     SectionLabel(PsUi.tr("Printer"))
-                    PresetCombo(PsUi.tr("Printer"), presets.printers, presets.selectedPrinter,
-                                dirtyCount = presets.printerChanges.size,
-                                onEdit = { onOpenSettings("printer") }) {
-                        requestPresetSwitch(
-                            PsmCore.PresetType.PRINTER,
-                            presets.selectedPrinter,
-                            it,
-                        )
-                    }
+                    DruckerAuswahl(
+                        printers = presets.printers,
+                        selected = presets.selectedPrinter,
+                        onSelect = {
+                            requestPresetSwitch(
+                                PsmCore.PresetType.PRINTER,
+                                presets.selectedPrinter,
+                                it,
+                            )
+                        },
+                        onSetup = { onOpenSettings("printer") },
+                    )
 
                     SectionLabel(PsUi.tr("Print settings"))
                     PresetCombo(PsUi.tr("Print settings"), presets.prints, presets.selectedPrint,

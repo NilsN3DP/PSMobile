@@ -874,30 +874,22 @@ private fun SimplePrinterPanel(service: SlicerService, presets: SlicerService.Pr
         EmptySimplePanel(st("No printer configured", "Noch kein Drucker eingerichtet"), st("Set up printer", "Drucker einrichten"), onSetup)
         return
     }
-    models.flatMap { model -> model.variants.map { model to it } }.chunked(2).forEach { row ->
-        Row(
-            Modifier.fillMaxWidth().padding(bottom = 10.dp),
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            row.forEach { (model, choice) ->
-                SimplePrinterCard(
-                    model = model.label,
-                    nozzle = choice.label,
-                    selected = choice.rawPreset == presets.selectedPrinter,
-                    onClick = {
-                        service.selectPreset(PsmCore.PresetType.PRINTER, choice.rawPreset)
-                        onDismiss()
-                    },
-                    modifier = Modifier.weight(1f),
-                )
-            }
-            if (row.size == 1) Spacer(Modifier.weight(1f))
-        }
-    }
+    // Dieselbe Ansicht wie im Advanced Mode - siehe DruckerAuswahl.kt.
+    // Zwei Kartenlisten mit verschiedenem Aufbau waeren zwei Antworten
+    // auf dieselbe Frage.
+    DruckerAuswahl(
+        printers = presets.printers,
+        selected = presets.selectedPrinter,
+        onSelect = { preset ->
+            service.selectPreset(PsmCore.PresetType.PRINTER, preset)
+            onDismiss()
+        },
+        onSetup = onSetup,
+    )
 }
 
 @Composable
-private fun SimplePrinterCard(
+internal fun SimplePrinterCard(
     model: String,
     nozzle: String,
     selected: Boolean,
@@ -924,12 +916,14 @@ private fun SimplePrinterCard(
         }
     }
     HorizontalDivider(color = PrusaColors.Divider)
+    // Nur Modell, Zustand und Duese - wie die Karte auf iOS. Der
+    // Hinweis auf den naechsten Schritt stand hier, solange die Karte
+    // nur im Simple Mode vorkam; im Advanced Mode stimmt er nicht.
     Text(st("Nozzle", "Düse") + "  $nozzle", color = PrusaColors.TextPrimary, style = MaterialTheme.typography.labelMedium)
-    Text(st("Material is chosen in the next step", "Material wird im nächsten Schritt gewählt"), color = PrusaColors.TextMuted, style = MaterialTheme.typography.labelSmall, maxLines = 1)
 }
 
 @Composable
-private fun SimplePrinterGlyph() = Box(
+internal fun SimplePrinterGlyph() = Box(
     Modifier.width(62.dp).height(72.dp)
         .background(PrusaColors.Panel, RoundedCornerShape(Corners.FIELD.dp))
         .border(1.dp, PrusaColors.Divider, RoundedCornerShape(Corners.FIELD.dp)),
@@ -1399,7 +1393,7 @@ private fun SimpleSettingsCard(
 }
 
 @Composable
-private fun EmptySimplePanel(message: String, action: String, onClick: () -> Unit) = Column(
+internal fun EmptySimplePanel(message: String, action: String, onClick: () -> Unit) = Column(
     Modifier.fillMaxWidth().background(PrusaColors.PanelRaised, RoundedCornerShape(Corners.FIELD.dp)).padding(18.dp),
     horizontalAlignment = Alignment.CenterHorizontally,
     verticalArrangement = Arrangement.spacedBy(10.dp),
