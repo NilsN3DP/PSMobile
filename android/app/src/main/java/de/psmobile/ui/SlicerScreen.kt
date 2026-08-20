@@ -2298,6 +2298,11 @@ internal fun BedSelector(
     val active = strip.items.first { it.active }
     var renameId by remember { mutableStateOf<Int?>(null) }
     var renameText by remember { mutableStateOf("") }
+    // Langer Druck oeffnet ein Menue statt sofort umzubenennen -
+    // Gegenstueck zum `contextMenu` an `bettKapsel` auf iOS. Umbenennen
+    // und Entfernen sind selten; sichtbar in der Kapsel steht nur, was
+    // man oft braucht.
+    var menueFuer by remember { mutableStateOf<Int?>(null) }
 
     renameId?.let { id ->
         AlertDialog(
@@ -2466,7 +2471,7 @@ internal fun BedSelector(
                         .combinedClickable(
                             enabled = bed.canSelect,
                             onClick = { if (!bed.active) onSelect(bed.id) },
-                            onLongClick = { renameId = bed.id; renameText = bed.name },
+                            onLongClick = { menueFuer = bed.id },
                         )
                         .padding(start = 10.dp),
                     verticalAlignment = Alignment.CenterVertically,
@@ -2514,6 +2519,33 @@ internal fun BedSelector(
                     }
                 } else {
                     Spacer(Modifier.width(3.dp))
+                }
+
+                DropdownMenu(
+                    expanded = menueFuer == bed.id,
+                    onDismissRequest = { menueFuer = null },
+                ) {
+                    ScaledOverlay {
+                        DropdownMenuItem(
+                            text = { Text(advancedText("Rename", "Umbenennen")) },
+                            onClick = {
+                                menueFuer = null
+                                renameId = bed.id
+                                renameText = bed.name
+                            },
+                        )
+                        if (bed.canRemove) {
+                            DropdownMenuItem(
+                                text = {
+                                    Text(
+                                        advancedText("Remove", "Entfernen"),
+                                        color = PrusaColors.Danger,
+                                    )
+                                },
+                                onClick = { menueFuer = null; onRemove(bed.id) },
+                            )
+                        }
+                    }
                 }
             }
         }
