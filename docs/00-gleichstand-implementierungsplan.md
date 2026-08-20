@@ -83,6 +83,7 @@ ab; von dort gehört sie in die Arbeitskopie kopiert. Achtung: `du` meldet
 | AP-09 Leere Zustände | `875a655` | `LeeresPanel` als Muster |
 | AP-18 Bindungen | `27ac6eb`, `1eb4c97` | 26 fehlende Funktionen → noch 2 |
 | Bemalen (Strich, Füllmodi) | `e2f9dad`, `9da2adf` | Spur statt Punkt, 1358 Facetten |
+| AP-24 Viewer statt schwebender Karte | (dieser Commit) | Band sagt *Preview*, Legende bricht um, über dem Bett steht nichts |
 | AP-11 Slice-Blatt (Simple) | `feb230a` | *Send to printer* unter dem Export, Hinweis wenn nichts geschrieben wurde |
 | Kleinigkeiten | `86c1842` | *Sliced in <1s* statt *0m*; *Wipe into infill* statt deutscher Beschriftung |
 | AP-17 g ZIP-Import | `7298439` | *2 models came from a ZIP archive.*, Bett zeigt 3 Objekte |
@@ -112,6 +113,16 @@ wenn keine Datei entstand. Das ist nachgeholt, siehe AP-11.
 Der Abgleich läuft als Skript und lässt sich wiederholen; er findet
 fehlende und zusätzliche Bedienelemente, sagt aber nichts über die
 Reihenfolge — die muss man sich weiter ansehen.
+
+**Neu von Nils (20.08.):** das schwebende Menü über dem Bett soll weg,
+und rechts soll zwischen einer **Viewer-** und einer **Editor**-Ansicht
+umgeschaltet werden. Umgesetzt als **AP-24**, im Advanced Mode fertig
+und belegt. Offen bleibt dort der Simple Mode, der die Vorschau-Legende
+bisher gar nicht hat — wohin sie dort gehört, ist eine Entscheidung für
+Nils.
+
+Ebenfalls von ihm vorgemerkt: **iOS fehlt der Werkzeugweg-Regler** aus
+AP-14. Steht als Punkt 7 in Abschnitt Z, braucht den Mac.
 
 **Sonst ist ohne den Mac nichts mehr offen.** Alle Android-Pakete des Plans
 sind zu; die Behauptung „Kern: ja" bei AP-10, AP-13, AP-14 und AP-17 g
@@ -1047,6 +1058,48 @@ Belegt am Emulator: nach dem Tippen entsteht `files/bett-1.gcode`
 
 ---
 
+### AP-24 · Rechts: Viewer statt Editor · Kern: nein
+
+**Vorgabe von Nils** (20.08.): „Allerdings möchte ich das Menü, was da
+frei schwebend ist, nicht mehr haben. Das soll bei Ansicht des G-Codes
+im rechten Menü mit verschwinden. Allgemein sollte auf der rechten Seite
+zwischen einer Viewer- und einer Editor-Ansicht hin und her geswitcht
+werden, je nachdem, in welchem Bereich man sich gerade befindet."
+
+**Zustand vorher** Zahlen, Merkmals-/Extruderwahl und Legende lagen als
+schwebende Karte über dem Bett — mit der Begründung, das Seitenband sei
+im Vorschaumodus oft zu. Sie verdeckte einen Teil der Platte, und
+seit der Schichtregler links steht (AP-14), auch dessen unteren Griff.
+
+**Stand: fertig** (20.08., Advanced Mode). Das rechte Band trägt jetzt
+zwei Gesichter:
+
+| | Kopfzeile | Inhalt |
+|---|---|---|
+| Editor | *Arbeitsbereich* | Print/Filament/Printer Settings, Bereiche, Objektbaum |
+| Vorschau | *Vorschau* | Zahlen, *Merkmale ↔ Extruder*, Legende, Verbrauch |
+
+Der Schneiden-Block unten (Fortschritt, *Slice now*, *Export G-code*)
+bleibt in beiden sichtbar — er gehört zum Projekt, nicht zur Ansicht.
+
+Die drei Profilseiten sind in der Vorschau **weg**: sie wirken auf den
+nächsten Schnitt, nicht auf das, was man gerade ansieht.
+
+Das Band **geht beim Wechsel in die Vorschau von selbst auf**. Sonst
+wären die Zahlen auf schmalen Geräten gar nicht mehr erreichbar — genau
+das war die ursprüngliche Begründung für die schwebende Karte.
+
+Die Legende bricht jetzt um (`FlowRow`) statt seitwärts zu scrollen: im
+schmaleren Band lief die Reihe rechts aus dem Bild, und ein waagerechter
+Schieber ohne sichtbaren Rand sieht aus wie abgeschnittener Text.
+
+**Offen:** Der **Simple Mode** hat die Vorschau-Legende gar nicht — dort
+gibt es weder Zahlen noch Merkmalswahl. iOS hat beides in beiden Modi.
+Wo sie im Simple Mode hingehört (eigenes Panel neben *Projects ·
+Printer · Material · Settings*?), ist eine Entscheidung für Nils.
+
+---
+
 ## Z · Wo umgekehrt iOS nachzieht
 
 Braucht einen erreichbaren Mac.
@@ -1068,7 +1121,18 @@ Braucht einen erreichbaren Mac.
    Mode je Kopf eine Kachel mit Farbe und Material, dazu *Alle setzen*
    und eine Farbreihe; iOS hat dort nur eine Liste mit Farbfeld und
    Menü. Die Android-Fassung ist die reichere — hier zieht iOS nach.
-7. **Auswahlblatt überlappt die Seitenleiste.** Das Filamentblatt ist ein
+7. **Der Werkzeugweg-Regler fehlt.** iOS hat nur den senkrechten
+   Schichtregler; den waagerechten darunter — welcher Ausschnitt der
+   Werkzeugwege innerhalb der sichtbaren Schichten gezeigt wird — gibt
+   es dort nicht, obwohl `psm_viewport_set_move_range` und
+   `…_move_range_bounds` gebunden sind. Android hat ihn seit AP-14
+   (`ed84cd5`); von Nils ausdrücklich zum Nachziehen vorgemerkt
+   (20.08.).
+8. **Rechts Viewer statt schwebender Karte.** Siehe AP-24: das rechte
+   Band schaltet zwischen *Arbeitsbereich* und *Vorschau* um, statt die
+   Zahlen und die Legende über das Bett zu legen. iOS legt sie dort
+   ebenfalls schwebend ab und zieht nach.
+9. **Auswahlblatt überlappt die Seitenleiste.** Das Filamentblatt ist ein
    `.sheet` und schneidet auf dem iPad die rechte Seitenleiste mitten im
    Wort. Der Advanced-Einstellungsdialog macht es richtig und legt einen
    Schleier über den ganzen Bereich.
@@ -1107,7 +1171,8 @@ abgelegten `.so` (geprüft 20.08.2026).
 | 22 | AP-22 Alle Betten schneiden | nein | fertig |
 | 23 | AP-19 Hochformat | nein | zurückgestellt |
 | 24 | AP-23 Werkzeugbereich | nein | zurückgestellt, braucht eine Entscheidung |
-| 25 | Z iOS nachziehen | Mac | offen |
+| 25 | AP-24 Rechts: Viewer statt Editor | nein | fertig (Advanced), Simple offen |
+| 26 | Z iOS nachziehen | Mac | offen |
 
 ---
 

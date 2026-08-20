@@ -489,6 +489,11 @@ private fun SlicerContent(
      * Legende. Erst nach dem Slicen vorhanden, deshalb nullable.
      */
     var previewData by remember { mutableStateOf<SlicerService.PreviewData?>(null) }
+    // Ein Zaehler statt eines Schalters: `inspectorOpen` entsteht erst
+    // weiter unten, wo die Breite bekannt ist. Wer das Band aufmachen
+    // will, zaehlt hoch; dort drinnen horcht ein Effekt darauf.
+    var bandOeffnen by remember { mutableStateOf(0) }
+    val oeffneBand = { bandOeffnen++ }
     var previewView by remember { mutableStateOf(PsmViewport.PreviewView.FEATURE) }
     var hiddenRoles by remember { mutableStateOf(emptySet<Int>()) }
     var hiddenExtruders by remember { mutableStateOf(emptySet<Int>()) }
@@ -507,6 +512,10 @@ private fun SlicerContent(
                 hiddenRoles = emptySet()
                 hiddenExtruders = emptySet()
                 wegAnfragen(n)
+                // Seit die Zahlen und die Legende rechts stehen, muss das
+                // Band aufgehen - sonst waeren sie auf schmalen Geraeten
+                // gar nicht mehr erreichbar.
+                if (n > 0) oeffneBand()
             }
         } else {
             sceneController.enterEditor()
@@ -546,6 +555,7 @@ private fun SlicerContent(
                 hiddenRoles = emptySet()
                 hiddenExtruders = emptySet()
                 wegAnfragen(n)
+                if (n > 0) oeffneBand()
             }
         } else if (previewMode) {
             sceneController.enterEditor()
@@ -606,6 +616,66 @@ private fun SlicerContent(
         var inspectorOpen by remember(permanentInspector) {
             mutableStateOf(permanentInspector)
         }
+        LaunchedEffect(bandOeffnen) { if (bandOeffnen > 0) inspectorOpen = true }
+
+        /*
+         * Was in der Vorschau rechts steht.
+         *
+         * Es stand als schwebende Karte ueber dem Bett - mit der
+         * Begruendung, das Seitenband sei im Vorschaumodus oft zu.
+         * Nils will das anders: rechts wird zwischen Betrachten und
+         * Bearbeiten umgeschaltet. Beim Ansehen der Werkzeugwege
+         * gibt es nichts zu bearbeiten, also gehoert der Platz der
+         * Vorschau - und ueber dem Bett bleibt nichts stehen, was
+         * die Sicht verstellt.
+         */
+        val vorschauBand: (@Composable () -> Unit)? =
+            if (previewMode) previewData?.let { daten ->
+                {
+                    PreviewStatsRow(
+                        range = PreviewRange(layerCount)
+                            .withLower(layerLo)
+                            .withUpper(layerHi),
+                        data = daten,
+                    )
+                    PreviewLegendPicker(
+                        data = daten,
+                        view = previewView,
+                        hiddenRoles = hiddenRoles,
+                        hiddenExtruders = hiddenExtruders,
+                        onView = {
+                            previewView = it
+                            sceneController.setPreviewView(it)
+                        },
+                        onToggleRole = { rolle ->
+                            val sichtbar = rolle in hiddenRoles
+                            hiddenRoles = if (sichtbar) hiddenRoles - rolle
+                                          else hiddenRoles + rolle
+                            sceneController.setRoleVisible(rolle, sichtbar)
+                        },
+                        onToggleExtruder = { e ->
+                            val sichtbar = e in hiddenExtruders
+                            hiddenExtruders = if (sichtbar) hiddenExtruders - e
+                                              else hiddenExtruders + e
+                            sceneController.setExtruderVisible(e, sichtbar)
+                        },
+                    )
+                    PreviewUsageRows(
+                        data = daten,
+                        farbeVon = { extruder: Int ->
+                            daten.extruders
+                                .firstOrNull { it.extruder == extruder }
+                                ?.let { roh ->
+                                    androidx.compose.ui.graphics.Color(
+                                        ((roh.colorRgba shr 24) and 0xFF).toInt(),
+                                        ((roh.colorRgba shr 16) and 0xFF).toInt(),
+                                        ((roh.colorRgba shr 8) and 0xFF).toInt(),
+                                    )
+                                } ?: PrusaColors.PanelRaised
+                        },
+                    )
+                }
+            } else null
 
         Row(Modifier.fillMaxSize()) {
             ToolStrip(
@@ -920,85 +990,6 @@ private fun SlicerContent(
                         }
                     }
 
-                    /*
-                     * Statistik und Legende der Vorschau.
-                     *
-                     * Bisher sah man auf Android nach dem Slicen die
-                     * Wege, aber nicht, was sie kosten - und ausblenden
-                     * liess sich nichts. iOS hat beides in beiden Modi.
-                     *
-                     * Unten am Rand und nicht im Seitenband: die Zahlen
-                     * gehoeren zu dem, was man gerade ansieht, und das
-                     * Seitenband ist im Vorschaumodus oft zu.
-                     */
-                    previewData?.let { daten ->
-                        if (previewMode) {
-                            Column(
-                                Modifier
-                                    .align(Alignment.BottomStart)
-                                    // Ueber der Ansichtsleiste, nicht auf ihr:
-                                    // sonst verdeckt die Legende Oben/Vorn/Links.
-                                    // Und rechts vom senkrechten Regler, seit
-                                    // der links steht - sonst laege die Karte
-                                    // ueber seinem unteren Griff.
-                                    .padding(
-                                        start = if (layerCount > 1) 84.dp else 12.dp,
-                                        end = 12.dp,
-                                        bottom = if (wegGrenzen != null) 140.dp else 84.dp,
-                                    )
-                                    .widthIn(max = 520.dp)
-                                    .background(
-                                        PrusaColors.Panel.copy(alpha = 0.94f),
-                                        RoundedCornerShape(Corners.CARD.dp),
-                                    )
-                                    .padding(12.dp),
-                                verticalArrangement = Arrangement.spacedBy(8.dp),
-                            ) {
-                                PreviewStatsRow(
-                                    range = PreviewRange(layerCount)
-                                        .withLower(layerLo)
-                                        .withUpper(layerHi),
-                                    data = daten,
-                                )
-                                PreviewLegendPicker(
-                                    data = daten,
-                                    view = previewView,
-                                    hiddenRoles = hiddenRoles,
-                                    hiddenExtruders = hiddenExtruders,
-                                    onView = {
-                                        previewView = it
-                                        sceneController.setPreviewView(it)
-                                    },
-                                    onToggleRole = { rolle ->
-                                        val sichtbar = rolle in hiddenRoles
-                                        hiddenRoles = if (sichtbar) hiddenRoles - rolle
-                                                      else hiddenRoles + rolle
-                                        sceneController.setRoleVisible(rolle, sichtbar)
-                                    },
-                                    onToggleExtruder = { e ->
-                                        val sichtbar = e in hiddenExtruders
-                                        hiddenExtruders = if (sichtbar) hiddenExtruders - e
-                                                          else hiddenExtruders + e
-                                        sceneController.setExtruderVisible(e, sichtbar)
-                                    },
-                                )
-                                PreviewUsageRows(
-                                    data = daten,
-                                    farbeVon = { extruder: Int ->
-                                        daten.extruders
-                                            .firstOrNull { it.extruder == extruder }
-                                            ?.let { roh ->
-                                                androidx.compose.ui.graphics.Color(
-                                                    ((roh.colorRgba shr 24) and 0xFF).toInt(),
-                                                    ((roh.colorRgba shr 16) and 0xFF).toInt(),
-                                                    ((roh.colorRgba shr 8) and 0xFF).toInt(),
-                                                )
-                                            } ?: PrusaColors.PanelRaised
-                                    },
-                                )
-                            }
-                        }
-                    }
                 }
             }
 
@@ -1070,6 +1061,7 @@ private fun SlicerContent(
                         scaleTool = on
                         sceneController.scaleTool = on
                     },
+                    vorschauBand = vorschauBand,
                     modifier = Modifier.width(inspectorWidth).fillMaxHeight(),
                 )
             }
@@ -1153,6 +1145,7 @@ private fun SlicerContent(
                     scaleTool = on
                     sceneController.scaleTool = on
                 },
+                vorschauBand = vorschauBand,
                 onClose = { inspectorOpen = false },
                 modifier = Modifier
                     .align(Alignment.CenterEnd)

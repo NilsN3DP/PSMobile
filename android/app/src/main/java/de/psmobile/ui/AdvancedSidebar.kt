@@ -166,6 +166,16 @@ internal fun Sidebar(
     gizmo: de.psmobile.core.PsmViewport.Gizmo,
     onGizmoChange: (de.psmobile.core.PsmViewport.Gizmo) -> Unit,
     configRevision: Int,
+    /**
+     * Wenn gesetzt, zeigt das Band **statt** des Editors die Vorschau.
+     *
+     * Beim Ansehen der Werkzeugwege gibt es nichts zu bearbeiten - die
+     * Zahlen und die Legende gehoeren dann hierher und nicht als
+     * schwebende Karte ueber das Bett. Nils' Vorgabe: rechts wird
+     * zwischen Betrachten und Bearbeiten umgeschaltet, je nachdem, wo
+     * man gerade ist.
+     */
+    vorschauBand: (@Composable () -> Unit)? = null,
     onClose: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
@@ -275,7 +285,8 @@ internal fun Sidebar(
         ) {
             Column(Modifier.weight(1f)) {
                 Text(
-                    PsUi.appText("Workspace", "Arbeitsbereich"),
+                    if (vorschauBand != null) PsUi.appText("Preview", "Vorschau")
+                    else PsUi.appText("Workspace", "Arbeitsbereich"),
                     color = PrusaColors.TextPrimary,
                     fontSize = 18.sp,
                     fontWeight = FontWeight.SemiBold,
@@ -309,27 +320,38 @@ internal fun Sidebar(
             }
         }
 
-        // Die drei Einstellungsseiten stehen oben im Band, nicht in
-        // einem der Bereiche: sie wirken auf das Profil, und das Profil
-        // steht rechts. Oben in die Werkzeugleiste gehoert, was auf den
-        // Viewport wirkt. Wortgleich zu `einstellungsbereiche` in
-        // AdvancedWorkspaceView.swift.
-        EinstellungsZeile(
-            PsUi.tr("Print Settings"),
-            onClick = { onOpenSettings("print") },
-        )
-        EinstellungsZeile(
-            PsUi.tr("Filament Settings"),
-            onClick = { onOpenSettings("filament") },
-        )
-        EinstellungsZeile(
-            PsUi.tr("Printer Settings"),
-            onClick = { onOpenSettings("printer") },
-        )
+        // In der Vorschau gibt es nichts einzustellen: die drei
+        // Profilseiten wirken auf den naechsten Schnitt, nicht auf das,
+        // was man gerade ansieht. Sie bleiben deshalb dem Editor
+        // vorbehalten.
+        if (vorschauBand == null) {
+            // Die drei Einstellungsseiten stehen oben im Band, nicht in
+            // einem der Bereiche: sie wirken auf das Profil, und das
+            // Profil steht rechts. Oben in die Werkzeugleiste gehoert,
+            // was auf den Viewport wirkt. Wortgleich zu
+            // `einstellungsbereiche` in AdvancedWorkspaceView.swift.
+            EinstellungsZeile(
+                PsUi.tr("Print Settings"),
+                onClick = { onOpenSettings("print") },
+            )
+            EinstellungsZeile(
+                PsUi.tr("Filament Settings"),
+                onClick = { onOpenSettings("filament") },
+            )
+            EinstellungsZeile(
+                PsUi.tr("Printer Settings"),
+                onClick = { onOpenSettings("printer") },
+            )
+        }
         HorizontalDivider(color = PrusaColors.Divider)
 
         val editingLayersFor = layerEditorObjectId
-        if (editingLayersFor != null && selected?.id == editingLayersFor) {
+        if (vorschauBand != null) {
+            Column(
+                Modifier.weight(1f).verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) { vorschauBand() }
+        } else if (editingLayersFor != null && selected?.id == editingLayersFor) {
             LayerProfileToolPage(
                 objectHeight = selected.sizeMm.third.toDouble(),
                 initial = service.layerProfile(editingLayersFor),

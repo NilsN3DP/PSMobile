@@ -104,6 +104,7 @@ private fun Kennzahl(zeichen: String, wert: String) {
  * nur gedaempft: sonst weiss man nicht mehr, was man weggeschaltet hat.
  */
 @Composable
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 internal fun PreviewLegendPicker(
     data: SlicerService.PreviewData,
     view: PsmViewport.PreviewView,
@@ -128,9 +129,15 @@ internal fun PreviewLegendPicker(
             ) { onView(PsmViewport.PreviewView.EXTRUDER) }
         }
 
-        Row(
-            Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+        // Umbrechen statt seitwaerts schieben: seit die Legende im
+        // rechten Band steht statt in einer breiten Karte ueber dem
+        // Bett, lief die Reihe rechts aus dem Bild - und ein
+        // waagerechter Schieber ohne sichtbaren Rand sieht aus wie ein
+        // abgeschnittener Text.
+        androidx.compose.foundation.layout.FlowRow(
+            Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(7.dp),
+            verticalArrangement = Arrangement.spacedBy(7.dp),
         ) {
             if (view == PsmViewport.PreviewView.FEATURE) {
                 data.roles.forEach { rolle ->

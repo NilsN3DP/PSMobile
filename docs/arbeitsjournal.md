@@ -58,6 +58,46 @@ sondern die Absprache währenddessen.
 
 ## 2026-08-20
 
+### Claude — AP-24: rechts steht jetzt entweder der Editor oder die Vorschau
+
+Nils, waehrend ich am Abgleich sass: das schwebende Menue ueber dem Bett
+soll weg, sein Inhalt gehoert beim Ansehen des G-Codes ins rechte Band,
+und allgemein soll rechts zwischen einer Viewer- und einer
+Editor-Ansicht umgeschaltet werden, je nachdem, wo man gerade ist.
+
+Die Karte lag ueber der Platte, weil - so stand es im Quelltext - „das
+Seitenband im Vorschaumodus oft zu" sei. Das Argument stimmte, nur war
+die Antwort darauf falsch herum: statt die Karte ueber das Bett zu
+legen, macht das Band jetzt beim Wechsel in die Vorschau von selbst auf.
+Dafuer reicht ein Zaehler weit oben in der Bildschirmfunktion, auf den
+weiter unten - wo die Breite bekannt ist und `inspectorOpen` entsteht -
+ein Effekt horcht.
+
+Das Band traegt seitdem zwei Gesichter. Im Editor steht oben
+*Arbeitsbereich*, darunter die drei Profilseiten und die Bereiche. In
+der Vorschau steht oben *Vorschau*, darunter die Zahlen, die Umschaltung
+*Merkmale ↔ Extruder*, die Legende und der Verbrauch. Die drei
+Profilseiten sind dort **weg**: sie wirken auf den naechsten Schnitt,
+nicht auf das, was man gerade ansieht. Der Schneiden-Block unten bleibt
+in beiden - er gehoert zum Projekt, nicht zur Ansicht.
+
+Ueber dem Bett steht damit nichts mehr ausser den beiden Reglern.
+
+**Eine Kleinigkeit, die erst am Bildschirmfoto auffiel.** Die Legende war
+eine Reihe mit waagerechtem Schieber - in der breiten Karte ging das
+auf, im schmaleren Band lief sie rechts aus dem Bild. Man sah „Solid
+inf…" und keinen Hinweis, dass da noch etwas kommt; das sieht aus wie
+abgeschnittener Text, nicht wie etwas zum Schieben. Jetzt bricht sie um
+(`FlowRow`), und alle sieben Merkmale stehen da.
+
+**Offen und ausdruecklich nicht erfunden:** der Simple Mode hat die
+Vorschau-Legende gar nicht - dort gibt es weder Zahlen noch
+Merkmalswahl, obwohl iOS beides in beiden Modi zeigt. Wohin sie im
+Simple Mode gehoert, ist eine Anordnungsfrage; die entscheidet Nils.
+
+Ebenfalls von ihm vorgemerkt: **iOS fehlt der Werkzeugweg-Regler** aus
+AP-14. Steht jetzt als Punkt 7 in Abschnitt Z.
+
 ### Claude — AP-11 war nur zur Haelfte umgesetzt
 
 Der Plan sagte, ohne den Mac sei nichts mehr offen. Statt zu warten habe
