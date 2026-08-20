@@ -428,6 +428,26 @@ gewesen, die iOS laengst wieder hat.
 passiert ist. Vor dem Nachbauen pruefen, was drueben *heute* im
 Quelltext steht - `git log -S` auf die Datei kostet zehn Sekunden.
 
+### Claude — AP-16: das Band scrollt zum Bearbeiten-Bereich
+
+Seit AP-20 klappt *Bearbeiten* bei einer Auswahl von selbst auf. Bei
+offenen Profilen lag es aber unterhalb des sichtbaren Fensters - nach
+dem Antippen eines Objekts geschah scheinbar nichts. Der Bereich meldet
+jetzt seine Position im Band, und die Auswahl scrollt dorthin.
+
+Commit `82f3fa8`. Belegt am Emulator: Wuerfel antippen zeigt *EDIT* mit
+Objektnamen und den Griffen direkt unter den drei Einstellungszeilen.
+
+**Der Stolperstein:** ohne ein abgewartetes Bild scrollt man an die
+Stelle, an der der Bereich *vor* dem Aufklappen lag - die gemeldete
+Position stammt noch aus dem alten Layout. `withFrameNanos { }` zwischen
+Aufklappen und Scrollen genuegt.
+
+**Nebenbei erledigt:** der zweite Teil des Pakets („Fokus bleibt beim
+Blaettern layoutstabil") ist seit AP-20 gegenstandslos - es gibt nur
+noch einen durchgehenden Scrollbereich statt vier, die beim Reiterwechsel
+zurueckgesetzt wurden.
+
 ---
 
 ## 2026-08-03

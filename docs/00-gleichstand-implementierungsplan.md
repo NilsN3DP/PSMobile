@@ -67,6 +67,7 @@ ab; von dort gehört sie in die Arbeitskopie kopiert. Achtung: `du` meldet
 | AP-03 Vorschau | `3377a96` | `0:30 · 3.59 m · 10.7 g`, Chips grauen aus |
 | AP-07 Materialauswahl | `875a655` | Typ-Filter PLA blendet auf vier Karten ein |
 | AP-06 Schwebende Dialoge | `469203a`, `1e785c0` | Einstellungen als Karte über dem Bett, Rand 104/120/80 px |
+| AP-16 Inspector | `82f3fa8` | Auswahl zeigt EDIT samt Griffen |
 | AP-12 Bettleiste | `f03c7b0` | langer Druck zeigt *Rename* |
 | AP-05 Werkzeugleisten | `f489a48`, `c41a1ba`, `f0c314a` | Schiene mit Trennen, Stützen, Naht |
 | AP-11 Slice-Blatt | `8afd69d`, `c63e329` | `2 G-code files`, *Export all*, Zeile je Datei |
@@ -88,17 +89,20 @@ ab; von dort gehört sie in die Arbeitskopie kopiert. Achtung: `du` meldet
 
 ### Als Nächstes
 
-**AP-16 · Inspector öffnet nach der Auswahl.** Kein Kernbau, klein.
-Vier Anläufe auf iOS (`3e45739`, `cb08ec1`, `bda94c2`, `8a53aa3`): nach
-einer Auswahl klappt der Bearbeiten-Bereich von selbst auf, und der
-Fokus bleibt beim Blättern layoutstabil. Auf Android klappt *Bearbeiten*
-seit AP-20 zwar auf, scrollt aber nicht dorthin — bei offenen Profilen
-liegt es unterhalb des sichtbaren Bereichs.
+**AP-15 · Druckerauswahl als Karten.** Kein Kernbau. Auf iOS
+(`Screens/DruckerAuswahlView.swift`) ist die Druckerwahl in beiden Modi
+dieselbe Kartenansicht; im Quelltext steht, dass die Klappliste mit rohen
+Profilnamen genau deshalb ersetzt wurde. Android hat dort einen Dialog
+mit Suchliste (`AdvancedSidebar.kt`, `PresetCombo`).
 
-Danach **AP-15 · Druckerauswahl als Karten** — die Klappliste durch
-Karten ersetzen, Filament und Druckprofil bleiben bewusst Suchlisten.
+**Abgrenzung, die im Paket steht:** Filament und Druckeinstellungen
+bleiben Suchlisten — dort sind es hunderte Einträge, und iOS macht es
+genauso. Nur der Drucker wird zur Karte.
 
-Danach **AP-17 a–f**, die kleineren Pakete ohne Kernbau.
+Danach **AP-17 a–f**, die kleineren Pakete ohne Kernbau:
+Projekt/Platte/G-Codes weitergeben · Größenverhältnis je Objekt ·
+„Je Extruder" in der Simple-Materialseite · ColorMix-Vorschau ·
+Reinigungsturm in die Extruderbank · Zoll-Einheiten.
 
 **AP-04** und Abschnitt **Z** brauchen den Mac; er ist ab dem 20.08.
 wieder da.
@@ -646,6 +650,18 @@ Vier Anläufe auf iOS (`3e45739`, `cb08ec1`, `bda94c2`, `8a53aa3`): nach
 einer Auswahl klappt der Bearbeiten-Bereich von selbst auf, und der Fokus
 bleibt beim Blättern layoutstabil.
 
+**Stand: erledigt** (20.08., `82f3fa8`). Aufklappen kam mit AP-20; jetzt
+scrollt das Band auch dorthin. Der Bereich meldet seine Position, und
+die Auswahl scrollt hin — nach einem abgewarteten Bild, weil die
+Position vor dem nächsten Layout noch die vor dem Aufklappen ist.
+
+Der zweite Teil („Fokus bleibt beim Blättern layoutstabil") ist seit
+AP-20 gegenstandslos: es gibt nur noch einen durchgehenden Scrollbereich
+statt vier, die beim Wechsel zurückgesetzt wurden.
+
+Belegt am Emulator: Würfel antippen zeigt *EDIT* mit Objektnamen und den
+Griffen direkt unter den drei Einstellungszeilen.
+
 ---
 
 ### AP-17 · Kleinere Pakete · Kern: gemischt
@@ -922,20 +938,24 @@ Braucht einen erreichbaren Mac.
 | 4 | AP-04 Objektleiste | nein |
 | 5 | AP-07 Materialauswahl | nein |
 | 6 | AP-09 Leere Zustände | nein |
-| 7 | AP-12 Bettleiste | `f03c7b0` | langer Druck zeigt *Rename* |
+| 7 | AP-16 Inspector | `82f3fa8` | Auswahl zeigt EDIT samt Griffen |
+| AP-12 Bettleiste | `f03c7b0` | langer Druck zeigt *Rename* |
 | AP-05 Werkzeugleisten | `f489a48`, `c41a1ba`, `f0c314a` | Schiene mit Trennen, Stützen, Naht |
 | AP-11 Slice-Blatt | `8afd69d`, `c63e329` | `2 G-code files`, *Export all*, Zeile je Datei |
 | AP-22 Alle Betten schneiden | `6bd3438` | `bett-1.gcode`, 53020 Bytes |
 | AP-20 Bereiche statt Reiter | `2e5f5ec` | drei Einstellungszeilen, vier Überschriften, Schneiden-Block außerhalb |
 | AP-08 Einstellungskopf | nein |
 | 8 | AP-06 Schwebende Dialoge | nein |
-| 9 | AP-12 Bettleiste | `f03c7b0` | langer Druck zeigt *Rename* |
+| 9 | AP-16 Inspector | `82f3fa8` | Auswahl zeigt EDIT samt Griffen |
+| AP-12 Bettleiste | `f03c7b0` | langer Druck zeigt *Rename* |
 | AP-05 Werkzeugleisten | nein |
 | 10 | AP-10 Anordnen | ja |
 | 11 | AP-13 Adaptive Schichthöhe | ja |
 | 12 | AP-14 Zweiter Regler | ja |
-| 13 | AP-12 Bettleiste | nein |
-| 14 | AP-12 Bettleiste | `f03c7b0` | langer Druck zeigt *Rename* |
+| 13 | AP-16 Inspector | `82f3fa8` | Auswahl zeigt EDIT samt Griffen |
+| AP-12 Bettleiste | nein |
+| 14 | AP-16 Inspector | `82f3fa8` | Auswahl zeigt EDIT samt Griffen |
+| AP-12 Bettleiste | `f03c7b0` | langer Druck zeigt *Rename* |
 | AP-05 Werkzeugleisten | `f489a48`, `c41a1ba`, `f0c314a` | Schiene mit Trennen, Stützen, Naht |
 | AP-11 Slice-Blatt | nein |
 | 15 | AP-15 Druckerkarten | nein |
