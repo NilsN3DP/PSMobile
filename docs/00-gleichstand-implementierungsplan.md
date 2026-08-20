@@ -16,7 +16,7 @@ das, was eine neue Sitzung als Erstes liest — hier steht, wo genau
 weitergemacht wird, ohne dass jemand die Historie durchsuchen muss.
 
 **Zuletzt geändert:** 20.08.2026 · Zweig
-`codex/ios-android-parity-implementation` · letzter Commit `ed84cd5`
+`codex/ios-android-parity-implementation` · letzter Commit `7298439`
 
 ### Wo die Arbeit liegt
 
@@ -83,7 +83,7 @@ ab; von dort gehört sie in die Arbeitskopie kopiert. Achtung: `du` meldet
 | AP-09 Leere Zustände | `875a655` | `LeeresPanel` als Muster |
 | AP-18 Bindungen | `27ac6eb`, `1eb4c97` | 26 fehlende Funktionen → noch 2 |
 | Bemalen (Strich, Füllmodi) | `e2f9dad`, `9da2adf` | Spur statt Punkt, 1358 Facetten |
-| AP-17 g ZIP-Import | (dieser Commit) | *2 models came from a ZIP archive.*, Bett zeigt 3 Objekte |
+| AP-17 g ZIP-Import | `7298439` | *2 models came from a ZIP archive.*, Bett zeigt 3 Objekte |
 | AP-14 Zweiter Regler | `ed84cd5` | Werkzeugweg 10–7189 unten, Schichtregler links |
 | AP-13 Adaptive Schichthöhe | `0418edc` | *Compute* füllt 81 Höhenbereiche, *Apply* wird aktiv |
 | AP-10 Anordnen mit Optionen | `ae316ed` | *Bed 2 is empty…* und *Bed 1: 1 instances arranged.* im Feld am Knopf |
