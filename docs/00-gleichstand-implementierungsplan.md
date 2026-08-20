@@ -67,6 +67,7 @@ ab; von dort gehört sie in die Arbeitskopie kopiert. Achtung: `du` meldet
 | AP-03 Vorschau | `3377a96` | `0:30 · 3.59 m · 10.7 g`, Chips grauen aus |
 | AP-07 Materialauswahl | `875a655` | Typ-Filter PLA blendet auf vier Karten ein |
 | AP-06 Schwebende Dialoge | `469203a`, `1e785c0` | Einstellungen als Karte über dem Bett, Rand 104/120/80 px |
+| AP-17 b Größenverhältnis | `d919c3d` | Kästchen in der Objektliste |
 | AP-15 Druckerkarten | `50de001` | Karte mit Modell, Zustand, Düse |
 | AP-16 Inspector | `82f3fa8` | Auswahl zeigt EDIT samt Griffen |
 | AP-12 Bettleiste | `f03c7b0` | langer Druck zeigt *Rename* |
@@ -90,24 +91,28 @@ ab; von dort gehört sie in die Arbeitskopie kopiert. Achtung: `du` meldet
 
 ### Als Nächstes
 
-**AP-17 a–f**, die kleineren Pakete ohne Kernbau. In dieser Reihenfolge,
-nach steigendem Aufwand:
+**AP-17 f · Zoll-Einheiten.** Kein Kernbau. Der Schalter
+`KEY_UNITS_IMPERIAL` steht auf Android in den App-Einstellungen, **wird
+aber nirgends ausgewertet** — der Kommentar in `AppSettingsScreen.kt:64`
+sagt es selbst: „wertet nur `ios/Screens/SettingField.swift` aus".
 
-| | Ziel | Fundstelle |
-|---|---|---|
-| b | Größenverhältnis je Objekt in beiden Listen | `0befe95` |
-| f | Zoll-Einheiten (`KEY_UNITS_IMPERIAL`) | `AppSettings` |
-| c | Abschnitt „Je Extruder" in der Simple-Materialseite | — |
-| e | Reinigungsturm (X, Y, Drehung) in die Extruderbank statt in die Projektwerkzeuge | — |
-| a | Projekt (.3mf), Platte und alle G-Code-Dateien weitergeben | — |
-| d | ColorMix-Vorschau vor dem Speichern, Fehlermeldung beim Sichern | — |
+Konkret:
 
-Vor jedem Punkt gilt, was AP-12 gelehrt hat: erst nachsehen, was drüben
-**heute** im Quelltext steht.
+1. In `SettingsScreen.kt` das Eingabefeld (`SettingField`) beim Anzeigen
+   und Eingeben zwischen mm und Zoll umrechnen, wenn der Schalter an
+   ist. Der Kern bekommt weiterhin ausschließlich Millimeter.
+2. **Nur Felder mit der Einheit „mm"** — nicht Prozentwerte, nicht
+   Temperaturen. Auf iOS heißt die Prüfung `istLaenge`; genau diese
+   Einschränkung war der Grund, warum es dort überhaupt eingebaut wurde.
+3. Den veralteten Kommentar in `AppSettingsScreen.kt` mitnehmen.
 
-**AP-04** und Abschnitt **Z** brauchen den Mac; er ist ab dem 20.08.
-wieder da. **AP-10**, **AP-13**, **AP-14** und **AP-17 g** brauchen einen
-Kernbau (20–25 min auf dem Unraid).
+Danach die übrigen kleinen Pakete: **c** („Je Extruder" in der
+Simple-Materialseite), **e** (Reinigungsturm in die Extruderbank), **a**
+(Projekt/Platte/G-Codes weitergeben), **d** (ColorMix-Vorschau).
+
+**AP-04** und Abschnitt **Z** brauchen den Mac. **AP-10**, **AP-13**,
+**AP-14** und **AP-17 g** brauchen einen Kernbau (20–25 min auf dem
+Unraid).
 
 ### Worauf zu achten ist
 
@@ -682,7 +687,7 @@ Griffen direkt unter den drei Einstellungszeilen.
 | | Ziel | Kern |
 |---|---|---|
 | a | Projekt (.3mf), Platte und alle G-Code-Dateien weitergeben | nein |
-| b | Größenverhältnis je Objekt in beiden Listen (`0befe95`) | nein |
+| b | ~~Größenverhältnis je Objekt in beiden Listen~~ — **erledigt** (20.08., `d919c3d`) | nein |
 | c | Abschnitt „Je Extruder" in der Simple-Materialseite | nein |
 | d | ColorMix-Vorschau vor dem Speichern, Fehlermeldung beim Sichern | nein |
 | e | Reinigungsturm (X, Y, Drehung) in die Extruderbank statt in die Projektwerkzeuge | nein |
@@ -951,7 +956,8 @@ Braucht einen erreichbaren Mac.
 | 4 | AP-04 Objektleiste | nein |
 | 5 | AP-07 Materialauswahl | nein |
 | 6 | AP-09 Leere Zustände | nein |
-| 7 | AP-15 Druckerkarten | `50de001` | Karte mit Modell, Zustand, Düse |
+| 7 | AP-17 b Größenverhältnis | `d919c3d` | Kästchen in der Objektliste |
+| AP-15 Druckerkarten | `50de001` | Karte mit Modell, Zustand, Düse |
 | AP-16 Inspector | `82f3fa8` | Auswahl zeigt EDIT samt Griffen |
 | AP-12 Bettleiste | `f03c7b0` | langer Druck zeigt *Rename* |
 | AP-05 Werkzeugleisten | `f489a48`, `c41a1ba`, `f0c314a` | Schiene mit Trennen, Stützen, Naht |
@@ -960,23 +966,28 @@ Braucht einen erreichbaren Mac.
 | AP-20 Bereiche statt Reiter | `2e5f5ec` | drei Einstellungszeilen, vier Überschriften, Schneiden-Block außerhalb |
 | AP-08 Einstellungskopf | nein |
 | 8 | AP-06 Schwebende Dialoge | nein |
-| 9 | AP-15 Druckerkarten | `50de001` | Karte mit Modell, Zustand, Düse |
+| 9 | AP-17 b Größenverhältnis | `d919c3d` | Kästchen in der Objektliste |
+| AP-15 Druckerkarten | `50de001` | Karte mit Modell, Zustand, Düse |
 | AP-16 Inspector | `82f3fa8` | Auswahl zeigt EDIT samt Griffen |
 | AP-12 Bettleiste | `f03c7b0` | langer Druck zeigt *Rename* |
 | AP-05 Werkzeugleisten | nein |
 | 10 | AP-10 Anordnen | ja |
 | 11 | AP-13 Adaptive Schichthöhe | ja |
 | 12 | AP-14 Zweiter Regler | ja |
-| 13 | AP-15 Druckerkarten | `50de001` | Karte mit Modell, Zustand, Düse |
+| 13 | AP-17 b Größenverhältnis | `d919c3d` | Kästchen in der Objektliste |
+| AP-15 Druckerkarten | `50de001` | Karte mit Modell, Zustand, Düse |
 | AP-16 Inspector | `82f3fa8` | Auswahl zeigt EDIT samt Griffen |
 | AP-12 Bettleiste | nein |
-| 14 | AP-15 Druckerkarten | `50de001` | Karte mit Modell, Zustand, Düse |
+| 14 | AP-17 b Größenverhältnis | `d919c3d` | Kästchen in der Objektliste |
+| AP-15 Druckerkarten | `50de001` | Karte mit Modell, Zustand, Düse |
 | AP-16 Inspector | `82f3fa8` | Auswahl zeigt EDIT samt Griffen |
 | AP-12 Bettleiste | `f03c7b0` | langer Druck zeigt *Rename* |
 | AP-05 Werkzeugleisten | `f489a48`, `c41a1ba`, `f0c314a` | Schiene mit Trennen, Stützen, Naht |
 | AP-11 Slice-Blatt | nein |
-| 15 | AP-15 Druckerkarten | nein |
-| 16 | AP-15 Druckerkarten | `50de001` | Karte mit Modell, Zustand, Düse |
+| 15 | AP-17 b Größenverhältnis | `d919c3d` | Kästchen in der Objektliste |
+| AP-15 Druckerkarten | nein |
+| 16 | AP-17 b Größenverhältnis | `d919c3d` | Kästchen in der Objektliste |
+| AP-15 Druckerkarten | `50de001` | Karte mit Modell, Zustand, Düse |
 | AP-16 Inspector | nein |
 | 17 | AP-17 a–f Kleinere Pakete | nein |
 | 18 | AP-17 g ZIP-Import | ja |

@@ -470,6 +470,23 @@ entfernt. `git checkout` auf die Datei, dann der einfachere Weg:
 Bausteine aufrufen lassen. Beim Ausschneiden von Quelltext lieber die
 Sichtbarkeit aendern als Zeilen verschieben.
 
+### Claude — AP-17 b, und wieder die Frage nach der Richtung
+
+Die Proportionsvorschau gab es auf Android nur im Modelle-Blatt. Der
+Plan nannte sie als Android-Luecke mit Verweis auf `0befe95` - und
+dieser Commit sagt im Text selbst, er sei das „Gegenstueck zu
+ObjectProportionThumb auf Android". iOS hat also *nachgezogen* und dabei
+beide Listen bedacht; Android hatte sie in der Liste im Seitenband nie.
+
+Jetzt steht dasselbe Kaestchen auch dort, abschaltbar ueber denselben
+App-Schalter. Commit `d919c3d`, am Emulator belegt an der Zeile
+„testwuerfel · 20 × 20 × 20 mm · 1 Vol.".
+
+**Weiterhin gilt, was AP-12 gelehrt hat:** der Commit-Text ist die
+zweite Quelle nach dem heutigen Quelltext. Hier stand die Richtung sogar
+in der Commit-Nachricht - wer nur die Zeile im Plan liest, baut in die
+falsche Richtung.
+
 ---
 
 ## 2026-08-03
