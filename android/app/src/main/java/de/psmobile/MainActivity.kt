@@ -334,6 +334,14 @@ class MainActivity : ComponentActivity() {
                         onOpenPrinterSetup = { svc.reopenSetup() },
                         onAppSettings = { showAppSettings = true },
                         onStartSlice = { svc.startSlice() },
+                        // Der Knopf im Slice-Blatt war nie verdrahtet:
+                        // onShareGcode hatte eine leere Vorgabe, und
+                        // niemand hat sie ueberschrieben. Im Simple Mode
+                        // fuehrte "G-Code sichern" damit ins Leere.
+                        onShareGcode = {
+                            svc.shareableGcodeUri()?.let { uri -> shareGcode(uri) }
+                        },
+                        onShareAllGcode = { shareGcodes(svc.shareableGcodeUris()) },
                         onSaveProject = { saveProject(saveAs = false) },
                         onRemoteSettings = { showRemoteSlice = true },
                         onControllerReady = { simpleSceneController = it },
@@ -346,6 +354,7 @@ class MainActivity : ComponentActivity() {
                         onAppSettings = { showAppSettings = true },
                         onPickFile = { uris -> importUris(uris) },
                         onShare = { uri -> shareGcode(uri) },
+                        onShareAll = { uris -> shareGcodes(uris) },
                         // Bei jeder Neuzeichnung neu gefragt: ein Stick
                         // kann jederzeit angesteckt oder abgezogen
                         // werden.
@@ -1132,6 +1141,28 @@ class MainActivity : ComponentActivity() {
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
         startActivity(Intent.createChooser(send, de.psmobile.ui.PsUi.appText("Share G-code", "G-Code teilen")))
+    }
+
+    /**
+     * Mehrere G-Code-Dateien auf einmal weitergeben.
+     *
+     * Nach "alle Betten schneiden" liegen mehrere vor; einzeln zu teilen
+     * hiesse, den Waehler fuenfmal zu durchlaufen. Gegenstueck zum
+     * ShareLink mit Sammlung auf iOS (SliceSheet.swift:88ff).
+     */
+    private fun shareGcodes(uris: List<Uri>) {
+        if (uris.isEmpty()) return
+        if (uris.size == 1) {
+            shareGcode(uris.first())
+            return
+        }
+        val send = Intent(Intent.ACTION_SEND_MULTIPLE).apply {
+            type = "text/plain"
+            putParcelableArrayListExtra(Intent.EXTRA_STREAM, ArrayList(uris))
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        startActivity(Intent.createChooser(
+            send, de.psmobile.ui.PsUi.appText("Share G-code", "G-Code teilen")))
     }
 
     private fun queryDisplayName(uri: Uri): String? =

@@ -151,6 +151,7 @@ internal fun Sidebar(
     onConvertGcode: () -> Unit,
     onAddSvg: (Int, Float, PsmCore.VolumeType) -> Unit,
     onShare: (android.net.Uri) -> Unit,
+    onShareAll: (List<android.net.Uri>) -> Unit = {},
     usbTarget: String?,
     onExportToUsb: () -> Unit,
     onOpenSettings: (String) -> Unit,
@@ -683,6 +684,21 @@ internal fun Sidebar(
                 color = PrusaColors.TextMuted,
                 fontSize = 12.sp,
             )
+            // Ein Durchgang durch den Waehler statt fuenf.
+            Text(
+                advancedText("Export all", "Alle exportieren"),
+                color = PrusaColors.Orange,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.SemiBold,
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(Corners.FIELD.dp))
+                    .background(PrusaColors.PanelRaised)
+                    .clickable { onShareAll(service.shareableGcodeUris()) }
+                    .heightIn(min = psTouch(44))
+                    .padding(vertical = 12.dp),
+            )
             gcodeDateien.forEach { datei ->
                 val ziel = linkPrinters.singleOrNull()
                 Row(
@@ -715,6 +731,18 @@ internal fun Sidebar(
                     )
                 }
             }
+        }
+
+        val fehlend by service.nichtGeschrieben.collectAsState()
+        if (fehlend.isNotEmpty()) {
+            Text(
+                advancedText(
+                    "Not written: ${fehlend.joinToString(", ")}",
+                    "Nicht geschrieben: ${fehlend.joinToString(", ")}",
+                ),
+                color = PrusaColors.Danger,
+                fontSize = 12.sp,
+            )
         }
 
         // An `progress` haengen statt an einem eigenen Zustand: nach

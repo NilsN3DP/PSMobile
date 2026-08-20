@@ -106,6 +106,7 @@ fun SimpleModeScreen(
     onSaveProject: () -> Unit,
     onRemoteSettings: () -> Unit = {},
     onShareGcode: () -> Unit = {},
+    onShareAllGcode: () -> Unit = {},
     onControllerReady: (SceneController) -> Unit = {},
 ) {
     val remoteSlicePluginAn = androidx.compose.ui.platform.LocalContext.current
@@ -426,11 +427,14 @@ fun SimpleModeScreen(
         // schloss das Menue dann nicht.
         if (progress !is SlicerService.Progress.Idle &&
             progress !is SlicerService.Progress.Stale) {
+            val gcodeDateien by service.gcodeDateien.collectAsState()
             SimpleSliceSheet(
                 progress = progress,
                 onCancel = service::cancelSlice,
                 onClose = service::dismissProgress,
                 onShare = onShareGcode,
+                dateien = gcodeDateien.size,
+                onShareAll = onShareAllGcode,
             )
         }
         if (hinderungsgruende.isNotEmpty()) {

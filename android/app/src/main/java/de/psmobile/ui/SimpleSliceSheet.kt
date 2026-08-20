@@ -52,6 +52,9 @@ internal fun SimpleSliceSheet(
     onCancel: () -> Unit,
     onClose: () -> Unit,
     onShare: () -> Unit,
+    /** Wie viele G-Code-Dateien der letzte Lauf ergeben hat. */
+    dateien: Int = 0,
+    onShareAll: () -> Unit = {},
 ) {
     val laeuft = progress is SlicerService.Progress.Running
 
@@ -93,15 +96,40 @@ internal fun SimpleSliceSheet(
 
                 is SlicerService.Progress.Done -> {
                     Titel(st("Ready to print", "Fertig zum Drucken"))
+                    // Wie lange es gedauert hat - dieselbe Zeile wie auf
+                    // iOS. Ohne sie ist "fertig" eine Behauptung ohne
+                    // Mass.
+                    Text(
+                        st(
+                            "Sliced in ${SliceSummary.duration(progress.seconds)}",
+                            "Geslict in ${SliceSummary.duration(progress.seconds)}",
+                        ),
+                        color = PrusaColors.TextMuted,
+                        fontSize = 12.sp,
+                    )
                     progress.stats?.let { Zahlen(it) }
+                    if (dateien > 1) {
+                        Text(
+                            st("$dateien G-code files", "$dateien G-Code-Dateien"),
+                            color = PrusaColors.TextMuted,
+                            fontSize = 12.sp,
+                        )
+                    }
                     Button(
-                        onClick = onShare,
+                        onClick = if (dateien > 1) onShareAll else onShare,
                         shape = RoundedCornerShape(Corners.FIELD.dp),
                         colors = ButtonDefaults.buttonColors(
                             containerColor = PrusaColors.Orange,
                         ),
                         modifier = Modifier.fillMaxWidth().heightIn(min = psTouch(50)),
-                    ) { Text(st("Save G-Code", "G-Code sichern")) }
+                    ) {
+                        // "Exportieren", nicht "Sichern": die Datei
+                        // verlaesst die Anwendung. Wortwahl von iOS.
+                        Text(
+                            if (dateien > 1) st("Export all", "Alle exportieren")
+                            else st("Export G-code", "G-Code exportieren")
+                        )
+                    }
                     TextButton(onClick = onClose, modifier = Modifier.fillMaxWidth()) {
                         Text(st("Close", "Schließen"), color = PrusaColors.TextMuted)
                     }

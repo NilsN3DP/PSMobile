@@ -387,6 +387,15 @@ class SlicerService : Service() {
     private val _bettFortschritt = MutableStateFlow<Pair<Int, Int>?>(null)
     val bettFortschritt: StateFlow<Pair<Int, Int>?> = _bettFortschritt.asStateFlow()
 
+    /**
+     * Betten, deren Datei nicht geschrieben werden konnte.
+     *
+     * Ein stiller Ausfall waere hier der schlimmste Fall: man haelt vier
+     * Dateien fuer alle fuenf und merkt es erst am Drucker.
+     */
+    private val _nichtGeschrieben = MutableStateFlow<List<String>>(emptyList())
+    val nichtGeschrieben: StateFlow<List<String>> = _nichtGeschrieben.asStateFlow()
+
     override fun onBind(intent: Intent?): IBinder = binder
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -679,6 +688,10 @@ class SlicerService : Service() {
     }
 
     fun shareableGcodeUri(): android.net.Uri? = shareableGcodeUri(lastGcode)
+
+    /** Alle Dateien des letzten Mehrbett-Laufs, teilbar. */
+    fun shareableGcodeUris(): List<android.net.Uri> =
+        _gcodeDateien.value.mapNotNull { shareableGcodeUri(it) }
 
     /** Wie [shareableGcodeUri], aber fuer eine bestimmte Datei. */
     fun shareableGcodeUri(datei: File?): android.net.Uri? {
@@ -1915,12 +1928,14 @@ class SlicerService : Service() {
 
         invalidateSliceResult()
         _gcodeDateien.value = emptyList()
+        _nichtGeschrieben.value = emptyList()
         val t0 = System.nanoTime()
 
         scope.launch {
             try {
                 val c = ensureCore()
                 val dateien = mutableListOf<File>()
+                val nichtGeschrieben = mutableListOf<String>()
                 var letzteStats: PsmCore.SliceStats? = null
 
                 for ((lauf, bett) in ziele.withIndex()) {
@@ -1938,17 +1953,26 @@ class SlicerService : Service() {
                     when (c.awaitSlice()) {
                         PsmCore.SliceState.DONE -> {
                             val out = File(filesDir, "bett-${bett + 1}.gcode")
-                            c.exportGcode(out.absolutePath)
-                            dateien += out
-                            letzteStats = c.sliceStats()
+                            // Ein Bett, das sich nicht schreiben laesst,
+                            // beendet nicht den ganzen Lauf: die
+                            // uebrigen vier von fuenf sind trotzdem
+                            // etwas wert. Der Name kommt in die Meldung.
+                            runCatching { c.exportGcode(out.absolutePath) }
+                                .onSuccess {
+                                    dateien += out
+                                    letzteStats = c.sliceStats()
+                                }
+                                .onFailure { nichtGeschrieben += out.name }
                         }
                         PsmCore.SliceState.CANCELLED -> {
                             _progress.value = Progress.Cancelled
                             return@launch
                         }
                         else -> {
-                            _progress.value = Progress.Failed(c.lastError())
-                            return@launch
+                            // Auch ein misslungener Schnitt haelt die
+                            // Reihe nicht auf - sonst entscheidet das
+                            // erste Bett ueber alle.
+                            nichtGeschrieben += "Bett ${bett + 1}"
                         }
                     }
                 }
@@ -1960,7 +1984,13 @@ class SlicerService : Service() {
                 // geschnittenen Betts.
                 lastGcode = dateien.lastOrNull()
                 val secs = (System.nanoTime() - t0) / 1_000_000_000.0
+                if (dateien.isEmpty()) {
+                    _progress.value = Progress.Failed(SimpleModeState.text(
+                        "No bed could be sliced.", "Kein Bett liess sich schneiden."))
+                    return@launch
+                }
                 _progress.value = Progress.Done(letzteStats, secs)
+                _nichtGeschrieben.value = nichtGeschrieben.toList()
                 meldeDiagnose(erfolgreich = true, sekunden = secs, weg = "local-alle", fehler = null)
             } catch (t: Throwable) {
                 val fehler = t.message ?: SimpleModeState.text("unknown error", "unbekannter Fehler")
