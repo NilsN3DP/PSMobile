@@ -661,6 +661,7 @@ internal fun Sidebar(
                         onExportPlate = onExportPlate,
                         onRepairStl = onRepairStl,
                         onConvertGcode = onConvertGcode,
+                        onShare = onShare,
                         onAddSvg = onAddSvg,
                         onOpenLayerEditor = { layerEditorObjectId = it },
                     )

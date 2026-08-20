@@ -209,6 +209,7 @@ internal fun GeometryTools(
     onExportPlate: (PsmCore.PlateFormat) -> Unit,
     onRepairStl: () -> Unit,
     onConvertGcode: () -> Unit,
+    onShare: (android.net.Uri) -> Unit = {},
     onAddSvg: (Int, Float, PsmCore.VolumeType) -> Unit,
     onOpenLayerEditor: (Int) -> Unit,
 ) {
@@ -568,6 +569,7 @@ internal fun GeometryTools(
             onExportPlate = onExportPlate,
             onRepairStl = onRepairStl,
             onConvertGcode = onConvertGcode,
+            onShare = onShare,
         )
     }
 

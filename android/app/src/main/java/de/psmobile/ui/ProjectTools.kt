@@ -24,6 +24,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -39,12 +40,33 @@ internal fun ProjectTools(
     onExportPlate: (PsmCore.PlateFormat) -> Unit,
     onRepairStl: () -> Unit,
     onConvertGcode: () -> Unit,
+    onShare: (android.net.Uri) -> Unit = {},
 ) {
     var gcodes by remember { mutableStateOf(service.customGcodes()) }
     var editIndex by remember { mutableStateOf<Int?>(null) }
     var addingGcode by remember { mutableStateOf(false) }
 
+    // Was zuletzt herauskam, laesst sich weitergeben - dieselbe Zeile
+    // wie auf iOS, mit dem Dateinamen darin, damit man sieht, was man
+    // weitergibt.
+    val letzteAusgabe by service.letzteAusgabe.collectAsState()
+
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        letzteAusgabe?.let { datei ->
+            Button(
+                onClick = { service.shareableAusgabeUri()?.let(onShare) },
+                modifier = Modifier.fillMaxWidth().height(psTouch(48)),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = PrusaColors.Orange,
+                    contentColor = PrusaColors.TextPrimary,
+                ),
+            ) {
+                Text(
+                    PsUi.appText("Share", "Weitergeben") + " · " + datei.name,
+                    maxLines = 1,
+                )
+            }
+        }
         ProjectHeading(PsUi.appText("Custom G-code by height", "Custom G-Code nach Höhe"))
         if (gcodes.isEmpty()) {
             Text(

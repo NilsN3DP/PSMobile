@@ -1090,6 +1090,10 @@ class MainActivity : ComponentActivity() {
                     noticeTitle = de.psmobile.ui.PsUi.appText("File saved", "Datei gespeichert")
                     importNotice =
                         "$pendingFileDescription wurde gespeichert (${bytes / 1024} KiB)."
+                    // Gespeichert ist nicht weitergegeben: der Weg in
+                    // eine andere App fuehrt ueber das Teilen-Blatt, und
+                    // dafuer muss die Datei erreichbar bleiben.
+                    service?.merkeAusgabe(source)
                 }
             pendingFileOutput = null
         }

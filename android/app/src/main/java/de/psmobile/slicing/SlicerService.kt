@@ -955,6 +955,30 @@ class SlicerService : Service() {
             }
     }
 
+    /**
+     * Die zuletzt erzeugte Datei, die kein G-Code ist - Plattenexport,
+     * repariertes STL, gewandelter G-Code.
+     *
+     * Sie laesst sich damit nicht nur speichern, sondern auch
+     * weitergeben; iOS bietet an derselben Stelle „Weitergeben ·
+     * <Dateiname>" an (AdvancedWorkspaceView.swift:1449ff).
+     */
+    private val _letzteAusgabe = MutableStateFlow<File?>(null)
+    val letzteAusgabe: StateFlow<File?> = _letzteAusgabe.asStateFlow()
+
+    fun merkeAusgabe(datei: File?) { _letzteAusgabe.value = datei }
+
+    /** Die letzte Ausgabe teilbar machen. */
+    fun shareableAusgabeUri(): android.net.Uri? {
+        val src = _letzteAusgabe.value ?: return null
+        val outDir = File(cacheDir, "share").apply { mkdirs() }
+        val dst = File(outDir, src.name)
+        src.copyTo(dst, overwrite = true)
+        return androidx.core.content.FileProvider.getUriForFile(
+            this, "$packageName.fileprovider", dst
+        )
+    }
+
     /** Fuer den Viewport, der direkt auf der Session arbeitet (E-03). */
     val coreOrNull: PsmCore? get() = core
 
