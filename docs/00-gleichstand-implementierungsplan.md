@@ -166,6 +166,21 @@ des Kerns. Ein sauberer Neustart danach war unauffällig. Auf schwächeren
 Geräten könnte das echt werden; ein Fall zum Nachmessen, nicht zum
 Raten.
 
+**Gegenprobe nach den acht Paketen des 20.08.** (AP-10, AP-13, AP-14,
+AP-17 g, AP-11 zweite Hälfte, AP-24 bis AP-28): auf einer frisch
+eingerichteten Installation (`pm clear`) ist der **Selbsttest komplett
+grün** — Modell laden, Schneiden, G-Code schreiben, Projekt sichern und
+wieder laden, Zurücknehmen/Wiederholen, Teil anlegen und entfernen,
+Bemalen, Lasttest. Danach von Hand die Kette Import → Schneiden →
+Vorschau: das Band schaltet auf *G-Code-Vorschau* mit *Editor*-Knopf,
+die Legende bricht um, beide Regler stehen (senkrecht 0–49, waagerecht
+9–484), der Schneiden-Block bleibt darunter.
+
+**Was die Gegenprobe nicht abdeckt:** Hochformat (AP-19, zurückgestellt),
+schmale Geräte, echte Drucker über PrusaLink und alles, was den Mac
+braucht. Der Selbsttest läuft auf **einem** Emulator mit **einem**
+Druckerprofil.
+
 **Sonst ist ohne den Mac nichts mehr offen.** Alle Android-Pakete des Plans
 sind zu; die Behauptung „Kern: ja" bei AP-10, AP-13, AP-14 und AP-17 g
 war in allen vier Fällen falsch — die Bindungen lagen längst in

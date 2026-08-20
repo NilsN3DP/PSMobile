@@ -58,6 +58,38 @@ sondern die Absprache währenddessen.
 
 ## 2026-08-20
 
+### Claude — Gegenprobe statt neuntes Paket
+
+Nach acht Paketen an einem Tag - AP-10, AP-13, AP-14, AP-17 g, die
+zweite Haelfte von AP-11, dann AP-24 bis AP-28 - habe ich kein neuntes
+angefangen, sondern nachgesehen, ob das alles zusammen noch laeuft.
+Beruehrt waren SlicerService, SlicerScreen, AdvancedSidebar,
+SimpleModeScreen, GeometryTools, PreviewPanel und der Selbsttest; jedes
+Paket war fuer sich belegt, keines im Verbund.
+
+**Erstens der Selbsttest**, den ich vorhin selbst abbrechbar gemacht
+habe - auf einer frisch eingerichteten Installation (`pm clear`, dann
+Prusa CORE One L einrichten). Alle sechzehn Schritte gruen: Modell
+laden, liegt auf dem Bett, Schneiden, G-Code schreiben, Projekt sichern
+und wieder laden, Zuruecknehmen und Wiederholen, Teil anlegen und
+entfernen, Bemalen, Lasttest. **All checks passed.**
+
+Das hat noch etwas Nebenbei belegt: die Ergebniszeile aus AP-25
+funktioniert auch im gruenen Fall, nicht nur nach einem Abbruch.
+
+**Zweitens die Kette von Hand**, weil AP-28 dieselbe Datei angefasst hat
+wie das Vorschau-Band aus AP-24. Import ueber die verkuerzte Schiene,
+Schneiden, Vorschau. Ein Bild zeigt alles zusammen: die Schiene ohne
+*Options* mit *Split* direkt nach *- Kopie*, das Band als
+*G-Code-Vorschau* mit *Editor*-Knopf, die umbrechende Legende, den
+senkrechten Regler links (0-49) und den waagerechten darunter (9-484),
+und den Schneiden-Block am Fuss.
+
+**Was ich nicht behaupte:** das war ein Emulator, ein Druckerprofil, ein
+Querformat. Hochformat ist zurueckgestellt, schmale Geraete sind
+ungeprueft, PrusaLink an einem echten Drucker auch. Die Gegenprobe sagt,
+dass die acht Pakete einander nicht zerstoert haben - mehr nicht.
+
 ### Claude — AP-28: ein Knopf, der die eigene Regel widerlegte
 
 Nach den Regeln habe ich die **Reihenfolge der Werkzeugschiene**
