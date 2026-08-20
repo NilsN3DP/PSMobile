@@ -574,6 +574,11 @@ private fun SlicerContent(
             ToolStrip(
                 onPrinters = { service.showScreen(SlicerService.Screen.Printers) },
                 onAppSettings = onAppSettings,
+                surfaceMode = surfaceMode,
+                onSurface = { modus ->
+                    surfaceMode = modus
+                    if (modus == null) measureStart = null
+                },
                 hasSelection = selectedIds.isNotEmpty(),
                 // Die Quelle darf auf einem anderen Bett liegen. Der Core
                 // kennt alle Betten, waehrend `objects` nur das aktive zeigt.
@@ -1225,6 +1230,8 @@ private fun SchrittKnopf(
 private fun ToolStrip(
     onPrinters: () -> Unit,
     onAppSettings: () -> Unit,
+    surfaceMode: SurfaceToolMode?,
+    onSurface: (SurfaceToolMode?) -> Unit,
     hasSelection: Boolean,
     canPaste: Boolean,
     canUndo: Boolean,
@@ -1238,7 +1245,18 @@ private fun ToolStrip(
                                "splitobjects", "splitvolumes")
     // Zurueck und Vor sind in die untere Leiste gewandert, wo der
     // Daumen liegt - hier waeren sie ein zweiter Weg zur selben Sache.
-    val notYet = setOf("layersediting", "undo", "redo")
+    //
+    // "arrangecurrent" und die beiden Trenn-Werkzeuge kommen nicht als
+    // eigene Knoepfe: Anordnen fasst beide Ziele ueber Tipp und Halten
+    // zusammen, Trennen beide Arten in einem Untermenue. Genau wie auf
+    // iOS - dort steht die Begruendung in `bettKapsel`s Nachbarschaft:
+    // sichtbare Knoepfe fuer seltene Faelle machen die Schiene breiter,
+    // als der haeufige Fall es braucht.
+    val notYet = setOf(
+        "layersediting", "undo", "redo",
+        "arrangecurrent", "splitobjects", "splitvolumes",
+    )
+    var trennenOffen by remember { mutableStateOf(false) }
 
     Column(
         Modifier
@@ -1255,8 +1273,63 @@ private fun ToolStrip(
                           (tool.name != "paste" || canPaste) &&
                           (tool.name != "undo" || canUndo) &&
                           (tool.name != "redo" || canRedo)
-            ToolButton(tool, enabled) { onTool(tool.name) }
+            if (tool.name == "arrange") {
+                // Tipp ordnet alle Betten an, Halten nur das aktuelle -
+                // dieselbe Doppelbelegung wie drueben.
+                ToolButton(tool, enabled, onLongClick = { onTool("arrangecurrent") }) {
+                    onTool("arrange")
+                }
+            } else {
+                ToolButton(tool, enabled) { onTool(tool.name) }
+            }
         }
+
+        // Trennen: "zu Objekten" und "zu Volumen" in einem Eintrag.
+        val trennen = tools.firstOrNull { it.name == "splitobjects" }
+        if (trennen != null) {
+            Box {
+                ToolButton(
+                    trennen.copy(tooltip = "Split"),
+                    enabled = hasSelection,
+                ) { trennenOffen = true }
+                DropdownMenu(
+                    expanded = trennenOffen,
+                    onDismissRequest = { trennenOffen = false },
+                ) {
+                    ScaledOverlay {
+                        DropdownMenuItem(
+                            text = { Text(advancedText("To objects", "Zu Objekten")) },
+                            onClick = { trennenOffen = false; onTool("splitobjects") },
+                        )
+                        DropdownMenuItem(
+                            text = { Text(advancedText("To parts", "Zu Volumen")) },
+                            onClick = { trennenOffen = false; onTool("splitvolumes") },
+                        )
+                    }
+                }
+            }
+        }
+
+        // Stuetzen und Naht stehen auf iOS in der Schiene, auf Android
+        // bisher nur im Seitenband unter "Werkzeuge". Sie kommen nicht
+        // aus PrusaSlicers toolbar.json - dort gibt es sie als
+        // Leistenknopf nicht -, deshalb hier von Hand.
+        MalKnopf(
+            symbol = "fdm_supports.svg",
+            beschriftung = advancedText("Supports", "Stützen"),
+            werkzeug = PsmCore.PaintTool.SUPPORT,
+            surfaceMode = surfaceMode,
+            enabled = hasSelection,
+            onSurface = onSurface,
+        )
+        MalKnopf(
+            symbol = "seam.svg",
+            beschriftung = advancedText("Seam", "Naht"),
+            werkzeug = PsmCore.PaintTool.SEAM,
+            surfaceMode = surfaceMode,
+            enabled = hasSelection,
+            onSurface = onSurface,
+        )
 
         // Fusszeile wie auf iOS: Drucker und App-Einstellungen stehen
         // unten links in der Schiene. Vorher lagen sie oben in der
@@ -1311,15 +1384,60 @@ private fun SchienenFuss(
     }
 }
 
+/**
+ * Ein Malwerkzeug in der Schiene.
+ *
+ * Zweites Tippen legt es wieder weg - sonst gibt es keinen Weg zurueck
+ * zum blossen Ziehen, ohne die Auswahl aufzugeben.
+ */
 @Composable
-private fun ToolButton(tool: PsUi.Tool, enabled: Boolean, onClick: () -> Unit) {
+private fun MalKnopf(
+    symbol: String,
+    beschriftung: String,
+    werkzeug: PsmCore.PaintTool,
+    surfaceMode: SurfaceToolMode?,
+    enabled: Boolean,
+    onSurface: (SurfaceToolMode?) -> Unit,
+) {
+    val aktiv = (surfaceMode as? SurfaceToolMode.Paint)?.tool == werkzeug
+    ToolButton(
+        PsUi.Tool(werkzeug.name.lowercase(), symbol, beschriftung),
+        enabled = enabled,
+        aktiv = aktiv,
+    ) {
+        onSurface(
+            if (aktiv) null
+            else SurfaceToolMode.Paint(tool = werkzeug, state = 1)
+        )
+    }
+}
+
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
+@Composable
+private fun ToolButton(
+    tool: PsUi.Tool,
+    enabled: Boolean,
+    aktiv: Boolean = false,
+    onLongClick: (() -> Unit)? = null,
+    onClick: () -> Unit,
+) {
     Box(
         Modifier
             .fillMaxWidth()
             .height(TOOL_SIZE)
             .clip(RoundedCornerShape(Corners.CARD.dp))
-            .background(if (enabled) PrusaColors.PanelRaised else Color.Transparent)
-            .clickable(enabled = enabled, onClick = onClick),
+            .background(
+                when {
+                    aktiv -> PrusaColors.Orange.copy(alpha = 0.25f)
+                    enabled -> PrusaColors.PanelRaised
+                    else -> Color.Transparent
+                }
+            )
+            .combinedClickable(
+                enabled = enabled,
+                onClick = onClick,
+                onLongClick = onLongClick,
+            ),
         contentAlignment = Alignment.Center,
     ) {
         Column(
@@ -1358,8 +1476,9 @@ private fun shortToolLabel(tool: PsUi.Tool): String = when (tool.name) {
     "paste" -> advancedText("Paste", "Einfügen")
     "more" -> advancedText("+ copy", "+ Kopie")
     "fewer" -> advancedText("− copy", "− Kopie")
-    "splitobjects" -> advancedText("Objects", "Objekte")
-    "splitvolumes" -> advancedText("Volumes", "Volumen")
+    // Der Eintrag fasst beide Trennarten zusammen; welche gemeint ist,
+    // entscheidet das Untermenue.
+    "splitobjects" -> advancedText("Split", "Trennen")
     "settings" -> advancedText("Options", "Optionen")
     else -> PsUi.tr(tool.tooltip)
 }
