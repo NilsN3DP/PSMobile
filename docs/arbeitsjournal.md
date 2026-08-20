@@ -352,6 +352,35 @@ Mal bezahlt gemacht.
 **Offen an AP-11:** *Alle exportieren*, die Wortwahl im Simple-Blatt und
 der Hinweis bei einem Schreibfehler. Steht im Plan.
 
+### Claude — AP-11 zu Ende
+
+Die drei Reststuecke: *Alle exportieren* teilt jetzt alle Dateien in
+einem Durchgang (`ACTION_SEND_MULTIPLE`), das Simple-Blatt sagt
+„Export G-code" statt „Sichern" und nennt Dauer und Dateizahl, und ein
+Bett, dessen Datei sich nicht schreiben laesst, beendet nicht mehr den
+ganzen Lauf - die Namen stehen als Hinweis im Ergebnisblock.
+
+Commit `c63e329`. Belegt am Emulator: Advanced mit *2 G-code files*,
+*Export all* und je einer Zeile fuer `bett-1.gcode` und `bett-2.gcode`;
+das Simple-Blatt mit *Ready to print*, *Sliced in 0m*, den Zahlen,
+*2 G-code files* und *Export all*.
+
+**Nebenbefund:** `onShareGcode` im Simple Mode war nie verdrahtet. Der
+Parameter hatte eine leere Vorgabe, und `MainActivity` hat sie nie
+ueberschrieben - „G-Code sichern" fuehrte dort seit jeher ins Leere.
+Solche Vorgaben verstecken fehlende Verdrahtung; wer einen Rueckruf mit
+`= {}` anlegt, sollte im selben Schritt pruefen, ob ihn jemand setzt.
+
+**Beim Bedienen des Emulators gelernt:** *Kopieren* wird erst
+klickbar, wenn wirklich etwas ausgewaehlt ist, und der erste Tipp nach
+dem App-Start geht oft ins Leere. Zwei Anlaeufe haben gefehlt, bis der
+Wuerfel auf dem zweiten Bett lag. Bei solchen Ketten nach jedem Schritt
+ein Bild machen, statt am Ende zu raten.
+
+**Kleiner Rest:** `SliceSummary.duration()` meldet bei einem halben
+Sekundenlauf „0m". Unter einer Minute gehoeren Sekunden dorthin; die
+Regel liegt im gemeinsamen Modul und betrifft damit beide Seiten.
+
 ---
 
 ## 2026-08-03
