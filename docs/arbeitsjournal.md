@@ -58,6 +58,49 @@ sondern die Absprache währenddessen.
 
 ## 2026-08-20
 
+### Claude — AP-17 g: ZIP hinein, und damit ist ohne den Mac nichts mehr offen
+
+Printables liefert Sammlungen als ZIP - STL neben Bildern, Lizenz und
+Beiwerk. Der Kern kann das seit langem auspacken
+(`psm_zip_extract_models`, in Kotlin `PsmCore.zipExtractModels`), nur
+fuehrte kein Weg vom Dateiwaehler dorthin.
+
+Jetzt schon: `application/zip` steht in den Dateitypen des Waehlers, und
+`importOne` schickt eine ZIP an `SlicerService.loadZip` statt an die
+Endungspruefung - eine ZIP ist keine Modelldatei, sondern eine Tuete
+voll davon. Genau die Reihenfolge wie drueben, wo `loadZip` vor dem
+Formatpfad steht (`PSMobileApp.swift:168`). Entpackt wird in einen
+eigenen Ordner unter `cacheDir/zip/<zeit>`, danach geht jede lesbare
+Datei durch `loadModel`.
+
+**Was zaehlt, ist nicht, was ausgepackt wurde.** Der Kern meldet die
+Zahl der entpackten Eintraege; ob daraus Objekte auf dem Bett werden,
+sagt erst das Laden. Deshalb zaehlt `loadZip` die *geladenen* Modelle,
+nicht die ausgepackten.
+
+**Ein Hinweis, den es vorher nicht gab.** Bei genau einer ausgewaehlten
+Datei bleibt der Abschlusshinweis sonst aus - die Rueckfrage zur 3MF
+sagt dort selbst, was passiert ist. Eine ZIP stellt keine Rueckfrage,
+bringt aber mehrere Modelle mit. Dass aus einer Auswahl zwoelf Teile
+werden, gehoert gesagt, also erscheint der Hinweis fuer ZIPs immer.
+
+Belegt am Emulator mit einer ZIP aus zwei STL und einer Textdatei:
+„Files loaded - 2 models came from a ZIP archive.", und das Bett zeigt
+danach drei Objekte statt einem.
+
+**Ein Fehlversuch dazwischen war meiner:** die erste Test-ZIP enthielt
+zwei selbst erzeugte Wuerfel, und libslic3r lehnte beide ab („Loading of
+a model file failed"). Das Entpacken hatte funktioniert - im Log standen
+beide Dateinamen. Mit den vorhandenen Test-STLs aus dem Emulator lief es
+sofort. Wer hier testet, nimmt eine Datei, von der er weiss, dass der
+Kern sie liest; sonst sucht man den Fehler im eigenen Code.
+
+**Damit ist ohne den Mac nichts mehr offen.** Alle vier Pakete, die der
+Plan als kernpflichtig fuehrte, waren es nicht - dreimal an einem Tag
+dieselbe Ueberraschung. Offen bleiben nur AP-04, die iOS-Seite von AP-02
+und Abschnitt Z, alle drei am Mac, sowie die beiden zurueckgestellten
+Pakete und der Symboldurchgang.
+
 ### Claude — AP-14: der zweite Regler, und der erste wechselt die Seite
 
 Die Vorschau hatte auf Android nur den senkrechten Schichtregler, und

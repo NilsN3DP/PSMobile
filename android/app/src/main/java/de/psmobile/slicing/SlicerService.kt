@@ -25,6 +25,7 @@ import de.psmobile.shared.rules.FilamentCatalog
 import de.psmobile.shared.rules.PreviewLayerMetrics
 import de.psmobile.shared.rules.ColorMixCodec
 import de.psmobile.shared.rules.ColorMixRecipe
+import de.psmobile.shared.rules.ModelFormats
 import de.psmobile.shared.rules.SimpleModeState
 import de.psmobile.net.DiagnosticsReporter
 import de.psmobile.net.RemoteSliceClient
@@ -1972,6 +1973,45 @@ class SlicerService : Service() {
         // laedt das Modell unsichtbar hinter einem anderen Bildschirm.
         showBed()
         return project
+    }
+
+    /**
+     * Die Modelle aus einer ZIP entpacken und alle laden.
+     *
+     * Printables liefert Sammlungen als ZIP, mit STL neben Bildern,
+     * Lizenz und Beiwerk. Der Kern sucht sich die Modelle selbst heraus
+     * (`psm_zip_extract_models`); hier wird nur ausgepackt, geladen und
+     * gezaehlt.
+     *
+     * Vorlage: `SlicerModel.loadZip(url:)` (SlicerModel.swift:315ff).
+     *
+     * @return Zahl der geladenen Modelle, oder null wenn das Entpacken
+     *         selbst fehlschlug.
+     */
+    fun loadZip(zipPath: String): Int? {
+        val c = ensureCore()
+        val ziel = File(cacheDir, "zip/${System.nanoTime()}").apply { mkdirs() }
+        val entpackt = runCatching { c.zipExtractModels(zipPath, ziel.absolutePath) }
+            .onFailure { Log.w(TAG, "ZIP entpacken", it) }
+            .getOrNull()
+        if (entpackt == null) return null
+        if (entpackt <= 0) return 0
+
+        // Der Kern meldet, wie viele Eintraege er ausgepackt hat; was
+        // wirklich auf dem Bett landet, sagt erst das Laden.
+        var geladen = 0
+        ziel.walkTopDown()
+            .filter { it.isFile && ModelFormats.erlaubt(it.extension) }
+            .sortedBy { it.name }
+            .forEach { datei ->
+                runCatching { c.loadModel(datei.absolutePath) }
+                    .onFailure { Log.w(TAG, "Aus ZIP laden: ${datei.name}", it) }
+                    .onSuccess { geladen++ }
+            }
+        refreshObjects()
+        invalidateSliceResult()
+        showBed()
+        return geladen
     }
 
     fun removeObject(id: Int) {

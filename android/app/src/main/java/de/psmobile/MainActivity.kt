@@ -84,6 +84,9 @@ internal val MODEL_MIME_TYPES = arrayOf(
     "model/stl",
     "application/sla",
     "application/vnd.ms-pki.stl",
+    // Sammlungen von Printables kommen als ZIP. Der Kern sucht die
+    // Modelle darin selbst heraus - siehe SlicerService.loadZip.
+    "application/zip",
     "application/octet-stream",
 )
 
@@ -91,6 +94,9 @@ class MainActivity : ComponentActivity() {
 
     private var service by mutableStateOf<SlicerService?>(null)
     private var pending3mf by mutableStateOf<File?>(null)
+
+    /** Wie viele Modelle die zuletzt entpackte ZIP mitbrachte. */
+    private var zipModelle: Int = 0
     private var pending3mfUri: Uri? = null
     private var importNotice by mutableStateOf<String?>(null)
     private var noticeTitle by mutableStateOf(de.psmobile.ui.PsUi.appText("Project imported", "Projekt importiert"))
@@ -647,6 +653,8 @@ class MainActivity : ComponentActivity() {
         lifecycleScope.launch {
             var loaded = 0
             var projectsAsObjects = 0
+            var ausZip = 0
+            var leereZips = 0
             for (uri in uris) {
                 when (importOne(uri, askAboutProject = ask)) {
                     ImportOutcome.FAILED -> Unit
@@ -656,15 +664,53 @@ class MainActivity : ComponentActivity() {
                         loaded++
                         projectsAsObjects++
                     }
+                    // Eine ZIP zaehlt als eine Auswahl, bringt aber
+                    // mehrere Modelle mit - beide Zahlen gehoeren in
+                    // den Hinweis, sonst steht dort "1 Datei geladen"
+                    // und auf dem Bett liegen zwoelf.
+                    ImportOutcome.LOADED_ZIP -> {
+                        loaded++
+                        ausZip += zipModelle
+                    }
+                    ImportOutcome.EMPTY_ZIP -> leereZips++
                 }
             }
-            if (!ask) {
+            // Bei genau einer Datei bleibt der Hinweis sonst aus - die
+            // Rueckfrage zur 3MF sagt dort selbst, was passiert ist. Eine
+            // ZIP stellt keine Rueckfrage, bringt aber mehrere Modelle
+            // mit: dass aus einer Auswahl zwoelf Teile wurden, gehoert
+            // gesagt.
+            if (!ask || ausZip > 0 || leereZips > 0) {
                 noticeTitle = de.psmobile.ui.PsUi.appText("Files loaded", "Dateien geladen")
-                importNotice = de.psmobile.ui.ImportSelection.summary(
-                    loaded = loaded,
-                    total = uris.size,
-                    projectsAsObjects = projectsAsObjects,
-                )
+                importNotice = buildString {
+                    if (!ask) {
+                        append(
+                            de.psmobile.ui.ImportSelection.summary(
+                                loaded = loaded,
+                                total = uris.size,
+                                projectsAsObjects = projectsAsObjects,
+                            )
+                        )
+                    }
+                    if (ausZip > 0) {
+                        if (isNotEmpty()) append(" ")
+                        append(
+                            de.psmobile.ui.PsUi.appText(
+                                "$ausZip models came from a ZIP archive.",
+                                "$ausZip Modelle kamen aus einem ZIP-Archiv.",
+                            )
+                        )
+                    }
+                    if (leereZips > 0) {
+                        if (isNotEmpty()) append(" ")
+                        append(
+                            de.psmobile.ui.PsUi.appText(
+                                "A ZIP archive contained no readable model.",
+                                "Ein ZIP-Archiv enthielt kein lesbares Modell.",
+                            )
+                        )
+                    }
+                }
             }
         }
     }
@@ -673,6 +719,12 @@ class MainActivity : ComponentActivity() {
         FAILED,
         LOADED,
         LOADED_PROJECT_AS_OBJECTS,
+
+        /** Eine ZIP hat mehrere Modelle mitgebracht. */
+        LOADED_ZIP,
+
+        /** Die ZIP enthielt kein Modell, das der Kern lesen kann. */
+        EMPTY_ZIP,
 
         /** 3MF wartet auf die Rueckfrage; der Hinweis kommt von dort. */
         AWAITING_DECISION,
@@ -720,6 +772,21 @@ class MainActivity : ComponentActivity() {
         // abgewiesen. Die Dateiauswahl laesst deutlich mehr durch, als
         // libslic3r versteht; ohne diese Pruefung kam die Absage aus dem
         // Kern und war unlesbar.
+        // Eine ZIP ist keine Modelldatei, sondern eine Tuete voll
+        // davon - sie geht deshalb an der Endungspruefung vorbei und in
+        // den Entpacker. Genau wie drueben, wo `loadZip` vor dem
+        // Formatpfad steht (`PSMobileApp.swift:168`).
+        if (file.extension.equals("zip", ignoreCase = true)) {
+            val anzahl = withContext(Dispatchers.IO) {
+                runCatching { svc.loadZip(file.absolutePath) }
+            }.onFailure { svc.reportImportError(it) }.getOrNull()
+            zipModelle = anzahl ?: 0
+            return when {
+                anzahl == null -> ImportOutcome.FAILED
+                anzahl <= 0 -> ImportOutcome.EMPTY_ZIP
+                else -> ImportOutcome.LOADED_ZIP
+            }
+        }
         if (!ModelFormats.erlaubt(file.extension)) {
             svc.reportImportError(
                 IllegalArgumentException(ModelFormats.nichtUnterstuetzt(file.extension)))

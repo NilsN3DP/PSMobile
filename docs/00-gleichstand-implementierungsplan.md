@@ -83,6 +83,7 @@ ab; von dort gehört sie in die Arbeitskopie kopiert. Achtung: `du` meldet
 | AP-09 Leere Zustände | `875a655` | `LeeresPanel` als Muster |
 | AP-18 Bindungen | `27ac6eb`, `1eb4c97` | 26 fehlende Funktionen → noch 2 |
 | Bemalen (Strich, Füllmodi) | `e2f9dad`, `9da2adf` | Spur statt Punkt, 1358 Facetten |
+| AP-17 g ZIP-Import | (dieser Commit) | *2 models came from a ZIP archive.*, Bett zeigt 3 Objekte |
 | AP-14 Zweiter Regler | `ed84cd5` | Werkzeugweg 10–7189 unten, Schichtregler links |
 | AP-13 Adaptive Schichthöhe | `0418edc` | *Compute* füllt 81 Höhenbereiche, *Apply* wird aktiv |
 | AP-10 Anordnen mit Optionen | `ae316ed` | *Bed 2 is empty…* und *Bed 1: 1 instances arranged.* im Feld am Knopf |
@@ -98,28 +99,29 @@ ab; von dort gehört sie in die Arbeitskopie kopiert. Achtung: `du` meldet
 
 ### Als Nächstes
 
-**Kein Paket braucht mehr einen Kernbau.** Der Plan behauptete das für
-AP-10, AP-13, AP-14 und AP-17 g — geprüft am 20.08.: die Bindungen
-stehen längst in `android/jni/psm_jni.cpp` und sind in der abgelegten
-`libpsmobile_core.so` enthalten:
+**Ohne den Mac ist nichts mehr offen.** Alle Android-Pakete des Plans
+sind zu; die Behauptung „Kern: ja" bei AP-10, AP-13, AP-14 und AP-17 g
+war in allen vier Fällen falsch — die Bindungen lagen längst in
+`android/jni/psm_jni.cpp` und in der abgelegten `libpsmobile_core.so`.
+Das ist inzwischen der dritte Anlass für dieselbe Regel: **im Quelltext
+von heute nachsehen, nicht in der Historie.**
 
-```bash
-grep -ac nativeArrangeBedEx android/app/src/main/java/../jniLibsFixed/x86_64/libpsmobile_core.so
-```
+Was bleibt:
 
-liefert für `nativeArrangeBedEx`, `nativeLayerProfileAdaptive`,
-`nativeSetMoveRange`, `nativeMoveRangeBounds` und
-`nativeZipExtractModels` jeweils einen Treffer. Was fehlt, ist die
-Kotlin- und Oberflächenseite. Das ist derselbe Fehler wie bei AP-12 und
-AP-17 b/c: **im Quelltext von heute nachsehen, nicht in der Historie.**
+- **AP-04** (Griffe am Anfang der Objektleiste), **AP-02 iOS**
+  (~160 Radien) und Abschnitt **Z** (sechs Punkte, an denen iOS
+  nachzieht) — alle **brauchen den Mac**.
+- **AP-19 Hochformat** und **AP-23 Werkzeugbereich** sind
+  zurückgestellt. AP-23 braucht zuerst eine Entscheidung von Nils: die
+  Werkzeuge sehen auf beiden Seiten unterschiedlich aus, und auf iOS
+  gefallen sie ihm auch nicht — hier wird also nicht kopiert, sondern
+  beides zusammen neu entworfen.
+- **Der Symboldurchgang** kommt laut Nils zum Schluss und ist bewusst
+  noch nicht angefasst.
 
-Damit bleiben, alle ohne Kern und ohne Mac:
-
-- **AP-17 g · ZIP-Import.** `zipExtractModels` steht in `PsmCore`, der
-  Weg vom Dateiwähler dorthin fehlt.
-
-**AP-04**, **AP-02 iOS** und Abschnitt **Z** brauchen den Mac.
-**AP-19** und **AP-23** sind zurückgestellt.
+Kleiner offener Punkt nebenbei: `SliceSummary.duration()` meldet für
+Läufe unter einer Minute „0m"; dort gehören Sekunden hin. Betrifft
+beide Plattformen, also in die gemeinsame Regel.
 
 ### Worauf zu achten ist
 
@@ -773,7 +775,7 @@ Griffen direkt unter den drei Einstellungszeilen.
 | d | ~~ColorMix-Vorschau vor dem Speichern, Fehlermeldung beim Sichern~~ — **erledigt** (20.08., `492799b`) | nein |
 | e | ~~Reinigungsturm (X, Y, Drehung) in die Extruderbank~~ — **erledigt** (20.08., `431d961`) | nein |
 | f | ~~Zoll-Einheiten (`KEY_UNITS_IMPERIAL`)~~ — **erledigt** (20.08., `bcb4361`) | nein |
-| g | ZIP-Import samt Modusfrage | ja |
+| g | ~~ZIP-Import~~ — **erledigt** (20.08.). `application/zip` steht in den Dateitypen des Wählers, `importOne` schickt eine ZIP an `SlicerService.loadZip` statt an die Endungsprüfung — eine ZIP ist keine Modelldatei, sondern eine Tüte voll davon; dieselbe Reihenfolge wie in `PSMobileApp.swift:168`. Gezählt werden die *geladenen* Modelle, nicht die ausgepackten. Der Hinweis erscheint für ZIPs immer, auch bei einer einzelnen Auswahl — sonst stünde dort „1 Datei geladen", und auf dem Bett lägen zwölf. **Die Modusfrage entfällt:** sie gehört auf iOS zum Teilen von außen, wo noch kein Modus gewählt ist (`ZipModusDialog`); Androids Wähler wird immer aus einem Modus heraus geöffnet. | nein |
 
 ---
 
@@ -1056,7 +1058,7 @@ abgelegten `.so` (geprüft 20.08.2026).
 | 15 | AP-15 Druckerkarten | nein | fertig |
 | 16 | AP-16 Inspector | nein | fertig |
 | 17 | AP-17 a–f Kleinere Pakete | nein | fertig |
-| 18 | AP-17 g ZIP-Import | nein | offen |
+| 18 | AP-17 g ZIP-Import | nein | fertig |
 | 19 | AP-18 Restliche Bindungen | nein | fertig bis auf zwei |
 | 20 | AP-20 Bereiche statt Reiter | nein | fertig |
 | 21 | AP-21 Bettübersicht | nein | fertig |
