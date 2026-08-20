@@ -53,6 +53,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.layout.widthIn
 import de.psmobile.shared.ui.Corners
 import de.psmobile.core.PsmCore
+import de.psmobile.shared.rules.AppSettings
 import de.psmobile.slicing.SlicerService
 import de.psmobile.ui.theme.AlertDialog
 import de.psmobile.ui.theme.psTouch
@@ -123,6 +124,24 @@ fun SettingsScreen(
         favorites = FavoriteSettings.toggle(favorites, key)
         prefs.edit().putStringSet("favorites", favorites).apply()
     }
+    // Zoll-Einheiten koennen umgelegt werden, waehrend diese Seite
+    // offen ist - die App-Einstellungen schweben seit AP-06 darueber.
+    // Ohne den Horcher stuende danach ein Millimeterwert unter dem
+    // Etikett "in"; drueben ist genau das einmal passiert.
+    var zollEinheiten by remember {
+        mutableStateOf(prefs.getBoolean(AppSettings.KEY_UNITS_IMPERIAL, false))
+    }
+    androidx.compose.runtime.DisposableEffect(prefs) {
+        val horcher = android.content.SharedPreferences
+            .OnSharedPreferenceChangeListener { _, key ->
+                if (key == AppSettings.KEY_UNITS_IMPERIAL) {
+                    zollEinheiten = prefs.getBoolean(AppSettings.KEY_UNITS_IMPERIAL, false)
+                }
+            }
+        prefs.registerOnSharedPreferenceChangeListener(horcher)
+        onDispose { prefs.unregisterOnSharedPreferenceChangeListener(horcher) }
+    }
+
     val tabKeyOrder = remember(tab) { FavoriteSettings.keysOf(PsUi.tabs[tab].orEmpty()) }
     val favoriteKeys = remember(favorites, tabKeyOrder) {
         FavoriteSettings.orderedFor(favorites, tabKeyOrder)
@@ -315,6 +334,7 @@ fun SettingsScreen(
 
             if (pageIndex == FAVORITES_PAGE) {
                 FavoritesPanel(
+                    zoll = zollEinheiten,
                     core = core,
                     tab = tab,
                     keys = favoriteKeys,
@@ -396,6 +416,7 @@ fun SettingsScreen(
                             else               -> -1
                         }
                         SettingRow(core, entry.meta, configRevision,
+                                   zoll = zollEinheiten,
                                    extruder = index, multiline = entry.option.code,
                                    enabled = entry.enablement?.enabled ?: true,
                                    blockedBy = entry.enablement?.blockedBy.orEmpty(),
@@ -512,6 +533,7 @@ internal fun SettingRow(
     core: PsmCore,
     meta: PsmCore.ConfigMeta,
     configRevision: Int,
+    zoll: Boolean = false,
     extruder: Int = -1,
     multiline: Boolean = false,
     enabled: Boolean = true,
@@ -593,7 +615,10 @@ internal fun SettingRow(
                         colors = SwitchDefaults.colors(checkedTrackColor = PrusaColors.Orange),
                     )
                     PsmCore.ConfigType.ENUM -> EnumField(core, meta, value) { push(it) }
-                    else -> ValueField(value, meta.unit) { push(it) }
+                    // Zoll nur bei Laengen. Prozentwerte und
+                    // Temperaturen bleiben, was sie sind - genau die
+                    // Sorge, die gegen eine pauschale Umrechnung sprach.
+                    else -> ValueField(value, meta.unit, zoll && meta.unit == "mm") { push(it) }
                 }
             }
         }
@@ -681,8 +706,44 @@ private fun EnumField(
     }
 }
 
+/**
+ * Zahlenfeld mit Einheit.
+ *
+ * Bei eingeschalteten Zoll-Einheiten zeigt es Zoll und nimmt Zoll
+ * entgegen; der Kern bekommt weiterhin ausschliesslich Millimeter - er
+ * kennt keine Zoll-Einstellung. Gegenstueck zu `SettingField.swift`,
+ * wo dieselbe Umrechnung mit 25,4 steht.
+ */
 @Composable
-private fun ValueField(value: String, unit: String, onChange: (String) -> Unit) {
+private fun ValueField(
+    value: String,
+    unit: String,
+    inZoll: Boolean,
+    onChange: (String) -> Unit,
+) {
+    if (inZoll) {
+        val mm = value.toDoubleOrNull()
+        ValueFieldRoh(
+            value = if (mm == null) value else zollText(mm / 25.4),
+            unit = "in",
+        ) { eingabe ->
+            val zoll = eingabe.toDoubleOrNull()
+            onChange(if (zoll == null) eingabe else zollText(zoll * 25.4))
+        }
+        return
+    }
+    ValueFieldRoh(value, unit, onChange)
+}
+
+/** Hoechstens vier Nachkommastellen, ohne unnoetige Nullen. */
+private fun zollText(wert: Double): String {
+    val gerundet = kotlin.math.round(wert * 10_000) / 10_000
+    return if (gerundet == kotlin.math.floor(gerundet)) gerundet.toLong().toString()
+           else gerundet.toString()
+}
+
+@Composable
+private fun ValueFieldRoh(value: String, unit: String, onChange: (String) -> Unit) {
     Row(
         Modifier.fillMaxWidth().height(psTouch(48))
             .clip(RoundedCornerShape(Corners.FIELD.dp))
@@ -830,6 +891,7 @@ private fun SettingsPageEntry(
  */
 @Composable
 private fun FavoritesPanel(
+    zoll: Boolean,
     core: PsmCore,
     tab: String,
     keys: List<String>,
@@ -879,6 +941,7 @@ private fun FavoritesPanel(
             }
             SettingRow(
                 core, meta, configRevision,
+                zoll = zoll,
                 extruder = if (tab == "filament") 0 else -1,
                 enabled = enablement?.enabled ?: true,
                 blockedBy = enablement?.blockedBy.orEmpty(),

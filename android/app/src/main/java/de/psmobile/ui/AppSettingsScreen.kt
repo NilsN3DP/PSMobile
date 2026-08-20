@@ -61,19 +61,20 @@ private fun t(english: String, german: String) = SimpleModeState.text(english, g
  * Schalter, die die gemeinsame Liste zwar kennt, die auf Android aber
  * (noch) niemand liest - siehe android-parity-plan.md.
  *
- * KEY_UNITS_IMPERIAL wertet nur ios/Screens/SettingField.swift aus,
- * KEY_PORTRAIT_BOTTOM_BAR nur ios/Screens/AdvancedWorkspaceView.swift.
- * Sie trotzdem anzuzeigen war schlimmer als sie wegzulassen: "Längen
- * in Zoll anzeigen" liess sich umlegen, und in den Druckeinstellungen
- * stand danach unveraendert 0.2 mm. Ein Schalter, der nichts tut,
- * kostet den Nutzer mehr Zeit als ein fehlender. Wieder hereinnehmen,
- * sobald Android sie umsetzt.
+ * KEY_PORTRAIT_BOTTOM_BAR wertet nur
+ * ios/Screens/AdvancedWorkspaceView.swift aus. Ihn trotzdem anzuzeigen
+ * waere schlimmer als ihn wegzulassen: ein Schalter, der nichts tut,
+ * kostet den Nutzer mehr Zeit als ein fehlender.
+ *
+ * KEY_UNITS_IMPERIAL stand hier ebenfalls - genau mit dem Befund, dass
+ * sich "Laengen in Zoll anzeigen" umlegen liess und in den
+ * Druckeinstellungen unveraendert 0.2 mm stand. Seit AP-17 f rechnet
+ * SettingsScreen um, also darf der Schalter wieder erscheinen.
  *
  * KEY_MULTI_BED_RENDER stand hier ebenfalls, bis SlicerScreen ihn
  * auswertet.
  */
 private val nurIOS = setOf(
-    AppSettings.KEY_UNITS_IMPERIAL,
     AppSettings.KEY_PORTRAIT_BOTTOM_BAR,
 )
 
