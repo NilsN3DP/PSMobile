@@ -19,10 +19,20 @@ object SliceSummary {
      * Druckzeit in der Schreibweise von PrusaSlicer: Tage, Stunden und
      * Minuten, und nur die Einheiten, die auch vorkommen. "0 h 7 min"
      * liest sich schlechter als "7 min".
+     *
+     * Unter einer Minute stehen Sekunden da. Vorher meldete ein Lauf
+     * von 40 Sekunden "0m" - eine Zahl, die aussieht wie ein Fehler,
+     * und beim Zerlegen kleiner Teile kommt sie regelmaessig vor. Die
+     * Null ist auch keine Rundung, sondern schlicht keine Auskunft.
      */
     fun duration(seconds: Double): String {
         if (seconds <= 0) return "–"
         val total = seconds.toLong()
+        // Ein halbsekuendiger Schnitt ergab abgerundet "0s" - dieselbe
+        // Null wie vorher, nur in kleinerer Einheit. Wer unter einer
+        // Sekunde bleibt, bekommt das gesagt.
+        if (total < 1) return "<1s"
+        if (total < 60) return "${total}s"
         val days = total / 86_400
         val hours = (total % 86_400) / 3_600
         val minutes = (total % 3_600) / 60

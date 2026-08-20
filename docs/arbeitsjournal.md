@@ -58,6 +58,30 @@ sondern die Absprache währenddessen.
 
 ## 2026-08-20
 
+### Claude — Zwei Kleinigkeiten, die beim Testen aufgefallen sind
+
+**„Geslict in 0m".** Der Satz im Slice-Blatt nennt, wie lange der
+Schnitt gedauert hat, und `SliceSummary.duration()` kannte als kleinste
+Einheit Minuten. Ein Schnitt dauert aber selten eine Minute - bei einem
+Testwuerfel eine halbe Sekunde. Dort stand dann „0m", was aussieht wie
+ein Fehler.
+
+Jetzt stehen unter einer Minute Sekunden da. Der erste Versuch machte
+daraus „0s" - dieselbe Null, nur in kleinerer Einheit, weil `toLong()`
+abrundet. Unter einer Sekunde steht deshalb „<1s". Das ist die
+gemeinsame Regel, gilt also fuer beide Apps; zwei Tests decken beide
+Faelle ab. Belegt am Emulator: „Sliced in <1s".
+
+Der Strich fuer „kein Ergebnis" bleibt, wo er war - eine Null waere eine
+Aussage, ein Strich sagt, dass nichts vorliegt. Der Unterschied zu
+„<1s" ist genau dieser: dort liegt ein Wert vor, er ist nur klein.
+
+**Ein deutscher Schalter im englischen Betrieb.** In den Werkzeugen
+stand „In Infill wischen" fest verdrahtet, waehrend die Zeile darunter
+(„Wipe into other objects") laengst zweisprachig war. Ein Durchgang
+durch alle Beschriftungen mit Umlauten hat sonst nichts gefunden - die
+uebrigen Treffer sind Symbole wie „▾".
+
 ### Claude — AP-17 g: ZIP hinein, und damit ist ohne den Mac nichts mehr offen
 
 Printables liefert Sammlungen als ZIP - STL neben Bildern, Lizenz und

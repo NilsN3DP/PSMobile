@@ -83,6 +83,7 @@ ab; von dort gehört sie in die Arbeitskopie kopiert. Achtung: `du` meldet
 | AP-09 Leere Zustände | `875a655` | `LeeresPanel` als Muster |
 | AP-18 Bindungen | `27ac6eb`, `1eb4c97` | 26 fehlende Funktionen → noch 2 |
 | Bemalen (Strich, Füllmodi) | `e2f9dad`, `9da2adf` | Spur statt Punkt, 1358 Facetten |
+| Kleinigkeiten | (dieser Commit) | *Sliced in <1s* statt *0m*; *Wipe into infill* statt deutscher Beschriftung |
 | AP-17 g ZIP-Import | `7298439` | *2 models came from a ZIP archive.*, Bett zeigt 3 Objekte |
 | AP-14 Zweiter Regler | `ed84cd5` | Werkzeugweg 10–7189 unten, Schichtregler links |
 | AP-13 Adaptive Schichthöhe | `0418edc` | *Compute* füllt 81 Höhenbereiche, *Apply* wird aktiv |
@@ -119,9 +120,15 @@ Was bleibt:
 - **Der Symboldurchgang** kommt laut Nils zum Schluss und ist bewusst
   noch nicht angefasst.
 
-Kleiner offener Punkt nebenbei: `SliceSummary.duration()` meldet für
-Läufe unter einer Minute „0m"; dort gehören Sekunden hin. Betrifft
-beide Plattformen, also in die gemeinsame Regel.
+Zwei Kleinigkeiten sind dabei mit erledigt:
+
+- `SliceSummary.duration()` meldete für Läufe unter einer Minute „0m".
+  Jetzt Sekunden, und unter einer Sekunde „<1s" — ein halbsekündiger
+  Schnitt hätte sonst „0s" ergeben, dieselbe Null in kleinerer Einheit.
+  In der gemeinsamen Regel, also auf beiden Plattformen; zwei Tests
+  decken es ab.
+- Ein Schalter in den Werkzeugen hieß auch auf Englisch „In Infill
+  wischen". Der Rest der Zeile stand längst zweisprachig daneben.
 
 ### Worauf zu achten ist
 

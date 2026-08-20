@@ -554,7 +554,7 @@ internal fun GeometryTools(
                 containerColor = PrusaColors.PanelRaised,
             ),
         ) { Text(PsUi.appText("Apply colour", "Farbe übernehmen")) }
-        ToggleRow("In Infill wischen", wipeInfill) {
+        ToggleRow(PsUi.appText("Wipe into infill", "In Infill wischen"), wipeInfill) {
             wipeInfill = it
             service.setObjectWipe(selected.id, wipeInfill, wipeObjects)
         }

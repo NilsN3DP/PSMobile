@@ -17,6 +17,17 @@ class SliceSummaryTest {
     }
 
     @Test
+    fun `unter einer Minute stehen Sekunden da`() {
+        // "0m" sieht aus wie ein Fehler, und beim Zerlegen kleiner
+        // Teile kommt der Fall regelmaessig vor.
+        assertEquals("<1s", SliceSummary.duration(0.5))
+        assertEquals("1s", SliceSummary.duration(1.0))
+        assertEquals("40s", SliceSummary.duration(40.0))
+        assertEquals("59s", SliceSummary.duration(59.9))
+        assertEquals("1m", SliceSummary.duration(60.0))
+    }
+
+    @Test
     fun `ohne Ergebnis steht ein Strich`() {
         // Eine Null waere eine Aussage. Ein Strich sagt: dazu liegt
         // nichts vor.
