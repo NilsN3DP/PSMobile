@@ -58,6 +58,51 @@ sondern die Absprache währenddessen.
 
 ## 2026-08-20
 
+### Claude — AP-27: zwei Geraete, zwei Ergebnisse aus derselben Einrichtung
+
+Der Beschriftungsabgleich ist ausgeschoepft, also habe ich anders
+gesucht: **welche Regel des gemeinsamen Moduls ruft welche Seite
+ueberhaupt?** Eine Regel, die nur eine Seite benutzt, ist genau die
+Stelle, an der die Apps auseinanderlaufen - so fand ich schon bei AP-13
+die doppelte Umrechnung im Schichtprofil.
+
+Der Treffer heisst `Defaults`. Die Regel legt zwei bewusste Abweichungen
+von PrusaSlicers Voreinstellung fest, samt Begruendung: *Prusament PLA*
+statt des alphabetisch ersten Filaments, und *Gyroid* statt Grid. Sie
+sagt selbst, warum sie dort liegt: „Beides ist eine Regel und keine
+Anzeige - deshalb hier und nicht in einer der beiden Oberflaechen."
+
+**iOS wendet sie an. Android rief sie nie.** Nach derselben
+Ersteinrichtung standen auf den beiden Geraeten verschiedenes Filament
+und verschiedenes Fuellmuster - bei einem MK4S drueben Prusament PLA,
+hier „Ultrafuse PET", weil die Liste alphabetisch beginnt. Genau das,
+was Nils nicht will.
+
+Jetzt ruft `SlicerService.standardwerteSetzen()` die Regel, an denselben
+zwei Stellen wie drueben: nach der Einrichtung und bei jedem
+Druckerwechsel. Der zweite Fall ist der leichter zu uebersehende - ein
+anderer Drucker heisst eine andere Filamentliste, und die bisherige Wahl
+passt womoeglich nicht mehr.
+
+Belegt mit `pm clear` und einer frischen Einrichtung: T1 steht auf
+*Prusament PLA @COREONE*, das Fuellmuster auf *Gyroid*.
+
+**Der Nebenbefund ist unangenehmer als der Fund.** Vier weitere Regeln
+im gemeinsamen Modul benutzt **keine** der beiden Apps - nur ihre
+eigenen Tests. Darunter `ProfileUpdatePolicy` mit echter Logik
+(Versionsvergleich, „bis zur naechsten Version ueberspringen") fuer eine
+Funktion, die es auf keiner Seite gibt. Sie sehen aus wie die Quelle der
+Wahrheit, sind getestet und gruen, und regeln nichts. Loeschen oder
+einziehen entscheidet Nils; gemeinsamen Code wegzuwerfen gehoert nicht
+nebenbei erledigt.
+
+**Und noch eine Gegenprobe, die sich gelohnt hat:** `EasyPanel` stand
+zuerst auf meiner Liste der ungenutzten Regeln. Es wird von
+`EasyModeState` **innerhalb** des Moduls benutzt - mein erster Test
+durchsuchte `commonMain` selbst gar nicht. Haette ich die Liste ohne
+diese Nachpruefung aufgeschrieben, stuende jetzt eine falsche
+Behauptung im Plan.
+
 ### Claude — AP-26: die Vorschau, die etwas zeigte, das niemand eingegeben hatte
 
 Der erweiterte Abgleich meldete fuer das Schichtprofil vier Zeilen, die

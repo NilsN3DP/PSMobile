@@ -83,6 +83,7 @@ ab; von dort gehört sie in die Arbeitskopie kopiert. Achtung: `du` meldet
 | AP-09 Leere Zustände | `875a655` | `LeeresPanel` als Muster |
 | AP-18 Bindungen | `27ac6eb`, `1eb4c97` | 26 fehlende Funktionen → noch 2 |
 | Bemalen (Strich, Füllmodi) | `e2f9dad`, `9da2adf` | Spur statt Punkt, 1358 Facetten |
+| AP-27 Standardwerte nach der Einrichtung | (dieser Commit) | *Prusament PLA @COREONE* und *Gyroid* nach frischer Einrichtung |
 | AP-26 Schichtprofil ehrlich | `ec82032` | *Not valid* statt erfundener Vorschau, Erklärzeile darüber |
 | AP-25 Selbsttest | `712baa1` | *Run all checks*, Abbrechen mit übersprungenen Schritten, *Cancelled* |
 | Beschriftungen angeglichen | `e25e22d` | *Export log* statt *Share log*, *Recent* statt *RECENT* |
@@ -1234,6 +1235,61 @@ Unterschiede, die keine sind:
 
 ---
 
+### AP-27 · Standardwerte nach der Einrichtung · Kern: nein
+
+**Gefunden am 20.08.** durch einen anderen Abgleich als bisher: nicht
+Beschriftung gegen Beschriftung, sondern **welche Regel des gemeinsamen
+Moduls von welcher Seite überhaupt gerufen wird**. Eine Regel, die nur
+eine Seite benutzt, ist eine Stelle, an der die Apps auseinanderlaufen.
+
+**Der Befund** `Defaults` legt zwei bewusste Abweichungen von
+PrusaSlicers Voreinstellung fest, mit Begründung im Quelltext:
+
+- **Filament:** *Prusament PLA* statt des alphabetisch ersten Eintrags
+  (bei einem MK4S wäre das „Ultrafuse PET" — die Liste beginnt
+  alphabetisch, nicht nach Wahrscheinlichkeit).
+- **Füllmuster:** *Gyroid* statt Grid.
+
+Die Regel schreibt selbst: „Beides ist eine Regel und keine Anzeige —
+deshalb hier und nicht in einer der beiden Oberflächen."
+
+**iOS wendet sie an** (`SlicerModel.standardwerteSetzen`, gerufen nach
+der Einrichtung und bei jedem Druckerwechsel). **Android rief sie
+nie.** Nach derselben Ersteinrichtung standen auf den beiden Geräten
+verschiedenes Filament und verschiedenes Füllmuster.
+
+**Stand: fertig** (20.08.). `SlicerService.standardwerteSetzen()` ruft
+die gemeinsame Regel, und zwar an denselben zwei Stellen wie drüben:
+nach `completeSetup` und bei einem Druckerwechsel — ein anderer Drucker
+heißt eine andere Filamentliste, die bisherige Wahl passt womöglich
+nicht mehr.
+
+Belegt am Emulator nach `pm clear` und frischer Einrichtung (Prusa CORE
+One L): T1 steht auf *Prusament PLA @COREONE*, *Fill pattern* auf
+*Gyroid*.
+
+**Nebenbefund: gemeinsame Regeln, die niemand ruft.** Derselbe Abgleich
+zeigt vier weitere, die **keine der beiden Apps** benutzt — nur ihre
+eigenen Tests:
+
+| Regel | Inhalt | Einschätzung |
+|---|---|---|
+| `ProfileUpdatePolicy` | Versionsvergleich und *bis zur nächsten Version überspringen* | **Echte Logik ohne Funktion drumherum.** Weder Android noch iOS bieten Profil-Updates an. |
+| `InspectorContract` | ausgewählt → Objekt, sonst Projekt | trivial; als Regel wenig wert |
+| `ExperimentalFeatureFlags` | `localPrusaLinkPairingEnabled(x) = x` | Hülle ohne Inhalt |
+| `ExtruderPresentation` | `index + 1` als Beschriftung | trivial; nur iOS ruft sie |
+
+Das ist eine Falle: sie sehen aus wie die Quelle der Wahrheit, sind
+getestet und grün, und regeln nichts. **Löschen oder einziehen ist eine
+Entscheidung für Nils** — gemeinsamen Code wegzuwerfen gehört nicht
+nebenbei erledigt.
+
+*Geprüft und verworfen:* `EasyPanel` sah zunächst ebenfalls ungenutzt
+aus. Es wird von `EasyModeState` **innerhalb** des Moduls benutzt — mein
+erster Test durchsuchte `commonMain` nicht.
+
+---
+
 ## Z · Wo umgekehrt iOS nachzieht
 
 Braucht einen erreichbaren Mac.
@@ -1317,7 +1373,8 @@ abgelegten `.so` (geprüft 20.08.2026).
 | 25 | AP-24 Rechts: Viewer statt Editor | nein | fertig |
 | 26 | AP-25 Selbsttest angleichen | nein | fertig |
 | 27 | AP-26 Schichtprofil ehrlich | nein | fertig |
-| 28 | Z iOS nachziehen | Mac | offen |
+| 28 | AP-27 Standardwerte nach der Einrichtung | nein | fertig |
+| 29 | Z iOS nachziehen | Mac | offen |
 
 ---
 

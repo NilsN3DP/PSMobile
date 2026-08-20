@@ -25,6 +25,7 @@ import de.psmobile.shared.rules.FilamentCatalog
 import de.psmobile.shared.rules.PreviewLayerMetrics
 import de.psmobile.shared.rules.ColorMixCodec
 import de.psmobile.shared.rules.ColorMixRecipe
+import de.psmobile.shared.rules.Defaults
 import de.psmobile.shared.rules.ModelFormats
 import de.psmobile.shared.rules.SimpleModeState
 import de.psmobile.net.DiagnosticsReporter
@@ -612,6 +613,38 @@ class SlicerService : Service() {
     fun installedPrinters(): Set<String> =
         prefs.getStringSet("printers", emptySet()) ?: emptySet()
 
+    /**
+     * Was nach der Ersteinrichtung eingestellt sein soll.
+     *
+     * Die beiden Abweichungen von PrusaSlicers Voreinstellung stehen in
+     * der gemeinsamen Regel [Defaults], samt Begruendung: Prusament PLA
+     * statt des alphabetisch ersten Filaments, und Gyroid statt Grid.
+     *
+     * Bis zum 20.08. wendete **nur iOS** sie an
+     * (`SlicerModel.standardwerteSetzen`). Auf Android stand nach der
+     * Einrichtung, was der Kern gewaehlt hatte - bei einem MK4S also
+     * "Ultrafuse PET" und Grid. Zwei Geraete, zwei Ergebnisse aus
+     * derselben Einrichtung.
+     *
+     * Das Fuellmuster macht das Druckprofil damit "geaendert". Das ist
+     * der Preis dafuer, eine eigene Meinung zu haben, und er ist
+     * sichtbar statt versteckt - dieselbe Abwaegung wie drueben.
+     */
+    fun standardwerteSetzen() {
+        val c = core ?: return
+        val namen = runCatching { c.presetNames(PsmCore.PresetType.FILAMENT) }
+            .getOrDefault(emptyList())
+        Defaults.preferredFilament(namen)?.let { wunsch ->
+            runCatching { c.selectPreset(PsmCore.PresetType.FILAMENT, wunsch) }
+                .onFailure { Log.w(TAG, "Standardfilament '$wunsch' nicht waehlbar", it) }
+        }
+        runCatching { c["fill_pattern"] = Defaults.FILL_PATTERN }
+            .onFailure { Log.w(TAG, "Fuellmuster nicht setzbar", it) }
+        refreshPresets()
+        refreshQuickSettings()
+        notifyConfigChanged()
+    }
+
     /** Richtet die gewaehlten Drucker ein und merkt sich die Auswahl. */
     fun completeSetup(keys: List<String>) {
         val c = core ?: return
@@ -621,6 +654,9 @@ class SlicerService : Service() {
                 c.installPresets(keys)
                 prefs.edit().putStringSet("printers", keys.toSet()).apply()
                 refreshPresets()
+                // Erst die Profile, dann unsere Meinung dazu - die Regel
+                // braucht die Liste der kompatiblen Filamente.
+                standardwerteSetzen()
                 notifyConfigChanged()
                 _setupNeeded.value = false
             } catch (t: Throwable) {
@@ -846,6 +882,11 @@ class SlicerService : Service() {
         runCatching { c.selectPreset(type, name) }
             .onFailure { Log.w(TAG, "Preset '$name' nicht waehlbar: ${it.message}") }
             .onSuccess {
+                // Ein anderer Drucker heisst eine andere Filamentliste -
+                // die bisherige Wahl passt womoeglich nicht mehr. Also
+                // die Standardwerte erneut anwenden, sie kennen die neue
+                // Liste. Genauso drueben (`SlicerModel.swift:655ff`).
+                if (type == PsmCore.PresetType.PRINTER) standardwerteSetzen()
                 refreshPresets()
                 refreshObjects()
                 notifyConfigChanged()
