@@ -9,19 +9,39 @@ import io
 import re
 import sys
 
+# Die Windows-Konsole steht auf cp1252 und bricht sonst am ersten Pfeil
+# oder Halbgeviertstrich ab - mitten im Bericht, was schlimmer ist als
+# gar kein Bericht: man haelt die halbe Liste fuer die ganze.
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+
+# Mehrere Bildschirme heissen auf beiden Seiten verschieden - "kein
+# Gegenstueck gefunden" hiess bis zum 20.08. schlicht, dass sie gar
+# nicht verglichen wurden. Wer hier ein Paar ergaenzt, achte darauf,
+# dass die Android-Datei aehnlich eng geschnitten ist: eine
+# Sammel-Datei wie SlicerScreen.kt liefert hunderte Zeilen "nur
+# Android", die nichts bedeuten.
 PAARE = [
     ("PrintersView.swift", "PrintersScreen.kt"),
     ("SetupView.swift", "SetupScreen.kt"),
-    ("MaterialAuswahlView.swift", "MaterialAuswahl.kt"),
     ("SettingsView.swift", "SettingsScreen.kt"),
     ("SliceSheet.swift", "SimpleSliceSheet.kt"),
     ("RemoteSliceView.swift", "RemoteSliceScreen.kt"),
-    ("CustomGcodeView.swift", "CustomGcode.kt"),
     ("ColorMixView.swift", "ColorMixScreen.kt"),
     ("DruckerAuswahlView.swift", "DruckerAuswahl.kt"),
     ("WorkflowStartView.swift", "WorkflowStartScreen.kt"),
     ("AppSettingsView.swift", "AppSettingsScreen.kt"),
     ("SimpleObjectBarView.swift", "SimpleObjectBar.kt"),
+    ("SimpleModelSheetView.swift", "SimpleModelSheet.kt"),
+    # Anders benannt, aber dieselbe Aufgabe:
+    ("SelbsttestView.swift", "SelbsttestScreen.kt"),
+    ("SpecialValueEditors.swift", "SpecialSettingsDialogs.kt"),
+    ("CustomGcodeView.swift", "ProjectTools.kt"),
+    ("AdvancedObjectInspectorView.swift", "ObjectPanel.kt"),
+    ("LayerProfileView.swift", "GeometryTools.kt"),
+    ("SettingField.swift", "SettingsLayout.kt"),
+    ("ProfileSearchSheet.swift", "SettingsScreen.kt"),
+    ("FinalPreviewPanel.swift", "PreviewPanel.kt"),
     ("WerkzeugSchiene.swift", "SlicerScreen.kt"),
 ]
 

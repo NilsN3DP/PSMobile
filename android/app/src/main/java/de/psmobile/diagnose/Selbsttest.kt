@@ -56,6 +56,23 @@ class Selbsttest(private val context: Context) {
     private val _bericht = MutableStateFlow<File?>(null)
     val bericht: StateFlow<File?> = _bericht.asStateFlow()
 
+    /**
+     * Ob der laufende Durchgang abgebrochen werden soll.
+     *
+     * Der Lasttest am Ende dauert auf schwachen Geraeten Minuten, und
+     * bis hierhin gab es keinen Weg heraus ausser die App zu beenden.
+     * iOS kann das seit langem (`SelbsttestView.startKnopf`).
+     *
+     * Abgebrochen wird zwischen den Schritten, nicht mitten in einem:
+     * ein halb gerechneter Schnitt liesse den Kern in einem Zustand
+     * zurueck, ueber den der Bericht nichts Wahres sagen koennte. Die
+     * uebrigen Schritte stehen danach als *uebersprungen* im Bericht -
+     * das ist die ehrliche Auskunft.
+     */
+    @Volatile private var abbruch = false
+
+    fun abbrechen() { if (_laeuft.value) abbruch = true }
+
     /** Wie viele Koerper der Lasttest hoechstens auftuermt. */
     private val lastKoerperMax = 25
 
@@ -66,6 +83,7 @@ class Selbsttest(private val context: Context) {
     fun durchlauf() {
         if (_laeuft.value) return
         _laeuft.value = true
+        abbruch = false
         _schritte.value = emptyList()
 
         datei = berichtsdatei()
@@ -316,6 +334,15 @@ class Selbsttest(private val context: Context) {
      * Ergebnis steht, ist die Stelle, an der es geknallt hat.
      */
     private inline fun schritt(name: String, block: () -> Pair<Ausgang, String>) {
+        if (abbruch) {
+            // Nicht stillschweigend aufhoeren: was nicht mehr lief,
+            // gehoert als uebersprungen in den Bericht, sonst sieht er
+            // aus wie ein vollstaendiger Durchgang mit weniger Zeilen.
+            anhaengen("- $name (abgebrochen)")
+            _schritte.value = _schritte.value +
+                Schritt(name, Ausgang.UEBERSPRUNGEN, "abgebrochen", 0.0)
+            return
+        }
         _aktuell.value = name
         anhaengen("→ $name")
         val t0 = System.nanoTime()

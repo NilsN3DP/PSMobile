@@ -83,6 +83,7 @@ ab; von dort gehört sie in die Arbeitskopie kopiert. Achtung: `du` meldet
 | AP-09 Leere Zustände | `875a655` | `LeeresPanel` als Muster |
 | AP-18 Bindungen | `27ac6eb`, `1eb4c97` | 26 fehlende Funktionen → noch 2 |
 | Bemalen (Strich, Füllmodi) | `e2f9dad`, `9da2adf` | Spur statt Punkt, 1358 Facetten |
+| AP-25 Selbsttest | (dieser Commit) | *Run all checks*, Abbrechen mit übersprungenen Schritten, *Cancelled* |
 | Beschriftungen angeglichen | `e25e22d` | *Export log* statt *Share log*, *Recent* statt *RECENT* |
 | AP-24 Simple-Vorschau + Editor-Knopf | `091fc03` | *Finaler G-Code* rechts am Rand, *Editor* führt zurück |
 | AP-24 Viewer statt schwebender Karte | `5ab12eb` | Band sagt *Preview*, Legende bricht um, über dem Bett steht nichts |
@@ -1155,6 +1156,46 @@ Korrekturversuch mitten in der Kapsel *Bett 1*.
 
 ---
 
+### AP-25 · Selbsttest angleichen · Kern: nein
+
+**Gefunden am 20.08.** durch den erweiterten Beschriftungsabgleich: die
+Paarliste kannte `SelbsttestView.swift` gar nicht, weil die
+Android-Datei anders heißt. „Kein Gegenstück gefunden" hieß bis dahin
+schlicht, dass ein Bildschirm **nie verglichen wurde**.
+
+**Zustand vorher** Ein Knopf *Start*, der während des Laufs
+ausgegraut war und *Läuft…* sagte. Kein Weg heraus, und am Ende keine
+Auskunft, ob etwas schiefging — dafür musste man den Bericht öffnen oder
+sechzehn Haken einzeln durchsehen.
+
+**Stand: fertig** (20.08.). Drei Angleichungen an
+`SelbsttestView.swift`:
+
+1. Der Knopf heißt *Alles prüfen* (drüben *Run all checks*).
+2. Während des Laufs wird derselbe Knopf zu *Abbrechen* — dieselbe
+   Doppelbelegung wie drüben.
+3. Danach steht eine Zeile da: *Alles bestanden*, *N fehlgeschlagen*
+   oder *Abgebrochen*.
+
+**Abgebrochen wird zwischen den Schritten, nicht mitten in einem.** Ein
+halb gerechneter Schnitt ließe den Kern in einem Zustand zurück, über
+den der Bericht nichts Wahres sagen könnte. Die übrigen Schritte stehen
+danach als *übersprungen · abgebrochen* im Bericht — wer nur aufhört,
+liefert einen Bericht, der aussieht wie ein vollständiger Durchgang mit
+weniger Zeilen.
+
+**Die dritte Zeile war nötig, weil die zweite sonst lügt.** Nach einem
+Abbruch stand zuerst *All checks passed* da: es war nichts
+fehlgeschlagen, aber eben auch nicht alles geprüft worden. Am
+Bildschirmfoto sofort zu sehen, im Quelltext nicht.
+
+**Geprüft und gleich:** die Schrittnamen sind auf beiden Seiten deutsch
+(*Gerät und App*, *Kern starten*) — auch bei englischer Oberfläche. Das
+ist kein Versäumnis, sondern auf beiden Seiten so gewollt: der Bericht
+ist ein Werkzeug für die Entwicklung.
+
+---
+
 ## Z · Wo umgekehrt iOS nachzieht
 
 Braucht einen erreichbaren Mac.
@@ -1236,7 +1277,8 @@ abgelegten `.so` (geprüft 20.08.2026).
 | 23 | AP-19 Hochformat | nein | zurückgestellt |
 | 24 | AP-23 Werkzeugbereich | nein | zurückgestellt, braucht eine Entscheidung |
 | 25 | AP-24 Rechts: Viewer statt Editor | nein | fertig |
-| 26 | Z iOS nachziehen | Mac | offen |
+| 26 | AP-25 Selbsttest angleichen | nein | fertig |
+| 27 | Z iOS nachziehen | Mac | offen |
 
 ---
 

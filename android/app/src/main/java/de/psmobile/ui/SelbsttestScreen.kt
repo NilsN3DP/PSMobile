@@ -102,17 +102,28 @@ fun SelbsttestScreen(onClose: () -> Unit, modifier: Modifier = Modifier) {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Button(
                     onClick = {
-                        // Der Kern rechnet, das darf nicht auf dem
-                        // Zeichenstrang laufen - sonst steht die Anzeige
-                        // genau dann still, wenn sie am meisten zu sagen
-                        // haette.
-                        scope.launch(Dispatchers.Default) { test.durchlauf() }
+                        if (laeuft) {
+                            test.abbrechen()
+                        } else {
+                            // Der Kern rechnet, das darf nicht auf dem
+                            // Zeichenstrang laufen - sonst steht die
+                            // Anzeige genau dann still, wenn sie am
+                            // meisten zu sagen haette.
+                            scope.launch(Dispatchers.Default) { test.durchlauf() }
+                        }
                     },
-                    enabled = !laeuft,
                     shape = RoundedCornerShape(Corners.FIELD.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = PrusaColors.Orange),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = if (laeuft) PrusaColors.PanelRaised
+                                         else PrusaColors.Orange,
+                    ),
                 ) {
-                    Text(if (laeuft) st("Running…", "Läuft…") else st("Start", "Starten"))
+                    // Wortlaut und Doppelbelegung von drueben: derselbe
+                    // Knopf startet und bricht ab.
+                    Text(
+                        if (laeuft) st("Cancel", "Abbrechen")
+                        else st("Run all checks", "Alles prüfen")
+                    )
                 }
                 bericht?.let { datei ->
                     if (!laeuft) {
@@ -148,6 +159,39 @@ fun SelbsttestScreen(onClose: () -> Unit, modifier: Modifier = Modifier) {
                     .padding(top = 16.dp, bottom = 24.dp),
             ) {
                 schritte.forEach { s -> SchrittZeile(s) }
+
+                // Nach dem Durchgang in einer Zeile, ob etwas
+                // schiefging. Bis hierhin musste man dafuer den Bericht
+                // oeffnen oder die Haken einzeln durchsehen - drueben
+                // steht die Auskunft seit langem da
+                // (`SelbsttestView.abschluss`).
+                if (!laeuft && schritte.isNotEmpty()) {
+                    val fehler = schritte.count {
+                        it.ausgang == Selbsttest.Ausgang.FEHLER
+                    }
+                    // Nach einem Abbruch waere "Alles bestanden" eine
+                    // Falschauskunft: es ist nichts schiefgegangen, aber
+                    // eben auch nicht alles geprueft worden.
+                    val abgebrochen = schritte.any {
+                        it.ausgang == Selbsttest.Ausgang.UEBERSPRUNGEN &&
+                            it.detail == "abgebrochen"
+                    }
+                    Text(
+                        when {
+                            fehler > 0 -> "$fehler " + st("failed", "fehlgeschlagen")
+                            abgebrochen -> st("Cancelled", "Abgebrochen")
+                            else -> st("All checks passed", "Alles bestanden")
+                        },
+                        color = when {
+                            fehler > 0 -> PrusaColors.Danger
+                            abgebrochen -> PrusaColors.TextMuted
+                            else -> PrusaColors.Orange
+                        },
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.padding(top = 12.dp),
+                    )
+                }
                 if (laeuft) {
                     aktuell?.let {
                         Text(

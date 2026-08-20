@@ -58,6 +58,60 @@ sondern die Absprache währenddessen.
 
 ## 2026-08-20
 
+### Claude — AP-25: der Selbsttest, und ein Fehlurteil unterwegs
+
+Die Paarliste des Abgleichs kannte mehrere Bildschirme gar nicht, weil
+sie auf beiden Seiten verschieden heissen - `SelbsttestView.swift` etwa
+gegen `SelbsttestScreen.kt`. „Kein Gegenstueck gefunden" hiess bis heute
+schlicht, dass ein Bildschirm **nie verglichen wurde**. Ein stiller
+Ausfall, kein lauter. Die Liste ist ergaenzt, mit einem Hinweis, worauf
+man beim Ergaenzen achten muss: die Android-Datei muss aehnlich eng
+geschnitten sein, sonst liefert der Vergleich hunderte bedeutungslose
+Zeilen.
+
+Dabei kam auch heraus, dass das Skript auf der Windows-Konsole am ersten
+Pfeil abbrach - mitten im Bericht. Das ist schlimmer als gar kein
+Bericht: man haelt die halbe Liste fuer die ganze. Jetzt schreibt es
+UTF-8 mit `errors="replace"`.
+
+**Der Selbsttest war der Fund.** Drueben heisst der Knopf *Run all
+checks*, wird waehrend des Laufs zu *Cancel*, und am Ende steht eine
+Zeile da: alles bestanden, oder wie viele Schritte fehlschlugen. Hier
+hiess er *Start*, war waehrend des Laufs ausgegraut, und am Ende sagte
+nichts, ob etwas schiefging - dafuer musste man den Bericht oeffnen oder
+sechzehn Haken durchsehen. Alle drei Punkte sind angeglichen.
+
+Abgebrochen wird **zwischen** den Schritten. Mitten in einem
+aufzuhoeren hiesse, den Kern in einem Zustand zurueckzulassen, ueber den
+der Bericht nichts Wahres sagen koennte. Die uebrigen Schritte stehen
+danach als *uebersprungen · abgebrochen* da.
+
+**Und jetzt das Fehlurteil.** Beim ersten Versuch sah ich, dass alle
+Schritte durchliefen, und schrieb - hier im Journal, schon halb
+formuliert -, der Abbruch habe nicht gegriffen. Statt das zu glauben,
+habe ich zwei Log-Zeilen eingebaut und noch einmal gemessen:
+
+    abbrechen laeuft=true
+    schritt Standardfilament nach Einrichtung abbruch=true
+    schritt Drucker auswaehlen abbruch=true
+    ...
+
+Der Abbruch griff einwandfrei. Beim ersten Versuch hatte schlicht mein
+Tipp danebengelegen - der Bildschirm war anders gescrollt als
+angenommen. Dieselbe Falle wie schon zweimal: **frisches Bildschirmfoto
+vor jedem Tipp in eine gescrollte Flaeche.** Haette ich dem ersten
+Eindruck geglaubt, haette ich an funktionierendem Code herumgebaut.
+
+**Ein echter Mangel kam dabei doch heraus.** Nach einem Abbruch stand
+*All checks passed* da. Es war nichts fehlgeschlagen - geprueft war aber
+auch nicht alles. Jetzt steht dort *Abgebrochen*. Am Bildschirmfoto
+sofort zu sehen, im Quelltext nicht.
+
+**Nachgesehen und gleich:** die Schrittnamen sind auf beiden Seiten
+deutsch, auch bei englischer Oberflaeche. Sah nach einem Versaeumnis
+aus, ist aber drueben genauso - der Bericht ist ein Werkzeug fuer die
+Entwicklung, kein Text fuer Nutzer.
+
 ### Claude — Der Abgleich log, und wie ich es gemerkt habe
 
 Das Vergleichsskript von gestern meldete, den Moduskarten der Startseite
