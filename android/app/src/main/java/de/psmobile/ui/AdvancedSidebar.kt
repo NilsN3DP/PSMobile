@@ -669,6 +669,54 @@ internal fun Sidebar(
             )
         }
 
+        // Nach "alle Betten schneiden" liegen mehrere Dateien vor. Ohne
+        // diese Liste entstuenden sie unsichtbar - man saehe nur
+        // "Fertig" und haette keinen Weg zu vier der fuenf Dateien.
+        // Gegenstueck zu SliceSheet.swift:88ff.
+        val gcodeDateien by service.gcodeDateien.collectAsState()
+        if (progress is SlicerService.Progress.Done && gcodeDateien.size > 1) {
+            Text(
+                PsUi.appText(
+                    "${gcodeDateien.size} G-code files",
+                    "${gcodeDateien.size} G-Code-Dateien",
+                ),
+                color = PrusaColors.TextMuted,
+                fontSize = 12.sp,
+            )
+            gcodeDateien.forEach { datei ->
+                val ziel = linkPrinters.singleOrNull()
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(Corners.FIELD.dp))
+                        .background(PrusaColors.PanelRaised)
+                        .clickable {
+                            if (ziel != null) service.sendToPrinter(ziel, false, datei)
+                            else service.shareableGcodeUri(datei)?.let(onShare)
+                        }
+                        .heightIn(min = psTouch(40))
+                        .padding(horizontal = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        datei.name,
+                        color = PrusaColors.TextPrimary,
+                        fontSize = 12.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Text(
+                        if (ziel != null) advancedText("Send", "Senden")
+                        else advancedText("Export", "Exportieren"),
+                        color = PrusaColors.Orange,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                }
+            }
+        }
+
         // An `progress` haengen statt an einem eigenen Zustand: nach
         // "Bett leeren" faellt progress auf Idle zurueck, damit
         // verschwinden Senden und Export mit. Befund B5.

@@ -678,14 +678,23 @@ class SlicerService : Service() {
         return dst
     }
 
-    fun shareableGcodeUri(): android.net.Uri? {
-        val src = lastGcode ?: return null
+    fun shareableGcodeUri(): android.net.Uri? = shareableGcodeUri(lastGcode)
+
+    /** Wie [shareableGcodeUri], aber fuer eine bestimmte Datei. */
+    fun shareableGcodeUri(datei: File?): android.net.Uri? {
+        val src = datei ?: return null
         val outDir = File(cacheDir, "share").apply { mkdirs() }
         // Frueher hiess jede Datei "psmobile.gcode". Der Name kommt jetzt
         // aus output_filename_format des Druckprofils, wie am Desktop -
         // also mit Modell, Schichthoehe, Material, Drucker und Druckzeit.
-        val dst = File(outDir, suggestedGcodeName())
-        outDir.listFiles()?.forEach { if (it != dst) it.delete() }
+        val dst = File(outDir, if (_gcodeDateien.value.size > 1) src.name
+                               else suggestedGcodeName())
+        // Bei mehreren Betten bleiben die uebrigen liegen: sonst
+        // loescht das Teilen der zweiten Datei die erste, die der
+        // Nutzer vielleicht gerade noch im Blick hat.
+        if (_gcodeDateien.value.size <= 1) {
+            outDir.listFiles()?.forEach { if (it != dst) it.delete() }
+        }
         src.copyTo(dst, overwrite = true)
         return androidx.core.content.FileProvider.getUriForFile(
             this, "$packageName.fileprovider", dst
@@ -1278,8 +1287,23 @@ class SlicerService : Service() {
      * G-Code ist ja trotzdem entstanden, und ihn zu verlieren waere
      * aergerlicher als ein fehlgeschlagener Upload.
      */
-    fun sendToPrinter(printer: de.psmobile.net.PrusaLink.Printer, printAfter: Boolean) {
-        val gcode = lastGcode
+    fun sendToPrinter(printer: de.psmobile.net.PrusaLink.Printer, printAfter: Boolean) =
+        sendToPrinter(printer, printAfter, lastGcode)
+
+    /**
+     * Eine bestimmte Datei senden.
+     *
+     * Nach "alle Betten schneiden" gibt es mehrere, und dann ist
+     * [lastGcode] nur eine davon. Der Name auf dem Drucker traegt in dem
+     * Fall den Dateinamen, damit fuenf Betten nicht fuenfmal denselben
+     * Namen bekommen.
+     */
+    fun sendToPrinter(
+        printer: de.psmobile.net.PrusaLink.Printer,
+        printAfter: Boolean,
+        datei: File?,
+    ) {
+        val gcode = datei
         if (core?.sliceState() != PsmCore.SliceState.DONE ||
             gcode == null || !gcode.exists()) {
             _sendState.value = SimpleModeState.text("No current G-code – slice again", "Kein aktueller G-Code vorhanden – erneut slicen")
@@ -1289,7 +1313,10 @@ class SlicerService : Service() {
         scope.launch {
             _sendState.value = "Sende an ${printer.name}…"
 
-            val remote = suggestedGcodeName()
+            // Bei mehreren Betten muss der Name die Datei unterscheiden,
+            // sonst ueberschreibt der zweite Auftrag den ersten.
+            val remote = if (_gcodeDateien.value.size > 1) gcode.name
+                         else suggestedGcodeName()
             val r = withContext(Dispatchers.IO) {
                 de.psmobile.net.PrusaLink.upload(
                     printer,
