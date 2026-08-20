@@ -1093,7 +1093,7 @@ class MainActivity : ComponentActivity() {
                     // Gespeichert ist nicht weitergegeben: der Weg in
                     // eine andere App fuehrt ueber das Teilen-Blatt, und
                     // dafuer muss die Datei erreichbar bleiben.
-                    service?.merkeAusgabe(source)
+                    service?.merkeAusgabe(source, pendingFileName)
                 }
             pendingFileOutput = null
         }

@@ -966,13 +966,26 @@ class SlicerService : Service() {
     private val _letzteAusgabe = MutableStateFlow<File?>(null)
     val letzteAusgabe: StateFlow<File?> = _letzteAusgabe.asStateFlow()
 
-    fun merkeAusgabe(datei: File?) { _letzteAusgabe.value = datei }
+    /**
+     * Der Name, unter dem die Datei gespeichert wurde.
+     *
+     * Die Datei im Zwischenspeicher heisst `druckbett-<nanozeit>.stl` -
+     * die Eindeutigkeit gehoert dorthin, aber niemand will sie im Knopf
+     * lesen.
+     */
+    private val _letzterAusgabename = MutableStateFlow("")
+    val letzterAusgabename: StateFlow<String> = _letzterAusgabename.asStateFlow()
+
+    fun merkeAusgabe(datei: File?, anzeigename: String = "") {
+        _letzteAusgabe.value = datei
+        _letzterAusgabename.value = anzeigename.ifBlank { datei?.name.orEmpty() }
+    }
 
     /** Die letzte Ausgabe teilbar machen. */
     fun shareableAusgabeUri(): android.net.Uri? {
         val src = _letzteAusgabe.value ?: return null
         val outDir = File(cacheDir, "share").apply { mkdirs() }
-        val dst = File(outDir, src.name)
+        val dst = File(outDir, _letzterAusgabename.value.ifBlank { src.name })
         src.copyTo(dst, overwrite = true)
         return androidx.core.content.FileProvider.getUriForFile(
             this, "$packageName.fileprovider", dst

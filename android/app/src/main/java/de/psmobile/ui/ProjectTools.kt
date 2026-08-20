@@ -50,6 +50,7 @@ internal fun ProjectTools(
     // wie auf iOS, mit dem Dateinamen darin, damit man sieht, was man
     // weitergibt.
     val letzteAusgabe by service.letzteAusgabe.collectAsState()
+    val ausgabename by service.letzterAusgabename.collectAsState()
 
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         letzteAusgabe?.let { datei ->
@@ -62,7 +63,8 @@ internal fun ProjectTools(
                 ),
             ) {
                 Text(
-                    PsUi.appText("Share", "Weitergeben") + " · " + datei.name,
+                    PsUi.appText("Share", "Weitergeben") + " · " +
+                        ausgabename.ifBlank { datei.name },
                     maxLines = 1,
                 )
             }
