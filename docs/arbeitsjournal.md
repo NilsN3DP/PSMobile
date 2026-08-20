@@ -58,6 +58,50 @@ sondern die Absprache währenddessen.
 
 ## 2026-08-20
 
+### Claude — Der Abgleich log, und wie ich es gemerkt habe
+
+Das Vergleichsskript von gestern meldete, den Moduskarten der Startseite
+fehle auf Android die Uebersetzung: „Get to print quickly with a few
+clear decisions." stehe nur auf iOS. Ich wollte das schon beheben - und
+habe vorher nachgesehen. Der Text steht dort laengst zweisprachig.
+
+Der Fehler lag im Skript. Der Ausdruck verlangte hinter dem zweiten
+Text sofort die schliessende Klammer. Steht der Aufruf ueber mehrere
+Zeilen, hat er davor aber meist ein Komma - und dann greift das Muster
+nicht. Ein `,?` mehr, und die Liste wurde deutlich kuerzer und
+belastbarer. Der Kommentar im Skript sagt jetzt, warum das `,?` dort
+steht.
+
+Das ist die Lehre, nicht der Regexfehler: **ein Werkzeug, das Fehler
+meldet, muss selbst geprueft werden, bevor man seinen Meldungen
+folgt.** Haette ich losgelegt, haette ich funktionierenden Text
+„repariert" und im Journal stolz davon berichtet.
+
+**Zwei echte Funde blieben ueber.** Die Zeile zum Protokoll hiess
+„Protokoll teilen", drueben „Protokoll exportieren" - und die Datei
+verlaesst die App, genau wie beim G-Code, wo hier schon „exportieren"
+steht. Angeglichen. Androids Untertext bleibt: er nennt, was drinsteht
+und was nicht, und ist damit der bessere; er geht als Z-Punkt nach
+drueben. Und die Ueberschrift der Zuletzt-Kacheln stand in Versalien,
+drueben schlicht „Zuletzt". Auch das angeglichen.
+
+**Drei Funde habe ich liegen gelassen**, weil sie Entscheidungen sind
+und keine Buegelarbeit: die Schreibweise *colour* gegen *color* (Android
+39-mal zu 5, iOS 4-mal zu 1 - **beide Seiten sind in sich
+uneinheitlich**), die durchweg abweichenden ColorMix-Beschriftungen, und
+„Alle Projekte" als eigener Bildschirm gegen das Aufklappen an Ort und
+Stelle. Alle drei stehen mit Zahlen im Plan, damit die Entscheidung
+billig ist.
+
+**Und noch etwas beim Belegen.** Fuer das Bildschirmfoto der
+Zuletzt-Kacheln habe ich zwei Eintraege direkt in die Preferences
+geschrieben und danach wieder entfernt. Beim erzwungenen Neustart
+mittendrin kam ein ANR: `executing service …SlicerService, waited
+20176ms`. Nicht die Startseite, sondern der Dienst beim Hochfahren des
+Kerns. Ein sauberer Neustart danach war unauffaellig, ich habe es also
+nicht zum Fehler erklaert - aber notiert. Auf einem schwaecheren Geraet
+koennte daraus einer werden.
+
 ### Claude — AP-24 zu Ende, und eine Korrektur an mir selbst
 
 Gestern hatte ich in Abschnitt Z geschrieben, iOS lege Zahlen und

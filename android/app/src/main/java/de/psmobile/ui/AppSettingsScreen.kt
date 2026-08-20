@@ -214,7 +214,10 @@ fun AppSettingsScreen(
                     onClick = { zeigeSelbsttest = true },
                 )
                 ActionRow(
-                    title = t("Share log", "Protokoll teilen"),
+                    // "Exportieren", nicht "Teilen": die Datei verlaesst
+                    // die Anwendung, und genauso heisst es beim G-Code und
+                    // drueben (AppSettingsView.swift).
+                    title = t("Export log", "Protokoll exportieren"),
                     why = t(
                         "The last messages from the core and the app - device and version, " +
                             "no account data and no network addresses.",

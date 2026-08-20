@@ -178,7 +178,10 @@ fun WorkflowStartScreen(
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                         Text(
-                            SimpleModeState.text("RECENT", "ZULETZT"),
+                            // Nicht in Versalien: drueben steht dort
+                            // schlicht "Zuletzt", und zwei Schreibweisen
+                            // derselben Ueberschrift sind eine zu viel.
+                            SimpleModeState.text("Recent", "Zuletzt"),
                             color = PrusaColors.TextMuted,
                             style = MaterialTheme.typography.labelMedium,
                         )

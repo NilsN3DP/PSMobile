@@ -25,10 +25,16 @@ PAARE = [
     ("WerkzeugSchiene.swift", "SlicerScreen.kt"),
 ]
 
-SWIFT = re.compile(r'st\(\s*"((?:[^"\\]|\\.)*)"\s*,\s*"((?:[^"\\]|\\.)*)"\s*\)')
+# Das `,?` vor der schliessenden Klammer ist wichtig: viele Aufrufe
+# stehen ueber mehrere Zeilen und tragen davor ein Komma. Ohne diese
+# Nachsicht meldet der Abgleich zweisprachige Texte als fehlend - genau
+# das ist am 20.08. bei den Moduskarten der Startseite passiert, und ich
+# hatte beinahe etwas "repariert", das in Ordnung war.
+SWIFT = re.compile(
+    r'st\(\s*"((?:[^"\\]|\\.)*)"\s*,\s*"((?:[^"\\]|\\.)*)"\s*,?\s*\)')
 KOTLIN = re.compile(
     r'(?:appText|advancedText|SimpleModeState\.text|\bt|\bst)\(\s*'
-    r'"((?:[^"\\]|\\.)*)"\s*,\s*"((?:[^"\\]|\\.)*)"\s*\)')
+    r'"((?:[^"\\]|\\.)*)"\s*,\s*"((?:[^"\\]|\\.)*)"\s*,?\s*\)')
 
 
 def lies(pfad, muster):

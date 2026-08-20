@@ -83,6 +83,7 @@ ab; von dort gehört sie in die Arbeitskopie kopiert. Achtung: `du` meldet
 | AP-09 Leere Zustände | `875a655` | `LeeresPanel` als Muster |
 | AP-18 Bindungen | `27ac6eb`, `1eb4c97` | 26 fehlende Funktionen → noch 2 |
 | Bemalen (Strich, Füllmodi) | `e2f9dad`, `9da2adf` | Spur statt Punkt, 1358 Facetten |
+| Beschriftungen angeglichen | (dieser Commit) | *Export log* statt *Share log*, *Recent* statt *RECENT* |
 | AP-24 Simple-Vorschau + Editor-Knopf | `091fc03` | *Finaler G-Code* rechts am Rand, *Editor* führt zurück |
 | AP-24 Viewer statt schwebender Karte | `5ab12eb` | Band sagt *Preview*, Legende bricht um, über dem Bett steht nichts |
 | AP-11 Slice-Blatt (Simple) | `feb230a` | *Send to printer* unter dem Export, Hinweis wenn nichts geschrieben wurde |
@@ -124,6 +125,42 @@ wohin sie gehört, war keine offene Frage, sondern steht in
 
 Ebenfalls von ihm vorgemerkt: **iOS fehlt der Werkzeugweg-Regler** aus
 AP-14. Steht als Punkt 7 in Abschnitt Z, braucht den Mac.
+
+**Aus dem Beschriftungsabgleich (20.08.), erledigt:**
+
+- *Share log* hieß drüben *Export log*. Die Datei verlässt die App —
+  genauso heißt es beim G-Code. Angeglichen; Androids ausführlicherer
+  Untertext (nennt, was drinsteht und was nicht) bleibt, er ist der
+  bessere und gehört als Z-Punkt nach drüben.
+- Die Überschrift der Zuletzt-Kacheln stand in Versalien (*RECENT*),
+  drüben schlicht *Recent*. Angeglichen.
+
+**Aus demselben Abgleich, bewusst nicht entschieden** — das sind Fragen
+an Nils, keine, die beim Bauen nebenbei beantwortet werden:
+
+1. **Schreibweise *colour* ↔ *color*.** Android schreibt 39-mal
+   *colour* und 5-mal *color*, iOS 4-mal *color* und 1-mal *colour*.
+   **Beide Seiten sind in sich uneinheitlich.** Eine Entscheidung, dann
+   ein Durchgang auf beiden Seiten.
+2. **ColorMix heißt überall anders.** *Add mixed colour* ↔ *Create a
+   mixed color*; *Remove* ↔ *Delete mixed color*; *Choose heads (2–3)* ↔
+   *Choose two or three physical positions…*; *First-head share* ↔
+   *Share of position N*. iOS führt zusätzlich die Überschriften *Save
+   mixed color* und *Saved mixed colors*. Hier ist nicht offensichtlich,
+   welche Seite recht hat.
+3. **Alle Projekte.** iOS öffnet einen eigenen Bildschirm *All
+   projects* mit *Löschen* je Zeile und *Fertig*; Android klappt die
+   Liste an Ort und Stelle auf (*Show all* ↔ *Show less*) und löscht
+   dort. Beide können dasselbe. Androids Weg spart einen Bildschirm —
+   Empfehlung: Android behalten und iOS nachziehen, aber das ist deine
+   Entscheidung.
+
+**Beobachtung, kein Paket:** beim Kaltstart nach einem erzwungenen Stopp
+kam einmal ein ANR — `executing service de.psmobile/.slicing.SlicerService,
+waited 20176ms`. Nicht die Startseite, sondern der Dienst beim Hochfahren
+des Kerns. Ein sauberer Neustart danach war unauffällig. Auf schwächeren
+Geräten könnte das echt werden; ein Fall zum Nachmessen, nicht zum
+Raten.
 
 **Sonst ist ohne den Mac nichts mehr offen.** Alle Android-Pakete des Plans
 sind zu; die Behauptung „Kern: ja" bei AP-10, AP-13, AP-14 und AP-17 g
@@ -1155,7 +1192,11 @@ Braucht einen erreichbaren Mac.
    steht die Vorschau unter dem Editorinhalt, hier ersetzt sie ihn —
    das ist Nils' Vorgabe vom 20.08. („zwischen Viewer und Editor hin
    und her switchen"). Diese Richtung zieht iOS nach.
-9. **Auswahlblatt überlappt die Seitenleiste.** Das Filamentblatt ist ein
+9. **Untertext beim Protokoll.** Android sagt, was in der Datei steht
+   und was nicht („Gerät und Version, keine Kontodaten und keine
+   Netzwerkadressen"); iOS sagt nur, dass es die letzten Warnungen sind.
+   Die Android-Fassung ist die bessere.
+10. **Auswahlblatt überlappt die Seitenleiste.** Das Filamentblatt ist ein
    `.sheet` und schneidet auf dem iPad die rechte Seitenleiste mitten im
    Wort. Der Advanced-Einstellungsdialog macht es richtig und legt einen
    Schleier über den ganzen Bereich.
