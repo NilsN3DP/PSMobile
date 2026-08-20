@@ -16,7 +16,7 @@ das, was eine neue Sitzung als Erstes liest — hier steht, wo genau
 weitergemacht wird, ohne dass jemand die Historie durchsuchen muss.
 
 **Zuletzt geändert:** 20.08.2026 · Zweig
-`codex/ios-android-parity-implementation` · letzter Commit `712baa1`
+`codex/ios-android-parity-implementation` · letzter Commit `ec82032`
 
 ### Wo die Arbeit liegt
 
@@ -83,7 +83,7 @@ ab; von dort gehört sie in die Arbeitskopie kopiert. Achtung: `du` meldet
 | AP-09 Leere Zustände | `875a655` | `LeeresPanel` als Muster |
 | AP-18 Bindungen | `27ac6eb`, `1eb4c97` | 26 fehlende Funktionen → noch 2 |
 | Bemalen (Strich, Füllmodi) | `e2f9dad`, `9da2adf` | Spur statt Punkt, 1358 Facetten |
-| AP-26 Schichtprofil ehrlich | (dieser Commit) | *Not valid* statt erfundener Vorschau, Erklärzeile darüber |
+| AP-26 Schichtprofil ehrlich | `ec82032` | *Not valid* statt erfundener Vorschau, Erklärzeile darüber |
 | AP-25 Selbsttest | `712baa1` | *Run all checks*, Abbrechen mit übersprungenen Schritten, *Cancelled* |
 | Beschriftungen angeglichen | `e25e22d` | *Export log* statt *Share log*, *Recent* statt *RECENT* |
 | AP-24 Simple-Vorschau + Editor-Knopf | `091fc03` | *Finaler G-Code* rechts am Rand, *Editor* führt zurück |
