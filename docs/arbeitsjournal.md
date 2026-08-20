@@ -448,6 +448,28 @@ Blaettern layoutstabil") ist seit AP-20 gegenstandslos - es gibt nur
 noch einen durchgehenden Scrollbereich statt vier, die beim Reiterwechsel
 zurueckgesetzt wurden.
 
+### Claude — AP-15: Druckerkarten in beiden Modi
+
+Der Advanced Mode hatte fuer den Drucker ein Aufklappmenue mit rohen
+Profilnamen. Die Kartenansicht gab es laengst - aber nur im Simple Mode.
+Sie liegt jetzt als `ui/DruckerAuswahl.kt` fuer sich und wird von beiden
+benutzt; die Karten stehen untereinander statt zu zweit nebeneinander,
+wie drueben, und der Materialhinweis ist weg (er stimmte im Advanced
+Mode nicht).
+
+Commit `50de001`. Belegt am Emulator: unter PRINTER die Karte „Prusa
+CORE One L MMU3 · SELECTED · OFFLINE · Nozzle 0.4 nozzle" mit orangem
+Rand, darunter „Add printer".
+
+**Ein Werkzeugfehler, der zurueckzunehmen war:** ich wollte die Karte
+per Skript aus `SimpleModeScreen.kt` herausschneiden und suchte das Ende
+mit `index("@Composable", index("SimplePrinterGlyph"))` - das fand das
+*naechste* `@Composable` hinter der Glyphe und haette 78 Zeilen zu viel
+entfernt. `git checkout` auf die Datei, dann der einfachere Weg:
+`private` zu `internal` machen und die neue Datei die vorhandenen
+Bausteine aufrufen lassen. Beim Ausschneiden von Quelltext lieber die
+Sichtbarkeit aendern als Zeilen verschieben.
+
 ---
 
 ## 2026-08-03

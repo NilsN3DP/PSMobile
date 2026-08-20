@@ -67,6 +67,7 @@ ab; von dort gehört sie in die Arbeitskopie kopiert. Achtung: `du` meldet
 | AP-03 Vorschau | `3377a96` | `0:30 · 3.59 m · 10.7 g`, Chips grauen aus |
 | AP-07 Materialauswahl | `875a655` | Typ-Filter PLA blendet auf vier Karten ein |
 | AP-06 Schwebende Dialoge | `469203a`, `1e785c0` | Einstellungen als Karte über dem Bett, Rand 104/120/80 px |
+| AP-15 Druckerkarten | `50de001` | Karte mit Modell, Zustand, Düse |
 | AP-16 Inspector | `82f3fa8` | Auswahl zeigt EDIT samt Griffen |
 | AP-12 Bettleiste | `f03c7b0` | langer Druck zeigt *Rename* |
 | AP-05 Werkzeugleisten | `f489a48`, `c41a1ba`, `f0c314a` | Schiene mit Trennen, Stützen, Naht |
@@ -89,23 +90,24 @@ ab; von dort gehört sie in die Arbeitskopie kopiert. Achtung: `du` meldet
 
 ### Als Nächstes
 
-**AP-15 · Druckerauswahl als Karten.** Kein Kernbau. Auf iOS
-(`Screens/DruckerAuswahlView.swift`) ist die Druckerwahl in beiden Modi
-dieselbe Kartenansicht; im Quelltext steht, dass die Klappliste mit rohen
-Profilnamen genau deshalb ersetzt wurde. Android hat dort einen Dialog
-mit Suchliste (`AdvancedSidebar.kt`, `PresetCombo`).
+**AP-17 a–f**, die kleineren Pakete ohne Kernbau. In dieser Reihenfolge,
+nach steigendem Aufwand:
 
-**Abgrenzung, die im Paket steht:** Filament und Druckeinstellungen
-bleiben Suchlisten — dort sind es hunderte Einträge, und iOS macht es
-genauso. Nur der Drucker wird zur Karte.
+| | Ziel | Fundstelle |
+|---|---|---|
+| b | Größenverhältnis je Objekt in beiden Listen | `0befe95` |
+| f | Zoll-Einheiten (`KEY_UNITS_IMPERIAL`) | `AppSettings` |
+| c | Abschnitt „Je Extruder" in der Simple-Materialseite | — |
+| e | Reinigungsturm (X, Y, Drehung) in die Extruderbank statt in die Projektwerkzeuge | — |
+| a | Projekt (.3mf), Platte und alle G-Code-Dateien weitergeben | — |
+| d | ColorMix-Vorschau vor dem Speichern, Fehlermeldung beim Sichern | — |
 
-Danach **AP-17 a–f**, die kleineren Pakete ohne Kernbau:
-Projekt/Platte/G-Codes weitergeben · Größenverhältnis je Objekt ·
-„Je Extruder" in der Simple-Materialseite · ColorMix-Vorschau ·
-Reinigungsturm in die Extruderbank · Zoll-Einheiten.
+Vor jedem Punkt gilt, was AP-12 gelehrt hat: erst nachsehen, was drüben
+**heute** im Quelltext steht.
 
 **AP-04** und Abschnitt **Z** brauchen den Mac; er ist ab dem 20.08.
-wieder da.
+wieder da. **AP-10**, **AP-13**, **AP-14** und **AP-17 g** brauchen einen
+Kernbau (20–25 min auf dem Unraid).
 
 ### Worauf zu achten ist
 
@@ -642,6 +644,17 @@ Profilnamen genau deshalb ersetzt wurde.
 **Abgrenzung** Filament und Druckeinstellungen bleiben Suchlisten — dort
 sind es hunderte Einträge, und iOS macht es genauso.
 
+**Stand: erledigt** (20.08., `50de001`). Die Kartenansicht liegt jetzt
+als `ui/DruckerAuswahl.kt` für sich und wird von **beiden** Modi
+benutzt — vorher stand sie nur im Simple Mode, und der Advanced hätte
+eine zweite bekommen. Die Karten stehen untereinander statt zu zweit
+nebeneinander, wie drüben, und der Materialhinweis ist weg: er stand
+da, solange die Karte nur im Simple Mode vorkam.
+
+Belegt am Emulator: unter *PRINTER* steht die Karte *Prusa CORE One L
+MMU3 · SELECTED · OFFLINE · Nozzle 0.4 nozzle* mit orangem Rand,
+darunter die Kachel *Add printer*.
+
 ---
 
 ### AP-16 · Inspector öffnet nach der Auswahl · Kern: nein
@@ -938,7 +951,8 @@ Braucht einen erreichbaren Mac.
 | 4 | AP-04 Objektleiste | nein |
 | 5 | AP-07 Materialauswahl | nein |
 | 6 | AP-09 Leere Zustände | nein |
-| 7 | AP-16 Inspector | `82f3fa8` | Auswahl zeigt EDIT samt Griffen |
+| 7 | AP-15 Druckerkarten | `50de001` | Karte mit Modell, Zustand, Düse |
+| AP-16 Inspector | `82f3fa8` | Auswahl zeigt EDIT samt Griffen |
 | AP-12 Bettleiste | `f03c7b0` | langer Druck zeigt *Rename* |
 | AP-05 Werkzeugleisten | `f489a48`, `c41a1ba`, `f0c314a` | Schiene mit Trennen, Stützen, Naht |
 | AP-11 Slice-Blatt | `8afd69d`, `c63e329` | `2 G-code files`, *Export all*, Zeile je Datei |
@@ -946,20 +960,24 @@ Braucht einen erreichbaren Mac.
 | AP-20 Bereiche statt Reiter | `2e5f5ec` | drei Einstellungszeilen, vier Überschriften, Schneiden-Block außerhalb |
 | AP-08 Einstellungskopf | nein |
 | 8 | AP-06 Schwebende Dialoge | nein |
-| 9 | AP-16 Inspector | `82f3fa8` | Auswahl zeigt EDIT samt Griffen |
+| 9 | AP-15 Druckerkarten | `50de001` | Karte mit Modell, Zustand, Düse |
+| AP-16 Inspector | `82f3fa8` | Auswahl zeigt EDIT samt Griffen |
 | AP-12 Bettleiste | `f03c7b0` | langer Druck zeigt *Rename* |
 | AP-05 Werkzeugleisten | nein |
 | 10 | AP-10 Anordnen | ja |
 | 11 | AP-13 Adaptive Schichthöhe | ja |
 | 12 | AP-14 Zweiter Regler | ja |
-| 13 | AP-16 Inspector | `82f3fa8` | Auswahl zeigt EDIT samt Griffen |
+| 13 | AP-15 Druckerkarten | `50de001` | Karte mit Modell, Zustand, Düse |
+| AP-16 Inspector | `82f3fa8` | Auswahl zeigt EDIT samt Griffen |
 | AP-12 Bettleiste | nein |
-| 14 | AP-16 Inspector | `82f3fa8` | Auswahl zeigt EDIT samt Griffen |
+| 14 | AP-15 Druckerkarten | `50de001` | Karte mit Modell, Zustand, Düse |
+| AP-16 Inspector | `82f3fa8` | Auswahl zeigt EDIT samt Griffen |
 | AP-12 Bettleiste | `f03c7b0` | langer Druck zeigt *Rename* |
 | AP-05 Werkzeugleisten | `f489a48`, `c41a1ba`, `f0c314a` | Schiene mit Trennen, Stützen, Naht |
 | AP-11 Slice-Blatt | nein |
 | 15 | AP-15 Druckerkarten | nein |
-| 16 | AP-16 Inspector | nein |
+| 16 | AP-15 Druckerkarten | `50de001` | Karte mit Modell, Zustand, Düse |
+| AP-16 Inspector | nein |
 | 17 | AP-17 a–f Kleinere Pakete | nein |
 | 18 | AP-17 g ZIP-Import | ja |
 | 19 | AP-18 Restliche Bindungen | ja |
