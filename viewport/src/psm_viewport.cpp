@@ -1,0 +1,2853 @@
+/*
+ * psm_viewport.cpp - OpenGL-ES-Viewport.
+ *
+ * Nutzt die Shader aus PrusaSlicer (resources/shaders/ES) unveraendert.
+ * Deren Konvention gibt die Namen vor:
+ *   attribute  v_position, v_normal
+ *   uniform    view_model_matrix, projection_matrix, view_normal_matrix,
+ *              uniform_color
+ *
+ * Es wird bewusst GLES 2.0 / GLSL ES 1.00 angesprochen, weil genau dafuer
+ * die vorhandenen Shader geschrieben sind. Das laeuft auf jedem Geraet,
+ * das die App ueberhaupt erreicht.
+ *
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
+#include "psm_viewport.h"
+#include "psm_gizmo_internal.hpp"
+#include "psm_layer_profile_render.hpp"
+#include "psm_bed_geometry.hpp"
+#include "psmobile_session.hpp"
+
+// Derselbe GLES-Bestand, zwei Ablageorte: Android legt die Header unter
+// GLES2/, Apple in das OpenGLES-Framework. Nur der Pfad unterscheidet
+// sich - die Funktionen dahinter sind dieselben, und genau deshalb
+// laesst sich der Viewport ueberhaupt teilen.
+#if defined(__APPLE__)
+#  include <OpenGLES/ES2/gl.h>
+#  include <OpenGLES/ES2/glext.h>
+#else
+#  include <GLES2/gl2.h>
+#endif
+
+#include <algorithm>
+#include <cmath>
+#include <fstream>
+#include <sstream>
+#include <string>
+#include <vector>
+
+#include <Eigen/Geometry>
+
+#include "libslic3r/Model.hpp"
+#include "libslic3r/PrintConfig.hpp"
+#include "libslic3r/TriangleSelector.hpp"
+#include "libslic3r/TriangleMesh.hpp"
+#include "libslic3r/BuildVolume.hpp"
+#include "libslic3r/MultipleBeds.hpp"
+
+/* NanoSVG rastert die Bett-Textur - dieselbe Bibliothek, die
+ * PrusaSlicer in GLTexture.cpp dafuer benutzt. */
+#include <nanosvg/nanosvg.h>
+#include <nanosvg/nanosvgrast.h>
+
+/* Der Vorschau-Renderer aus PrusaSlicer, unveraendert. */
+#include <Viewer.hpp>
+#include "slic3r/GUI/LibVGCode/LibVGCodeWrapper.hpp"
+
+namespace {
+
+using Mat4 = Eigen::Matrix4f;
+using Vec3 = Eigen::Vector3f;
+
+constexpr float PI_F = 3.14159265358979323846f;
+
+/* ------------------------------------------------------------------ */
+/* Shader                                                              */
+/* ------------------------------------------------------------------ */
+
+struct Program {
+    GLuint id = 0;
+    GLint  u_view_model = -1;
+    GLint  u_projection = -1;
+    GLint  u_normal     = -1;
+    GLint  u_color      = -1;
+    GLint  a_position   = -1;
+    GLint  a_normal     = -1;
+    /* Nur der printbed-Shader: die Textur des Druckbereichs. */
+    GLint  a_tex_coord   = -1;
+    GLint  u_texture     = -1;
+    GLint  u_transparent = -1;
+    GLint  u_svg_source  = -1;
+    /* Nur variable_layer_height: Prusas gepackte Z-Farbtextur. */
+    GLint  u_z_texture = -1;
+    GLint  u_z_to_texture_row = -1;
+    GLint  u_z_texture_row_to_normalized = -1;
+    GLint  u_z_cursor = -1;
+    GLint  u_z_cursor_band_width = -1;
+    GLint  u_object_max_z = -1;
+    GLint  u_volume_world = -1;
+
+    void use() const { glUseProgram(id); }
+
+    void destroy()
+    {
+        if (id != 0) { glDeleteProgram(id); id = 0; }
+    }
+};
+
+std::string read_file(const std::string &path)
+{
+    std::ifstream f(path, std::ios::binary);
+    if (! f)
+        return {};
+    std::ostringstream ss;
+    ss << f.rdbuf();
+    return ss.str();
+}
+
+GLuint compile(GLenum type, const std::string &src, std::string &err)
+{
+    const GLuint sh = glCreateShader(type);
+    const char *p = src.c_str();
+    glShaderSource(sh, 1, &p, nullptr);
+    glCompileShader(sh);
+
+    GLint ok = GL_FALSE;
+    glGetShaderiv(sh, GL_COMPILE_STATUS, &ok);
+    if (ok != GL_TRUE) {
+        GLint len = 0;
+        glGetShaderiv(sh, GL_INFO_LOG_LENGTH, &len);
+        std::string log(static_cast<size_t>(std::max(len, 1)), '\0');
+        glGetShaderInfoLog(sh, len, nullptr, log.data());
+        err = log;
+        glDeleteShader(sh);
+        return 0;
+    }
+    return sh;
+}
+
+bool link_program(Program &prg, const std::string &dir, const std::string &name, std::string &err)
+{
+    const std::string vs_src = read_file(dir + "/" + name + ".vs");
+    const std::string fs_src = read_file(dir + "/" + name + ".fs");
+    if (vs_src.empty() || fs_src.empty()) {
+        err = "Shader nicht gefunden: " + dir + "/" + name;
+        return false;
+    }
+
+    const GLuint vs = compile(GL_VERTEX_SHADER, vs_src, err);
+    if (vs == 0) { err = name + ".vs: " + err; return false; }
+    const GLuint fs = compile(GL_FRAGMENT_SHADER, fs_src, err);
+    if (fs == 0) { err = name + ".fs: " + err; glDeleteShader(vs); return false; }
+
+    prg.id = glCreateProgram();
+    glAttachShader(prg.id, vs);
+    glAttachShader(prg.id, fs);
+    glLinkProgram(prg.id);
+    glDeleteShader(vs);
+    glDeleteShader(fs);
+
+    GLint ok = GL_FALSE;
+    glGetProgramiv(prg.id, GL_LINK_STATUS, &ok);
+    if (ok != GL_TRUE) {
+        GLint len = 0;
+        glGetProgramiv(prg.id, GL_INFO_LOG_LENGTH, &len);
+        std::string log(static_cast<size_t>(std::max(len, 1)), '\0');
+        glGetProgramInfoLog(prg.id, len, nullptr, log.data());
+        err = name + ": " + log;
+        prg.destroy();
+        return false;
+    }
+
+    prg.u_view_model = glGetUniformLocation(prg.id, "view_model_matrix");
+    prg.u_projection = glGetUniformLocation(prg.id, "projection_matrix");
+    prg.u_normal     = glGetUniformLocation(prg.id, "view_normal_matrix");
+    prg.u_color      = glGetUniformLocation(prg.id, "uniform_color");
+    prg.a_position   = glGetAttribLocation(prg.id, "v_position");
+    prg.a_normal     = glGetAttribLocation(prg.id, "v_normal");
+    prg.a_tex_coord   = glGetAttribLocation(prg.id, "v_tex_coord");
+    prg.u_texture     = glGetUniformLocation(prg.id, "texture");
+    prg.u_transparent = glGetUniformLocation(prg.id, "transparent_background");
+    prg.u_svg_source  = glGetUniformLocation(prg.id, "svg_source");
+    prg.u_z_texture = glGetUniformLocation(prg.id, "z_texture");
+    prg.u_z_to_texture_row =
+        glGetUniformLocation(prg.id, "z_to_texture_row");
+    prg.u_z_texture_row_to_normalized =
+        glGetUniformLocation(prg.id, "z_texture_row_to_normalized");
+    prg.u_z_cursor = glGetUniformLocation(prg.id, "z_cursor");
+    prg.u_z_cursor_band_width =
+        glGetUniformLocation(prg.id, "z_cursor_band_width");
+    prg.u_object_max_z = glGetUniformLocation(prg.id, "object_max_z");
+    prg.u_volume_world =
+        glGetUniformLocation(prg.id, "volume_world_matrix");
+    return true;
+}
+
+/* ------------------------------------------------------------------ */
+/* Matrizen                                                            */
+/* ------------------------------------------------------------------ */
+
+Mat4 perspective(float fov_rad, float aspect, float znear, float zfar)
+{
+    Mat4 m = Mat4::Zero();
+    const float t = 1.0f / std::tan(fov_rad * 0.5f);
+    m(0, 0) = t / std::max(aspect, 1e-4f);
+    m(1, 1) = t;
+    m(2, 2) = (zfar + znear) / (znear - zfar);
+    m(2, 3) = (2.0f * zfar * znear) / (znear - zfar);
+    m(3, 2) = -1.0f;
+    return m;
+}
+
+Mat4 look_at(const Vec3 &eye, const Vec3 &center, const Vec3 &up)
+{
+    const Vec3 f = (center - eye).normalized();
+    const Vec3 s = f.cross(up).normalized();
+    const Vec3 u = s.cross(f);
+
+    Mat4 m = Mat4::Identity();
+    m.block<1, 3>(0, 0) =  s.transpose();
+    m.block<1, 3>(1, 0) =  u.transpose();
+    m.block<1, 3>(2, 0) = -f.transpose();
+    m(0, 3) = -s.dot(eye);
+    m(1, 3) = -u.dot(eye);
+    m(2, 3) =  f.dot(eye);
+    return m;
+}
+
+/* ------------------------------------------------------------------ */
+/* Geometriepuffer                                                     */
+/* ------------------------------------------------------------------ */
+
+struct Mesh {
+    GLuint vbo = 0;
+    GLsizei vertex_count = 0;
+    psm_object_id owner = PSM_INVALID_ID;
+    Slic3r::BoundingBoxf3 bbox;
+    /* Einsbasiert wie in PrusaSlicer. 0 hiesse "vom Objekt geerbt" und
+     * ist hier bereits aufgeloest. */
+    int extruder = 1;
+    /* Welchem Bett dieses Netz in der Mehrbett-Darstellung gehoert -
+     * bei ausgeschaltetem Modus immer 0 (das aktive Bett). */
+    int bed_index = 0;
+
+    void destroy()
+    {
+        if (vbo != 0) { glDeleteBuffers(1, &vbo); vbo = 0; }
+        vertex_count = 0;
+    }
+};
+
+struct LayerTexture {
+    GLuint id = 0;
+    psm_object_id owner = PSM_INVALID_ID;
+    int width = 0;
+    int height = 0;
+    int cells = 0;
+    float object_min_z = 0.f;
+    float object_max_z = 0.f;
+    float min_layer_height = 0.f;
+    float max_layer_height = 0.f;
+
+    void destroy()
+    {
+        if (id != 0) {
+            glDeleteTextures(1, &id);
+            id = 0;
+        }
+        owner = PSM_INVALID_ID;
+        width = height = cells = 0;
+        object_min_z = 0.f;
+        object_max_z = 0.f;
+        min_layer_height = 0.f;
+        max_layer_height = 0.f;
+    }
+
+    bool enabled_for(psm_object_id object_id) const
+    {
+        return id != 0 && cells > 0 && object_id == owner;
+    }
+};
+
+/* Die Farbe eines Extruders, wie sie auch die Extruderleiste zeigt.
+ *
+ * Erst filament_colour aus dem Filamentprofil - das ist die Farbe, die
+ * wirklich aus der Duese kommt. Dann extruder_colour aus dem
+ * Druckerprofil, das PrusaSlicer als Kennzeichnung der Duese fuehrt.
+ * Bleibt beides leer, faellt es auf Prusa-Orange zurueck.
+ *
+ * @param extruder einsbasiert
+ */
+static void extruder_farbe(const psm_session *s, int extruder, float out[4])
+{
+    static const float standard[4] = { 1.00f, 0.49f, 0.22f, 1.f };
+    std::memcpy(out, standard, sizeof(standard));
+    if (s == nullptr || extruder < 1)
+        return;
+
+    const size_t index = static_cast<size_t>(extruder - 1);
+    for (const char *key : { "filament_colour", "extruder_colour" }) {
+        const auto *opt = s->config.opt<Slic3r::ConfigOptionStrings>(key);
+        if (opt == nullptr || index >= opt->values.size())
+            continue;
+        const std::string &text = opt->values[index];
+        if (text.size() < 7 || text[0] != '#')
+            continue;
+        unsigned int r = 0, g = 0, b = 0;
+        if (std::sscanf(text.c_str() + 1, "%02x%02x%02x", &r, &g, &b) != 3)
+            continue;
+        out[0] = static_cast<float>(r) / 255.f;
+        out[1] = static_cast<float>(g) / 255.f;
+        out[2] = static_cast<float>(b) / 255.f;
+        out[3] = 1.f;
+        return;
+    }
+}
+
+/* Position und Normale verschraenkt - ein Puffer, ein Bindevorgang. */
+struct Vertex { float px, py, pz, nx, ny, nz; };
+
+} // namespace
+
+/* ------------------------------------------------------------------ */
+
+struct psm_viewport
+{
+    psm_session *session = nullptr;
+    std::string  shader_dir;
+    Mesh         bed_model;      /* Prusas STL, falls vorhanden */
+    bool         has_bed_model = false;
+    GLuint       bed_tex = 0;    /* gerasterte SVG des Druckbereichs */
+    bool         has_bed_texture = false;
+    std::string  bed_key;        /* womit das Bett zuletzt gebaut wurde */
+    std::string  last_error;
+    /* Siehe psm_viewport_set_multi_bed_render. */
+    bool         multi_bed_render = false;
+
+    Program prog_lit;    // gouraud_light - Modelle
+    Program prog_layer;  // variable_layer_height - gespeichertes Profil
+    Program prog_flat;   // flat          - Bett und Raster
+    Program prog_bed;    // printbed      - Bettflaeche mit Textur
+
+    std::vector<Mesh> meshes;
+    std::vector<Mesh> paint_overlays;
+    Mesh paint_cursor;
+    bool paint_enabled = false;
+    psm_paint_tool paint_tool = PSM_PAINT_SUPPORT;
+    psm_paint_options paint_options{};
+    psm_surface_hit paint_hit{};
+    bool paint_hit_valid = false;
+    bool paint_cursor_dirty = false;
+    size_t paint_annotation_facets = 0;
+    LayerTexture layer_texture;
+    Mesh bed_fill;
+    Mesh bed_grid;
+    /* Zwoelf Kanten um die Auswahl - siehe render(). */
+    Mesh auswahlkasten;
+
+    /* Griffe am ausgewaehlten Objekt */
+    psm_gizmo_mode gizmo = PSM_GIZMO_NONE;
+    bool  gizmo_dirty = true;
+    int   gizmo_hover = -1;          /* gerade angefasster Griff */
+    Mesh  gizmo_lines;               /* Schaefte und Kreise */
+    Mesh  gizmo_solid[4];            /* Spitzen bzw. Wuerfel je Achse */
+    int   gizmo_axis_count = 0;
+
+    bool  dirty = true;
+    int   width = 1, height = 1;
+
+    /* Kamera */
+    Vec3  target   { 0.f, 0.f, 0.f };
+    float distance = 300.f;
+    /* Ob Ziel und Abstand noch nie aus der Bettgroesse gesetzt wurden.
+     * Danach gehoert die Kamera dem Nutzer. */
+    bool  camera_unset = true;
+    /* Ob der naechste veraendernde Aufruf einen Wiederherstellungspunkt
+     * setzt - siehe psm_viewport_gesture_begin. */
+    bool  gesture_fresh = false;
+    /* Ob der Nutzer die Kamera schon selbst bewegt hat. Bis dahin passt
+     * jede Groessenaenderung neu ein - die erste Einpassung passiert
+     * sonst, bevor die Oberflaeche ihre Leisten gesetzt hat. */
+    bool  camera_owned = false;
+    float yaw      = -0.6f;
+    float pitch    =  0.55f;
+
+    Slic3r::BoundingBoxf3 scene_bbox;
+    psm_object_id selection = PSM_INVALID_ID;
+    std::vector<psm_object_id> selections;
+
+    /* Vorschau */
+    psm_view_mode           mode = PSM_VIEW_EDITOR;
+    libvgcode::Viewer       gcode_viewer;
+    bool                    gcode_viewer_ready = false;
+    bool                    gcode_loaded = false;
+    std::shared_ptr<const Slic3r::GCodeProcessorResult>
+                            loaded_preview_result;
+    std::vector<bool>       preview_extruders_visible;
+
+    Vec3 eye() const
+    {
+        /*
+         * Bei yaw = 0 steht die Kamera VOR dem Bett, also bei -Y, und
+         * blickt nach +Y. Das Vorzeichen war lange falsch herum: "Vorn"
+         * zeigte die Rueckseite, "Hinten" die Vorderseite, und in der
+         * Draufsicht lag die Y-Achse gespiegelt - weshalb Bettmodell und
+         * Aufschrift verdreht wirkten.
+         */
+        return target + Vec3(
+             distance * std::cos(pitch) * std::sin(yaw),
+            -distance * std::cos(pitch) * std::cos(yaw),
+             distance * std::sin(pitch));
+    }
+
+    Mat4 view() const { return look_at(eye(), target, Vec3(0.f, 0.f, 1.f)); }
+
+    Mat4 projection() const
+    {
+        const float aspect = static_cast<float>(width) / static_cast<float>(std::max(height, 1));
+        const float far_plane = std::max(distance * 4.f, 1000.f);
+        return perspective(45.f * PI_F / 180.f, aspect, 0.5f, far_plane);
+    }
+};
+
+namespace {
+
+void upload(Mesh &m, const std::vector<Vertex> &verts)
+{
+    m.destroy();
+    if (verts.empty())
+        return;
+    glGenBuffers(1, &m.vbo);
+    glBindBuffer(GL_ARRAY_BUFFER, m.vbo);
+    glBufferData(GL_ARRAY_BUFFER,
+                 static_cast<GLsizeiptr>(verts.size() * sizeof(Vertex)),
+                 verts.data(), GL_STATIC_DRAW);
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+    m.vertex_count = static_cast<GLsizei>(verts.size());
+}
+
+/*
+ * Weltversatz eines Betts fuer die raeumliche Mehrbett-Darstellung -
+ * derselbe Aufruf, den auch der 3MF-Export in psmobile_core.cpp fuer
+ * denselben Zweck nutzt (siehe merge_project_beds). Bei ausgeschaltetem
+ * Modus oder nur einem Bett bleibt es bei Null: der bisherige, immer
+ * schon korrekte Fall.
+ */
+Slic3r::Vec3d bed_offset(const psm_viewport *v, size_t bed_index)
+{
+    if (! v->multi_bed_render || v->session->bed_models.size() <= 1)
+        return Slic3r::Vec3d::Zero();
+    return Slic3r::s_multiple_beds.get_bed_translation(
+        static_cast<int>(bed_index));
+}
+
+/** Wie viele Betten die raeumliche Darstellung tatsaechlich zeichnet. */
+size_t visible_bed_count(const psm_viewport *v)
+{
+    return (v->multi_bed_render && v->session->bed_models.size() > 1)
+        ? v->session->bed_models.size() : 1;
+}
+
+/*
+ * Ordnet einer Schleifenposition [0, visible_bed_count()) das
+ * tatsaechliche Bett zu. Bei eingeschaltetem Mehrbett-Modus ist das
+ * dieselbe Zahl - alle Betten werden gezeichnet. Sonst gibt es nur eine
+ * Position, und die muss das gerade aktive Bett sein, nicht immer
+ * Bett 0.
+ */
+size_t bed_at(const psm_viewport *v, size_t position)
+{
+    if (v->multi_bed_render && v->session->bed_models.size() > 1)
+        return position;
+    return v->session->active_bed;
+}
+
+/*
+ * get_bed_translation() rechnet gegen die zuletzt gemeldete
+ * Druckbettflaeche (m_build_volume_bb). Die setzt sonst nur der
+ * Export/Import - hier muss sie vor dem ersten Aufruf pro Neubau selbst
+ * gesetzt werden, sonst waeren alle Betten deckungsgleich bei Null.
+ */
+void update_multi_bed_metrics(const psm_viewport *v)
+{
+    if (! v->multi_bed_render || v->session->bed_models.size() <= 1)
+        return;
+    const auto *shape =
+        v->session->config.opt<Slic3r::ConfigOptionPoints>("bed_shape");
+    const auto *height =
+        v->session->config.opt<Slic3r::ConfigOptionFloat>("max_print_height");
+    if (shape == nullptr || shape->values.size() < 3 || height == nullptr)
+        return;
+    try {
+        Slic3r::BuildVolume volume(shape->values, height->value);
+        if (volume.valid())
+            Slic3r::s_multiple_beds.update_build_volume(
+                volume.bounding_volume2d());
+    } catch (...) {
+        /* Ohne gueltige Bettform bleiben alle Betten bei Null - besser
+         * uebereinander als eine willkuerliche Rechnung. */
+    }
+}
+
+/** Baut das Druckbett aus der aktiven Konfiguration - nicht geraten. */
+/*
+ * Prusas eigenes Bettmodell laden.
+ *
+ * Zu jedem Druckermodell liefert Prusa ein STL des Betts mit; der Name
+ * steht im Herstellerbuendel und kommt ueber psm_bed_model_file. Das
+ * flache Vieleck aus bed_shape bleibt als Rueckfallebene fuer Drucker
+ * ohne Modell und fuer eigene Bettformen.
+ *
+ * @return true wenn ein Modell geladen wurde
+ */
+bool build_bed_model(psm_viewport *v)
+{
+    char path_buf[512] = { 0 };
+    if (psm_bed_model_file(v->session, path_buf, sizeof(path_buf)) != PSM_OK ||
+        path_buf[0] == 0)
+        return false;
+
+    /* Der Pfad ist bereits vollstaendig: system_printer_bed_model setzt
+     * ihn aus data_dir bzw. resources_dir zusammen, und beide haben wir
+     * beim Anlegen der Sitzung gesetzt. */
+    const std::string path = path_buf;
+
+    Slic3r::TriangleMesh mesh;
+    try {
+        if (! mesh.ReadSTLFile(path.c_str()) || mesh.empty()) {
+            psm_emit_log(PSM_LOG_WARN, "Bettmodell nicht lesbar: " + path);
+            return false;
+        }
+    } catch (const std::exception &e) {
+        psm_emit_log(PSM_LOG_WARN, std::string("Bettmodell: ") + e.what());
+        return false;
+    }
+
+    /*
+     * Das STL ist um seinen eigenen Ursprung modelliert. PrusaSlicer legt
+     * es in Bed3D::init_internal_model_from_file so ab, dass der Ursprung
+     * in die Mitte der Bettflaeche faellt, und schiebt es 0,03 mm nach
+     * unten, damit es nicht mit der Textur um dieselben Pixel streitet.
+     */
+    float shape_min_x = 0.f, shape_max_x = 0.f;
+    float shape_min_y = 0.f, shape_max_y = 0.f;
+    try {
+        const Slic3r::Points pts = Slic3r::get_bed_shape(v->session->config);
+        if (pts.size() >= 3) {
+            Slic3r::BoundingBoxf bb;
+            for (const Slic3r::Point &p : pts)
+                bb.merge(Slic3r::Vec2d(Slic3r::unscale<double>(p.x()),
+                                       Slic3r::unscale<double>(p.y())));
+            shape_min_x = static_cast<float>(bb.min.x());
+            shape_max_x = static_cast<float>(bb.max.x());
+            shape_min_y = static_cast<float>(bb.min.y());
+            shape_max_y = static_cast<float>(bb.max.y());
+        }
+    } catch (...) {
+        /* Ohne Bettform bleibt es beim Ursprung. */
+    }
+    float model_min_x = 0.f, model_max_x = 0.f;
+    float model_min_y = 0.f, model_max_y = 0.f;
+    if (! mesh.its.vertices.empty()) {
+        model_min_x = model_max_x = mesh.its.vertices.front().x();
+        model_min_y = model_max_y = mesh.its.vertices.front().y();
+        for (const Slic3r::Vec3f &p : mesh.its.vertices) {
+            model_min_x = std::min(model_min_x, p.x());
+            model_max_x = std::max(model_max_x, p.x());
+            model_min_y = std::min(model_min_y, p.y());
+            model_max_y = std::max(model_max_y, p.y());
+        }
+    }
+    const psm::BedModelTranslation placement = psm::align_bed_model(
+        shape_min_x, shape_max_x, shape_min_y, shape_max_y,
+        model_min_x, model_max_x, model_min_y, model_max_y);
+    const float cz = -0.03f;
+
+    const size_t bed_count = visible_bed_count(v);
+    std::vector<Vertex> verts;
+    verts.reserve(mesh.its.indices.size() * 3 * bed_count);
+    for (size_t bed_index = 0; bed_index < bed_count; ++bed_index) {
+        const Slic3r::Vec3d off = bed_offset(v, bed_index);
+        const float ox = placement.x + static_cast<float>(off.x());
+        const float oy = placement.y + static_cast<float>(off.y());
+        for (const Slic3r::Vec3i32 &tri : mesh.its.indices) {
+            const Slic3r::Vec3f &a = mesh.its.vertices[tri(0)];
+            const Slic3r::Vec3f &b = mesh.its.vertices[tri(1)];
+            const Slic3r::Vec3f &c = mesh.its.vertices[tri(2)];
+            const Slic3r::Vec3f n = (b - a).cross(c - a).normalized();
+            for (const Slic3r::Vec3f &p : { a, b, c })
+                verts.push_back({ p.x() + ox, p.y() + oy, p.z() + cz,
+                                  n.x(), n.y(), n.z() });
+        }
+    }
+
+    upload(v->bed_model, verts);
+    psm_emit_log(PSM_LOG_INFO,
+                 "Bettmodell geladen: " + path + " (" +
+                 std::to_string(mesh.its.indices.size()) + " Dreiecke)");
+    return true;
+}
+
+/*
+ * Textur des Druckbereichs.
+ *
+ * Prusa legt zu jedem Drucker eine SVG bei (mk4s.svg, xl.svg ...). Sie
+ * wird mit NanoSVG gerastert - derselbe Weg wie in GLTexture.cpp - und
+ * als Textur auf die Bettflaeche gelegt. Der Shader printbed.fs mischt
+ * sie mit seinem eigenen Farbverlauf, deshalb reicht der Alphakanal.
+ *
+ * Aufgeloest wird auf 1024 Punkte in der laengeren Kante: darunter
+ * franst die Beschriftung auf dem Bett aus, darueber bringt es auf einem
+ * Tablet nichts mehr.
+ */
+bool build_bed_texture(psm_viewport *v, const Slic3r::BoundingBoxf &bb)
+{
+    char path_buf[512] = { 0 };
+    if (psm_bed_texture_file(v->session, path_buf, sizeof(path_buf)) != PSM_OK ||
+        path_buf[0] == 0)
+        return false;
+
+    NSVGimage *img = nsvgParseFromFile(path_buf, "px", 96.0f);
+    if (img == nullptr || img->width <= 0.f || img->height <= 0.f) {
+        if (img != nullptr) nsvgDelete(img);
+        psm_emit_log(PSM_LOG_WARN, std::string("Bett-Textur nicht lesbar: ") + path_buf);
+        return false;
+    }
+
+    const int   longest = 1024;
+    const float scale   = static_cast<float>(longest) /
+                          std::max(img->width, img->height);
+    const int   tw = std::max(1, static_cast<int>(img->width  * scale));
+    const int   th = std::max(1, static_cast<int>(img->height * scale));
+
+    std::vector<unsigned char> pixels(static_cast<size_t>(tw) * th * 4, 0);
+    NSVGrasterizer *rast = nsvgCreateRasterizer();
+    if (rast == nullptr) {
+        nsvgDelete(img);
+        return false;
+    }
+    nsvgRasterize(rast, img, 0.f, 0.f, scale, pixels.data(), tw, th, tw * 4);
+    nsvgDeleteRasterizer(rast);
+    nsvgDelete(img);
+
+    if (v->bed_tex == 0)
+        glGenTextures(1, &v->bed_tex);
+    glBindTexture(GL_TEXTURE_2D, v->bed_tex);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, tw, th, 0, GL_RGBA,
+                 GL_UNSIGNED_BYTE, pixels.data());
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glBindTexture(GL_TEXTURE_2D, 0);
+
+    psm_emit_log(PSM_LOG_INFO,
+                 std::string("Bett-Textur geladen: ") + path_buf + " (" +
+                 std::to_string(tw) + "x" + std::to_string(th) + ")");
+    return true;
+}
+
+void build_bed(psm_viewport *v)
+{
+    /* Muss vor jedem Aufruf von bed_offset() in diesem Neubau stehen -
+     * die Uebersetzung rechnet gegen die hier gesetzte Bettflaeche. */
+    update_multi_bed_metrics(v);
+
+    /* Nur neu bauen, wenn sich am Bett etwas geaendert hat. Vorher lief
+     * das bei jedem invalidate() - also bei jedem Tipp auf ein Objekt:
+     * STL des Betts lesen, SVG auf 1024 Punkte rastern, hochladen. Auf
+     * dem Galaxy S23 FE stand das im Protokoll hinter jeder Beruehrung
+     * (14.09.2026). Der Schluessel: Bettmodell, Textur, Bettform und die
+     * Lage der sichtbaren Betten - alles, was unten hineinrechnet. */
+    std::string key;
+    {
+        char pfad[512] = { 0 };
+        if (psm_bed_model_file(v->session, pfad, sizeof(pfad)) == PSM_OK) key += pfad;
+        key += '|';
+        char textur[512] = { 0 };
+        if (psm_bed_texture_file(v->session, textur, sizeof(textur)) == PSM_OK) key += textur;
+        Slic3r::Points form;
+        try { form = Slic3r::get_bed_shape(v->session->config); } catch (...) { form.clear(); }
+        for (const Slic3r::Point &p : form)
+            key += '|' + std::to_string(p.x()) + ',' + std::to_string(p.y());
+        const size_t n = visible_bed_count(v);
+        key += "|n" + std::to_string(n);
+        for (size_t i = 0; i < n; ++i) {
+            const Slic3r::Vec3d off = bed_offset(v, i);
+            key += '|' + std::to_string(off.x()) + ',' + std::to_string(off.y());
+        }
+    }
+    if (key == v->bed_key && !v->camera_unset)
+        return;
+    v->bed_key = key;
+
+    /* Erst das echte Modell, dann die texturierte Flaeche darueber. */
+    v->bed_model.destroy();
+    v->has_bed_model = build_bed_model(v);
+
+    Slic3r::Points pts;
+    try {
+        pts = Slic3r::get_bed_shape(v->session->config);
+    } catch (...) {
+        pts.clear();
+    }
+    if (pts.size() < 3)
+        return;
+
+    Slic3r::BoundingBoxf bb;
+    std::vector<Eigen::Vector2f> poly;
+    poly.reserve(pts.size());
+    for (const Slic3r::Point &p : pts) {
+        const double x = Slic3r::unscale<double>(p.x());
+        const double y = Slic3r::unscale<double>(p.y());
+        poly.emplace_back(static_cast<float>(x), static_cast<float>(y));
+        bb.merge(Slic3r::Vec2d(x, y));
+    }
+
+    /* Flaeche als Faecher ab dem ersten Punkt. Fuer die rechteckigen und
+     * konvexen Betten der Prusa-Drucker ist das ausreichend.
+     *
+     * In den beiden ersten Normalenfeldern stehen die Texturkoordinaten:
+     * der printbed-Shader kennt kein v_normal, dafuer ein v_tex_coord an
+     * genau dieser Stelle im Puffer. So braucht es keinen zweiten
+     * Eckpunkttyp.
+     *
+     * Die Zuordnung ist die aus Bed3D::init_triangles - (p - min) durch
+     * die Groesse, mit gespiegeltem V, weil Bilder von oben nach unten
+     * laufen und das Bett von unten nach oben.
+     *
+     * Hier stand zwischenzeitlich ein gespiegeltes U, weil die
+     * Aufschrift verdreht erschien. Das war Symptombekaempfung: in
+     * Wahrheit stand die Kamera falsch herum (siehe eye()). Seit das
+     * behoben ist, stimmt wieder die Zuordnung des Originals.
+     */
+    const float bw = static_cast<float>(bb.size().x());
+    const float bh = static_cast<float>(bb.size().y());
+    const auto uv = [&](const Eigen::Vector2f &p) {
+        return Eigen::Vector2f(
+            bw > 0.f ? (p.x() - static_cast<float>(bb.min.x())) / bw : 0.f,
+            bh > 0.f ? 1.f - (p.y() - static_cast<float>(bb.min.y())) / bh : 0.f);
+    };
+
+    /* Ein Zehntelmillimeter ueber der Platte: bei genau z = 0 liegt die
+     * Textur auf derselben Ebene wie die Oberseite des Bettmodells, und
+     * welche von beiden gewinnt, entscheidet dann die Rechengenauigkeit
+     * der Tiefenpruefung - die sich mit dem Kameraabstand aendert. Die
+     * Textur war deshalb mal da und mal nicht. */
+    const float ebene = 0.1f;
+    const auto minp = bb.min;
+    const auto maxp = bb.max;
+    const float z = 0.05f;   // minimal ueber dem Bett, sonst Z-Fighting
+    const size_t bed_count = visible_bed_count(v);
+
+    std::vector<Vertex> fill;
+    std::vector<Vertex> grid;
+    for (size_t bed_index = 0; bed_index < bed_count; ++bed_index) {
+        const Slic3r::Vec3d off = bed_offset(v, bed_index);
+        const float ox = static_cast<float>(off.x());
+        const float oy = static_cast<float>(off.y());
+
+        /* Dieselbe UV-Rechnung fuer jedes Bett: die Bettform ist immer
+         * dieselbe, nur die Lage im Raum wechselt. */
+        for (size_t i = 1; i + 1 < poly.size(); ++i) {
+            for (const Eigen::Vector2f &p : { poly[0], poly[i], poly[i + 1] }) {
+                const Eigen::Vector2f t = uv(p);
+                fill.push_back({ p.x() + ox, p.y() + oy, ebene, t.x(), t.y(), 0.f });
+            }
+        }
+
+        /* Raster im 10-mm-Abstand, wie im Slicer. */
+        for (double x = std::ceil(minp.x() / 10.0) * 10.0; x <= maxp.x(); x += 10.0) {
+            grid.push_back({ (float) x + ox, (float) minp.y() + oy, z, 0.f, 0.f, 1.f });
+            grid.push_back({ (float) x + ox, (float) maxp.y() + oy, z, 0.f, 0.f, 1.f });
+        }
+        for (double y = std::ceil(minp.y() / 10.0) * 10.0; y <= maxp.y(); y += 10.0) {
+            grid.push_back({ (float) minp.x() + ox, (float) y + oy, z, 0.f, 0.f, 1.f });
+            grid.push_back({ (float) maxp.x() + ox, (float) y + oy, z, 0.f, 0.f, 1.f });
+        }
+    }
+    upload(v->bed_fill, fill);
+    v->has_bed_texture = build_bed_texture(v, bb);
+    upload(v->bed_grid, grid);
+
+    /* Nur beim ersten Mal und auf ausdruecklichen Wunsch. Sonst
+     * verliert jeder Nutzer bei jeder Aenderung an der Szene seine
+     * Ansicht - er hat hineingezoomt, um etwas genau anzusehen, und
+     * genau dann fasst er es an. */
+    if (v->camera_unset) {
+        /* Im Mehrbett-Modus soll die erste Ansicht alle sichtbaren
+         * Betten zeigen, nicht nur das erste - sonst haengen zwei
+         * Drittel der Szene ausserhalb des Bilds. */
+        Slic3r::BoundingBoxf gesamt = bb;
+        for (size_t bed_index = 1; bed_index < bed_count; ++bed_index) {
+            const Slic3r::Vec3d off = bed_offset(v, bed_index);
+            gesamt.merge(Slic3r::Vec2d(bb.min.x() + off.x(), bb.min.y() + off.y()));
+            gesamt.merge(Slic3r::Vec2d(bb.max.x() + off.x(), bb.max.y() + off.y()));
+        }
+        v->target = Vec3(static_cast<float>(gesamt.center().x()),
+                         static_cast<float>(gesamt.center().y()), 0.f);
+        /* Die Diagonale, nicht die laengste Kante: das Bett steht
+         * gedreht im Bild, und dann ist die Diagonale das, was quer
+         * hineinpassen muss. Ein Fuenftel Zuschlag fuer das, was das
+         * Bettmodell ueber den Druckbereich hinausragt - Griffe,
+         * Halterungen, die Kanten der Platte. */
+        const float halbe = 0.6f * static_cast<float>(
+            std::hypot(gesamt.size().x(), gesamt.size().y()));
+        const float seiten =
+            v->height > 0 ? static_cast<float>(v->width) /
+                            static_cast<float>(v->height)
+                          : 1.f;
+        /* 45 Grad senkrecht, siehe projection(). Waagerecht ist der
+         * Winkel um das Seitenverhaeltnis schmaler. */
+        const float t = std::tan(45.f * PI_F / 180.f * 0.5f);
+        v->distance = std::max(halbe / t,
+                               halbe / (t * std::max(seiten, 0.2f)));
+        v->camera_unset = false;
+    }
+}
+
+/** Erzeugt je Instanz einen Puffer aus den Dreiecken des Modells. */
+void build_meshes(psm_viewport *v)
+{
+    for (Mesh &m : v->meshes)
+        m.destroy();
+    v->meshes.clear();
+    for (Mesh &m : v->paint_overlays)
+        m.destroy();
+    v->paint_overlays.clear();
+    v->paint_annotation_facets = 0;
+    v->layer_texture.destroy();
+    v->scene_bbox = Slic3r::BoundingBoxf3();
+
+    const size_t mesh_bed_count = visible_bed_count(v);
+    for (size_t bed_index = 0; bed_index < mesh_bed_count; ++bed_index) {
+        const size_t wirkliches_bett = bed_at(v, bed_index);
+        const Slic3r::Vec3d bed_shift = bed_offset(v, bed_index);
+        for (const Slic3r::ModelObject *obj :
+             v->session->bed_models[wirkliches_bett]->objects) {
+        for (size_t inst = 0; inst < obj->instances.size(); ++inst) {
+            const Slic3r::Transform3d inst_m = obj->instances[inst]->get_matrix();
+
+            /* Ein Netz je Volumen: der Extruder haengt am Volumen, und
+             * wer alle in einen Puffer legt, kann sie hinterher nicht
+             * mehr unterschiedlich einfaerben. */
+            for (const Slic3r::ModelVolume *vol : obj->volumes) {
+                if (! vol->is_model_part())
+                    continue;
+                std::vector<Vertex> verts;
+                Slic3r::BoundingBoxf3 bbox;
+                /* indexed_triangle_set kommt aus admesh und liegt im
+                 * globalen Namensraum, nicht in Slic3r. */
+                const indexed_triangle_set &its = vol->mesh().its;
+                const Slic3r::Transform3d m = inst_m * vol->get_matrix();
+
+                verts.reserve(verts.size() + its.indices.size() * 3);
+                for (const Slic3r::Vec3i32 &tri : its.indices) {
+                    Slic3r::Vec3d p[3];
+                    for (int k = 0; k < 3; ++k)
+                        p[k] = m * its.vertices[tri[k]].cast<double>() + bed_shift;
+
+                    /* Flache Normale je Dreieck: das entspricht dem, was
+                     * PrusaSlicer fuer unstrukturierte Meshes auch tut,
+                     * und braucht keine Nachbarschaftsinformation. */
+                    const Slic3r::Vec3d n = (p[1] - p[0]).cross(p[2] - p[0]).normalized();
+                    for (int k = 0; k < 3; ++k) {
+                        verts.push_back({
+                            (float) p[k].x(), (float) p[k].y(), (float) p[k].z(),
+                            (float) n.x(),    (float) n.y(),    (float) n.z() });
+                        bbox.merge(p[k]);
+                    }
+                }
+
+                if (verts.empty())
+                    continue;
+
+                /* Der wirksame Extruder: erst der des Volumens, sonst
+                 * der des Objekts, sonst der erste. Dieselbe Reihenfolge
+                 * wie in PrusaSlicers eigener Anzeige. */
+                int extruder = vol->config.has("extruder")
+                    ? vol->config.opt_int("extruder") : 0;
+                if (extruder <= 0)
+                    extruder = obj->config.has("extruder")
+                        ? obj->config.opt_int("extruder") : 0;
+                if (extruder <= 0)
+                    extruder = 1;
+
+                Mesh mesh;
+                upload(mesh, verts);
+                mesh.owner     = static_cast<psm_object_id>(obj->id().id);
+                mesh.bed_index = static_cast<int>(wirkliches_bett);
+                mesh.bbox      = bbox;
+                mesh.extruder  = extruder;
+                v->meshes.push_back(mesh);
+                v->scene_bbox.merge(bbox);
+            }
+        }
+        }
+    }
+
+    /*
+     * Nur die primaere Auswahl bekommt die Profildarstellung. Ein Profil
+     * gehoert zwar dem ModelObject, aber andere Objekte gleichzeitig bunt
+     * zu zeichnen wuerde ihre Extruderfarben verdecken und die Zuordnung
+     * im Editor unklar machen.
+     */
+    if (v->selection != PSM_INVALID_ID && v->prog_layer.id != 0) {
+        for (const Slic3r::ModelObject *object :
+                 v->session->model().objects) {
+            if (static_cast<psm_object_id>(object->id().id) != v->selection)
+                continue;
+
+            const psm::LayerVisualizationData data =
+                psm::build_layer_visualization(*v->session, *object);
+            if (! data.enabled())
+                break;
+
+            LayerTexture &texture = v->layer_texture;
+            /* Nur Fehler dieses Uploads auswerten, nicht einen alten
+             * Zustand eines zuvor verwendeten Bett- oder Gizmo-Shaders. */
+            while (glGetError() != GL_NO_ERROR) {}
+            glGenTextures(1, &texture.id);
+            glBindTexture(GL_TEXTURE_2D, texture.id);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+#if defined(GL_TEXTURE_MAX_LEVEL_APPLE)
+            glTexParameteri(
+                GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER,
+                GL_LINEAR_MIPMAP_NEAREST);
+            /*
+             * iOS stellt das fehlende GLES2-Core-Token ueber
+             * GL_APPLE_texture_max_level bereit. Damit bedeutet der
+             * hohe Bias in Prusas unveraendertem Shader wirklich Level
+             * 1 und nicht das letzte Level einer kuenstlichen Kette.
+             */
+            glTexParameteri(
+                GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL_APPLE, 1);
+#else
+            /* Portabler Basis-Fallback; auf iOS greift immer der
+             * originalgetreue Zwei-Level-Pfad oberhalb. */
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+#endif
+            glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+            glTexImage2D(
+                GL_TEXTURE_2D, 0, GL_RGBA, data.width, data.height, 0,
+                GL_RGBA, GL_UNSIGNED_BYTE, data.rgba.data());
+#if defined(GL_TEXTURE_MAX_LEVEL_APPLE)
+            glTexImage2D(
+                GL_TEXTURE_2D, 1, GL_RGBA,
+                data.width / 2, data.height / 2,
+                0,
+                GL_RGBA, GL_UNSIGNED_BYTE,
+                data.rgba.data() +
+                    static_cast<size_t>(data.width * data.height * 4));
+#endif
+            glBindTexture(GL_TEXTURE_2D, 0);
+            const GLenum upload_error = glGetError();
+            if (upload_error != GL_NO_ERROR) {
+                texture.destroy();
+                psm_emit_log(
+                    PSM_LOG_WARN,
+                    "Schichthoehen-Textur konnte nicht geladen werden: GL " +
+                        std::to_string(static_cast<unsigned>(upload_error)));
+                break;
+            }
+
+            texture.owner = v->selection;
+            texture.width = data.width;
+            texture.height = data.height;
+            texture.cells = data.cells;
+            texture.object_min_z = data.object_min_z;
+            texture.object_max_z = data.object_max_z;
+            texture.min_layer_height = data.min_layer_height;
+            texture.max_layer_height = data.max_layer_height;
+            break;
+        }
+    }
+
+    /*
+     * Der Farbpass wird direkt aus Prusas serialisierter Annotation
+     * erzeugt. Es gibt weder hier noch in Swift einen zweiten
+     * Facettenzustand. Weil die Annotation am Volumen liegt, erscheint
+     * derselbe Pass folgerichtig auf jeder Instanz dieses Volumens.
+     */
+    if (v->paint_enabled && v->selection != PSM_INVALID_ID) {
+        for (const Slic3r::ModelObject *object :
+                 v->session->model().objects) {
+            if (static_cast<psm_object_id>(object->id().id) !=
+                v->selection)
+                continue;
+            for (size_t volume_index = 0;
+                 volume_index < object->volumes.size(); ++volume_index) {
+                const Slic3r::ModelVolume *volume =
+                    object->volumes[volume_index];
+                if (! volume->is_model_part())
+                    continue;
+                const Slic3r::FacetsAnnotation *annotation = nullptr;
+                switch (v->paint_tool) {
+                    case PSM_PAINT_SUPPORT:
+                        annotation = &volume->supported_facets; break;
+                    case PSM_PAINT_SEAM:
+                        annotation = &volume->seam_facets; break;
+                    case PSM_PAINT_FUZZY:
+                        annotation = &volume->fuzzy_skin_facets; break;
+                    case PSM_PAINT_MMU:
+                        annotation = &volume->mm_segmentation_facets; break;
+                }
+                if (annotation == nullptr || annotation->empty())
+                    continue;
+                Slic3r::TriangleSelector selector(volume->mesh());
+                selector.deserialize(annotation->get_data(), false);
+                for (size_t instance_index = 0;
+                     instance_index < object->instances.size();
+                     ++instance_index) {
+                    const Slic3r::Transform3d local_to_world =
+                        object->instances[instance_index]->get_matrix() *
+                        volume->get_matrix();
+                    std::vector<Vertex> vertices;
+                    for (int raw_state = 1; raw_state <= 254;
+                         ++raw_state) {
+                        const auto state =
+                            static_cast<Slic3r::TriangleStateType>(
+                                raw_state);
+                        if (! selector.has_facets(state))
+                            continue;
+                        const indexed_triangle_set painted =
+                            selector.get_facets_strict(state);
+                        v->paint_annotation_facets +=
+                            painted.indices.size();
+                        for (const Slic3r::Vec3i32 &face :
+                             painted.indices) {
+                            Slic3r::Vec3d points[3];
+                            for (int corner = 0; corner < 3; ++corner)
+                                points[corner] = local_to_world *
+                                    painted.vertices[face(corner)]
+                                        .cast<double>();
+                            const Slic3r::Vec3d normal =
+                                (points[1] - points[0])
+                                    .cross(points[2] - points[0])
+                                    .normalized();
+                            for (const Slic3r::Vec3d &point : points)
+                                vertices.push_back(Vertex{
+                                    static_cast<float>(point.x()),
+                                    static_cast<float>(point.y()),
+                                    static_cast<float>(point.z()),
+                                    static_cast<float>(normal.x()),
+                                    static_cast<float>(normal.y()),
+                                    static_cast<float>(normal.z()) });
+                        }
+                    }
+                    if (! vertices.empty()) {
+                        Mesh overlay;
+                        upload(overlay, vertices);
+                        overlay.owner = v->selection;
+                        v->paint_overlays.push_back(overlay);
+                    }
+                }
+            }
+            break;
+        }
+    }
+}
+
+void build_paint_cursor(psm_viewport *v)
+{
+    v->paint_cursor.destroy();
+    v->paint_cursor_dirty = false;
+    if (! v->paint_enabled || ! v->paint_hit_valid)
+        return;
+
+    Vec3 center(v->paint_hit.position[0], v->paint_hit.position[1],
+                v->paint_hit.position[2]);
+    Vec3 normal(v->paint_hit.normal[0], v->paint_hit.normal[1],
+                v->paint_hit.normal[2]);
+    if (normal.squaredNorm() < 1e-8f)
+        return;
+    normal.normalize();
+    Vec3 tangent = normal.cross(
+        std::abs(normal.z()) < 0.9f
+            ? Vec3(0.f, 0.f, 1.f) : Vec3(0.f, 1.f, 0.f)).normalized();
+    Vec3 bitangent = normal.cross(tangent).normalized();
+
+    const float radius = v->paint_options.radius_mm;
+    const float band = std::max(radius * 0.055f, 0.16f);
+    constexpr int segments = 64;
+    std::vector<Vertex> vertices;
+    auto append_ring = [&](const Vec3 &u, const Vec3 &w) {
+        for (int i = 0; i < segments; ++i) {
+            const float a0 = 2.f * PI_F * i / segments;
+            const float a1 = 2.f * PI_F * (i + 1) / segments;
+            const Vec3 d0 = std::cos(a0) * u + std::sin(a0) * w;
+            const Vec3 d1 = std::cos(a1) * u + std::sin(a1) * w;
+            const Vec3 p[4] = {
+                center + d0 * (radius - band),
+                center + d0 * (radius + band),
+                center + d1 * (radius + band),
+                center + d1 * (radius - band),
+            };
+            const int order[6] = { 0, 1, 2, 0, 2, 3 };
+            for (const int corner : order)
+                vertices.push_back(Vertex{
+                    p[corner].x(), p[corner].y(), p[corner].z(),
+                    normal.x(), normal.y(), normal.z() });
+        }
+    };
+    append_ring(tangent, bitangent);
+    if (v->paint_options.shape == PSM_PAINT_SHAPE_SPHERE) {
+        append_ring(tangent, normal);
+        append_ring(bitangent, normal);
+    }
+    upload(v->paint_cursor, vertices);
+}
+
+void draw(const Program &p, const Mesh &m, GLenum mode,
+          const Mat4 &view_model, const Mat4 &proj, const float rgba[4])
+{
+    if (m.vertex_count == 0)
+        return;
+
+    p.use();
+    glUniformMatrix4fv(p.u_view_model, 1, GL_FALSE, view_model.data());
+    glUniformMatrix4fv(p.u_projection, 1, GL_FALSE, proj.data());
+    if (p.u_color >= 0)
+        glUniform4fv(p.u_color, 1, rgba);
+    if (p.u_normal >= 0) {
+        const Eigen::Matrix3f nm = view_model.block<3, 3>(0, 0).inverse().transpose();
+        glUniformMatrix3fv(p.u_normal, 1, GL_FALSE, nm.data());
+    }
+
+    glBindBuffer(GL_ARRAY_BUFFER, m.vbo);
+    glEnableVertexAttribArray(static_cast<GLuint>(p.a_position));
+    glVertexAttribPointer(static_cast<GLuint>(p.a_position), 3, GL_FLOAT, GL_FALSE,
+                          sizeof(Vertex), reinterpret_cast<void *>(0));
+    if (p.a_normal >= 0) {
+        glEnableVertexAttribArray(static_cast<GLuint>(p.a_normal));
+        glVertexAttribPointer(static_cast<GLuint>(p.a_normal), 3, GL_FLOAT, GL_FALSE,
+                              sizeof(Vertex), reinterpret_cast<void *>(sizeof(float) * 3));
+    }
+    /* Der printbed-Shader liest an derselben Stelle zwei statt drei
+     * Werte - dort stehen die Texturkoordinaten. */
+    if (p.a_tex_coord >= 0) {
+        glEnableVertexAttribArray(static_cast<GLuint>(p.a_tex_coord));
+        glVertexAttribPointer(static_cast<GLuint>(p.a_tex_coord), 2, GL_FLOAT, GL_FALSE,
+                              sizeof(Vertex), reinterpret_cast<void *>(sizeof(float) * 3));
+    }
+
+    glDrawArrays(mode, 0, m.vertex_count);
+
+    glDisableVertexAttribArray(static_cast<GLuint>(p.a_position));
+    if (p.a_normal >= 0)
+        glDisableVertexAttribArray(static_cast<GLuint>(p.a_normal));
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+}
+
+void draw_layer_profile(psm_viewport *v, const Mesh &mesh,
+                        const Mat4 &view, const Mat4 &projection)
+{
+    const LayerTexture &texture = v->layer_texture;
+    if (! texture.enabled_for(mesh.owner) || texture.object_max_z <= 0.f)
+        return;
+
+    Program &program = v->prog_layer;
+    program.use();
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, texture.id);
+    if (program.u_z_texture >= 0)
+        glUniform1i(program.u_z_texture, 0);
+    if (program.u_z_to_texture_row >= 0)
+        glUniform1f(
+            program.u_z_to_texture_row,
+            static_cast<float>(texture.cells - 1) /
+                (static_cast<float>(texture.width) * texture.object_max_z));
+    if (program.u_z_texture_row_to_normalized >= 0)
+        glUniform1f(program.u_z_texture_row_to_normalized,
+                    1.f / static_cast<float>(texture.height));
+    if (program.u_z_cursor >= 0)
+        glUniform1f(program.u_z_cursor, -1000.f);
+    if (program.u_z_cursor_band_width >= 0)
+        glUniform1f(program.u_z_cursor_band_width, 2.f);
+    if (program.u_object_max_z >= 0)
+        glUniform1f(program.u_object_max_z, 0.f);
+    if (program.u_volume_world >= 0) {
+        Mat4 identity = Mat4::Identity();
+        /*
+         * Die gespeicherten Profil-Z-Werte beginnen an der
+         * Objektunterkante. Unsere VBO-Positionen sind bereits in
+         * Bettkoordinaten, daher diese eine Rueckverschiebung.
+         */
+        identity(2, 3) = -texture.object_min_z;
+        glUniformMatrix4fv(
+            program.u_volume_world, 1, GL_FALSE, identity.data());
+    }
+
+    static const float white[4] = { 1.f, 1.f, 1.f, 1.f };
+    draw(program, mesh, GL_TRIANGLES, view, projection, white);
+    glBindTexture(GL_TEXTURE_2D, 0);
+}
+
+} // namespace
+
+/* ------------------------------------------------------------------ */
+/* Oeffentliche Schnittstelle                                          */
+/* ------------------------------------------------------------------ */
+
+extern "C" {
+
+PSM_API psm_viewport *psm_viewport_create(psm_session *session, const char *shader_dir)
+{
+    if (session == nullptr || shader_dir == nullptr)
+        return nullptr;
+
+    auto *v = new psm_viewport();
+    v->session = session;
+    v->shader_dir = shader_dir;
+
+    std::string err;
+    /* printbed ist nicht lebensnotwendig - ohne ihn bleibt das Bett
+     * einfarbig. Deshalb getrennt und ohne Abbruch. */
+    if (! link_program(v->prog_bed, v->shader_dir, "printbed", err))
+        psm_emit_log(PSM_LOG_WARN, "Bett-Shader: " + err);
+    if (! link_program(
+            v->prog_layer, v->shader_dir, "variable_layer_height", err))
+        psm_emit_log(PSM_LOG_WARN, "Schichthoehen-Shader: " + err);
+
+    if (! link_program(v->prog_lit, v->shader_dir, "gouraud_light", err) ||
+        ! link_program(v->prog_flat, v->shader_dir, "flat", err)) {
+        v->last_error = err;
+        psm_emit_log(PSM_LOG_ERROR, "Viewport: " + err);
+        /* Bewusst nicht abbrechen: die Fehlermeldung ist ueber
+         * psm_viewport_last_error abrufbar, und ein leerer Viewport ist
+         * besser als ein Absturz beim Start. */
+    }
+
+    glEnable(GL_DEPTH_TEST);
+    glDepthFunc(GL_LEQUAL);
+    glEnable(GL_CULL_FACE);
+    glCullFace(GL_BACK);
+    return v;
+}
+
+PSM_API void psm_viewport_destroy(psm_viewport *v)
+{
+    if (v == nullptr)
+        return;
+    for (Mesh &m : v->meshes)
+        m.destroy();
+    for (Mesh &m : v->paint_overlays)
+        m.destroy();
+    v->paint_cursor.destroy();
+    v->bed_fill.destroy();
+    v->bed_grid.destroy();
+    v->auswahlkasten.destroy();
+    v->layer_texture.destroy();
+    v->prog_lit.destroy();
+    v->prog_layer.destroy();
+    v->prog_flat.destroy();
+    v->prog_bed.destroy();
+    if (v->bed_tex != 0) { glDeleteTextures(1, &v->bed_tex); v->bed_tex = 0; }
+    delete v;
+}
+
+PSM_API void psm_viewport_resize(psm_viewport *v, int width, int height)
+{
+    if (v == nullptr)
+        return;
+    const bool anders = v->width != std::max(width, 1) ||
+                        v->height != std::max(height, 1);
+    v->width = std::max(width, 1);
+    v->height = std::max(height, 1);
+    glViewport(0, 0, v->width, v->height);
+    if (anders && ! v->camera_owned) {
+        v->camera_unset = true;
+        v->dirty = true;
+    }
+}
+
+PSM_API void psm_viewport_invalidate(psm_viewport *v)
+{
+    if (v != nullptr)
+        v->dirty = true;
+}
+
+PSM_API void psm_viewport_set_multi_bed_render(psm_viewport *v, int32_t enabled)
+{
+    if (v == nullptr)
+        return;
+    const bool wert = enabled != 0;
+    if (v->multi_bed_render == wert)
+        return;
+    v->multi_bed_render = wert;
+    /* Camera-Fit nur beim Einschalten neu ausrichten - beim Ausschalten
+     * soll die Ansicht so stehen bleiben, wie der Nutzer sie zuletzt auf
+     * dem aktiven Bett hatte. */
+    if (wert)
+        v->camera_unset = true;
+    v->dirty = true;
+}
+
+PSM_API void psm_viewport_focus_bed(psm_viewport *v, int32_t bed_index)
+{
+    if (v == nullptr || v->session == nullptr)
+        return;
+    std::lock_guard<std::recursive_mutex> data_lock(v->session->data_mtx);
+
+    /* Dieselbe Bettflaeche wie beim Neubau - ohne sie waere die
+     * Uebersetzung fuer bed_index > 0 falsch. Ein Aufruf vor dem ersten
+     * Rendern (also bevor build_bed() je lief) ist unschaedlich: dann
+     * gilt einfach noch die Standard-Bettgroesse. */
+    update_multi_bed_metrics(v);
+
+    Slic3r::Points pts;
+    try {
+        pts = Slic3r::get_bed_shape(v->session->config);
+    } catch (...) {
+        pts.clear();
+    }
+    if (pts.size() < 3)
+        return;
+
+    Slic3r::BoundingBoxf bb;
+    for (const Slic3r::Point &p : pts)
+        bb.merge(Slic3r::Vec2d(Slic3r::unscale<double>(p.x()),
+                               Slic3r::unscale<double>(p.y())));
+
+    const size_t position = (v->multi_bed_render &&
+                              v->session->bed_models.size() > 1)
+        ? static_cast<size_t>(bed_index) : 0;
+    const Slic3r::Vec3d off = bed_offset(v, position);
+    v->target = Vec3(static_cast<float>(bb.center().x() + off.x()),
+                     static_cast<float>(bb.center().y() + off.y()), 0.f);
+
+    /* Genau dieses eine Bett fuellt das Bild - dieselbe Rechnung wie
+     * der erste Kamera-Fit in build_bed(), nur auf ein einzelnes Bett
+     * statt auf alle zusammen bezogen. Im Mehrbett-Modus zeigt ein
+     * Bettwechsel damit wieder das gewohnte enge Bild statt der
+     * Gesamtansicht, mit der die Szene beim Einschalten anfing. */
+    const float halbe = 0.6f * static_cast<float>(
+        std::hypot(bb.size().x(), bb.size().y()));
+    const float seiten =
+        v->height > 0 ? static_cast<float>(v->width) /
+                        static_cast<float>(v->height)
+                      : 1.f;
+    const float t = std::tan(45.f * PI_F / 180.f * 0.5f);
+    v->distance = std::max(halbe / t, halbe / (t * std::max(seiten, 0.2f)));
+    v->dirty = true;
+}
+
+PSM_API int psm_viewport_active_layer_visualization(
+    psm_viewport *v,
+    psm_layer_visualization_info *out)
+{
+    if (v == nullptr || out == nullptr)
+        return 0;
+    std::memset(out, 0, sizeof(*out));
+    const LayerTexture &texture = v->layer_texture;
+    if (v->prog_layer.id == 0 ||
+        ! texture.enabled_for(v->selection))
+        return 0;
+    out->texture_width = texture.width;
+    out->texture_height = texture.height;
+    out->texture_cells = texture.cells;
+    out->object_max_z = texture.object_max_z;
+    out->min_layer_height = texture.min_layer_height;
+    out->max_layer_height = texture.max_layer_height;
+    return 1;
+}
+
+namespace {
+/* Weiter unten definiert - die Griffe brauchen Helfer, die erst nach
+ * dem Zeichnen stehen. */
+void build_gizmo(psm_viewport *v);
+}
+
+PSM_API void psm_viewport_render(psm_viewport *v)
+{
+    if (v == nullptr)
+        return;
+    std::lock_guard<std::recursive_mutex> data_lock(v->session->data_mtx);
+
+    if (v->dirty) {
+        build_bed(v);
+        build_meshes(v);
+        v->dirty = false;
+    }
+
+    /* Hintergrund wie im Slicer: dunkler Verlauf, hier als Volltonfarbe. */
+    glClearColor(0.16f, 0.17f, 0.19f, 1.f);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    glEnable(GL_DEPTH_TEST);
+
+    const Mat4 view = v->view();
+    const Mat4 proj = v->projection();
+
+    static const float col_bed[4]   = { 0.27f, 0.29f, 0.31f, 1.f };
+    static const float col_grid[4]  = { 0.36f, 0.38f, 0.41f, 1.f };
+    static const float col_obj[4]   = { 1.00f, 0.49f, 0.22f, 1.f };  // Prusa-Orange
+    static const float col_sel[4]   = { 0.20f, 0.80f, 0.30f, 1.f };
+
+    /* Bett ohne Rueckseitenaussonderung - man schaut auch von unten.
+     * Auch in der Vorschau: der Desktop zeigt es dort ebenfalls, und ohne
+     * Bezugsflaeche schwebt das Teil im Nichts. */
+    glDisable(GL_CULL_FACE);
+
+    /*
+     * Blickt die Kamera von unten aufs Bett, zeigt der Desktop das Blech
+     * gar nicht und die Textur nur durchscheinend - sonst haette man die
+     * Unterseite der Heizplatte vor dem Objekt. Bed3D::render_system
+     * macht genau das ueber sein Flag "bottom".
+     */
+    const bool bottom = v->eye().z() < 0.f;
+
+    if (v->has_bed_model && ! bottom) {
+        /* Prusas eigenes Bettmodell. Deutlich heller als der
+         * Hintergrund, sonst sieht man nur seinen Umriss - die
+         * Beleuchtung des gouraud_light-Shaders zieht die Farbe an den
+         * abgewandten Flaechen ohnehin stark herunter. */
+        static const float col_model[4] = { 0.55f, 0.56f, 0.58f, 1.f };
+        draw(v->prog_lit, v->bed_model, GL_TRIANGLES, view, proj, col_model);
+    } else if (! bottom) {
+        draw(v->prog_flat, v->bed_fill, GL_TRIANGLES, view, proj, col_bed);
+    }
+    /* Danach die Textur des Druckbereichs darauf. Sie ist teilweise
+     * durchsichtig, deshalb Blending an und Tiefenschreiben aus - sonst
+     * verdeckt ihr unsichtbarer Rand die Objekte dahinter. */
+    if (v->has_bed_texture && v->prog_bed.id != 0) {
+        glEnable(GL_BLEND);
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+        glDepthMask(GL_FALSE);
+        /* Ohne Tiefenpruefung: Prusas Bettmodell bringt das
+         * Federstahlblech mit, dessen Oberseite ueber z = 0 liegt.
+         * Die Textur laege sonst darunter und schiene nur dort durch,
+         * wo die Platte ausgespart ist. Sie ist die unterste Ebene der
+         * Szene, darunter liegt nichts, was sie verdecken koennte. */
+        glDisable(GL_DEPTH_TEST);
+
+        v->prog_bed.use();
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, v->bed_tex);
+        if (v->prog_bed.u_texture >= 0)     glUniform1i(v->prog_bed.u_texture, 0);
+        /* Von unten durchscheinend, sonst deckend - wie im Original. */
+        if (v->prog_bed.u_transparent >= 0)
+            glUniform1i(v->prog_bed.u_transparent, bottom ? 1 : 0);
+        /* svg_source schaltet im Shader den radialen Verlauf hinter der
+         * Grafik ein - genau dafuer ist die SVG gemacht. */
+        if (v->prog_bed.u_svg_source >= 0)  glUniform1i(v->prog_bed.u_svg_source, 1);
+
+        static const float white[4] = { 1.f, 1.f, 1.f, 1.f };
+        draw(v->prog_bed, v->bed_fill, GL_TRIANGLES, view, proj, white);
+
+        glBindTexture(GL_TEXTURE_2D, 0);
+        glEnable(GL_DEPTH_TEST);
+        glDepthMask(GL_TRUE);
+        glDisable(GL_BLEND);
+    } else if (! v->has_bed_model && ! bottom) {
+        /* Ohne Modell und ohne Textur bleibt das Raster als Orientierung. */
+        draw(v->prog_flat, v->bed_grid, GL_LINES, view, proj, col_grid);
+    }
+    glEnable(GL_CULL_FACE);
+
+    /* In der Vorschau zeichnet libvgcode die Werkzeugwege - dieselbe
+     * Kamera, damit der Wechsel nicht springt. Es setzt seinen eigenen
+     * GL-Zustand, deshalb kommt es nach dem Bett. */
+    if (v->mode == PSM_VIEW_PREVIEW && v->gcode_loaded) {
+        libvgcode::Mat4x4 vm{}, pm{};
+        std::memcpy(vm.data(), view.data(), sizeof(float) * 16);
+        std::memcpy(pm.data(), proj.data(), sizeof(float) * 16);
+        v->gcode_viewer.render(vm, pm);
+        return;
+    }
+
+    for (const Mesh &m : v->meshes) {
+        /* Die Farbe des Extruders, nicht die der Auswahl: wer einem
+         * Objekt einen anderen Extruder gibt, will das sehen. Die
+         * Auswahl bleibt ueber ihren Huellkasten erkennbar und wird
+         * zusaetzlich aufgehellt - sie einzufaerben wuerde genau die
+         * Information zerstoeren, um die es hier geht. */
+        float farbe[4];
+        extruder_farbe(v->session, m.extruder, farbe);
+        const bool gewaehlt =
+            std::find(v->selections.begin(), v->selections.end(), m.owner)
+                != v->selections.end();
+        if (gewaehlt)
+            for (int k = 0; k < 3; ++k)
+                farbe[k] = std::min(1.f, farbe[k] * 0.45f + 0.55f);
+        if (v->layer_texture.enabled_for(m.owner))
+            draw_layer_profile(v, m, view, proj);
+        else
+            draw(v->prog_lit, m, GL_TRIANGLES, view, proj, farbe);
+    }
+
+    if (v->paint_enabled && ! v->paint_overlays.empty()) {
+        static const float support[4] = { 0.20f, 0.82f, 0.35f, 0.62f };
+        static const float seam[4]    = { 0.94f, 0.24f, 0.22f, 0.62f };
+        static const float fuzzy[4]   = { 0.35f, 0.68f, 0.96f, 0.62f };
+        static const float mmu[4]     = { 0.75f, 0.38f, 0.96f, 0.62f };
+        const float *color = support;
+        if (v->paint_tool == PSM_PAINT_SEAM) color = seam;
+        else if (v->paint_tool == PSM_PAINT_FUZZY) color = fuzzy;
+        else if (v->paint_tool == PSM_PAINT_MMU) color = mmu;
+        glEnable(GL_BLEND);
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+        glDepthMask(GL_FALSE);
+        glDisable(GL_CULL_FACE);
+        for (const Mesh &overlay : v->paint_overlays)
+            draw(v->prog_flat, overlay, GL_TRIANGLES, view, proj, color);
+        glEnable(GL_CULL_FACE);
+        glDepthMask(GL_TRUE);
+        glDisable(GL_BLEND);
+    }
+
+    if (v->paint_cursor_dirty)
+        build_paint_cursor(v);
+    if (v->paint_enabled && v->paint_cursor.vertex_count > 0) {
+        static const float brush[4] = { 1.00f, 0.63f, 0.16f, 0.95f };
+        static const float smart[4] = { 0.18f, 0.82f, 0.94f, 0.95f };
+        static const float bucket[4] = { 0.77f, 0.39f, 1.00f, 0.95f };
+        const float *color =
+            v->paint_options.mode == PSM_PAINT_MODE_SMART_FILL ? smart :
+            v->paint_options.mode == PSM_PAINT_MODE_BUCKET_FILL ? bucket :
+            brush;
+        glDisable(GL_DEPTH_TEST);
+        glDisable(GL_CULL_FACE);
+        draw(v->prog_flat, v->paint_cursor, GL_TRIANGLES, view, proj, color);
+        glEnable(GL_CULL_FACE);
+        glEnable(GL_DEPTH_TEST);
+    }
+
+    /*
+     * Der Huellkasten der Auswahl.
+     *
+     * Getroffen wird seit dem 4. August nur, wo Geometrie ist - das ist
+     * richtig, macht aber das Anordnen von Hand schwerer: der Platz, den
+     * ein Teil braucht, ist nicht seine Silhouette, sondern sein Kasten.
+     * Also treffen auf der Geometrie und sehen den Kasten.
+     */
+    if (! v->selections.empty()) {
+        std::vector<Vertex> kanten;
+        for (const Mesh &m : v->meshes) {
+            if (std::find(v->selections.begin(), v->selections.end(), m.owner)
+                    == v->selections.end() || ! m.bbox.defined)
+                continue;
+            const float x0 = static_cast<float>(m.bbox.min.x());
+            const float y0 = static_cast<float>(m.bbox.min.y());
+            const float z0 = static_cast<float>(m.bbox.min.z());
+            const float x1 = static_cast<float>(m.bbox.max.x());
+            const float y1 = static_cast<float>(m.bbox.max.y());
+            const float z1 = static_cast<float>(m.bbox.max.z());
+            const float ecken[8][3] = {
+                { x0, y0, z0 }, { x1, y0, z0 }, { x1, y1, z0 }, { x0, y1, z0 },
+                { x0, y0, z1 }, { x1, y0, z1 }, { x1, y1, z1 }, { x0, y1, z1 },
+            };
+            static const int paare[12][2] = {
+                { 0, 1 }, { 1, 2 }, { 2, 3 }, { 3, 0 },   /* unten */
+                { 4, 5 }, { 5, 6 }, { 6, 7 }, { 7, 4 },   /* oben */
+                { 0, 4 }, { 1, 5 }, { 2, 6 }, { 3, 7 },   /* senkrecht */
+            };
+            for (const auto &paar : paare)
+                for (int ende = 0; ende < 2; ++ende)
+                    kanten.push_back(Vertex{
+                        ecken[paar[ende]][0], ecken[paar[ende]][1],
+                        ecken[paar[ende]][2], 0.f, 0.f, 1.f });
+        }
+        upload(v->auswahlkasten, kanten);
+        draw(v->prog_flat, v->auswahlkasten, GL_LINES, view, proj, col_sel);
+    }
+
+    /*
+     * Die Griffe zuletzt und ohne Tiefenpruefung: sie sollen immer
+     * sichtbar sein, auch wenn sie im Objekt stecken. Genauso macht es
+     * der Desktop, sonst verschwindet der Pfeil im Modell und man weiss
+     * nicht mehr, wo man anfassen soll.
+     */
+    if (v->gizmo != PSM_GIZMO_NONE && v->selection != PSM_INVALID_ID) {
+        if (v->gizmo_dirty)
+            build_gizmo(v);
+
+        glDisable(GL_DEPTH_TEST);
+        static const float col_line[4] = { 0.75f, 0.75f, 0.78f, 1.f };
+        draw(v->prog_flat, v->gizmo_lines, GL_LINES, view, proj, col_line);
+
+        for (int a = 0; a < v->gizmo_axis_count; ++a) {
+            float col[4];
+            /* Der vierte Griff ist "gleichmaessig" und bekommt keine
+             * Achsenfarbe, sondern das Prusa-Orange. */
+            if (a == 3) { col[0] = 0.93f; col[1] = 0.42f; col[2] = 0.13f; col[3] = 1.f; }
+            else        psm::axis_color(a, a == v->gizmo_hover, col);
+
+            /* Alles Dreiecke - die Baender ersetzen die frueheren
+             * Haarlinien. Flach schattiert, damit die Achsenfarbe
+             * eindeutig bleibt. */
+            draw(v->prog_flat, v->gizmo_solid[a], GL_TRIANGLES, view, proj, col);
+        }
+        glEnable(GL_DEPTH_TEST);
+    }
+}
+
+/* --- Kamera ------------------------------------------------------- */
+
+PSM_API void psm_viewport_orbit(psm_viewport *v, float dx, float dy)
+{
+    if (v == nullptr)
+        return;
+    v->camera_owned = true;
+    /* Auf die Bildschirmbreite bezogen statt auf Pixel: ein Wisch ueber
+     * die halbe Breite dreht rund 90 Grad, unabhaengig von der Aufloesung.
+     * Mit festem Pixelfaktor war es auf einem 2560er Tablet unbrauchbar
+     * hektisch. */
+    const float per_px = PI_F / static_cast<float>(std::max(v->width, 1));
+    /* Direktmanipulation: was unter dem Finger liegt, bleibt unter dem
+     * Finger. Bewegt wird also das Objekt, nicht die Kamera - und die
+     * Kamera muss deshalb genau entgegengesetzt laufen.
+     *
+     * Das Auge sitzt bei (d*cosP*sin(yaw), -d*cosP*cos(yaw), d*sinP).
+     * Ein Wisch nach rechts mit wachsendem yaw schiebt es nach +X und
+     * traegt das Objekt damit nach links aus dem Bild - die Sicht eines
+     * Kameramanns, nicht die einer Hand.
+     *
+     * Senkrecht dasselbe: dy ist nach unten positiv. Wer die
+     * Vorderkante nach unten zieht, will von weiter oben schauen. */
+    v->yaw   -= dx * per_px;
+    v->pitch += dy * per_px;
+
+    /* Unter das Bett darf man schauen, aber nicht ueber den Pol kippen. */
+    const float limit = PI_F * 0.49f;
+    v->pitch = std::clamp(v->pitch, -limit, limit);
+}
+
+PSM_API void psm_viewport_pan(psm_viewport *v, float dx, float dy)
+{
+    if (v == nullptr)
+        return;
+    v->camera_owned = true;
+    const Vec3 fwd = (v->target - v->eye()).normalized();
+    const Vec3 right = fwd.cross(Vec3(0.f, 0.f, 1.f)).normalized();
+    const Vec3 up = right.cross(fwd).normalized();
+    const float scale = v->distance * 0.0015f;
+    v->target += right * (-dx * scale) + up * (dy * scale);
+}
+
+PSM_API void psm_viewport_zoom(psm_viewport *v, float factor)
+{
+    if (v == nullptr || factor <= 0.f)
+        return;
+    v->camera_owned = true;
+    v->distance = std::clamp(v->distance / factor, 20.f, 5000.f);
+}
+
+PSM_API void psm_viewport_reset_view(psm_viewport *v)
+{
+    if (v == nullptr)
+        return;
+    /* Zuruecksetzen heisst: die Ansicht bekommt die Kamera zurueck. */
+    v->camera_owned = false;
+    v->yaw = -0.6f;
+    v->pitch = 0.55f;
+    v->camera_unset = true;   // Ziel und Abstand beim naechsten Aufbau neu
+    v->dirty = true;
+}
+
+PSM_API int psm_viewport_camera_angles(const psm_viewport *v, float *yaw, float *pitch)
+{
+    if (v == nullptr)
+        return 0;
+    if (yaw != nullptr)   *yaw = v->yaw;
+    if (pitch != nullptr) *pitch = v->pitch;
+    return 1;
+}
+
+PSM_API void psm_viewport_view_preset(psm_viewport *v, int which)
+{
+    if (v == nullptr)
+        return;
+    /* Feste Blickrichtungen wie in PrusaSlicers Ansichts-Werkzeugleiste. */
+    switch (which) {
+        case 0: v->yaw = -0.6f;    v->pitch = 0.55f;        break; // iso
+        case 1: v->yaw =  0.f;     v->pitch = PI_F * 0.49f; break; // oben
+        case 2: v->yaw =  0.f;     v->pitch = 0.f;          break; // vorne
+        case 3: v->yaw =  PI_F;    v->pitch = 0.f;          break; // hinten
+        case 4: v->yaw = -PI_F/2;  v->pitch = 0.f;          break; // links
+        case 5: v->yaw =  PI_F/2;  v->pitch = 0.f;          break; // rechts
+        case 6: v->yaw =  0.f;     v->pitch = -PI_F * 0.49f; break; // unten (Ansichtswuerfel)
+        default: break;
+    }
+}
+
+/* --- Auswahl ------------------------------------------------------ */
+
+/* Weiter unten definiert - die Auswahl braucht ihn schon hier. */
+static int raycast_model(psm_viewport *v, float x, float y,
+                         psm_object_id only_object, psm_surface_hit *out,
+                         size_t *out_bed_index);
+
+PSM_API psm_object_id psm_viewport_pick(psm_viewport *v, float x, float y)
+{
+    if (v == nullptr)
+        return PSM_INVALID_ID;
+    /*
+     * Frueher stand hier ein Test gegen die Huellquader. Der war
+     * schneller, traf aber auch die Luft in der Ecke eines L-foermigen
+     * Teils - und wer dorthin tippte, um die Auswahl zu loesen, waehlte
+     * es stattdessen wieder aus.
+     */
+    psm_surface_hit treffer{};
+    size_t hit_bed = 0;
+    if (! raycast_model(v, x, y, PSM_INVALID_ID, &treffer, &hit_bed))
+        return PSM_INVALID_ID;
+
+    /* Im Mehrbett-Modus macht ein Tipp auf ein Objekt eines anderen
+     * Betts dieses Bett aktiv - wie ein Wechsel ueber den Bettwaehler,
+     * nur ohne den Umweg. Ohne das liesse sich nichts anfassen, was
+     * nicht zufaellig schon aktiv war. */
+    if (v->multi_bed_render && hit_bed != v->session->active_bed) {
+        v->session->active_bed = hit_bed;
+        v->session->mark_design_changed();
+        v->dirty = true;
+    }
+    return treffer.object_id;
+}
+
+PSM_API void psm_viewport_set_selection(psm_viewport *v, psm_object_id id)
+{
+    if (v != nullptr) {
+        const bool changed = v->selection != id;
+        v->selection = id;
+        v->selections.clear();
+        if (id != PSM_INVALID_ID)
+            v->selections.push_back(id);
+        if (changed)
+            v->dirty = true;
+    }
+}
+
+PSM_API void psm_viewport_set_selections(psm_viewport *v,
+                                         const psm_object_id *ids,
+                                         size_t count,
+                                         psm_object_id primary)
+{
+    if (v == nullptr)
+        return;
+    const bool changed = v->selection != primary;
+    v->selection = primary;
+    v->selections.clear();
+    if (ids != nullptr)
+        v->selections.assign(ids, ids + count);
+    if (primary != PSM_INVALID_ID &&
+        std::find(v->selections.begin(), v->selections.end(), primary)
+            == v->selections.end())
+        v->selections.push_back(primary);
+    if (changed)
+        v->dirty = true;
+}
+
+static int raycast_model(psm_viewport *v, float x, float y,
+                         psm_object_id only_object, psm_surface_hit *out,
+                         size_t *out_bed_index)
+{
+    if (v == nullptr || out == nullptr || v->session == nullptr)
+        return 0;
+
+    const Mat4 inv_view_proj = (v->projection() * v->view()).inverse();
+    const float nx = 2.f * x / static_cast<float>(v->width) - 1.f;
+    const float ny = 1.f - 2.f * y / static_cast<float>(v->height);
+    Eigen::Vector4f near4 =
+        inv_view_proj * Eigen::Vector4f(nx, ny, -1.f, 1.f);
+    Eigen::Vector4f far4 =
+        inv_view_proj * Eigen::Vector4f(nx, ny, 1.f, 1.f);
+    near4 /= near4.w();
+    far4 /= far4.w();
+
+    const Slic3r::Vec3d ray_origin(
+        near4.x(), near4.y(), near4.z());
+    const Slic3r::Vec3d ray_direction =
+        Slic3r::Vec3d(far4.x() - near4.x(),
+                      far4.y() - near4.y(),
+                      far4.z() - near4.z()).normalized();
+
+    double best_distance = std::numeric_limits<double>::max();
+    bool found = false;
+    psm_surface_hit best{};
+    best.object_id = PSM_INVALID_ID;
+    size_t best_bed = 0;
+
+    std::lock_guard<std::recursive_mutex> data_lock(
+        v->session->data_mtx);
+    const size_t pick_bed_count = visible_bed_count(v);
+    for (size_t bed_index = 0; bed_index < pick_bed_count; ++bed_index) {
+    const size_t wirkliches_bett = bed_at(v, bed_index);
+    const Eigen::Translation3d bed_shift(bed_offset(v, bed_index));
+    for (const Slic3r::ModelObject *object :
+         v->session->bed_models[wirkliches_bett]->objects) {
+        const psm_object_id object_id =
+            static_cast<psm_object_id>(object->id().id);
+        if (only_object != PSM_INVALID_ID && object_id != only_object)
+            continue;
+
+        for (size_t instance_index = 0;
+             instance_index < object->instances.size();
+             ++instance_index) {
+            const Slic3r::ModelInstance *instance =
+                object->instances[instance_index];
+            for (size_t volume_index = 0;
+                 volume_index < object->volumes.size();
+                 ++volume_index) {
+                const Slic3r::ModelVolume *volume =
+                    object->volumes[volume_index];
+                if (! volume->is_model_part())
+                    continue;
+
+                const Slic3r::Transform3d to_world =
+                    bed_shift * instance->get_matrix() * volume->get_matrix();
+                const Slic3r::Transform3d to_local =
+                    to_world.inverse();
+                const Slic3r::Vec3d local_origin =
+                    to_local * ray_origin;
+                const Slic3r::Vec3d local_direction =
+                    (to_local.linear() * ray_direction).normalized();
+                const auto &mesh = volume->mesh().its;
+
+                /*
+                 * Erst gegen den lokalen Volumenquader. Bei Texten,
+                 * Modifiern und großen Baugruppen spart das hunderttausende
+                 * Dreieckstests pro Fingertipp.
+                 */
+                const Slic3r::BoundingBoxf3 bbox =
+                    volume->mesh().bounding_box();
+                double box_min = 0.0;
+                double box_max = std::numeric_limits<double>::max();
+                bool box_hit = bbox.defined;
+                for (int axis = 0; box_hit && axis < 3; ++axis) {
+                    if (std::abs(local_direction(axis)) < 1e-12) {
+                        if (local_origin(axis) < bbox.min(axis) ||
+                            local_origin(axis) > bbox.max(axis))
+                            box_hit = false;
+                    } else {
+                        double enter =
+                            (bbox.min(axis) - local_origin(axis)) /
+                            local_direction(axis);
+                        double leave =
+                            (bbox.max(axis) - local_origin(axis)) /
+                            local_direction(axis);
+                        if (enter > leave)
+                            std::swap(enter, leave);
+                        box_min = std::max(box_min, enter);
+                        box_max = std::min(box_max, leave);
+                        if (box_min > box_max)
+                            box_hit = false;
+                    }
+                }
+                if (! box_hit)
+                    continue;
+
+                for (size_t facet_index = 0;
+                     facet_index < mesh.indices.size();
+                     ++facet_index) {
+                    const Slic3r::Vec3i32 &face =
+                        mesh.indices[facet_index];
+                    const Slic3r::Vec3d a =
+                        mesh.vertices[face(0)].cast<double>();
+                    const Slic3r::Vec3d b =
+                        mesh.vertices[face(1)].cast<double>();
+                    const Slic3r::Vec3d c =
+                        mesh.vertices[face(2)].cast<double>();
+
+                    /* Möller-Trumbore, zweiseitig. */
+                    const Slic3r::Vec3d e1 = b - a;
+                    const Slic3r::Vec3d e2 = c - a;
+                    const Slic3r::Vec3d p =
+                        local_direction.cross(e2);
+                    const double det = e1.dot(p);
+                    if (std::abs(det) < 1e-12)
+                        continue;
+                    const double inv_det = 1.0 / det;
+                    const Slic3r::Vec3d tvec = local_origin - a;
+                    const double u = tvec.dot(p) * inv_det;
+                    if (u < 0.0 || u > 1.0)
+                        continue;
+                    const Slic3r::Vec3d q = tvec.cross(e1);
+                    const double w =
+                        local_direction.dot(q) * inv_det;
+                    if (w < 0.0 || u + w > 1.0)
+                        continue;
+                    const double local_t = e2.dot(q) * inv_det;
+                    if (local_t <= 1e-8)
+                        continue;
+
+                    const Slic3r::Vec3d local_hit =
+                        local_origin + local_direction * local_t;
+                    const Slic3r::Vec3d world_hit =
+                        to_world * local_hit;
+                    const double distance =
+                        (world_hit - ray_origin).norm();
+                    if (distance >= best_distance)
+                        continue;
+
+                    Slic3r::Vec3d normal =
+                        (to_world.linear().inverse().transpose() *
+                         e1.cross(e2)).normalized();
+                    if (normal.dot(ray_direction) > 0.0)
+                        normal = -normal;
+
+                    best_distance = distance;
+                    best.object_id = object_id;
+                    best.volume_index =
+                        static_cast<int32_t>(volume_index);
+                    best.facet_index =
+                        static_cast<int32_t>(facet_index);
+                    best.instance_index =
+                        static_cast<int32_t>(instance_index);
+                    for (int axis = 0; axis < 3; ++axis) {
+                        best.position[axis] =
+                            static_cast<float>(world_hit(axis));
+                        best.normal[axis] =
+                            static_cast<float>(normal(axis));
+                    }
+                    best_bed = wirkliches_bett;
+                    found = true;
+                }
+            }
+        }
+    }
+    }
+
+    if (found) {
+        *out = best;
+        if (out_bed_index != nullptr)
+            *out_bed_index = best_bed;
+    }
+    return found ? 1 : 0;
+}
+
+namespace {
+
+/** Schnittpunkt des Sehstrahls durch (x,y) mit der Ebene z = plane_z. */
+bool ray_to_plane(const psm_viewport *v, float x, float y, double plane_z,
+                  Slic3r::Vec3d &out)
+{
+    const Mat4 inv = (v->projection() * v->view()).inverse();
+    const float nx = 2.f * x / static_cast<float>(v->width) - 1.f;
+    const float ny = 1.f - 2.f * y / static_cast<float>(v->height);
+
+    Eigen::Vector4f p0 = inv * Eigen::Vector4f(nx, ny, -1.f, 1.f);
+    Eigen::Vector4f p1 = inv * Eigen::Vector4f(nx, ny,  1.f, 1.f);
+    p0 /= p0.w();
+    p1 /= p1.w();
+
+    const Slic3r::Vec3d o(p0.x(), p0.y(), p0.z());
+    const Slic3r::Vec3d d = Slic3r::Vec3d(p1.x() - p0.x(), p1.y() - p0.y(),
+                                          p1.z() - p0.z()).normalized();
+    if (std::abs(d.z()) < 1e-9)
+        return false;                      // Blick parallel zum Bett
+
+    const double t = (plane_z - o.z()) / d.z();
+    if (t <= 0.0)
+        return false;                      // Ebene liegt hinter der Kamera
+    out = o + d * t;
+    return true;
+}
+
+} // namespace
+
+PSM_API int psm_viewport_drag_selected(psm_viewport *v,
+                                       float from_x, float from_y,
+                                       float to_x, float to_y)
+{
+    if (v == nullptr || v->selection == PSM_INVALID_ID)
+        return 0;
+    std::lock_guard<std::recursive_mutex> data_lock(v->session->data_mtx);
+
+    Slic3r::ModelObject *obj = nullptr;
+    for (Slic3r::ModelObject *o : v->session->model().objects)
+        if (static_cast<psm_object_id>(o->id().id) == v->selection) {
+            obj = o;
+            break;
+        }
+    if (obj == nullptr || obj->instances.empty())
+        return 0;
+
+    /* Auf halber Objekthoehe schneiden, nicht auf dem Bett: sonst laeuft
+     * das Objekt bei flacher Kamera davon. */
+    const Slic3r::BoundingBoxf3 bb = obj->instance_bounding_box(0, false);
+    const double plane_z = (bb.min.z() + bb.max.z()) * 0.5;
+
+    Slic3r::Vec3d a, b;
+    if (! ray_to_plane(v, from_x, from_y, plane_z, a) ||
+        ! ray_to_plane(v, to_x,   to_y,   plane_z, b))
+        return 0;
+
+    v->session->history_checkpoint("Objekt per Touch verschieben");
+    Slic3r::ModelInstance *inst = obj->instances.front();
+    Slic3r::Vec3d off = inst->get_offset();
+    off.x() += b.x() - a.x();
+    off.y() += b.y() - a.y();
+    inst->set_offset(off);
+    obj->invalidate_bounding_box();
+
+    v->dirty = true;
+    v->session->mark_design_changed();
+    return 1;
+}
+
+PSM_API int psm_viewport_drop_selected(psm_viewport *v,
+                                       psm_object_id *out_new_id)
+{
+    if (v == nullptr || v->selection == PSM_INVALID_ID)
+        return 0;
+    std::lock_guard<std::recursive_mutex> data_lock(v->session->data_mtx);
+    if (out_new_id != nullptr)
+        *out_new_id = v->selection;
+
+    /* Ohne raeumliche Mehrbett-Darstellung liegen alle Betten am selben
+     * Ursprung. Dann gibt es kein "anderes Bett", auf das man etwas
+     * ziehen koennte, und jede Zuordnung waere geraten. */
+    if (! v->multi_bed_render || v->session->bed_models.size() <= 1)
+        return 0;
+
+    /* get_bed_translation() rechnet gegen die zuletzt gemeldete
+     * Druckflaeche - dieselbe Vorbedingung wie beim Zeichnen. */
+    update_multi_bed_metrics(v);
+
+    const auto *shape =
+        v->session->config.opt<Slic3r::ConfigOptionPoints>("bed_shape");
+    const auto *height =
+        v->session->config.opt<Slic3r::ConfigOptionFloat>("max_print_height");
+    if (shape == nullptr || shape->values.size() < 3 || height == nullptr)
+        return 0;
+    Slic3r::BoundingBoxf flaeche;
+    try {
+        Slic3r::BuildVolume volume(shape->values, height->value);
+        if (! volume.valid())
+            return 0;
+        flaeche = volume.bounding_volume2d();
+    } catch (...) {
+        return 0;
+    }
+
+    Slic3r::ModelObject *obj = nullptr;
+    for (Slic3r::ModelObject *o : v->session->model().objects)
+        if (static_cast<psm_object_id>(o->id().id) == v->selection) {
+            obj = o;
+            break;
+        }
+    if (obj == nullptr || obj->instances.empty())
+        return 0;
+
+    const size_t quelle = v->session->active_bed;
+    const Slic3r::Vec3d versatz_quelle = bed_offset(v, quelle);
+    /* Der Mittelpunkt entscheidet, nicht eine Ecke: sonst wechselte ein
+     * grosses Teil das Bett, sobald sein Rand hinueberragt. */
+    const Slic3r::Vec3d mitte =
+        obj->instance_bounding_box(0, false).center() + versatz_quelle;
+
+    size_t ziel = quelle;
+    for (size_t i = 0; i < v->session->bed_models.size(); ++i) {
+        const Slic3r::Vec3d off = bed_offset(v, i);
+        if (mitte.x() >= flaeche.min.x() + off.x() &&
+            mitte.x() <= flaeche.max.x() + off.x() &&
+            mitte.y() >= flaeche.min.y() + off.y() &&
+            mitte.y() <= flaeche.max.y() + off.y()) {
+            ziel = i;
+            break;
+        }
+    }
+    if (ziel == quelle)
+        return 0;
+
+    /*
+     * Das Objekt soll dort liegen bleiben, wo es losgelassen wurde. Die
+     * gespeicherte Position ist bettlokal, der Versatz der Betten steckt
+     * nur in der Darstellung - beim Bettwechsel muss er einmal
+     * herausgerechnet werden.
+     */
+    const Slic3r::Vec3d delta = versatz_quelle - bed_offset(v, ziel);
+    Slic3r::ModelInstance *inst = obj->instances.front();
+    const Slic3r::Vec3d vorher = inst->get_offset();
+    Slic3r::Vec3d off = vorher;
+    off.x() += delta.x();
+    off.y() += delta.y();
+    inst->set_offset(off);
+    obj->invalidate_bounding_box();
+
+    psm_object_id neu = PSM_INVALID_ID;
+    if (psm_bed_move_object(v->session, v->selection, ziel, &neu) != PSM_OK) {
+        inst->set_offset(vorher);
+        obj->invalidate_bounding_box();
+        return 0;
+    }
+
+    /* Dem Nutzer folgen: er arbeitet jetzt auf dem Bett, auf das er
+     * gezogen hat - genau wie beim Tippen auf ein fremdes Bett. */
+    v->session->active_bed = ziel;
+    v->selection = neu;
+    v->selections.clear();
+    if (neu != PSM_INVALID_ID)
+        v->selections.push_back(neu);
+    v->dirty = true;
+    v->session->mark_design_changed();
+    if (out_new_id != nullptr)
+        *out_new_id = neu;
+    return 1;
+}
+
+/* ------------------------------------------------------------------ */
+
+namespace {
+
+/** Das ausgewaehlte Objekt, oder null. */
+Slic3r::ModelObject *selected_object(psm_viewport *v)
+{
+    if (v == nullptr || v->selection == PSM_INVALID_ID)
+        return nullptr;
+    for (Slic3r::ModelObject *o : v->session->model().objects)
+        if (static_cast<psm_object_id>(o->id().id) == v->selection)
+            return o;
+    return nullptr;
+}
+
+/** Mittelpunkt des ausgewaehlten Objekts - dort sitzen die Griffe. */
+bool selected_center(psm_viewport *v, Slic3r::Vec3d &out)
+{
+    Slic3r::ModelObject *o = selected_object(v);
+    if (o == nullptr || o->instances.empty())
+        return false;
+    out = o->instance_bounding_box(0, false).center();
+    return true;
+}
+
+/*
+ * psm::Vertex und der Eckpunkttyp hier sind absichtlich gleich
+ * aufgebaut: die Griffe entstehen in einer eigenen Uebersetzungseinheit
+ * ohne GL-Kenntnis und werden hier nur hochgeladen.
+ */
+static_assert(sizeof(psm::Vertex) == sizeof(Vertex),
+              "Eckpunkttypen von Viewport und Griffen sind auseinandergelaufen");
+
+void upload_psm(Mesh &m, const std::vector<psm::Vertex> &verts)
+{
+    upload(m, *reinterpret_cast<const std::vector<Vertex> *>(&verts));
+}
+
+/*
+ * Baut die Griffe neu.
+ *
+ * Das passiert bei jeder Kamerabewegung, weil die Griffe feste
+ * Bildschirmgroesse haben - ein paar hundert Eckpunkte, das faellt
+ * nicht ins Gewicht.
+ */
+void build_gizmo(psm_viewport *v)
+{
+    for (Mesh &m : v->gizmo_solid)
+        m.destroy();
+    v->gizmo_lines.destroy();
+    v->gizmo_axis_count = 0;
+    v->gizmo_dirty = false;
+
+    if (v->gizmo == PSM_GIZMO_NONE)
+        return;
+
+    Slic3r::Vec3d c;
+    if (! selected_center(v, c))
+        return;
+
+    const psm::Vec3 origin(static_cast<float>(c.x()), static_cast<float>(c.y()),
+                           static_cast<float>(c.z()));
+    const psm::Mat4 vp = v->projection() * v->view();
+    const float len = psm::handle_length_px() *
+                      psm::screen_scale(vp, origin, v->width, v->height);
+
+    /*
+     * Blickrichtung, damit die Baender immer zur Kamera zeigen. Ohne das
+     * waeren die Kreise aus manchen Winkeln unsichtbar duenn.
+     */
+    const Vec3 eye_v = v->eye();
+    const psm::Vec3 to_cam =
+        psm::Vec3(eye_v.x() - origin.x(), eye_v.y() - origin.y(),
+                  eye_v.z() - origin.z()).normalized();
+
+    /* Alles in Bildpunkten gedacht, dann in Millimeter umgerechnet. */
+    const float mm    = len / psm::handle_length_px();
+    const float band  = 7.f  * mm;   /* Breite der Baender */
+    const float ball  = 13.f * mm;   /* Radius der Anfasskugeln */
+
+    std::vector<psm::Vertex> lines;
+
+    switch (v->gizmo) {
+        case PSM_GIZMO_MOVE:
+            for (int a = 0; a < 3; ++a) {
+                const psm::Vec3 dir = psm::axis_vector(a);
+                std::vector<psm::Vertex> geo;
+                /* Schaft als Band statt als Haarlinie. */
+                psm::build_line_band(geo, origin, origin + dir * (len * 0.78f),
+                                     band, to_cam);
+                /* Spitze - build_arrow liefert ab Index 2 die Dreiecke. */
+                std::vector<psm::Vertex> arrow;
+                psm::build_arrow(arrow, origin, dir, len);
+                geo.insert(geo.end(), arrow.begin() + 2, arrow.end());
+                upload_psm(v->gizmo_solid[a], geo);
+            }
+            v->gizmo_axis_count = 3;
+            break;
+
+        case PSM_GIZMO_ROTATE:
+            for (int a = 0; a < 3; ++a) {
+                std::vector<psm::Vertex> geo;
+                psm::build_ring_band(geo, origin, a, len, band, to_cam, 64);
+                /* Sichtbare Anfasspunkte: ohne sie sieht man den Kreis,
+                 * weiss aber nicht, wo man ihn greifen kann. */
+                for (const psm::Anchor &an :
+                         psm::gizmo_anchors(PSM_GIZMO_ROTATE, origin, mm))
+                    if (an.axis == a)
+                        psm::build_ball(geo, an.to, ball);
+                upload_psm(v->gizmo_solid[a], geo);
+            }
+            v->gizmo_axis_count = 3;
+            break;
+
+        case PSM_GIZMO_SCALE: {
+            for (int a = 0; a < 3; ++a) {
+                const psm::Vec3 tip = origin + psm::axis_vector(a) * len;
+                std::vector<psm::Vertex> geo;
+                psm::build_line_band(geo, origin, tip, band, to_cam);
+                psm::build_box(geo, tip, ball);
+                upload_psm(v->gizmo_solid[a], geo);
+            }
+            /* Der Griff fuer gleichmaessiges Skalieren. */
+            const psm::Vec3 d = psm::Vec3(1.f, 1.f, 1.f).normalized();
+            std::vector<psm::Vertex> box;
+            psm::build_box(box, origin + d * (len * 0.75f), ball * 1.25f);
+            upload_psm(v->gizmo_solid[3], box);
+            v->gizmo_axis_count = 4;
+            break;
+        }
+
+        default:
+            break;
+    }
+
+    if (! lines.empty())
+        upload_psm(v->gizmo_lines, lines);
+}
+
+} // namespace
+
+PSM_API void psm_viewport_gesture_begin(psm_viewport *v)
+{
+    if (v != nullptr)
+        v->gesture_fresh = true;
+}
+
+PSM_API int psm_viewport_scale_selected(psm_viewport *v, float factor)
+{
+    if (v == nullptr || v->selection == PSM_INVALID_ID)
+        return 0;
+    /* Unsinnige Faktoren abweisen, statt das Objekt zu zerstoeren. */
+    if (! (factor > 0.f) || factor > 100.f)
+        return 0;
+    std::lock_guard<std::recursive_mutex> data_lock(v->session->data_mtx);
+
+    Slic3r::ModelObject *obj = nullptr;
+    for (Slic3r::ModelObject *o : v->session->model().objects)
+        if (static_cast<psm_object_id>(o->id().id) == v->selection) {
+            obj = o;
+            break;
+        }
+    if (obj == nullptr || obj->instances.empty())
+        return 0;
+
+    if (v->gesture_fresh) {
+                v->session->history_checkpoint("Objekt per Geste skalieren");
+                v->gesture_fresh = false;
+            }
+    Slic3r::ModelInstance *inst = obj->instances.front();
+    Slic3r::Vec3d sc = inst->get_scaling_factor();
+
+    /* Grenzen wie am Desktop: unter einem Prozent ist nichts mehr zu
+     * sehen, ueber dem Hundertfachen passt nichts mehr aufs Bett. */
+    const double f = std::clamp(static_cast<double>(factor),
+                                0.01 / sc.x(), 100.0 / sc.x());
+    sc *= f;
+    inst->set_scaling_factor(sc);
+    obj->invalidate_bounding_box();
+
+    /* Nach dem Skalieren wieder aufsetzen - sonst schwebt das Objekt
+     * beim Verkleinern und steckt beim Vergroessern im Bett. */
+    const Slic3r::BoundingBoxf3 bb = obj->instance_bounding_box(0, false);
+    Slic3r::Vec3d off = inst->get_offset();
+    off.z() -= bb.min.z();
+    inst->set_offset(off);
+    obj->invalidate_bounding_box();
+
+    v->dirty = true;
+    v->session->mark_design_changed();
+    return 1;
+}
+
+/* --- Vorschau ------------------------------------------------------ */
+
+namespace {
+
+libvgcode::EGCodeExtrusionRole libvgcode_role(
+    psm_preview_feature_role role)
+{
+    using Role = libvgcode::EGCodeExtrusionRole;
+    switch (role) {
+        case PSM_PREVIEW_ROLE_PERIMETER:                  return Role::Perimeter;
+        case PSM_PREVIEW_ROLE_EXTERNAL_PERIMETER:         return Role::ExternalPerimeter;
+        case PSM_PREVIEW_ROLE_OVERHANG_PERIMETER:         return Role::OverhangPerimeter;
+        case PSM_PREVIEW_ROLE_INTERNAL_INFILL:            return Role::InternalInfill;
+        case PSM_PREVIEW_ROLE_SOLID_INFILL:               return Role::SolidInfill;
+        case PSM_PREVIEW_ROLE_TOP_SOLID_INFILL:           return Role::TopSolidInfill;
+        case PSM_PREVIEW_ROLE_IRONING:                    return Role::Ironing;
+        case PSM_PREVIEW_ROLE_BRIDGE_INFILL:              return Role::BridgeInfill;
+        case PSM_PREVIEW_ROLE_GAP_FILL:                   return Role::GapFill;
+        case PSM_PREVIEW_ROLE_SKIRT:                      return Role::Skirt;
+        case PSM_PREVIEW_ROLE_SUPPORT_MATERIAL:           return Role::SupportMaterial;
+        case PSM_PREVIEW_ROLE_SUPPORT_MATERIAL_INTERFACE: return Role::SupportMaterialInterface;
+        case PSM_PREVIEW_ROLE_WIPE_TOWER:                 return Role::WipeTower;
+        case PSM_PREVIEW_ROLE_CUSTOM:                     return Role::Custom;
+        default:                                          return Role::None;
+    }
+}
+
+std::vector<std::string> preview_color_print_colors(
+    const Slic3r::GCodeProcessorResult &result)
+{
+    if (result.custom_gcode_per_print_z.empty())
+        return {};
+    std::vector<std::string> colors = result.extruder_colors;
+    for (const auto &item : result.custom_gcode_per_print_z)
+        if (item.type == Slic3r::CustomGCode::ColorChange)
+            colors.push_back(item.color);
+    /*
+     * Derselbe letzte Eintrag wie in GUI_Preview: Pause und freier
+     * Custom-G-Code werden grau gezeichnet.
+     */
+    colors.push_back("#808080");
+    return colors;
+}
+
+bool load_final_preview(
+    psm_viewport *v,
+    const std::shared_ptr<const Slic3r::GCodeProcessorResult> &result)
+{
+    if (! result || result->moves.empty())
+        return false;
+
+    libvgcode::GCodeInputData data = libvgcode::convert(
+        *result,
+        result->extruder_colors,
+        preview_color_print_colors(*result),
+        v->gcode_viewer);
+
+    /*
+     * libvgcode hat Rollen-Sichtbarkeit, aber keine Werkzeug-
+     * Sichtbarkeit. Gefiltert werden deshalb seine bereits offiziell
+     * konvertierten Eingabepunkte, nie selbst geparster G-Code.
+     * Reise-/Werkzeugwechselpunkte bleiben stehen und trennen Pfade.
+     */
+    if (! v->preview_extruders_visible.empty()) {
+        data.vertices.erase(
+            std::remove_if(
+                data.vertices.begin(), data.vertices.end(),
+                [v](const libvgcode::PathVertex &vertex) {
+                    const size_t extruder = vertex.extruder_id;
+                    return vertex.type == libvgcode::EMoveType::Extrude &&
+                           extruder < v->preview_extruders_visible.size() &&
+                           ! v->preview_extruders_visible[extruder];
+                }),
+            data.vertices.end());
+    }
+
+    v->gcode_viewer.load(std::move(data));
+    v->loaded_preview_result = result;
+    v->gcode_loaded = true;
+    return true;
+}
+
+} // namespace
+
+PSM_API void psm_viewport_set_mode(psm_viewport *v, psm_view_mode mode)
+{
+    if (v != nullptr)
+        v->mode = mode;
+}
+
+PSM_API psm_view_mode psm_viewport_get_mode(psm_viewport *v)
+{
+    return v == nullptr ? PSM_VIEW_EDITOR : v->mode;
+}
+
+PSM_API int psm_viewport_load_preview(psm_viewport *v)
+{
+    if (v == nullptr || v->session == nullptr ||
+        ! v->session->result_is_current())
+        return 0;
+
+    try {
+        if (! v->gcode_viewer_ready) {
+            /* libvgcode laedt seine GL-Funktionen selbst. Die Zeichenkette
+             * ist die Kontextversion; unter GLES erwartet es "3.0". */
+            v->gcode_viewer.init("3.0");
+            v->gcode_viewer_ready = true;
+        }
+
+        std::shared_ptr<const Slic3r::GCodeProcessorResult> result;
+        {
+            /*
+             * Revisionsprüfung und Zeigerübernahme bilden eine Einheit.
+             * Danach hält shared_ptr den unveränderlichen Final-Datensatz,
+             * ohne den Slice-/Editor-Lock während der Konvertierung zu
+             * blockieren.
+             */
+            std::lock_guard<std::recursive_mutex> data_lock(
+                v->session->data_mtx);
+            if (! v->session->result_is_current())
+                return 0;
+            std::lock_guard<std::mutex> result_lock(
+                v->session->result_mtx);
+            result = v->session->preview_result;
+        }
+        if (! result)
+            return 0;
+        if (v->loaded_preview_result == result && v->gcode_loaded)
+            return 1;
+
+        size_t extruder_count = result->extruders_count;
+        for (const auto &move : result->moves)
+            extruder_count = std::max(
+                extruder_count,
+                static_cast<size_t>(move.extruder_id) + 1);
+        v->preview_extruders_visible.assign(extruder_count, true);
+
+        /* Finaler GCodeProcessorResult, wie in GCodeViewer::load_as_gcode. */
+        return load_final_preview(v, result) ? 1 : 0;
+    } catch (const std::exception &e) {
+        v->last_error = std::string("Vorschau: ") + e.what();
+        psm_emit_log(PSM_LOG_ERROR, v->last_error);
+        return 0;
+    }
+}
+
+PSM_API int psm_viewport_pick_surface(psm_viewport *v, float x, float y,
+                                      psm_surface_hit *out)
+{
+    if (v == nullptr)
+        return 0;
+    /*
+     * Ist bereits ein Objekt gewaehlt, gehoert der Flaechenpinsel
+     * ausschliesslich dazu. Beim Messen ohne Auswahl darf dagegen die
+     * gesamte Platte getroffen werden.
+     */
+    const int found = raycast_model(v, x, y, v->selection, out, nullptr);
+    if (v->paint_enabled) {
+        v->paint_hit_valid = found != 0 && out != nullptr;
+        if (v->paint_hit_valid)
+            v->paint_hit = *out;
+        v->paint_cursor_dirty = true;
+    }
+    return found;
+}
+
+PSM_API void psm_viewport_set_preview_view(
+    psm_viewport *v,
+    psm_preview_view view)
+{
+    if (v == nullptr || ! v->gcode_loaded)
+        return;
+    v->gcode_viewer.set_view_type(
+        view == PSM_PREVIEW_VIEW_EXTRUDER
+            ? libvgcode::EViewType::Tool
+            : libvgcode::EViewType::FeatureType);
+}
+
+PSM_API void psm_viewport_set_role_visible(
+    psm_viewport *v,
+    psm_preview_feature_role role,
+    int32_t visible)
+{
+    if (v == nullptr || ! v->gcode_loaded)
+        return;
+    const libvgcode::EGCodeExtrusionRole converted =
+        libvgcode_role(role);
+    if (converted == libvgcode::EGCodeExtrusionRole::None)
+        return;
+    const bool current =
+        v->gcode_viewer.is_extrusion_role_visible(converted);
+    if (current != (visible != 0))
+        v->gcode_viewer.toggle_extrusion_role_visibility(converted);
+}
+
+PSM_API void psm_viewport_set_extruder_visible(
+    psm_viewport *v,
+    int32_t extruder,
+    int32_t visible)
+{
+    if (v == nullptr || ! v->gcode_loaded || extruder < 0)
+        return;
+    const size_t index = static_cast<size_t>(extruder);
+    if (index >= v->preview_extruders_visible.size() ||
+        v->preview_extruders_visible[index] == (visible != 0))
+        return;
+    v->preview_extruders_visible[index] = visible != 0;
+    try {
+        load_final_preview(v, v->loaded_preview_result);
+    } catch (const std::exception &e) {
+        v->last_error = std::string("Extruderfilter: ") + e.what();
+        psm_emit_log(PSM_LOG_ERROR, v->last_error);
+    }
+}
+
+PSM_API void psm_viewport_set_paint_options(
+    psm_viewport *v,
+    int32_t enabled,
+    psm_paint_tool tool,
+    const psm_paint_options *options)
+{
+    if (v == nullptr)
+        return;
+    const bool valid =
+        enabled != 0 && options != nullptr &&
+        options->version == PSM_PAINT_OPTIONS_VERSION_1;
+    const bool changed =
+        v->paint_enabled != valid ||
+        (valid && (v->paint_tool != tool ||
+            std::memcmp(&v->paint_options, options,
+                        sizeof(psm_paint_options)) != 0));
+    v->paint_enabled = valid;
+    if (valid) {
+        v->paint_tool = tool;
+        v->paint_options = *options;
+    } else {
+        v->paint_hit_valid = false;
+        v->paint_cursor.destroy();
+    }
+    if (changed) {
+        v->paint_cursor_dirty = true;
+        v->dirty = true;
+    }
+}
+
+PSM_API int psm_viewport_active_paint_visualization(
+    psm_viewport *v,
+    psm_paint_visualization_info *out)
+{
+    if (v == nullptr || out == nullptr || ! v->paint_enabled)
+        return 0;
+    std::memset(out, 0, sizeof(*out));
+    out->cursor_visible = v->paint_cursor.vertex_count > 0 ? 1 : 0;
+    out->annotation_visible = v->paint_overlays.empty() ? 0 : 1;
+    out->mode = static_cast<int32_t>(v->paint_options.mode);
+    out->shape = static_cast<int32_t>(v->paint_options.shape);
+    out->radius_mm = v->paint_options.radius_mm;
+    out->annotation_facets = v->paint_annotation_facets;
+    return out->cursor_visible != 0 || out->annotation_visible != 0;
+}
+
+PSM_API int32_t psm_viewport_layer_count(psm_viewport *v)
+{
+    if (v == nullptr || ! v->gcode_loaded)
+        return 0;
+    return static_cast<int32_t>(v->gcode_viewer.get_layers_count());
+}
+
+PSM_API void psm_viewport_set_layer_range(psm_viewport *v, int32_t first, int32_t last)
+{
+    if (v == nullptr || ! v->gcode_loaded)
+        return;
+    v->gcode_viewer.set_layers_view_range(
+        static_cast<libvgcode::Interval::value_type>(std::max(first, 0)),
+        static_cast<libvgcode::Interval::value_type>(std::max(last, 0)));
+}
+
+PSM_API int psm_viewport_move_range_bounds(
+    psm_viewport *v, int32_t *out_min, int32_t *out_max)
+{
+    if (v == nullptr || ! v->gcode_loaded)
+        return 0;
+    /* "enabled" ist der Teil der Werkzeugwege, den die aktuelle
+     * Schicht-/Rollen-/Extruderauswahl ueberhaupt zulaesst - genau der
+     * Bereich, den der untere Regler abdecken soll. "full" waere
+     * unabhaengig von der Schichtauswahl, "visible" ist der bereits
+     * eingeschraenkte Anzeigebereich (das Ergebnis, nicht die Grenze). */
+    const libvgcode::Interval &bereich = v->gcode_viewer.get_view_enabled_range();
+    if (out_min != nullptr)
+        *out_min = static_cast<int32_t>(bereich[0]);
+    if (out_max != nullptr)
+        *out_max = static_cast<int32_t>(bereich[1]);
+    return 1;
+}
+
+PSM_API void psm_viewport_set_move_range(psm_viewport *v, int32_t first, int32_t last)
+{
+    if (v == nullptr || ! v->gcode_loaded)
+        return;
+    v->gcode_viewer.set_view_visible_range(
+        static_cast<libvgcode::Interval::value_type>(std::max(first, 0)),
+        static_cast<libvgcode::Interval::value_type>(std::max(last, 0)));
+}
+
+PSM_API const char *psm_viewport_last_error(psm_viewport *v)
+{
+    return v == nullptr ? "" : v->last_error.c_str();
+}
+
+/* ------------------------------------------------------------------ */
+/* Griffe am Objekt                                                    */
+/* ------------------------------------------------------------------ */
+
+PSM_API int psm_viewport_bed_label_anchor(
+    psm_viewport *v, int32_t position, float *out_x, float *out_y)
+{
+    if (v == nullptr || out_x == nullptr || out_y == nullptr)
+        return 0;
+    if (! v->multi_bed_render || v->session->bed_models.size() <= 1)
+        return 0;
+
+    std::lock_guard<std::recursive_mutex> data_lock(v->session->data_mtx);
+    float min_x = 0.f, min_y = 0.f;
+    try {
+        const Slic3r::Points pts = Slic3r::get_bed_shape(v->session->config);
+        if (pts.size() < 3)
+            return 0;
+        Slic3r::BoundingBoxf bb;
+        for (const Slic3r::Point &p : pts)
+            bb.merge(Slic3r::Vec2d(Slic3r::unscale<double>(p.x()),
+                                   Slic3r::unscale<double>(p.y())));
+        min_x = static_cast<float>(bb.min.x());
+        min_y = static_cast<float>(bb.min.y());
+    } catch (...) {
+        return 0;
+    }
+
+    /* 4 mm von der Ecke nach innen - sonst sitzt das Schild genau auf
+     * dem Rand des Betts. */
+    const Slic3r::Vec3d off = bed_offset(v, static_cast<size_t>(position));
+    const psm::Vec3 world(min_x + static_cast<float>(off.x()) + 4.f,
+                          min_y + static_cast<float>(off.y()) + 4.f, 0.f);
+    const psm::Mat4 vp = v->projection() * v->view();
+    psm::Vec2 screen;
+    if (! psm::project_point(vp, world, v->width, v->height, screen))
+        return 0;
+    *out_x = screen.x();
+    *out_y = screen.y();
+    return 1;
+}
+
+PSM_API void psm_viewport_set_gizmo(psm_viewport *v, psm_gizmo_mode mode)
+{
+    if (v == nullptr || v->gizmo == mode)
+        return;
+    v->gizmo = mode;
+    v->gizmo_dirty = true;
+}
+
+PSM_API psm_gizmo_mode psm_viewport_get_gizmo(const psm_viewport *v)
+{
+    return v == nullptr ? PSM_GIZMO_NONE : v->gizmo;
+}
+
+PSM_API int psm_viewport_gizmo_pick(psm_viewport *v, float x, float y,
+                                    float radius_px)
+{
+    if (v == nullptr || v->gizmo == PSM_GIZMO_NONE)
+        return -1;
+    std::lock_guard<std::recursive_mutex> data_lock(v->session->data_mtx);
+    Slic3r::Vec3d c;
+    if (! selected_center(v, c))
+        return -1;
+
+    const psm::Vec3 origin(static_cast<float>(c.x()), static_cast<float>(c.y()),
+                           static_cast<float>(c.z()));
+    const psm::Mat4 vp = v->projection() * v->view();
+    const float mm = psm::screen_scale(vp, origin, v->width, v->height);
+
+    return psm::pick_anchor(psm::gizmo_anchors(v->gizmo, origin, mm), vp,
+                            v->width, v->height, x, y, radius_px);
+}
+
+PSM_API int psm_viewport_gizmo_axis_screen(psm_viewport *v, int axis,
+                                           psm_gizmo_screen_axis *out)
+{
+    if (v == nullptr || out == nullptr || axis < 0 || axis > 2 ||
+        v->gizmo != PSM_GIZMO_MOVE)
+        return 0;
+
+    std::lock_guard<std::recursive_mutex> data_lock(v->session->data_mtx);
+    Slic3r::Vec3d c;
+    if (! selected_center(v, c))
+        return 0;
+
+    const psm::Vec3 origin(static_cast<float>(c.x()), static_cast<float>(c.y()),
+                           static_cast<float>(c.z()));
+    const psm::Mat4 vp = v->projection() * v->view();
+    const float mm = psm::screen_scale(vp, origin, v->width, v->height);
+    const std::vector<psm::Anchor> anchors =
+        psm::gizmo_anchors(PSM_GIZMO_MOVE, origin, mm);
+
+    for (const psm::Anchor &anchor : anchors) {
+        if (anchor.axis != axis)
+            continue;
+        psm::Vec2 from, to;
+        if (! psm::project_point(vp, anchor.from, v->width, v->height, from) ||
+            ! psm::project_point(vp, anchor.to, v->width, v->height, to))
+            return 0;
+        out->from_x = from.x();
+        out->from_y = from.y();
+        out->to_x   = to.x();
+        out->to_y   = to.y();
+        return 1;
+    }
+    return 0;
+}
+
+PSM_API int psm_viewport_gizmo_drag(psm_viewport *v, int axis,
+                                    float from_x, float from_y,
+                                    float to_x, float to_y, int snap)
+{
+    if (v == nullptr || axis < 0 || v->gizmo == PSM_GIZMO_NONE)
+        return 0;
+    std::lock_guard<std::recursive_mutex> data_lock(v->session->data_mtx);
+    Slic3r::ModelObject *obj = selected_object(v);
+    if (obj == nullptr || obj->instances.empty())
+        return 0;
+    Slic3r::ModelInstance *inst = obj->instances.front();
+
+    Slic3r::Vec3d c;
+    if (! selected_center(v, c))
+        return 0;
+    const psm::Vec3 origin(static_cast<float>(c.x()), static_cast<float>(c.y()),
+                           static_cast<float>(c.z()));
+    const psm::Mat4 vp = v->projection() * v->view();
+    const float mm = psm::screen_scale(vp, origin, v->width, v->height);
+
+    switch (v->gizmo) {
+        case PSM_GIZMO_MOVE: {
+            /*
+             * Der Bildschirmversatz wird auf die Achse projiziert: nur
+             * der Anteil in Achsenrichtung zaehlt, alles quer dazu wird
+             * verworfen. Sonst laeuft das Objekt bei schraeger Kamera
+             * seitlich weg.
+             */
+            const psm::Vec3 a = psm::axis_vector(axis);
+            psm::Vec2 s0, s1;
+            if (! psm::project_point(vp, origin, v->width, v->height, s0) ||
+                ! psm::project_point(vp, origin + a * (10.f * mm),
+                                     v->width, v->height, s1))
+                return 0;
+            const psm::Vec2 dir = s1 - s0;
+            const float len2 = dir.squaredNorm();
+            if (len2 < 0.01f)
+                return 0;
+
+            const psm::Vec2 drag(to_x - from_x, to_y - from_y);
+            float along = drag.dot(dir) / len2 * 10.f * mm;
+            if (snap != 0)
+                along = std::round(along);
+
+            if (v->gesture_fresh) {
+                v->session->history_checkpoint("Objekt am Griff verschieben");
+                v->gesture_fresh = false;
+            }
+            Slic3r::Vec3d off = inst->get_offset();
+            off(axis) += static_cast<double>(along);
+            inst->set_offset(off);
+            break;
+        }
+
+        case PSM_GIZMO_ROTATE: {
+            /*
+             * Der Winkel ergibt sich aus der Drehung des Fingers um den
+             * Bildschirmmittelpunkt des Objekts. Das ist die Zuordnung,
+             * die sich am natuerlichsten anfuehlt - unabhaengig davon,
+             * wie flach der Kreis gerade steht.
+             */
+            psm::Vec2 ctr;
+            if (! psm::project_point(vp, origin, v->width, v->height, ctr))
+                return 0;
+            const float a0 = std::atan2(from_y - ctr.y(), from_x - ctr.x());
+            const float a1 = std::atan2(to_y   - ctr.y(), to_x   - ctr.x());
+
+            /*
+             * Zwei Vorzeichen sind hier zu beachten, sonst dreht das
+             * Objekt der Fingerbewegung entgegen:
+             *
+             *  - Der Bildschirm zaehlt y nach unten, atan2 nach oben.
+             *    Deshalb das Minus.
+             *  - Blickt man von der Rueckseite auf den Kreis, laeuft er
+             *    aus Sicht des Fingers andersherum. Das Skalarprodukt
+             *    von Achse und Blickrichtung sagt, welche Seite es ist.
+             */
+            const Vec3 eye_v = v->eye();
+            const psm::Vec3 to_cam =
+                psm::Vec3(eye_v.x() - origin.x(), eye_v.y() - origin.y(),
+                          eye_v.z() - origin.z()).normalized();
+            const float facing = psm::axis_vector(axis).dot(to_cam) < 0.f ? -1.f : 1.f;
+
+            float deg = -(a1 - a0) * 180.f / static_cast<float>(M_PI) * facing;
+
+            Slic3r::Vec3d rot = inst->get_rotation();
+            double cur = rot(axis) * 180.0 / M_PI + static_cast<double>(deg);
+            if (snap != 0)
+                cur = std::round(cur / 15.0) * 15.0;   /* wie am Desktop */
+            if (v->gesture_fresh) {
+                v->session->history_checkpoint("Objekt am Griff drehen");
+                v->gesture_fresh = false;
+            }
+            rot(axis) = cur * M_PI / 180.0;
+            inst->set_rotation(rot);
+            break;
+        }
+
+        case PSM_GIZMO_SCALE: {
+            /* Abstand vom Mittelpunkt vorher zu nachher - vergroessert
+             * sich der Abstand, waechst das Objekt. */
+            psm::Vec2 ctr;
+            if (! psm::project_point(vp, origin, v->width, v->height, ctr))
+                return 0;
+            const float d0 = std::hypot(from_x - ctr.x(), from_y - ctr.y());
+            const float d1 = std::hypot(to_x - ctr.x(), to_y - ctr.y());
+            if (d0 < 1.f)
+                return 0;
+            const double f = static_cast<double>(d1 / d0);
+
+            if (v->gesture_fresh) {
+                v->session->history_checkpoint("Objekt am Griff skalieren");
+                v->gesture_fresh = false;
+            }
+            Slic3r::Vec3d sc = inst->get_scaling_factor();
+            if (axis == 3) {
+                sc *= f;                       /* gleichmaessig */
+            } else {
+                sc(axis) *= f;                 /* nur diese Achse */
+            }
+            for (int i = 0; i < 3; ++i)
+                sc(i) = std::clamp(sc(i), 0.01, 100.0);
+            inst->set_scaling_factor(sc);
+            break;
+        }
+
+        default:
+            return 0;
+    }
+
+    obj->invalidate_bounding_box();
+
+    /* Nach Drehen und Skalieren wieder aufsetzen - sonst schwebt oder
+     * versinkt das Objekt. Beim Verschieben nicht, sonst liesse sich die
+     * Hoehe nie aendern. */
+    if (v->gizmo != PSM_GIZMO_MOVE) {
+        const Slic3r::BoundingBoxf3 bb = obj->instance_bounding_box(0, false);
+        Slic3r::Vec3d off = inst->get_offset();
+        off.z() -= bb.min.z();
+        inst->set_offset(off);
+        obj->invalidate_bounding_box();
+    }
+
+    v->dirty = true;
+    v->gizmo_dirty = true;
+    v->session->mark_design_changed();
+    return 1;
+}
+
+} /* extern "C" */

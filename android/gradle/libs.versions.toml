@@ -1,0 +1,71 @@
+[versions]
+agp = "8.7.3"
+kotlin = "2.1.0"
+coreKtx = "1.15.0"
+lifecycle = "2.8.7"
+activityCompose = "1.9.3"
+composeBom = "2024.12.01"
+documentfile = "1.0.1"
+coroutines = "1.9.0"
+coil = "2.7.0"
+junit = "4.13.2"
+serializationJson = "1.7.3"
+coroutinesTest = "1.9.0"
+camerax = "1.4.1"
+mlkitBarcode = "17.3.0"
+zxing = "3.5.3"
+androidxTestJunit = "1.2.1"
+androidxTestRunner = "1.6.2"
+
+[libraries]
+androidx-core-ktx           = { group = "androidx.core",              name = "core-ktx",                 version.ref = "coreKtx" }
+androidx-lifecycle-runtime  = { group = "androidx.lifecycle",         name = "lifecycle-runtime-ktx",    version.ref = "lifecycle" }
+androidx-lifecycle-viewmodel= { group = "androidx.lifecycle",         name = "lifecycle-viewmodel-compose", version.ref = "lifecycle" }
+androidx-activity-compose   = { group = "androidx.activity",          name = "activity-compose",         version.ref = "activityCompose" }
+androidx-documentfile       = { group = "androidx.documentfile",      name = "documentfile",             version.ref = "documentfile" }
+androidx-compose-bom        = { group = "androidx.compose",           name = "compose-bom",              version.ref = "composeBom" }
+androidx-ui                 = { group = "androidx.compose.ui",        name = "ui" }
+androidx-ui-graphics        = { group = "androidx.compose.ui",        name = "ui-graphics" }
+androidx-ui-tooling         = { group = "androidx.compose.ui",        name = "ui-tooling" }
+androidx-ui-tooling-preview = { group = "androidx.compose.ui",        name = "ui-tooling-preview" }
+androidx-material3          = { group = "androidx.compose.material3", name = "material3" }
+androidx-material-icons     = { group = "androidx.compose.material",  name = "material-icons-extended" }
+kotlinx-coroutines-android  = { group = "org.jetbrains.kotlinx",      name = "kotlinx-coroutines-android", version.ref = "coroutines" }
+# Fuer die Original-SVG-Icons aus PrusaSlicer - Android rendert SVG nicht selbst.
+coil-compose                = { group = "io.coil-kt",                 name = "coil-compose",             version.ref = "coil" }
+coil-svg                    = { group = "io.coil-kt",                 name = "coil-svg",                 version.ref = "coil" }
+kotlin-test                 = { group = "org.jetbrains.kotlin",     name = "kotlin-test",              version.ref = "kotlin" }
+junit                       = { group = "junit",                      name = "junit",                    version.ref = "junit" }
+kotlinx-serialization-json = { group = "org.jetbrains.kotlinx",      name = "kotlinx-serialization-json", version.ref = "serializationJson" }
+kotlinx-coroutines-test    = { group = "org.jetbrains.kotlinx",      name = "kotlinx-coroutines-test",    version.ref = "coroutinesTest" }
+# QR-Scanner fuer die experimentelle lokale PrusaLink-Kopplung (nur Kamera-Vorschau + Barcode-Erkennung, keine Cloud-Anbindung).
+androidx-camera-core        = { group = "androidx.camera",           name = "camera-core",              version.ref = "camerax" }
+androidx-camera-camera2     = { group = "androidx.camera",           name = "camera-camera2",           version.ref = "camerax" }
+androidx-camera-lifecycle   = { group = "androidx.camera",           name = "camera-lifecycle",         version.ref = "camerax" }
+androidx-camera-view        = { group = "androidx.camera",           name = "camera-view",              version.ref = "camerax" }
+mlkit-barcode-scanning      = { group = "com.google.mlkit",          name = "barcode-scanning",         version.ref = "mlkitBarcode" }
+# QR-Codes ERZEUGEN. ML Kit liest nur; fuer "meinen Code zeigen"
+# braucht es einen Erzeuger. Reines Java ohne Android-Anhang, und R8
+# wirft den Teil weg, den wir nicht anfassen (wir nutzen nur QR, nicht
+# die zwoelf anderen Strichcodearten).
+zxing-core                  = { group = "com.google.zxing",          name = "core",                     version.ref = "zxing" }
+# Oberflaechentests auf dem Geraet. Die reinen Logiktests unter
+# app/src/test brauchen davon nichts - diese hier zeichnen wirklich.
+androidx-test-ext-junit     = { group = "androidx.test.ext",         name = "junit",                    version.ref = "androidxTestJunit" }
+androidx-test-runner        = { group = "androidx.test",             name = "runner",                   version.ref = "androidxTestRunner" }
+androidx-ui-test-junit4     = { group = "androidx.compose.ui",       name = "ui-test-junit4" }
+androidx-ui-test-manifest   = { group = "androidx.compose.ui",       name = "ui-test-manifest" }
+# Fuer Faelle, in denen die Compose-Regel nicht warten kann: sie
+# verlangt, dass die Oberflaeche zur Ruhe kommt, und ein Drucker, dessen
+# Erreichbarkeit gerade geprueft wird, dreht sein Kringelchen weiter.
+# uiautomator liest den Baum, ohne auf Ruhe zu warten - moeglich, weil
+# testTagsAsResourceId die Kennungen nach draussen gibt.
+androidx-test-uiautomator   = { group = "androidx.test.uiautomator",  name = "uiautomator",              version = "2.3.0" }
+
+[plugins]
+android-application = { id = "com.android.application", version.ref = "agp" }
+kotlin-android      = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
+kotlin-compose      = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
+android-library     = { id = "com.android.library", version.ref = "agp" }
+kotlin-multiplatform= { id = "org.jetbrains.kotlin.multiplatform", version.ref = "kotlin" }
+kotlin-serialization= { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }

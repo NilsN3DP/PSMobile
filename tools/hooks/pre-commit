@@ -1,0 +1,28 @@
+#!/bin/sh
+# Paritaetswaechter vor jedem Commit.
+#
+# Einrichten:  git config core.hooksPath tools/hooks
+# Umgehen:     git commit --no-verify   (fuer den seltenen begruendeten Fall)
+#
+# Geprueft wird nur, was im Commit steckt - das dauert Bruchteile einer
+# Sekunde. Den vollstaendigen Lauf macht die CI.
+
+if ! command -v python >/dev/null 2>&1; then
+    echo "paritaet: kein python gefunden, Pruefung uebersprungen." >&2
+    exit 0
+fi
+
+WURZEL="$(git rev-parse --show-toplevel)"
+GEAENDERT="$(git diff --cached --name-only --diff-filter=ACM)"
+
+# Nur laufen, wenn Oberflaechendateien betroffen sind.
+if ! printf '%s\n' "$GEAENDERT" | grep -qE '^(ios/PSMobile/(Screens|UI)/|android/app/src/main/java/de/psmobile/ui/)'; then
+    exit 0
+fi
+
+python "$WURZEL/tools/paritaet_pruefen.py" --geaendert --basis HEAD || {
+    echo ""
+    echo "paritaet: Commit gestoppt. Entweder den Zwilling nachziehen oder,"
+    echo "          wenn es wirklich begruendet ist, mit --no-verify commiten."
+    exit 1
+}

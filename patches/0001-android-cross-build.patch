@@ -1,0 +1,186 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 57b60ea..d3c18fb 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -56,6 +56,15 @@ set(SLIC3R_GTK "2" CACHE STRING "GTK version to use with wxWidgets on Linux")
+ 
+ set(IS_CROSS_COMPILE FALSE)
+ 
++# PSMobile: Upstream erkennt Cross-Compiling nur an der Apple-Multi-Arch-
++# Konstellation. Beim Bauen fuer Android setzt die NDK-Toolchain
++# CMAKE_CROSSCOMPILING - ohne diese Zeile versucht der Build, das fuer
++# arm64 uebersetzte Hilfsprogramm encoding-check auf dem x86-Host
++# auszufuehren ("Exec format error").
++if (CMAKE_CROSSCOMPILING)
++    set(IS_CROSS_COMPILE TRUE)
++endif ()
++
+ if (SLIC3R_STATIC)
+     # Prefer config scripts over find modules. This is helpful when building with
+     # the static dependencies. Many libraries have their own export scripts
+@@ -439,18 +448,25 @@ slic3r_remap_configs(TBB::tbbmalloc RelWithDebInfo Release)
+ # The Intel TBB library will use the std::exception_ptr feature of C++11.
+ # add_definitions(-DTBB_USE_CAPTURED_EXCEPTION=0)
+ 
+-find_package(CURL REQUIRED)
+-
++# PSMobile: libslic3r enthaelt keine einzige curl-Referenz - Netzwerk
++# steckt ausschliesslich in der Desktop-GUI-Schicht. Ohne GUI brauchen
++# wir weder libcurl noch OpenSSL, was den Android-Cross-Build deutlich
++# verkleinert. Das INTERFACE-Ziel bleibt bestehen, damit Ziele, die
++# darauf verweisen, weiterhin konfigurierbar sind.
+ add_library(libcurl INTERFACE)
+-target_link_libraries(libcurl INTERFACE CURL::libcurl)
+ 
+-# Fixing curl's cmake config script bugs
+-if (NOT WIN32)
+-    # Required by libcurl
+-    find_package(ZLIB REQUIRED)
+-    target_link_libraries(libcurl INTERFACE ZLIB::ZLIB)
+-else()
+-    target_link_libraries(libcurl INTERFACE crypt32)
++if (SLIC3R_GUI)
++    find_package(CURL REQUIRED)
++    target_link_libraries(libcurl INTERFACE CURL::libcurl)
++
++    # Fixing curl's cmake config script bugs
++    if (NOT WIN32)
++        # Required by libcurl
++        find_package(ZLIB REQUIRED)
++        target_link_libraries(libcurl INTERFACE ZLIB::ZLIB)
++    else()
++        target_link_libraries(libcurl INTERFACE crypt32)
++    endif()
+ endif()
+ 
+ ## OPTIONAL packages
+@@ -471,16 +487,21 @@ endif ()
+ 
+ find_package(PNG REQUIRED)
+ 
+-set(OpenGL_GL_PREFERENCE "LEGACY")
+-find_package(OpenGL REQUIRED)
++# PSMobile: Ohne Desktop-GUI wird weder Desktop-OpenGL noch GLEW
++# gebraucht. Auf Android gibt es beides nicht - dort stellt das System
++# OpenGL ES bereit, und der Viewport bindet GLESv3 direkt ein.
++if (SLIC3R_GUI)
++    set(OpenGL_GL_PREFERENCE "LEGACY")
++    find_package(OpenGL REQUIRED)
+ 
+-# Find glew or use bundled version
+-if (SLIC3R_STATIC AND NOT SLIC3R_STATIC_EXCLUDE_GLEW)
+-    set(GLEW_USE_STATIC_LIBS ON)
+-    set(GLEW_VERBOSE ON)
+-endif()
++    # Find glew or use bundled version
++    if (SLIC3R_STATIC AND NOT SLIC3R_STATIC_EXCLUDE_GLEW)
++        set(GLEW_USE_STATIC_LIBS ON)
++        set(GLEW_VERBOSE ON)
++    endif()
+ 
+-find_package(GLEW REQUIRED)
++    find_package(GLEW REQUIRED)
++endif ()
+ 
+ # Find the Cereal serialization library
+ find_package(cereal REQUIRED)
+diff --git a/deps/+GMP/GMP.cmake b/deps/+GMP/GMP.cmake
+index bea8c89..2d2e8b5 100644
+--- a/deps/+GMP/GMP.cmake
++++ b/deps/+GMP/GMP.cmake
+@@ -28,6 +28,11 @@ else ()
+     set(_gmp_ccflags "${_stdlib} ${CMAKE_CXX_FLAGS_${_buildtype_upper}} -fPIC -DPIC -Wall -Wmissing-prototypes -Wpointer-arith -pedantic -fomit-frame-pointer -fno-common")
+     set(_gmp_build_tgt "${CMAKE_SYSTEM_PROCESSOR}")
+ 
++    # PSMobile: C- und C++-Flags trennen. -std=gnu11 und -Wmissing-prototypes
++    # sind C-only; clang++ des Android-NDK bricht damit ab.
++    set(_gmp_cxxflags "${CMAKE_CXX_FLAGS_${_buildtype_upper}} -fPIC -DPIC -Wall -Wpointer-arith -fomit-frame-pointer -fno-common")
++
++
+     set(_cross_compile_arg "")
+     if (APPLE)
+         if (CMAKE_OSX_ARCHITECTURES)
+@@ -42,8 +47,33 @@ else ()
+             set(_cross_compile_arg --host=${_gmp_build_tgt}-apple-darwin21)
+         endif ()
+ 
+-        set(_gmp_ccflags "${_gmp_ccflags} -mmacosx-version-min=${DEP_OSX_TARGET}")
+-        set(_gmp_build_tgt "--build=${_gmp_build_tgt}-apple-darwin")
++        # PSMobile: Auf iOS ist -mmacosx-version-min schlicht falsch. Das
++        # Ergebnis ist eine macOS-Bibliothek, und erst der Linker der App
++        # merkt es: "built for macOS" mitten im iOS-Bau. Autotools erfaehrt
++        # das SDK ausserdem nur ueber die Flags - CMake reicht -isysroot
++        # hier nicht von selbst weiter.
++        if (CMAKE_SYSTEM_NAME STREQUAL "iOS")
++            if (CMAKE_OSX_SYSROOT MATCHES "[Ss]imulator")
++                set(_ios_min "-mios-simulator-version-min=${CMAKE_OSX_DEPLOYMENT_TARGET}")
++            else ()
++                set(_ios_min "-miphoneos-version-min=${CMAKE_OSX_DEPLOYMENT_TARGET}")
++            endif ()
++            set(_gmp_ccflags  "${_gmp_ccflags} ${_ios_min} -isysroot ${CMAKE_OSX_SYSROOT}")
++            set(_gmp_cxxflags "${_gmp_cxxflags} -arch ${CMAKE_OSX_ARCHITECTURES} ${_ios_min} -isysroot ${CMAKE_OSX_SYSROOT}")
++        else ()
++            set(_gmp_ccflags "${_gmp_ccflags} -mmacosx-version-min=${DEP_OSX_TARGET}")
++        endif ()
++        if (CMAKE_SYSTEM_NAME STREQUAL "iOS")
++            # PSMobile: configure vergleicht die beiden Tripel als reine
++            # Zeichenketten. Sind sie gleich, haelt es den Bau fuer nativ
++            # und fuehrt seine Testprogramme aus - eine Simulator-Binaerdatei
++            # laeuft auf dem Mac aber nicht, und die Meldung lautet dann nur
++            # "program does not run". Deshalb hier die Maschine benennen,
++            # auf der tatsaechlich gebaut wird, statt noch einmal das Ziel.
++            set(_gmp_build_tgt "--build=${CMAKE_HOST_SYSTEM_PROCESSOR}-apple-darwin${CMAKE_HOST_SYSTEM_VERSION}")
++        else ()
++            set(_gmp_build_tgt "--build=${_gmp_build_tgt}-apple-darwin")
++        endif ()
+     elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+         if (${CMAKE_SYSTEM_PROCESSOR} MATCHES "arm")
+             set(_gmp_ccflags "${_gmp_ccflags} -march=armv7-a") # Works on RPi-4
+@@ -65,7 +95,7 @@ else ()
+         URL_HASH SHA256=eae9326beb4158c386e39a356818031bd28f3124cf915f8c5b1dc4c7a36b4d7c
+         DOWNLOAD_DIR ${${PROJECT_NAME}_DEP_DOWNLOAD_DIR}/GMP
+         BUILD_IN_SOURCE ON 
+-        CONFIGURE_COMMAND  env "CFLAGS=${_gmp_ccflags}" "CXXFLAGS=${_gmp_ccflags}" ./configure ${_cross_compile_arg} --enable-shared=no --enable-cxx=yes --enable-static=yes "--prefix=${${PROJECT_NAME}_DEP_INSTALL_PREFIX}" ${_gmp_build_tgt}
++        CONFIGURE_COMMAND  env "CFLAGS=${_gmp_ccflags}" "CXXFLAGS=${_gmp_cxxflags}" ./configure ${_cross_compile_arg} --enable-shared=no --enable-cxx=yes --enable-static=yes "--prefix=${${PROJECT_NAME}_DEP_INSTALL_PREFIX}" ${_gmp_build_tgt}
+         BUILD_COMMAND     make -j
+         INSTALL_COMMAND   make install
+     )
+diff --git a/deps/+MPFR/MPFR.cmake b/deps/+MPFR/MPFR.cmake
+index 81d8276..bc09a3e 100644
+--- a/deps/+MPFR/MPFR.cmake
++++ b/deps/+MPFR/MPFR.cmake
+@@ -34,7 +34,7 @@ else ()
+                 sh -c
+                 "autoreconf -f -i && \
+                  CFLAGS='${_gmp_ccflags}' \
+-                 CXXFLAGS='${_gmp_ccflags}' \
++                 CXXFLAGS='${_gmp_cxxflags}' \
+                  ./configure ${_cross_compile_arg} \
+                              --prefix='${${PROJECT_NAME}_DEP_INSTALL_PREFIX}' \
+                              --enable-shared=no \
+diff --git a/deps/+PNG/PNG.cmake b/deps/+PNG/PNG.cmake
+index 2c11468..d9242da 100644
+--- a/deps/+PNG/PNG.cmake
++++ b/deps/+PNG/PNG.cmake
+@@ -1,4 +1,4 @@
+-if (MSVC OR APPLE)
++if (MSVC OR APPLE OR ANDROID)
+     if (APPLE)
+         # Only disable NEON extension for Apple ARM builds, leave it enabled for Raspberry PI.
+         set(_disable_neon_extension "-DPNG_ARM_NEON:STRING=off")
+@@ -6,7 +6,14 @@ if (MSVC OR APPLE)
+         set(_disable_neon_extension "")
+     endif ()
+ 
+-    set(_patch_cmd PATCH_COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_CURRENT_LIST_DIR}/CMakeLists.txt.patched CMakeLists.txt)
++    # PSMobile: Android braucht libpng aus dem deps-Baum, weil es dort
++    # keine Systembibliothek gibt. Das gepatchte CMakeLists ist auf
++    # MSVC/Apple zugeschnitten - fuer Android bleibt das Original stehen.
++    if (ANDROID)
++        set(_patch_cmd "")
++    else ()
++        set(_patch_cmd PATCH_COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_CURRENT_LIST_DIR}/CMakeLists.txt.patched CMakeLists.txt)
++    endif ()
+ 
+     if (APPLE)
+         set(_patch_cmd ${_patch_cmd} && ${PATCH_CMD} ${CMAKE_CURRENT_LIST_DIR}/PNG.patch)

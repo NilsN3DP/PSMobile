@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Platzhalter-Icon: eine Duese ueber Schichtlinien.
+    Vektorgrafik statt PNG-Satz, damit kein Binaerballast im Repo liegt.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Duese -->
+    <path
+        android:fillColor="#FF6B35"
+        android:pathData="M45,30 L63,30 L63,50 L57,62 L51,62 L45,50 Z" />
+
+    <!-- Extrudierter Strang -->
+    <path
+        android:fillColor="#FF6B35"
+        android:pathData="M52,62 L56,62 L56,70 L52,70 Z" />
+
+    <!-- Schichten -->
+    <path
+        android:fillColor="#8A8A8E"
+        android:pathData="M34,74 L74,74 L74,78 L34,78 Z" />
+    <path
+        android:fillColor="#8A8A8E"
+        android:pathData="M32,80 L76,80 L76,84 L32,84 Z" />
+</vector>

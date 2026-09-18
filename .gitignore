@@ -1,0 +1,57 @@
+# Externer PrusaSlicer-Checkout - wird per bootstrap.sh geholt
+/external/
+/core/src/generated/
+
+# Build-Ausgaben
+/build-out/
+/deps-out/
+**/build/
+!/build/
+/build/*
+# Die Skripte unter build/scripts sind Quelltext, keine Bauausgabe.
+#
+# Hier stand eine Positivliste, in die jedes neue Skript einzeln
+# eingetragen werden musste. Das wurde vergessen: dreizehn Skripte lagen
+# nur auf der Freigabe, darunter env.sh, bootstrap.sh, build-deps.sh,
+# build-apk.sh und extract-ui.py - also die halbe Baukette. Waere die
+# Freigabe verloren gegangen, waere sie mit ihr weg gewesen.
+!/build/scripts/
+!/build/docker/
+**/.cxx/
+*.o
+*.a
+*.so
+*.apk
+*.aab
+__pycache__/
+*.py[cod]
+
+# Android
+android/local.properties
+android/.gradle/
+android/app/build/
+.gradle/
+
+# iOS / Xcode
+ios/build/
+ios/DerivedData/
+*.xcuserstate
+xcuserdata/
+
+# Editoren
+.vscode/
+.idea/
+*.swp
+android/shared/build/
+
+# Erzeugte iOS-Ausgaben.
+#
+# Beides entsteht aus Quellen, die im Baum liegen: das Xcode-Projekt aus
+# ios/project.yml (xcodegen), die Ressourcen aus dem
+# PrusaSlicer-Checkout (build/scripts/stage-resources.sh ios). Sie
+# einzuchecken hiesse, dieselbe Sache zweimal zu fuehren - und wer im
+# Xcode etwas am Projekt aendert, verliert es beim naechsten xcodegen
+# ohne Warnung. Die 18 MB Ressourcen kaemen dazu.
+/ios/PSMobile.xcodeproj/
+/ios/Resources/
+android/.kotlin/

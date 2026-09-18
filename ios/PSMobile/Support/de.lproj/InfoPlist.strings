@@ -1,0 +1,2 @@
+"NSLocalNetworkUsageDescription" = "Um G-Code an deinen Drucker im selben Netzwerk zu senden.";
+"NSCameraUsageDescription" = "Um den QR-Code deines Remote-Slice-Servers einzuscannen.";

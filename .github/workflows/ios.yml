@@ -1,0 +1,260 @@
+# Build iOS on a rented macOS runner.
+#
+# The second route next to a Mac of your own: GitHub provides real Apple
+# hardware, billed by the minute, no device needed on site.
+#
+# Two targets that do not replace each other:
+#
+#   simulator  runs only in the iPad simulator on the runner. The result
+#              is screenshots - the quick look at the UI.
+#
+#   device     unsigned .ipa for a real iPad. It can be installed from a
+#              Windows machine with Sideloadly or AltStore, which re-sign
+#              it with your own Apple ID. No Mac needed, not even to install.
+#
+# Deliberately manual: the dependency build takes hours, and macOS minutes
+# are expensive.
+
+name: iOS
+
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: "What to build"
+        type: choice
+        options: [simulator, device, both]
+        default: simulator
+      rebuild_deps:
+        description: "Rebuild dependencies from scratch instead of resuming"
+        type: boolean
+        default: false
+      deps_minutes:
+        description: "Time window for the dependency build in minutes"
+        default: "150"
+
+jobs:
+  simulator:
+    if: inputs.target == 'simulator' || inputs.target == 'both'
+    runs-on: macos-15
+    timeout-minutes: 360
+    env:
+      PSM_IOS_PLATFORM: SIMULATORARM64
+      # hashFiles does NOT belong here: it needs the workspace, which does
+      # not exist yet when env is evaluated. GitHub rejects the whole file
+      # and reports a failed run on every push. The key therefore lives in
+      # the cache steps, where hashFiles is allowed.
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Tools
+        run: |
+          # coreutils for gtimeout - macOS ships no timeout.
+          brew install cmake ninja xcodegen automake autoconf libtool pkg-config coreutils
+          xcodebuild -version
+          xcodebuild -showsdks | grep iphone
+
+      # Resumable instead of all-or-nothing.
+      #
+      # A free account has 200 macOS minutes per month, the dependency
+      # build needs more. So not only the result is cached but also the
+      # half-finished build folder - even when the time window ran out.
+      # Every run gets you a bit further instead of starting from zero.
+      #
+      # The key carries the run number because an existing cache entry
+      # cannot be overwritten. restore-keys then picks the newest match.
+      - name: Restore previous progress
+        if: '! inputs.rebuild_deps'
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            build-out/ios-deps-SIMULATORARM64
+            build-out/ios-destdir-SIMULATORARM64
+            build-out/dl-cache
+          key: ios-deps-simarm64-${{ hashFiles('patches/*.patch', 'build/scripts/build-ios.sh') }}-none
+          restore-keys: ios-deps-simarm64-${{ hashFiles('patches/*.patch', 'build/scripts/build-ios.sh') }}-
+
+      - name: Sources and patches
+        run: build/scripts/macos-bootstrap.sh sources
+
+      - name: Dependencies, time-boxed
+        id: deps
+        run: |
+          set +e
+          gtimeout "${{ inputs.deps_minutes }}m" build/scripts/macos-bootstrap.sh deps
+          rc=$?
+          set -e
+          if [ "$rc" = "124" ]; then
+              echo "unfinished=true" >> "$GITHUB_OUTPUT"
+              echo "::warning::Time window exhausted. Progress is saved - just start the workflow again."
+              exit 0
+          fi
+          exit "$rc"
+
+      # Save even after a timeout: the half-finished state is exactly what
+      # makes the next run shorter.
+      - name: Save progress
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            build-out/ios-deps-SIMULATORARM64
+            build-out/ios-destdir-SIMULATORARM64
+            build-out/dl-cache
+          key: ios-deps-simarm64-${{ hashFiles('patches/*.patch', 'build/scripts/build-ios.sh') }}-${{ github.run_id }}
+
+      - name: Stop while dependencies are unfinished
+        if: steps.deps.outputs.unfinished == 'true'
+        run: |
+          echo "The dependencies are not finished yet."
+          echo "The state is in the cache. Start the same workflow again -"
+          echo "it resumes where this run stopped."
+          exit 1
+
+      - name: Core
+        run: build/scripts/macos-bootstrap.sh core
+
+      - name: Resources and Xcode project
+        run: build/scripts/macos-bootstrap.sh project
+
+      # The actual question. That something compiles does not mean it
+      # computes - and a slicer that starts on iOS but produces wrong
+      # G-code would be worse than one that does not build at all. simctl
+      # spawn runs the simulator binary in the simulator environment with
+      # access to the runner's files - the same test that runs on the
+      # Android emulator.
+      - name: C ABI contract test in the simulator
+        run: |
+          set -eux
+          TEST=$(find build-out/ios-core-SIMULATORARM64 -name psm_contract_tests -type f | head -1)
+          test -n "$TEST"
+
+          python3 build/scripts/make-test-project-3mf.py /tmp/multibed.3mf
+          python3 build/scripts/make-test-project-3mf.py --installed-core-one /tmp/installed.3mf
+
+          DEVICE=$(xcrun simctl create psm-test \
+                   "com.apple.CoreSimulator.SimDeviceType.iPad-Pro-11-inch-M4" \
+                   "com.apple.CoreSimulator.SimRuntime.iOS-18-0")
+          xcrun simctl boot "$DEVICE"
+          xcrun simctl bootstatus "$DEVICE" -b
+
+          mkdir -p /tmp/psmdata
+          xcrun simctl spawn "$DEVICE" "$PWD/$TEST" \
+              /tmp/psmdata \
+              "$PWD/ios/Resources/psresources" \
+              "$PWD/testdata/wuerfel20.stl" \
+              /tmp/multibed.3mf \
+              /tmp/installed.3mf
+
+          xcrun simctl shutdown "$DEVICE"
+
+      - name: Build the app for the simulator
+        run: |
+          xcodebuild -project ios/PSMobile.xcodeproj \
+                     -scheme PSMobile \
+                     -destination 'platform=iOS Simulator,name=iPad Pro 11-inch (M4)' \
+                     -derivedDataPath build-out/ios-derived \
+                     CODE_SIGNING_ALLOWED=NO \
+                     build
+
+      # Without this step you would have a green build and still no idea
+      # what the UI looks like - which is the whole point of a prototype.
+      - name: Launch in the simulator and take a screenshot
+        run: |
+          set -x
+          DEVICE=$(xcrun simctl create psm-ipad \
+                   "com.apple.CoreSimulator.SimDeviceType.iPad-Pro-11-inch-M4" \
+                   "com.apple.CoreSimulator.SimRuntime.iOS-18-0")
+          xcrun simctl boot "$DEVICE"
+          xcrun simctl bootstatus "$DEVICE" -b
+          APP=$(find build-out/ios-derived -name 'PSMobile.app' -type d | head -1)
+          xcrun simctl install "$DEVICE" "$APP"
+          xcrun simctl launch "$DEVICE" de.psmobile
+          sleep 25
+          mkdir -p build-out/screenshots
+          xcrun simctl io "$DEVICE" screenshot build-out/screenshots/ipad-start.png
+          xcrun simctl shutdown "$DEVICE"
+
+      - name: Screenshots as artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-simulator-screenshots
+          path: build-out/screenshots/
+          if-no-files-found: warn
+
+  device:
+    if: inputs.target == 'device' || inputs.target == 'both'
+    runs-on: macos-15
+    timeout-minutes: 360
+    env:
+      PSM_IOS_PLATFORM: OS64
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Tools
+        run: |
+          brew install cmake ninja xcodegen automake autoconf libtool pkg-config
+          xcodebuild -version
+
+      # Separate cache: device and simulator are separate builds and must
+      # not share their dependencies.
+      - name: Dependency-Cache
+        id: deps-cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            build-out/ios-destdir-OS64
+            build-out/dl-cache
+          key: ios-deps-os64-${{ hashFiles('patches/*.patch', 'build/scripts/build-ios.sh') }}
+
+      - name: Sources and patches
+        run: build/scripts/macos-bootstrap.sh sources
+
+      - name: Dependencies
+        if: steps.deps-cache.outputs.cache-hit != 'true' || inputs.rebuild_deps
+        run: build/scripts/macos-bootstrap.sh deps
+
+      - name: Core
+        run: build/scripts/macos-bootstrap.sh core
+
+      - name: Resources and Xcode project
+        run: build/scripts/macos-bootstrap.sh project
+
+      # Build unsigned. A signing key would need an Apple developer account
+      # and stored secrets - unnecessary, because Sideloadly and AltStore
+      # re-sign with the user's Apple ID on install anyway.
+      - name: Build the app for the device
+        run: |
+          xcodebuild -project ios/PSMobile.xcodeproj \
+                     -scheme PSMobile \
+                     -destination 'generic/platform=iOS' \
+                     -derivedDataPath build-out/ios-derived \
+                     CODE_SIGNING_ALLOWED=NO \
+                     CODE_SIGNING_REQUIRED=NO \
+                     CODE_SIGN_IDENTITY="" \
+                     build
+
+      # An .ipa is a ZIP with the app in a folder named Payload - nothing
+      # more. xcodebuild -exportArchive is not an option here because it
+      # demands a signing profile.
+      - name: Package as .ipa
+        run: |
+          set -eux
+          APP=$(find build-out/ios-derived -name 'PSMobile.app' -type d | head -1)
+          test -n "$APP"
+          rm -rf build-out/ipa
+          mkdir -p build-out/ipa/Payload
+          cp -R "$APP" build-out/ipa/Payload/
+          ( cd build-out/ipa && zip -qry PSMobile-unsigned.ipa Payload )
+          ls -lh build-out/ipa/PSMobile-unsigned.ipa
+
+      - name: .ipa as artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: PSMobile-unsigned-ipa
+          path: build-out/ipa/PSMobile-unsigned.ipa
+          if-no-files-found: error

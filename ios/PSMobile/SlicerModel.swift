@@ -1,0 +1,2139 @@
+import Foundation
+import SwiftUI
+import UIKit   // beginBackgroundTask
+import PSMShared
+
+/// Zustandshalter der App - Gegenstueck zu `SlicerService` auf Android.
+///
+/// Auf iOS gibt es keinen zweiten Prozess und keinen Foreground-Service.
+/// Der Slice-Job laeuft deshalb als abgetrennter Task, und die App muss
+/// beim Wechsel in den Hintergrund selbst dafuer sorgen, dass sie
+/// Rechenzeit behaelt (`beginBackgroundTask`).
+@MainActor
+final class SlicerModel: ObservableObject {
+
+    enum Progress: Equatable {
+        case idle
+        case running(percent: Int, stage: String)
+        case done(seconds: Double, printMinutes: Int, grams: Double)
+        /// `laden`: ein Import ist gescheitert, kein Schnitt - das Blatt titelt dann anders.
+        case failed(String, laden: Bool = false)
+        case cancelled
+    }
+
+    @Published private(set) var objects: [PsmCore.ObjectInfo] = []
+
+    /// Die Betten des Projekts. Mehrbett gibt es im Kern seit langem;
+    /// auf der iOS-Seite war es nur nicht sichtbar.
+    @Published private(set) var beds: [PsmCore.Bed] = []
+    @Published private(set) var progress: Progress = .idle
+    @Published private(set) var memoryWarning: String?
+    @Published private(set) var coreVersion: String = "?"
+
+    /// Die Kennzahlen des letzten Slice. Frueher standen nur Zeit und
+    /// Gewicht im Fortschrittstext; fuer eine Zusammenfassung braucht es
+    /// auch Laenge, Kosten und Objektzahl.
+    @Published private(set) var stats: PsmCore.SliceStats?
+
+    /// Der fertige G-Code als Datei im Zwischenspeicher.
+    ///
+    /// Auf iOS gibt es keinen Ordner, in den eine App einfach schreibt -
+    /// die Datei muss erst existieren, bevor das Teilen-Blatt sie
+    /// weiterreichen kann.
+    @Published private(set) var gcodeURL: URL?
+    /// Ob das gerade angezeigte Ergebnis von einem Remote-Slice stammt.
+    /// core?.sliceResultIsCurrent ist eine rein lokale Pruefung - beim
+    /// Remote-Slicing lief nie ein lokaler psm_slice_start, also ist sie
+    /// danach IMMER false. Ohne dieses Flag faellt die Advanced-
+    /// Oberflaeche nach jedem erfolgreichen Remote-Slice zurueck auf
+    /// den Slice-Knopf, obwohl die Datei laengst fertig ist - genau der
+    /// Feldbericht ("sieht aus, als wuerde er am Ende abbrechen").
+    @Published private(set) var lastSliceWasRemote = false
+    /// Bei "Alle Betten schneiden": eine Datei je Bett mit Objekten.
+    /// Bei einem einzelnen Schnitt enthaelt sie nur gcodeURL.
+    @Published private(set) var gcodeURLs: [URL] = []
+    /// Waehrend "Alle Betten schneiden" laeuft: welches Bett gerade dran
+    /// ist, von wie vielen insgesamt.
+    @Published private(set) var sliceAllProgress: (bed: Int, total: Int)?
+    /// Steigt bei jedem Bettwechsel - der Viewport schwenkt dann dorthin,
+    /// auch im Mehrbett-Modus. Ein reiner Zaehler wie resetViewKey, weil
+    /// SwiftUI ein Ereignis sonst nicht ausdruecken kann.
+    @Published private(set) var focusBedKey: Int = 0
+
+    /// Das gesicherte Projekt als Datei - dieselbe Ueberlegung wie beim
+    /// G-Code: erst schreiben, dann teilen.
+    @Published private(set) var projectURL: URL?
+    /// sceneRevision beim letzten Sichern (oder beim letzten Laden/
+    /// Neuanlegen) - der Vergleich mit dem aktuellen sceneRevision
+    /// entscheidet, ob "Speichern?" beim Verlassen noetig ist.
+    private var savedRevision: Int = 0
+    /// Ob es etwas zu verlieren gibt, wenn man jetzt verlaesst - kein
+    /// Betteltrick, sondern derselbe sceneRevision-Zaehler, der auch
+    /// den Viewport ueber Aenderungen informiert.
+    var hasUnsavedChanges: Bool { !objects.isEmpty && sceneRevision != savedRevision }
+    /// Alle ausgewaehlten Objekte. `selectedId` ist das Hauptobjekt
+    /// darin - an ihm haengen die Griffe, und auf es beziehen sich die
+    /// Zahlen im Inspektor.
+    @Published private(set) var selectedIds: Set<Int32> = []
+    /// Bis zu welcher Einstufung Parameter gezeigt werden.
+    ///
+    /// Gilt fuer die ganze App und ueberlebt den Start: wer sich einmal
+    /// fuer Expert entschieden hat, will das nicht auf jeder Seite neu
+    /// sagen.
+    @Published var sichtbarkeit: PsmCore.ConfigMode = {
+        // `object(forKey:)` unterscheidet "nicht gesetzt" von 0 -
+        // `integer(forKey:)` kann das nicht: es liefert 0, und 0 ist
+        // `.simple`. Die Vorgabe `.advanced` wurde deshalb auf einer
+        // frischen Installation nie erreicht; der Bildvergleich am
+        // 12.09.2026 zeigte die Druckeinstellungen drueben in Simple,
+        // hier in Advanced - dieselbe Seite, ein Drittel des Inhalts.
+        // Android liest mit ausdruecklicher Vorgabe
+        // (`getInt(key, ADVANCED.ordinal)`) und hatte den Fehler nicht.
+        guard UserDefaults.standard.object(forKey: "psm.sichtbarkeit") != nil else {
+            return .advanced
+        }
+        let gemerkt = UserDefaults.standard.integer(forKey: "psm.sichtbarkeit")
+        return PsmCore.ConfigMode(rawValue: Int32(gemerkt)) ?? .advanced
+    }() {
+        didSet {
+            UserDefaults.standard.set(Int(sichtbarkeit.rawValue), forKey: "psm.sichtbarkeit")
+        }
+    }
+
+    /// Siehe filamentCatalog() - einmal holen reicht.
+    private var filamentCache: [FilamentCatalog.Entry]?
+    private var compatibleFilamentCache: Set<String>?
+
+    /// Ein Presetwechsel, der wegen ungespeicherter Profilwerte erst eine
+    /// Entscheidung braucht. Android hat dieselbe Schranke im Advanced
+    /// Sidebar: ohne sie verliert ein Tap auf ein anderes Profil die
+    /// lokalen Änderungen still.
+    @Published private(set) var pendingPresetSwitch: PendingPresetSwitch?
+
+    /// Was beim Oeffnen eines Projekts anders lief als darin stand.
+    /// Bleibt stehen, bis der Nutzer es weggeklickt hat.
+    @Published var projectNotice: String?
+
+    /// Beschriftung des naechsten Zurueck-Schritts, leer wenn keiner da
+    /// ist. Ein Zurueck-Knopf, der nicht sagt, was er zuruecknimmt, wird
+    /// nur zoegernd benutzt.
+    @Published private(set) var undoLabel = ""
+    @Published private(set) var redoLabel = ""
+
+    /// Ob noch kein Drucker eingerichtet ist.
+    ///
+    /// Ohne Drucker gibt es keine Profile, ohne Profile kein Bett und
+    /// nichts zu slicen. Deshalb kommt die Ersteinrichtung vor allem
+    /// anderen - genauso wie auf Android.
+    @Published private(set) var setupNeeded = false
+    @Published private(set) var printerModels: [PsmCore.PrinterModel] = []
+    @Published private(set) var setupBusy = false
+
+    /// True only when the native core has an active printer profile and that
+    /// profile is still one of the printers selected during setup. Stored
+    /// preferences alone are not enough: a stale/deleted profile otherwise
+    /// lets the editor open without a bed and can crash on import.
+    var printerIsReady: Bool {
+        PrinterReadyPolicy.isReady(
+            selectedPrinter: core?.selectedPreset(.printer),
+            // Preferences store vendor:model keys; the core exposes concrete
+            // profile names. Validate against the profiles actually loaded.
+            installedPrinters: Set(core?.presetNames(.printer) ?? [])
+        ) && !Self.storedPrinters.isEmpty
+    }
+
+    /// Welches Objekt gerade angefasst ist, oder nichts.
+    @Published private(set) var selectedId: Int32?
+
+    /// Steigt bei jeder Modelaenderung - der Viewport zeichnet dann neu.
+    /// Gegenstueck zu sceneRevision in SlicerService auf Android.
+    @Published private(set) var sceneRevision: Int = 0
+
+    var sessionHandle: OpaquePointer? { core?.sessionHandle }
+
+    /// Verzeichnis mit den GLES-Shadern aus PrusaSlicer. Sie liegen im
+    /// App-Bundle, nicht im Datenverzeichnis - anders als auf Android,
+    /// wo sie beim ersten Start ausgepackt werden.
+    var shaderDir: String {
+        Bundle.main.resourceURL?
+            .appendingPathComponent("psresources/shaders/ES").path ?? ""
+    }
+
+    /// Nicht privat: der Einstellungsrenderer liest Typ, Grenzen und
+    /// Auswahlwerte direkt beim Kern. Sie hier alle durchzureichen waere
+    /// eine zweite, immer veraltete Fassung des ABI.
+    private(set) var core: PsmCore?
+    private var sliceTask: Task<Void, Never>?
+    private var backgroundTask: UIBackgroundTaskIdentifier = .invalid
+
+    /// Ob "Slice now" auf den eigenen Server statt lokal zielt - siehe
+    /// docs/remote-slicing.md. Persistiert wie jede andere Werkzeugwahl.
+    @Published var remoteSliceEnabled: Bool =
+        UserDefaults.standard.bool(forKey: SlicerModel.remoteSliceEnabledKey) {
+        didSet {
+            UserDefaults.standard.set(remoteSliceEnabled, forKey: Self.remoteSliceEnabledKey)
+        }
+    }
+    static let remoteSliceEnabledKey = "remote.slice.enabled"
+    static let remoteSliceHostKey = "remote.slice.host"
+
+    private let remoteClient = RemoteSliceClient()
+    @Published private(set) var credentialSelfTestResult: String?
+
+    func start() {
+        guard core == nil else { return }
+        do {
+            let support = FileManager.default.urls(for: .applicationSupportDirectory,
+                                                   in: .userDomainMask)[0]
+            let dataDir = support.appendingPathComponent("psmdata")
+            try? FileManager.default.createDirectory(at: dataDir, withIntermediateDirectories: true)
+
+            guard let resDir = Bundle.main.resourceURL?.appendingPathComponent("psresources") else {
+                progress = .failed("Ressourcen fehlen im App-Bundle")
+                return
+            }
+
+            let c = try PsmCore(dataDir: dataDir.path, resourceDir: resDir.path)
+            core = c
+            coreVersion = PsmCore.coreVersion
+            // Wie PsmCore.kt auf Android: der Kern sagt, ob STEP geht.
+            // iOS liess das Flag bis zum 13.09.2026 auf false - obwohl der
+            // Geraete-Kern OCCT enthalten kann.
+            ModelFormats.shared.stepVerfuegbar = PsmCore.supportsStep
+            PsUiCatalog.load(language: PsUiCatalog.language)
+
+            // Massgeblich ist die gemerkte Wahl, nicht was der Kern an
+            // Profilen kennt: nach loadBundledPresets waeren immer welche
+            // da, und die Ersteinrichtung erschiene nie.
+            //
+            // Und geladen wird nur das Gewaehlte. Alle 37 Modelle kosten
+            // 13,5 s Start und 5762 Filamente in den Listen, ein einzelner
+            // Drucker 1,9 s und 189.
+            // Der UI-Test braucht einen unberuehrten Zustand, sonst
+            // startet der zweite Durchlauf mit eingerichtetem Drucker
+            // und prueft nichts mehr. Nur ueber ein Startargument - eine
+            // Einstellung in der App waere ein Schalter, mit dem sich
+            // versehentlich alles loeschen liesse.
+            let argumente = ProcessInfo.processInfo.arguments
+            if argumente.contains("-psm-credential-self-test") {
+                credentialSelfTestResult = runCredentialSelfTest()
+            }
+            // -psm-reset-setup und -psm-preset-printer stehen seit dem
+            // 11.09.2026 in `PSMobileApp.init()` - sie muessen wirken,
+            // bevor das erste Bild entsteht. Siehe dort.
+
+            let gewaehlt = Self.storedPrinters
+            if gewaehlt.isEmpty {
+                setupNeeded = true
+                printerModels = c.printerModels()
+            } else {
+                try? c.installPrinters(Array(gewaehlt))
+                // Acht Positionen und eindeutige Farben sind ausschliesslich
+                // ein reproduzierbarer UI-Testzustand. Im normalen Start
+                // bestimmt das installierte Druckerprofil die Extruderzahl.
+                if argumente.contains("-psm-test-eight-extruders") {
+                    try? c.setConfig("nozzle_diameter", Array(repeating: "0.4", count: 8).joined(separator: ","))
+                }
+                if argumente.contains("-psm-test-colormix-colors") {
+                    let colors = ["#FF0000", "#0000FF"] + Array(repeating: "#808080", count: 6)
+                    for (index, color) in colors.enumerated() {
+                        try? c.setExtruderColor(index, color)
+                    }
+                }
+                setupNeeded = !PrinterReadyPolicy.isReady(
+                    selectedPrinter: c.selectedPreset(.printer),
+                    installedPrinters: Set(c.presetNames(.printer))
+                ) || gewaehlt.isEmpty
+                if setupNeeded { printerModels = c.printerModels() }
+                // Ein Wuerfel fuer die Tests, die etwas auf dem Bett
+                // brauchen: Schneiden, Auswahl, Gizmos. Er kommt hinter
+                // die Profile - ohne Drucker gibt es kein Bett, und ein
+                // Modell ohne Bett landet irgendwo.
+                // Ein Testschalter sagt, was auf dem Bett liegen soll -
+                // der gesicherte Arbeitsstand hat dann nichts
+                // hinzuzufuegen.
+                //
+                // Ohne diese Bedingung schleppte der Simulator das Bett
+                // des vorigen Testfalls mit: "Ohne Modell nennt die App
+                // den Grund" fand dort einen Wuerfel und schnitt, statt
+                // den Grund zu nennen. Auf Android steht dieselbe Liste
+                // in `Startargumente.verlangtFrischenAusgangszustand`.
+                if !Self.verlangtFrischenAusgangszustand(argumente) {
+                    arbeitsstandZurueckholen()
+                }
+                if argumente.contains("-psm-load-cube") {
+                    // Viele Würfel erzwingen im UI-Test eine lange
+                    // Objektliste. So bleibt der Inspector-Fokus nicht
+                    // nur für den bequemen Ein-Objekt-Fall geprüft.
+                    let anzahl = argumente.contains("-psm-test-many-cubes") ? 12 : 1
+                    for _ in 0..<anzahl { ladeTestWuerfel() }
+                }
+                // Nur fuer die Untersuchung der G-Code-Vorschau: ein
+                // Koerper mit vielen Schichten und einer gekruemmten
+                // Kontur statt des flachen Wuerfels.
+                if argumente.contains("-psm-load-kegel") {
+                    ladeTestKegel()
+                }
+                // Randfall "STEP laedt": beweist, dass der Kern OCCT hat -
+                // und nicht nur behauptet (siehe psm_supports_step). Den
+                // Pfad legt der Test, wie `Startargumente.stepPfad` auf Android.
+                if argumente.contains("-psm-load-step") {
+                    let gewuenscht = argumente.first(where: { $0.hasPrefix("-psm-step-pfad=") })
+                        .map { String($0.dropFirst("-psm-step-pfad=".count)) }
+                    // Auf dem Geraet kann die App nicht ins Bundle des
+                    // Test-Runners lesen (iPad Pro, 15.09.2026: 0 Objekte) -
+                    // dann die mitgelieferte Schraube.
+                    let pfad = gewuenscht.flatMap { FileManager.default.isReadableFile(atPath: $0) ? $0 : nil }
+                        ?? Bundle.main.path(forResource: "screw", ofType: "step")
+                    if let pfad {
+                        do { _ = try c.loadModel(path: pfad) } catch {
+                            NSLog("STEP-Datei liess sich nicht laden: %@", String(describing: error))
+                        }
+                    }
+                    refresh()
+                }
+            }
+        } catch {
+            progress = .failed(error.localizedDescription)
+        }
+    }
+
+    // MARK: - Arbeitsstand ueber das App-Ende hinweg
+    //
+    // Die App-Einstellung "Keep work when leaving the app" gab es auf
+    // beiden Plattformen, gesichert hat den Stand aber nur Android: iOS
+    // meldete beim Wechsel in den Hintergrund nur "sauber beendet" und
+    // liess das Bett fallen. Ein Schalter, der nichts tut, ist die
+    // schlechtere Sorte Unterschied - man sieht ihn erst, wenn die
+    // Arbeit weg ist.
+    //
+    // Dieselbe 3MF-Maschinerie wie "Speichern unter", nur an einen
+    // festen Ort. Ein ausdruecklich gespeichertes Projekt bleibt
+    // unberuehrt.
+
+    /**
+     * Ob die Startargumente einen bestimmten Ausgangszustand verlangen.
+     *
+     * Zeichengleich zu `Startargumente.verlangtFrischenAusgangszustand`
+     * auf Android. Steht hier ein Schalter mehr als drueben, faengt das
+     * Auseinanderdriften genau dort wieder an.
+     */
+    private static func verlangtFrischenAusgangszustand(_ argumente: [String]) -> Bool {
+        let frisch = ["-psm-reset-setup", "-psm-preset-printer", "-psm-load-cube",
+                      "-psm-load-kegel", "-psm-load-step", "-psm-test-eight-extruders",
+                      "-psm-test-colormix-colors"]
+        return frisch.contains { argumente.contains($0) }
+    }
+
+    private var arbeitsstandDatei: URL {
+        let ordner = FileManager.default.urls(for: .applicationSupportDirectory,
+                                              in: .userDomainMask)[0]
+            .appendingPathComponent("autosave", isDirectory: true)
+        try? FileManager.default.createDirectory(at: ordner, withIntermediateDirectories: true)
+        return ordner.appendingPathComponent("session.3mf")
+    }
+
+    /// Ob der Arbeitsstand gesichert wird - abschaltbar in den App-Einstellungen.
+    private var arbeitsstandAktiv: Bool {
+        guard UserDefaults.standard.object(forKey: AppSettings.shared.KEY_AUTOSAVE) != nil
+        else { return true }
+        return UserDefaults.standard.bool(forKey: AppSettings.shared.KEY_AUTOSAVE)
+    }
+
+    /// Schreibt den aktuellen Stand weg. Ein leeres Bett loescht die
+    /// Datei, sonst kaeme nach "Neues Projekt" der alte Stand zurueck.
+    func arbeitsstandSichern() {
+        guard let core, !setupNeeded else { return }
+        guard arbeitsstandAktiv else {
+            // Ausdruecklich abgeschaltet: dann darf auch kein alter Stand
+            // liegenbleiben, der beim naechsten Start zurueckkaeme.
+            try? FileManager.default.removeItem(at: arbeitsstandDatei)
+            return
+        }
+        let ziel = arbeitsstandDatei
+        if objects.isEmpty && beds.count <= 1 {
+            try? FileManager.default.removeItem(at: ziel)
+            return
+        }
+        // Erst daneben schreiben, dann umbenennen: ein abgebrochener
+        // Schreibvorgang darf keine halbe Datei hinterlassen, die beim
+        // naechsten Start als Arbeitsstand gilt. Die Endung muss dabei
+        // .3mf bleiben - der Kern prueft sie und lehnt sonst ab.
+        let teil = ziel.deletingLastPathComponent().appendingPathComponent("session-part.3mf")
+        do {
+            try core.saveProject(path: teil.path)
+            try? FileManager.default.removeItem(at: ziel)
+            try FileManager.default.moveItem(at: teil, to: ziel)
+        } catch {
+            NSLog("Arbeitsstand nicht gesichert: %@", String(describing: error))
+        }
+    }
+
+    private func arbeitsstandZurueckholen() {
+        let datei = arbeitsstandDatei
+        guard let core,
+              let groesse = try? datei.resourceValues(forKeys: [.fileSizeKey]).fileSize,
+              groesse > 0 else { return }
+        do {
+            _ = try core.loadProject(path: datei.path)
+            refresh()
+        } catch {
+            // Ein unlesbarer Arbeitsstand darf den Start nicht blockieren.
+            NSLog("Arbeitsstand nicht lesbar, wird verworfen: %@", String(describing: error))
+            try? FileManager.default.removeItem(at: datei)
+        }
+    }
+
+    /// Laedt den Testwuerfel aus `Testkoerper`.
+    ///
+    /// Der Wuerfel selbst steht dort, weil ihn auch der Selbsttest
+    /// braucht - zwei Fassungen desselben Koerpers waeren eine zu viel.
+    private func ladeTestWuerfel() {
+        do {
+            let datei = try Testkoerper.wuerfelDatei()
+            _ = try core?.loadModel(path: datei.path)
+        } catch {
+            NSLog("Testwuerfel liess sich nicht laden: %@", String(describing: error))
+        }
+        refresh()
+    }
+
+    private func ladeTestKegel() {
+        do {
+            let datei = try Testkoerper.kegelDatei()
+            _ = try core?.loadModel(path: datei.path)
+        } catch {
+            NSLog("Testkegel liess sich nicht laden: %@", String(describing: error))
+        }
+        refresh()
+    }
+
+    func load(url: URL) {
+        guard printerIsReady, let core else {
+            reopenSetup()
+            progress = .failed(SimpleModeState.shared.text(english: "Select a printer before importing an object", german: "Wähle zuerst einen Drucker, dann lässt sich ein Objekt importieren"), laden: true)
+            return
+        }
+        // Aus der Files-App kommen sicherheitsbeschraenkte URLs.
+        let scoped = url.startAccessingSecurityScopedResource()
+        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+
+        ladefehlerVergessen()
+        do {
+            // libslic3r arbeitet mit Dateipfaden - deshalb erst in den
+            // App-Container kopieren.
+            let dest = FileManager.default.temporaryDirectory
+                .appendingPathComponent(url.lastPathComponent)
+            try? FileManager.default.removeItem(at: dest)
+            try FileManager.default.copyItem(at: url, to: dest)
+
+            try core.loadModel(path: dest.path)
+            refresh()
+            checkMemory()
+        } catch {
+            progress = .failed(error.localizedDescription, laden: true)
+        }
+    }
+
+    /// Nach dem Teilen einer ZIP: entpackt alle Modelldateien darin und
+    /// fuegt sie wie einzelne Importe hinzu. nil heisst Fehler beim
+    /// Entpacken, 0 heisst eine ZIP ohne erkennbares Modell - beides
+    /// zeigt der Aufrufer an, statt es zu verschlucken.
+    /// Eine alte Lademeldung raeumen, bevor der naechste Import beginnt: bis
+    /// zum 16.09.2026 stand "Die Datei liess sich nicht lesen." weiter auf
+    /// dem Schirm, obwohl die naechste Datei laengst geladen war (Zwilling:
+    /// ladefehlerVergessen in SlicerModel.kt).
+    private func ladefehlerVergessen() {
+        if case .failed(_, let laden) = progress, laden { progress = .idle }
+    }
+
+    func loadZip(url: URL) -> Int? {
+        guard printerIsReady, let core else {
+            reopenSetup()
+            progress = .failed(SimpleModeState.shared.text(english: "Select a printer before importing an object", german: "Wähle zuerst einen Drucker, dann lässt sich ein Objekt importieren"), laden: true)
+            return nil
+        }
+        let scoped = url.startAccessingSecurityScopedResource()
+        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+
+        ladefehlerVergessen()
+        do {
+            let lokal = FileManager.default.temporaryDirectory
+                .appendingPathComponent(url.lastPathComponent)
+            try? FileManager.default.removeItem(at: lokal)
+            try FileManager.default.copyItem(at: url, to: lokal)
+
+            let zielOrdner = FileManager.default.temporaryDirectory
+                .appendingPathComponent("psm-zip-" + UUID().uuidString)
+            let anzahl = try PsmCore.extractZipModels(
+                zipPath: lokal.path, into: zielOrdner.path)
+            // Eine ZIP ohne Modell blieb stumm (Zwilling: SlicerModel.kt, 16.09.2026).
+            guard anzahl > 0 else {
+                progress = .failed(SimpleModeState.shared.text(
+                    english: "The ZIP contains no model files.", german: "Die ZIP enthält keine Modelldateien."), laden: true)
+                return 0
+            }
+
+            let dateien = (try? FileManager.default.contentsOfDirectory(
+                at: zielOrdner, includingPropertiesForKeys: nil)) ?? []
+            for datei in dateien {
+                try? core.loadModel(path: datei.path)
+            }
+            refresh()
+            checkMemory()
+            return dateien.count
+        } catch {
+            progress = .failed(error.localizedDescription, laden: true)
+            return nil
+        }
+    }
+
+    func select(_ id: Int32?) {
+        selectedId = id
+        selectedIds = id.map { [$0] } ?? []
+    }
+
+    /// Ein Objekt zur Auswahl hinzunehmen oder herausnehmen.
+    ///
+    /// Das zuletzt Angetippte wird Hauptobjekt. Nimmt man das
+    /// Hauptobjekt heraus, rueckt ein anderes nach - eine Auswahl ohne
+    /// Hauptobjekt haette keine Griffe.
+    func toggleSelection(_ id: Int32) {
+        var menge = selectedIds
+        if menge.contains(id) {
+            menge.remove(id)
+            selectedIds = menge
+            if selectedId == id { selectedId = menge.first }
+        } else {
+            menge.insert(id)
+            selectedIds = menge
+            selectedId = id
+        }
+        // Kein sceneRevision += 1: die Auswahl aendert das Projekt nicht.
+        // Bis zum 16.09.2026 fragte die App nach Sichern + Haekchen in der
+        // Objektliste beim Verlassen nach ungesicherten Aenderungen; der
+        // Viewport liest selectedIds ohnehin selbst (Bug-Bounty).
+    }
+
+    func selectAll() {
+        selectedIds = Set(objects.map { $0.id })
+        if selectedId == nil { selectedId = objects.first?.id }
+    }
+
+    var extruderCount: Int { core?.extruderCount ?? 1 }
+
+    /// Das gewaehlte Profil eines Bereichs - "print", "filament",
+    /// "printer".
+    func selectedPreset(for tab: String) -> String? {
+        guard let core else { return nil }
+        switch tab {
+        case "print":    return core.selectedPreset(.print)
+        case "filament": return core.selectedPreset(.filament)
+        case "printer":  return core.selectedPreset(.printer)
+        default:         return nil
+        }
+    }
+
+    /// Die Profilnamen eines Bereichs - "print", "filament", "printer".
+    /// Gegenstueck zu `selectedPreset(for:)`, fuer die Profilsuche in den
+    /// Einstellungen.
+    func presetNames(for tab: String) -> [String] {
+        switch tab {
+        case "print":    return presetNames(.print)
+        case "filament": return presetNames(.filament)
+        case "printer":  return presetNames(.printer)
+        default:         return []
+        }
+    }
+
+    /// Ein Profil eines Bereichs waehlen, ueber denselben String wie
+    /// `selectedPreset(for:)` statt ueber den Aufrufer selbst den Typ
+    /// zuordnen zu lassen.
+    func selectPreset(for tab: String, _ name: String) {
+        switch tab {
+        case "print":    selectPreset(.print, name)
+        case "filament": selectPreset(.filament, name)
+        case "printer":  selectPreset(.printer, name)
+        default:         break
+        }
+    }
+
+    func setConfig(_ key: String, _ value: String) {
+        try? core?.setConfig(key, value)
+        // Eine Aenderung an den Einstellungen macht ein vorhandenes
+        // Slice-Ergebnis ungueltig und kann das Bett veraendern.
+        sceneRevision += 1
+    }
+
+    func config(_ key: String) -> String? { core?.config(key) }
+
+    /// Material und Farbe je Extruder.
+    ///
+    /// Bei einem Extruder ist das dasselbe wie das gewaehlte
+    /// Filamentprofil; erst mit MMU oder Werkzeugwechsler wird es eine
+    /// eigene Frage.
+    func extruderFilament(_ index: Int) -> String {
+        core?.extruderFilament(index) ?? ""
+    }
+
+    func setExtruderFilament(_ index: Int, _ name: String) {
+        try? core?.setExtruderFilament(index, name)
+        sceneRevision += 1
+        objectWillChange.send()
+    }
+
+    func extruderColor(_ index: Int) -> String {
+        core?.extruderColor(index) ?? ""
+    }
+
+    func wipeTower() -> (x: Float, y: Float, rotationDeg: Float)? {
+        core?.wipeTower()
+    }
+
+    func setWipeTower(x: Float, y: Float, rotationDeg: Float) {
+        try? core?.setWipeTower(x: x, y: y, rotationDeg: rotationDeg)
+        sceneRevision += 1
+    }
+
+    func setExtruderColor(_ index: Int, _ hex: String) {
+        try? core?.setExtruderColor(index, hex)
+        sceneRevision += 1
+        objectWillChange.send()
+    }
+
+    private func runCredentialSelfTest() -> String {
+        let host = "credential-test.psmobile.invalid"
+        let store = PrinterCredentialStore()
+        do {
+            try store.remove(host: host, mode: .apiKey)
+            try store.save(.init(host: host, mode: .apiKey, secret: "test-secret"))
+            defer { try? store.remove(host: host, mode: .apiKey) }
+            guard try store.load(host: host, mode: .apiKey)?.secret == "test-secret",
+                  UserDefaults.standard.object(forKey: "printer.apiKey") == nil else { return "failed" }
+            return "passed"
+        } catch {
+            return "failed"
+        }
+    }
+
+    /// Virtuelle ColorMix-Positionen bleiben im Kernprojekt erhalten und
+    /// veraendern niemals die Filamentwahl der physischen Positionen.
+    func colorMixRecipes() -> [ColorMixRecipe] {
+        guard let source = try? core?.colorMixJson() else { return [] }
+        return ColorMixCodec.shared.decode(source: source)
+    }
+
+    @discardableResult
+    func saveColorMix(_ recipes: [ColorMixRecipe]) -> Bool {
+        guard let core else { return false }
+        let colors = (0..<extruderCount).map { index in
+            let color = extruderColor(index)
+            return color.isEmpty ? "#808080" : color
+        }
+        do {
+            try core.setColorMixJson(ColorMixCodec.shared.encode(physicalColors: colors, recipes: recipes))
+            sceneRevision += 1
+            objectWillChange.send()
+            return true
+        } catch {
+            return false
+        }
+    }
+
+    /// Der Extruder eines Objekts. 0 heisst: der Standard des Profils.
+    func objectExtruder(_ id: Int32) -> Int32 { core?.objectExtruder(id) ?? 0 }
+
+    func setObjectExtruder(_ id: Int32, _ extruder: Int32) {
+        try? core?.setObjectExtruder(id, extruder)
+        refresh()
+    }
+
+    func presetNames(_ type: PsmCore.PresetType) -> [String] {
+        core?.presetNames(type) ?? []
+    }
+
+    /// Welche Filamentprofile zum eingerichteten Drucker passen - der
+    /// Kern kennzeichnet nur, versteckt nichts (siehe presetCompatible),
+    /// das hatte bisher keine Oberflaeche. Name statt Index nach aussen,
+    /// weil die Karten mit dem Namen arbeiten und die Reihenfolge sich
+    /// beim Filtern/Suchen sonst verschieben wuerde.
+    func compatibleFilamentNames() -> Set<String> {
+        // Gemerkt wie filamentCache direkt darunter: sonst ein
+        // Kernaufruf je Profil bei jedem Tastendruck im Suchfeld - bei
+        // vierhundert Profilen war das Filament-Blatt spuerbar traege.
+        // Ungueltig wird der Cache dort, wo auch filamentCache es wird
+        // (selectPreset bei .printer) - andere Duese, andere Kompatibilitaet.
+        if let gemerkt = compatibleFilamentCache { return gemerkt }
+        guard let core else { return [] }
+        let namen = core.presetNames(.filament)
+        var ergebnis = Set<String>()
+        for (index, name) in namen.enumerated()
+        where core.presetCompatible(.filament, at: index) {
+            ergebnis.insert(name)
+        }
+        compatibleFilamentCache = ergebnis
+        return ergebnis
+    }
+
+    /// Alle Filamentprofile mit Typ und Farbe.
+    ///
+    /// Gemerkt, solange sich die Profile nicht aendern: bei
+    /// vierhundert Profilen sind das achthundert Abfragen an den Kern,
+    /// und bei jedem Tastendruck im Suchfeld erneut waere das spuerbar.
+    func filamentCatalog() -> [FilamentCatalog.Entry] {
+        guard let core else { return [] }
+        let namen = core.presetNames(.filament)
+        if let gemerkt = filamentCache, gemerkt.count == namen.count,
+           gemerkt.first?.rawPreset == namen.first {
+            return gemerkt
+        }
+        let eintraege = namen.map { name in
+            FilamentCatalog.shared.entry(
+                rawPreset: name,
+                type: core.presetOption(.filament, name, "filament_type") ?? "",
+                colorHex: core.presetOption(.filament, name, "filament_colour") ?? "")
+        }
+        filamentCache = eintraege
+        return eintraege
+    }
+
+    // MARK: - Ungespeicherte Profilaenderungen
+
+    /// Eine Aenderung am Profil, mit lesbarem Namen.
+    struct Profilaenderung: Identifiable {
+        let art: PsmCore.PresetType
+        let key: String
+        let bezeichnung: String
+        let vorher: String
+        let jetzt: String
+        var id: String { "\(art.rawValue).\(key)" }
+    }
+
+    struct PendingPresetSwitch: Identifiable {
+        let art: PsmCore.PresetType
+        let ziel: String
+        let aenderungen: [Profilaenderung]
+        var id: String { "\(art.rawValue):\(ziel)" }
+    }
+
+    /// Alles, was gegenueber den gewaehlten Profilen geaendert ist.
+    ///
+    /// Ueber alle drei Sammlungen: wer im Advanced Mode an der
+    /// Schichthoehe und am Filament dreht, hat zwei geaenderte Profile,
+    /// und beide gehoeren in denselben Dialog.
+    ///
+    /// Der lesbare Name kommt aus dem Kern, nicht aus einer Liste hier -
+    /// "fill_pattern" sagt niemandem etwas, "Fuellmuster" schon.
+    func profilaenderungen() -> [Profilaenderung] {
+        guard let core else { return [] }
+        var alle: [Profilaenderung] = []
+        for art in [PsmCore.PresetType.print, .filament, .printer] {
+            for wert in core.dirtyValues(art) {
+                let meta = core.configMeta(for: wert.key)
+                alle.append(Profilaenderung(
+                    art: art,
+                    key: wert.key,
+                    bezeichnung: (meta?.label).flatMap { $0.isEmpty ? nil : $0 } ?? wert.key,
+                    vorher: wert.oldValue,
+                    jetzt: wert.newValue))
+            }
+        }
+        return alle
+    }
+
+    /// Zurueck auf die Werte des Profils - in allen drei Sammlungen.
+    func profilaenderungenVerwerfen() {
+        guard let core else { return }
+        for art in [PsmCore.PresetType.print, .filament, .printer] {
+            try? core.discardChanges(art)
+        }
+        sceneRevision += 1
+        refresh()
+    }
+
+    /// Den geaenderten Stand als eigenes Profil sichern.
+    ///
+    /// Nur die Sammlungen, in denen wirklich etwas geaendert ist: ein
+    /// unveraendertes Filamentprofil unter neuem Namen zu duplizieren
+    /// waere eine Karteileiche.
+    func profilSichern(als name: String) {
+        guard let core, !name.isEmpty else { return }
+        for art in [PsmCore.PresetType.print, .filament, .printer]
+        where !core.dirtyValues(art).isEmpty {
+            try? core.savePreset(art, as: name)
+        }
+        refresh()
+    }
+
+    /// Das gewaehlte Profil mit dem geaenderten Stand ueberschreiben.
+    /// Wahr, wenn alles geschrieben wurde; ein Systemprofil lehnt der Kern ab.
+    @discardableResult
+    func profilUeberschreiben() -> Bool {
+        guard let core else { return false }
+        var alles = true
+        for art in [PsmCore.PresetType.print, .filament, .printer]
+        where !core.dirtyValues(art).isEmpty {
+            let tab = art == .print ? "print" : art == .filament ? "filament" : "printer"
+            if let name = selectedPreset(for: tab), !name.isEmpty {
+                do { try core.savePreset(art, as: name) } catch { alles = false }
+            }
+        }
+        refresh()
+        if !alles {
+            projectNotice = SimpleModeState.shared.text(
+                english: "System profiles cannot be overwritten – the changes stay in this project.",
+                german: "Systemprofile lassen sich nicht überschreiben – die Änderungen bleiben im Projekt.")
+        }
+        return alles
+    }
+
+    func selectPreset(_ type: PsmCore.PresetType, _ name: String) {
+        requestPresetSwitch(type, name)
+    }
+
+    func requestPresetSwitch(_ type: PsmCore.PresetType, _ name: String) {
+        guard selectedPreset(type) != name else { return }
+        let dirty = dirtyProfileChanges(for: type)
+        guard !dirty.isEmpty else {
+            performPresetSwitch(type, name)
+            return
+        }
+        pendingPresetSwitch = PendingPresetSwitch(art: type,
+                                                  ziel: name,
+                                                  aenderungen: dirty)
+    }
+
+    func pendingPresetSwitchAbbrechen() {
+        pendingPresetSwitch = nil
+    }
+
+    func pendingPresetSwitchVerwerfenUndWechseln() {
+        guard let pending = pendingPresetSwitch else { return }
+        try? core?.discardChanges(pending.art)
+        pendingPresetSwitch = nil
+        performPresetSwitch(pending.art, pending.ziel)
+    }
+
+    func pendingPresetSwitchAlsNeuesProfilSichernUndWechseln(_ name: String) {
+        guard let pending = pendingPresetSwitch else { return }
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        // Der Name eines Systemprofils wird abgelehnt - dann bleibt der
+        // Dialog offen, statt die Aenderungen mit dem Wechsel wegzuwerfen.
+        do {
+            try core?.savePreset(pending.art, as: trimmed)
+        } catch {
+            projectNotice = SimpleModeState.shared.text(
+                english: "This name belongs to a system profile – choose another one.",
+                german: "Dieser Name gehört einem Systemprofil – bitte einen anderen wählen.")
+            return
+        }
+        pendingPresetSwitch = nil
+        performPresetSwitch(pending.art, pending.ziel)
+    }
+
+    func pendingPresetSwitchUeberschreibenUndWechseln() {
+        guard let pending = pendingPresetSwitch else { return }
+        if let current = selectedPreset(pending.art), !current.isEmpty {
+            // Ein Systemprofil laesst sich nicht ueberschreiben - dann bleibt
+            // der Dialog offen, statt die Aenderungen mit dem Wechsel
+            // wegzuwerfen (Zwilling: SlicerModel.kt).
+            do {
+                try core?.savePreset(pending.art, as: current)
+            } catch {
+                projectNotice = SimpleModeState.shared.text(
+                    english: "System profiles cannot be overwritten – save as a new profile instead.",
+                    german: "Systemprofile lassen sich nicht überschreiben – als neues Profil sichern.")
+                return
+            }
+        }
+        pendingPresetSwitch = nil
+        performPresetSwitch(pending.art, pending.ziel)
+    }
+
+    func pendingPresetSwitchInsProjektUebernehmen() {
+        guard let pending = pendingPresetSwitch, let core else { return }
+        let transfer = pending.aenderungen.map {
+            PsmCore.DirtyValue(key: $0.key, oldValue: $0.vorher, newValue: $0.jetzt)
+        }
+        try? core.selectPresetKeeping(pending.art, pending.ziel, changes: transfer)
+        if pending.art == .filament {
+            // Beim Filament muss zusaetzlich die wirksame Extruderwahl
+            // mitziehen; nur psm_preset_select_keeping wuerde sonst wieder
+            // die flache Editor-Auswahl anfassen.
+            try? core.setExtruderFilament(0, pending.ziel)
+            for change in transfer {
+                try? core.setConfig(change.key, change.newValue)
+            }
+        }
+        pendingPresetSwitch = nil
+        finishPresetSwitch(pending.art)
+    }
+
+    private func dirtyProfileChanges(for type: PsmCore.PresetType) -> [Profilaenderung] {
+        guard let core else { return [] }
+        return core.dirtyValues(type).map { wert in
+            let meta = core.configMeta(for: wert.key)
+            return Profilaenderung(
+                art: type,
+                key: wert.key,
+                bezeichnung: (meta?.label).flatMap { $0.isEmpty ? nil : $0 } ?? wert.key,
+                vorher: wert.oldValue,
+                jetzt: wert.newValue)
+        }
+    }
+
+    private func selectedPreset(_ type: PsmCore.PresetType) -> String? {
+        selectedPreset(for: tab(for: type))
+    }
+
+    private func tab(for type: PsmCore.PresetType) -> String {
+        switch type {
+        case .print: return "print"
+        case .filament: return "filament"
+        case .printer: return "printer"
+        }
+    }
+
+    private func performPresetSwitch(_ type: PsmCore.PresetType, _ name: String) {
+        if type == .filament {
+            // NICHT psm_preset_select fuer Filament: das setzt nur die
+            // "Editor"-Auswahl der flachen Sammlung. PrusaSlicer haelt
+            // die tatsaechlich wirksame Filamentwahl separat je Extruder
+            // (extruders_filaments) und gleicht sie beim naechsten
+            // update_compatible() wieder an DIESEN Zustand an - eine
+            // ueber selectPreset() gesetzte Wahl wird dabei lautlos
+            // rueckgaengig gemacht, sobald sie zum Drucker "unpassend"
+            // markiert ist (gefunden ueber den Selbsttest: auf einem
+            // Prusa XL landete "Prusament PLA" nie, sondern immer ein
+            // unbeteiligtes Ersatzfilament).
+            //
+            // psm_extruder_filament_set (hier: Extruder 0, derselbe wie
+            // die "editierte" Sammlung) macht es wie PrusaSlicers eigenes
+            // GUI_App::select_filament_preset: erst das Preset sichtbar
+            // machen, dann ueber extruders_filaments[0] auswaehlen. Das
+            // ist der richtige Weg fuer JEDEN Drucker, nicht nur fuer
+            // mehrere Extruder - beim MK4S faellt der Unterschied nur
+            // nie auf, weil dort ohnehin nur ein Extruder existiert.
+            try? core?.setExtruderFilament(0, name)
+            finishPresetSwitch(type)
+            return
+        }
+        try? core?.selectPreset(type, name)
+        finishPresetSwitch(type)
+    }
+
+    private func finishPresetSwitch(_ type: PsmCore.PresetType) {
+        // Ein anderer Drucker heisst andere passende Filamente - der
+        // gemerkte Katalog gilt dann nicht mehr.
+        if type == .printer {
+            filamentCache = nil
+            compatibleFilamentCache = nil
+            // Und die bisherige Filamentwahl passt womoeglich nicht mehr.
+            // Also unsere Standardwerte erneut anwenden - sie kennen die
+            // neue Liste.
+            standardwerteSetzen()
+        }
+        // Ein anderer Drucker heisst ein anderes Bett, ein anderes Profil
+        // andere Masse - beides muss der Viewport sehen.
+        sceneRevision += 1
+        refresh()
+    }
+
+    /// Die Grundflaechen der Objekte, wie sie die Haftungsberatung
+    /// braucht. Die Beurteilung selbst steht im gemeinsamen Modul.
+    var footprints: [AdhesionAdvice.Footprint] {
+        objects.map {
+            AdhesionAdvice.Footprint(widthMm: $0.sizeMm.x,
+                                     depthMm: $0.sizeMm.y,
+                                     heightMm: $0.sizeMm.z)
+        }
+    }
+
+    /// Uebernimmt die Druckerwahl aus der Ersteinrichtung.
+    ///
+    /// Laeuft abgetrennt: das Installieren liest und schreibt Dutzende
+    /// Profildateien und blockiert sonst die Oberflaeche.
+    func completeSetup(_ keys: [String]) {
+        guard let core, !setupBusy else { return }
+        setupBusy = true
+        Task {
+            do {
+                try core.installPrinters(keys)
+                await MainActor.run {
+                    // Nach dem Installieren steht noch kein Drucker als
+                    // "aktuell" fest - das entscheidet PrusaSlicers eigene
+                    // update_compatible()-Logik intern, nicht zwingend
+                    // einer der gerade gewaehlten. Die Filament-Vorauswahl
+                    // gleich danach fragt aber genau nach dessen
+                    // kompatiblen Filamenten - ohne diese Zeile war das
+                    // Ergebnis (welches Filament als "kompatibel" gilt)
+                    // vom internen Zufall abhaengig, nicht vom Setup.
+                    if let druckername = self.core?.presetNames(.printer).first(where: {
+                        self.core?.presetOption(.printer, $0, "printer_technology") != "SLA"
+                    }) ?? self.core?.presetNames(.printer).first {
+                        try? self.core?.selectPreset(.printer, druckername)
+                    }
+                    self.standardwerteSetzen()
+                    // Erst merken, dann als erledigt melden - sonst steht
+                    // beim naechsten Start wieder die Einrichtung da.
+                    Self.storedPrinters = Set(keys)
+                    setupNeeded = false
+                    setupBusy = false
+                    sceneRevision += 1
+                }
+            } catch {
+                await MainActor.run {
+                    progress = .failed(error.localizedDescription)
+                    setupBusy = false
+                }
+            }
+        }
+    }
+
+    /// Unsere Standardwerte setzen: Prusament PLA und Gyroid.
+    ///
+    /// Zwei bewusste Abweichungen von PrusaSlicers Voreinstellung, beide
+    /// im gemeinsamen Modul begruendet. Sie greifen nach der
+    /// Einrichtung und nach einem Druckerwechsel - dann wechselt auch
+    /// die Liste der kompatiblen Filamente.
+    ///
+    /// Das Fuellmuster macht das Druckprofil damit "geaendert". Das ist
+    /// der Preis dafuer, eine eigene Meinung zu haben, und er ist
+    /// sichtbar statt versteckt.
+    func standardwerteSetzen() {
+        guard let core else { return }
+        if let wunsch = Defaults.shared.preferredFilament(names: presetNames(.filament)) {
+            try? core.selectPreset(.filament, wunsch)
+        }
+        setConfig("fill_pattern", Defaults.shared.FILL_PATTERN)
+        refresh()
+    }
+
+    /// Die Einrichtung noch einmal oeffnen, etwa um einen Drucker
+    /// nachzutragen.
+    func reopenSetup() {
+        guard let core else { return }
+        printerModels = core.printerModels()
+        setupNeeded = true
+    }
+
+    /// Eine laufende App darf die Einrichtung wieder verlassen; beim
+    /// allerersten Start gibt es dagegen keinen nutzbaren Zielbildschirm.
+    func dismissSetup() {
+        guard printerIsReady, !setupBusy else { return }
+        setupNeeded = false
+    }
+
+    /// Die gemerkte Druckerwahl. Gegenstueck zu den Preferences auf
+    /// Android - dieselbe Rolle, dieselbe Bedeutung.
+    private static let printersKey = "printers"
+
+    static var storedPrinters: Set<String> {
+        get { Set(UserDefaults.standard.stringArray(forKey: printersKey) ?? []) }
+        set { UserDefaults.standard.set(Array(newValue), forKey: printersKey) }
+    }
+
+    /// Bereits eingerichtete Modelle, damit die Auswahl nicht bei null
+    /// beginnt, wenn man nur eine Duesengroesse ergaenzen will.
+    var installedPrinters: Set<String> { Self.storedPrinters }
+
+    func remove(_ id: Int32) {
+        try? core?.removeObject(id)
+        refresh()
+    }
+
+    func refresh() {
+        guard let core else { return }
+        objects = core.listObjects().compactMap { core.objectInfo($0) }
+        beds = core.beds()
+        // Durch CoreLabels: der Kern benennt seine Schritte deutsch
+        // (`history_checkpoint("Objekte importieren")`), und das stand
+        // bis zum 11.09.2026 so unter dem Zurueck-Pfeil - auch in der
+        // englischen Oberflaeche. Dieselbe Tabelle uebersetzt drueben,
+        // siehe SlicerModel.kt.
+        undoLabel = core.undoCount > 0 ? CoreLabels.shared.label(german: core.undoLabel) : ""
+        redoLabel = core.redoCount > 0 ? CoreLabels.shared.label(german: core.redoLabel) : ""
+        sceneRevision += 1
+    }
+
+    func undo() {
+        try? core?.undo()
+        selectedId = nil
+        refresh()
+    }
+
+    func redo() {
+        try? core?.redo()
+        selectedId = nil
+        refresh()
+    }
+
+    /// Oeffnet eine 3MF als vollstaendiges Projekt: Positionen, Betten
+    /// und Konfiguration. Anders als beim Laden eines Modells wird das
+    /// aktuelle Bett dabei ersetzt.
+    func loadProject(url: URL) {
+        guard let core else { return }
+        let scoped = url.startAccessingSecurityScopedResource()
+        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+        ladefehlerVergessen()
+        do {
+            let ziel = FileManager.default.temporaryDirectory
+                .appendingPathComponent(url.lastPathComponent)
+            try? FileManager.default.removeItem(at: ziel)
+            try FileManager.default.copyItem(at: url, to: ziel)
+
+            let info = try core.loadProject(path: ziel.path)
+            projectNotice = hinweis(zu: info)
+            // Ein Projekt aus dem eigenen Ordner behaelt seinen Namen -
+            // "Sichern" ueberschreibt es dann, statt eine Kopie
+            // anzulegen. Wie `projectURL = url.takeIf { ... }` auf Android.
+            projectURL = url.deletingLastPathComponent().standardizedFileURL
+                == projectsDirectory.standardizedFileURL ? url : nil
+            refresh()
+            savedRevision = sceneRevision
+        } catch {
+            progress = .failed(error.localizedDescription)
+        }
+    }
+
+    /// Wo Projekte liegen.
+    ///
+    /// Nicht das temporaere Verzeichnis: das raeumt iOS ohne Vorwarnung
+    /// leer, und ein Projekt, das einen Neustart nicht ueberlebt, ist
+    /// kein Projekt. Documents wird gesichert und ist in der
+    /// Dateien-App sichtbar.
+    var projectsDirectory: URL {
+        let basis = FileManager.default.urls(for: .documentDirectory,
+                                             in: .userDomainMask)[0]
+        let ordner = basis.appendingPathComponent("Projects", isDirectory: true)
+        try? FileManager.default.createDirectory(at: ordner,
+                                                 withIntermediateDirectories: true)
+        return ordner
+    }
+
+    /// Die gesicherten Projekte, neueste zuerst.
+    ///
+    /// Nach Aenderungsdatum und nicht nach Namen: wer ein Projekt sucht,
+    /// sucht fast immer das zuletzt bearbeitete.
+    func recentProjects(limit: Int = 8) -> [URL] {
+        let inhalt = (try? FileManager.default.contentsOfDirectory(
+            at: projectsDirectory,
+            includingPropertiesForKeys: [.contentModificationDateKey],
+            options: [.skipsHiddenFiles])) ?? []
+        return inhalt
+            .filter { $0.pathExtension.lowercased() == "3mf" }
+            .sorted { a, b in
+                let da = (try? a.resourceValues(forKeys: [.contentModificationDateKey]))?
+                    .contentModificationDate ?? .distantPast
+                let db = (try? b.resourceValues(forKeys: [.contentModificationDateKey]))?
+                    .contentModificationDate ?? .distantPast
+                return da > db
+            }
+            .prefix(limit)
+            .map { $0 }
+    }
+
+    /// Ein gesichertes Projekt von der Platte entfernen - fuer "alte
+    /// Projekte aufraeumen" in der Liste. Betrifft nur die Datei, nicht
+    /// den gerade offenen Stand: wer sein aktuelles Projekt loescht,
+    /// arbeitet unbeeindruckt weiter, bis er selbst neu sichert.
+    func deleteProject(_ url: URL) {
+        try? FileManager.default.removeItem(at: url)
+    }
+
+    /// Leeres Bett. Der vorherige Stand bleibt zuruecknehmbar - ein
+    /// versehentliches "Neu" darf keine Stunde Arbeit kosten.
+    func newProject() {
+        guard let core else { return }
+        try? core.clearBed()
+        projectURL = nil
+        projectNotice = nil
+        select(nil)
+        refresh()
+        savedRevision = sceneRevision
+    }
+
+    /// Was auf welcher Hoehe passiert - Farbwechsel, Pause, eigener Code.
+    func customGcodeList() -> [PsmCore.CustomGcode] {
+        core?.customGcodeList() ?? []
+    }
+
+    func addCustomGcode(_ e: PsmCore.CustomGcode) {
+        try? core?.addCustomGcode(e)
+        refresh()
+    }
+
+    func updateCustomGcode(_ index: Int, _ e: PsmCore.CustomGcode) {
+        try? core?.updateCustomGcode(index, e)
+        refresh()
+    }
+
+    func removeCustomGcode(_ index: Int) {
+        try? core?.removeCustomGcode(index)
+        refresh()
+    }
+
+    /// Repariert eine STL und legt das Ergebnis neben das Original.
+    ///
+    /// Nicht an derselben Stelle ueberschreiben: wenn die Reparatur
+    /// etwas kaputtmacht, will man das Original noch haben.
+    func repairSTL(_ url: URL) -> URL? {
+        guard let core else { return nil }
+        let ziel = projectsDirectory.appendingPathComponent(
+            url.deletingPathExtension().lastPathComponent + "-repariert.stl")
+        try? FileManager.default.removeItem(at: ziel)
+        let offen = url.startAccessingSecurityScopedResource()
+        defer { if offen { url.stopAccessingSecurityScopedResource() } }
+        do {
+            try core.repairSTL(input: url.path, output: ziel.path)
+            return ziel
+        } catch {
+            projectNotice = error.localizedDescription
+            return nil
+        }
+    }
+
+    /// Wandelt eine G-Code-Datei zwischen ASCII und BGCode.
+    func convertGcode(_ url: URL, toBinary: Bool) -> URL? {
+        guard let core else { return nil }
+        let endung = toBinary ? "bgcode" : "gcode"
+        let ziel = projectsDirectory.appendingPathComponent(
+            url.deletingPathExtension().lastPathComponent + "." + endung)
+        try? FileManager.default.removeItem(at: ziel)
+        let offen = url.startAccessingSecurityScopedResource()
+        defer { if offen { url.stopAccessingSecurityScopedResource() } }
+        do {
+            try core.convertGcode(input: url.path, output: ziel.path, toBinary: toBinary)
+            return ziel
+        } catch {
+            projectNotice = error.localizedDescription
+            return nil
+        }
+    }
+
+    /// Die Platte als eine einzige STL.
+    ///
+    /// Nicht dasselbe wie ein Projekt: hier geht die Anordnung mit, aber
+    /// keine Profile und keine Bemalung. Gedacht zum Weitergeben an
+    /// jemanden, der einen anderen Slicer benutzt.
+    func exportPlate() -> URL? {
+        guard let core else { return nil }
+        let datei = SliceSummary.shared.fileName(project: "PSMobile")
+            .replacingOccurrences(of: ".gcode", with: "-platte.stl")
+        let url = projectsDirectory.appendingPathComponent(datei)
+        try? FileManager.default.removeItem(at: url)
+        do {
+            try core.exportPlateSTL(path: url.path)
+            return url
+        } catch {
+            projectNotice = error.localizedDescription
+            return nil
+        }
+    }
+
+    /// Der Name, den der Sichern-Dialog vorschlaegt: das gesicherte Projekt,
+    /// sonst das erste Objekt - ohne dessen Dateiendung. Bis zum 16.09.2026
+    /// stand "wuerfel20.stl" im Feld, und aus "screw.step" wurde beim
+    /// Sichern "screw_step.3mf". Gegenstueck: `proposedProjectName` drueben.
+    var proposedProjectName: String {
+        if let url = projectURL { return url.deletingPathExtension().lastPathComponent }
+        if let erstes = objects.first?.name {
+            let ohne = (erstes as NSString).deletingPathExtension
+            if !ohne.isEmpty { return ohne }
+        }
+        return "PSMobile"
+    }
+
+    /// Sichert alle Betten als PrusaSlicer-taugliches 3MF.
+    func saveProject(name: String = "PSMobile") {
+        guard let core else { return }
+        // Ein Projekt behaelt seinen Namen. Am PC heisst es nach dem
+        // Projekt und wird beim Sichern ueberschrieben; wer bei jedem
+        // Sichern einen neuen Namen bekommt, sammelt Karteileichen.
+        //
+        // Der sprechende Name aus output_filename_format gehoert an den
+        // G-Code, nicht hierher - siehe writeGcode().
+        //
+        // Endung anhaengen statt ersetzen: der Kern lehnt jeden Pfad ab,
+        // der nicht auf .3mf endet.
+        let basis = (SliceSummary.shared.fileName(project: name) as NSString)
+            .deletingPathExtension
+        let datei = (basis.isEmpty ? "psmobile" : basis) + ".3mf"
+        let url = projectsDirectory.appendingPathComponent(datei)
+        try? FileManager.default.removeItem(at: url)
+        do {
+            try core.saveProject(path: url.path)
+            projectURL = url
+            savedRevision = sceneRevision
+        } catch {
+            projectURL = nil
+            // Der Kern nennt nur die Tat, PrusaSlicer den Grund. Beides
+            // gehoert zusammen - eine Meldung ohne Grund kann der
+            // Nutzer nur wegklicken.
+            let gruende = PsmLog.recent.suffix(3).joined(separator: "\n")
+            projectNotice = gruende.isEmpty
+                ? error.localizedDescription
+                : error.localizedDescription + "\n" + gruende
+        }
+    }
+
+    /// Nur melden, was den Nutzer betrifft: ein anderes Profil als
+    /// gespeichert, und entfernte Skripte. Alles andere waere eine
+    /// Meldung, die man wegklickt, ohne sie zu lesen.
+    private func hinweis(zu info: PsmCore.ProjectImport) -> String? {
+        var zeilen: [String] = []
+        if info.printerChanged {
+            zeilen.append(SimpleModeState.shared.text(
+                english: "Printer profile differs: " + info.selectedPrinter,
+                german: "Anderes Druckerprofil aktiv: " + info.selectedPrinter))
+        }
+        if info.printChanged {
+            zeilen.append(SimpleModeState.shared.text(
+                english: "Print profile differs: " + info.selectedPrint,
+                german: "Anderes Druckprofil aktiv: " + info.selectedPrint))
+        }
+        if info.postProcessRemoved {
+            zeilen.append(SimpleModeState.shared.text(
+                english: "Embedded post-processing scripts were not loaded.",
+                german: "Eingebettete Nachbearbeitungsskripte wurden nicht übernommen."))
+        }
+        // Das Filament kennt die Importauskunft nicht - aber wenn danach
+        // "- default -" aktiv ist, fehlt das Profil des Projekts, und ohne
+        // Hinweis fiele das erst am Druck auf (Zwilling: hinweis() in SlicerModel.kt).
+        let filament = selectedPreset(for: "filament") ?? ""
+        if info.configLoaded, filament.isEmpty || filament.lowercased().contains("default") {
+            zeilen.append(SimpleModeState.shared.text(
+                english: "No matching filament profile – choose one",
+                german: "Kein passendes Filamentprofil – bitte wählen"))
+        }
+        return zeilen.isEmpty ? nil : zeilen.joined(separator: "  ·  ")
+    }
+
+    /// Obergrenze aus dem C-ABI (PSM_MAX_BEDS). Sie steht dort, damit
+    /// beide Seiten dieselbe Zahl nennen.
+    static let maxBeds = 36
+
+    /// Der Panel-Pfad braucht Erfolg und Fehler als echten Rückgabewert.
+    /// Ein `try?` würde gerade Locked/Full verschlucken.
+    func arrange(target: Int, gapMm: Float,
+                allowRotation: Bool = false) throws -> PsmCore.ArrangeResult {
+        guard let core else {
+            throw PsmCore.PsmError.createFailed("Core nicht bereit")
+        }
+        let ergebnis = try core.arrange(bed: target, gapMm: gapMm,
+                                        allowRotation: allowRotation)
+        refresh()
+        return ergebnis
+    }
+
+    /// Kompatibler Einstieg älterer Werkzeugknöpfe. Die gemeinsame
+    /// Arrange-Oberfläche verwendet immer die werfende Zielbett-Fassung.
+    func arrange() {
+        let aktiv = beds.first(where: { $0.active })?.index ?? 0
+        do {
+            _ = try arrange(target: aktiv, gapMm: 6)
+        } catch {
+            projectNotice = error.localizedDescription
+        }
+    }
+
+    /// Alle nicht gesperrten Betten in einem Rutsch anordnen - der
+    /// kurze Tipp auf den Arrange-Knopf. Wer nur ein Bett anordnen
+    /// will, haelt den Knopf gedrueckt und waehlt es im Panel.
+    func arrangeAll(gapMm: Float = 6, allowRotation: Bool = false) {
+        for bett in beds where !bett.locked {
+            _ = try? arrange(target: bett.index, gapMm: gapMm,
+                             allowRotation: allowRotation)
+        }
+    }
+
+    func duplicate(_ ids: [Int32]) {
+        for id in ids { try? core?.duplicate(id) }
+        refresh()
+    }
+
+    func removeObjects(_ ids: [Int32]) {
+        // Ein Befehl, ein Schritt. Ohne die Klammer muesste man zehnmal
+        // zurueck, um ein Loeschen von zehn Objekten rueckgaengig zu
+        // machen - und wuesste beim dritten Mal nicht mehr, wo man war.
+        if ids.count > 1 { core?.beginHistory("Objekte entfernen") }
+        defer { if ids.count > 1 { core?.endHistory() } }
+        for id in ids { try? core?.removeObject(id) }
+        if let gewaehlt = selectedId, ids.contains(gewaehlt) { selectedId = nil }
+        refresh()
+    }
+
+    /// Wie ein Bett heisst - der eigene Name, sonst die Nummer.
+    func bedLabel(_ index: Int) -> String {
+        let name = beds.first(where: { $0.index == index })?
+            .name.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return name.isEmpty
+            ? SimpleModeState.shared.text(english: "Bed", german: "Bett") + " \(index + 1)"
+            : name
+    }
+
+    func renameBed(_ index: Int, to name: String) {
+        guard let core, let bed = beds.first(where: { $0.index == index }) else { return }
+        do {
+            try core.setBedMetadata(bed, name: name)
+            refresh()
+        } catch {
+            projectNotice = error.localizedDescription
+        }
+    }
+
+    func isBedLocked(_ index: Int) -> Bool {
+        beds.first(where: { $0.index == index })?.locked ?? false
+    }
+
+    /// Ein gesperrtes Bett wird von Anordnen nicht angefasst.
+    func toggleBedLock(_ index: Int) {
+        guard let core, let bed = beds.first(where: { $0.index == index }) else { return }
+        do {
+            try core.setBedMetadata(bed, locked: !bed.locked)
+            refresh()
+        } catch {
+            projectNotice = error.localizedDescription
+        }
+    }
+
+    /// Ein weiteres Bett. Es wird gleich das aktive - wer eines
+    /// anlegt, will darauf.
+    func addBed() {
+        guard let core else { return }
+        if let neu = try? core.addBed() {
+            try? core.selectBed(neu)
+            selectedId = nil
+        }
+        sceneRevision += 1
+        refresh()
+    }
+
+    func removeBed(_ index: Int) {
+        try? core?.removeBed(index)
+        selectedId = nil
+        sceneRevision += 1
+        refresh()
+    }
+
+    /// Bett des Projekts, das gerade aktiv ist - 0, solange keins als
+    /// aktiv gemeldet ist (kann bei leerem Projekt kurz vorkommen).
+    var activeBedIndex: Int32 {
+        Int32(beds.first(where: \.active)?.index ?? 0)
+    }
+
+    func selectBed(_ index: Int) {
+        try? core?.selectBed(index)
+        // Ein anderes Bett heisst andere Objekte und eine andere
+        // Ansicht - die Auswahl von vorhin gibt es dort nicht.
+        selectedId = nil
+        sceneRevision += 1
+        // Der Viewport soll dorthin schauen, wohin man gerade gewechselt
+        // hat - sonst bleibt die Kamera im Mehrbett-Modus immer auf dem
+        // ersten Bett stehen, egal welches man antippt.
+        focusBedKey += 1
+        refresh()
+    }
+
+    /// Schiebt Objekte auf ein anderes Bett. Ein Index jenseits der
+    /// vorhandenen Betten legt eines an - sonst waere ein volles Bett
+    /// eine Sackgasse.
+    func moveToBed(_ ids: [Int32], target: Int) {
+        guard let core else { return }
+        var ziel = target
+        if ziel >= beds.count {
+            guard let neu = try? core.addBed() else { return }
+            ziel = neu
+            // addBed waehlt das neue Bett aus; die Objekte liegen aber
+            // noch auf dem alten.
+            try? core.selectBed(beds.first(where: { $0.active })?.index ?? 0)
+        }
+        for id in ids { _ = try? core.moveToBed(id, target: ziel) }
+        selectedId = nil
+        refresh()
+    }
+
+    func split(_ id: Int32) {
+        _ = try? core?.splitObject(id)
+        selectedId = nil
+        refresh()
+    }
+
+    func cut(_ id: Int32, zMm: Float) {
+        _ = try? core?.cut(id, zMm: zMm)
+        selectedId = nil
+        refresh()
+    }
+
+    /// Gleichmaessig skalieren. Der Kern kennt drei Achsen; ungleiche
+    /// Faktoren gibt es in der Oberflaeche bewusst nicht - wer ein
+    /// Modell in einer Achse streckt, druckt selten das, was er wollte.
+    func setUniformScale(_ id: Int32, _ faktor: Float) {
+        try? core?.setScale(id, SIMD3(faktor, faktor, faktor))
+        refresh()
+    }
+
+    /// Auf ein Zielmass der laengsten Kante bringen.
+    func scaleToSize(_ id: Int32, _ mm: Float) {
+        try? core?.scaleToFit(id, sizeMm: mm)
+        refresh()
+    }
+
+    /// Dreht eine Achse auf einen festen Winkel. Gerechnet wird im Kern
+    /// in Radiant, eingegeben in Grad.
+    func setRotationAxis(_ id: Int32, _ achse: Int, grad: Float) {
+        guard let objekt = objects.first(where: { $0.id == id }) else { return }
+        var r = objekt.rotation
+        r[achse] = grad * .pi / 180
+        try? core?.setRotation(id, r)
+        refresh()
+    }
+
+    /// Dreht um einen Betrag weiter - fuer die Vierteldrehungen.
+    func rotateBy(_ id: Int32, achse: Int, grad: Float) {
+        guard let objekt = objects.first(where: { $0.id == id }) else { return }
+        var r = objekt.rotation
+        r[achse] += grad * .pi / 180
+        try? core?.setRotation(id, r)
+        refresh()
+    }
+
+    func paint(_ id: Int32,
+               instance: Int,
+               volume: Int,
+               facet: Int,
+               hit: (Float, Float, Float),
+               previous: (Float, Float, Float)?,
+               options: PsmCore.PaintOptions) {
+        try? core?.paint(id, instance: instance,
+                         volume: volume, facet: facet,
+                         hit: hit, previous: previous,
+                         options: options)
+        // Nur neu zeichnen, nicht die Objektliste neu lesen: beim
+        // Streichen kaeme sonst je Beruehrung ein voller Durchlauf.
+        sceneRevision += 1
+    }
+
+    func clearPaint(_ id: Int32, tool: PsmCore.PaintTool) {
+        try? core?.clearPaint(id, tool: tool)
+        sceneRevision += 1
+        objectWillChange.send()
+    }
+
+    func paintCount(_ id: Int32, tool: PsmCore.PaintTool) -> Int {
+        core?.paintCount(id, tool: tool) ?? 0
+    }
+
+    func layOnFacet(_ id: Int32,
+                    instance: Int = 0,
+                    volume: Int,
+                    facet: Int) {
+        try? core?.layOnFacet(id, instance: instance,
+                              volume: volume, facet: facet)
+        refresh()
+    }
+
+    func layerProfile(_ id: Int32) -> [LayerProfile.Point] {
+        (core?.layerProfile(id) ?? []).map {
+            LayerProfile.Point(z: $0.z, height: $0.height)
+        }
+    }
+
+    func setLayerProfile(_ id: Int32, points: [LayerProfile.Point]) {
+        try? core?.setLayerProfile(id, points: points.map { (z: $0.z, height: $0.height) })
+        refresh()
+    }
+
+    func clearLayerProfile(_ id: Int32) {
+        try? core?.setLayerProfile(id, points: [])
+        refresh()
+    }
+
+    /// Berechnet Stuetzstellen aus der Objektgeometrie statt sie von
+    /// Hand zu setzen - PrusaSlicers eigener Algorithmus. Setzt noch
+    /// nichts: der Aufrufer zeigt das Ergebnis erst in der Vorschau.
+    func layerProfileAdaptive(_ id: Int32, qualityFactor: Float) -> [LayerProfile.Point] {
+        do {
+            return try (core?.layerProfileAdaptive(id, qualityFactor: qualityFactor) ?? [])
+                .map { LayerProfile.Point(z: $0.z, height: $0.height) }
+        } catch {
+            projectNotice = error.localizedDescription
+            return []
+        }
+    }
+
+    /// Legt das Objekt auf seine groesste ebene Flaeche.
+    func layFlat(_ id: Int32) {
+        try? core?.layFlatAuto(id)
+        sceneRevision += 1
+        refresh()
+    }
+
+    /// Dreht die angetippte Flaeche nach unten.
+    func layOnFace(_ id: Int32,
+                   instance: Int = 0,
+                   volume: Int,
+                   facet: Int) {
+        try? core?.layOnFacet(id, instance: instance,
+                              volume: volume, facet: facet)
+        sceneRevision += 1
+        refresh()
+    }
+
+    /// Reduziert die Dreieckszahl. Gibt vorher und nachher zurueck.
+    @discardableResult
+    func simplify(_ id: Int32, ratio: Float) -> (before: Int, after: Int)? {
+        guard let ergebnis = try? core?.simplify(id, ratio: ratio) else { return nil }
+        sceneRevision += 1
+        refresh()
+        return ergebnis
+    }
+
+    /// Zerlegt getrennte Koerper in einzelne Volumen.
+    @discardableResult
+    func splitVolumes(_ id: Int32) -> Int {
+        let anzahl = (try? core?.splitVolumes(id)) ?? 0
+        sceneRevision += 1
+        refresh()
+        return anzahl ?? 0
+    }
+
+    /// Der Dateiname, den PrusaSlicer vergaebe.
+    func suggestedGcodeName() -> String {
+        core?.suggestedGcodeName() ?? "psmobile.gcode"
+    }
+
+    func volumeCount(_ id: Int32) -> Int { core?.volumeCount(id) ?? 0 }
+
+    func volumeInfo(_ id: Int32, at index: Int) -> PsmCore.VolumeInfo? {
+        core?.volumeInfo(id, at: index)
+    }
+
+    /// Legt einen Grundkoerper als Teil an. Falsch heisst: hat nicht
+    /// geklappt - der Grund steht im Protokoll.
+    @discardableResult
+    func addPrimitiveVolume(_ id: Int32,
+                            type: PsmCore.VolumeType,
+                            shape: PsmCore.PrimitiveShape,
+                            size: Float) -> Bool {
+        guard let core else { return false }
+        do {
+            try core.addPrimitiveVolume(id, type: type, shape: shape,
+                                        sizeX: size, sizeY: size, sizeZ: size)
+        } catch {
+            projectNotice = error.localizedDescription
+            return false
+        }
+        sceneRevision += 1
+        refresh()
+        return true
+    }
+
+    func removeVolume(_ id: Int32, at index: Int) {
+        try? core?.removeVolume(id, at: index)
+        sceneRevision += 1
+        refresh()
+    }
+
+    func setVolumeExtruder(_ id: Int32, at index: Int, _ extruder: Int32) {
+        try? core?.setVolumeExtruder(id, at: index, extruder)
+        refresh()
+    }
+
+    func fitToBed(_ id: Int32) {
+        try? core?.fitToBed(id)
+        refresh()
+    }
+
+    func mirror(_ id: Int32, axis: Int32) {
+        try? core?.mirror(id, axis: axis)
+        refresh()
+    }
+
+    func dropToBed(_ id: Int32) {
+        try? core?.dropToBed(id)
+        refresh()
+    }
+
+    func setInstances(_ id: Int32, count: Int32) {
+        try? core?.setInstances(id, count: count)
+        refresh()
+    }
+
+    /// Dieselbe Regel wie Android (`SliceMemoryPolicy` im gemeinsamen
+    /// Modul, `sliceMemoryDecision` in SlicerService.kt). Bis zum
+    /// 13.09.2026 rechnete iOS hier mit einer eigenen 80-%-Faustregel und
+    /// warnte nur, Android blockierte - zwei Antworten auf dieselbe Frage.
+    private func speicherEntscheidung(_ core: PsmCore) -> SliceMemoryPolicy.Decision? {
+        // Ohne Auskunft ueber den freien Speicher wird nicht geraten. Eine
+        // Warnung, die auf einer erfundenen Zahl steht, ist schlimmer als
+        // keine - man gewoehnt sich an sie und uebersieht die echte.
+        guard let have = PsmCore.availableMemory else { return nil }
+        return SliceMemoryPolicy.shared.evaluate(
+            estimatedPeakBytes: Int64(core.estimatedSliceMemory),
+            totalDeviceBytes: Int64(ProcessInfo.processInfo.physicalMemory),
+            availableDeviceBytes: Int64(have),
+            currentProcessBytes: Int64(PsmCore.processFootprint),
+            systemLowMemory: false)
+    }
+
+    private func checkMemory() {
+        guard let core else { return }
+        guard let d = speicherEntscheidung(core) else { memoryWarning = nil; return }
+        memoryWarning = SliceMemoryPolicy.shared.message(d: d)?.text
+    }
+
+    /// Verbrauch je Extruder des letzten Ergebnisses.
+    func extruderUsage() -> [PsmCore.ExtruderUsage] {
+        core?.extruderUsage() ?? []
+    }
+
+    /// Ob ein Hinsehen ohne neues Rechnen genuegt.
+    var sliceResultIsCurrent: Bool { core?.sliceResultIsCurrent ?? false }
+
+    /// Keine zwischengespeicherte Swift-Kopie: so kann eine neue
+    /// Designrevision nie versehentlich den alten Preview-Wert zeigen.
+    func previewSnapshot() -> PsmCore.PreviewSnapshot? {
+        guard sliceResultIsCurrent || lastSliceWasRemote else { return nil }
+        return core?.previewSnapshot()
+    }
+
+    func slice() {
+        if remoteSliceEnabled {
+            sliceRemote()
+            return
+        }
+        guard let core, sliceTask == nil else { return }
+        // Wie SlicerService.runSlice auf Android: ein Slice, der den
+        // sicheren Speicher sprengen wuerde, wird gar nicht erst gestartet.
+        if let d = speicherEntscheidung(core), d.blocked {
+            progress = .failed(SliceMemoryPolicy.shared.message(d: d)?.text ?? "")
+            return
+        }
+
+        // Ohne diesen Antrag beendet iOS die Rechenarbeit, sobald die App
+        // in den Hintergrund geht - ein Slice dauert aber Minuten.
+        backgroundTask = UIApplication.shared.beginBackgroundTask(withName: "psm-slice") { [weak self] in
+            self?.cancel()
+        }
+
+        progress = .running(percent: 0, stage: "wird vorbereitet")
+        stats = nil
+        // Der G-Code des vorigen Laufs gehoert zum vorigen Stand. Ihn
+        // stehen zu lassen, waere die gefaehrlichere Variante: man
+        // teilt eine Datei, die zu dem, was auf dem Bett liegt, nicht
+        // mehr passt.
+        gcodeURL = nil
+        let t0 = Date()
+
+        sliceTask = Task.detached(priority: .userInitiated) { [weak self] in
+            do {
+                try core.startSlice { percent, stage in
+                    Task { @MainActor in
+                        self?.progress = .running(percent: percent, stage: stage)
+                    }
+                    return false
+                }
+                let state = core.awaitSlice()
+                let secs = Date().timeIntervalSince(t0)
+
+                await MainActor.run {
+                    switch state {
+                    case .done:
+                        let st = core.sliceStats()
+                        self?.stats = st
+                        self?.writeGcode()
+                        self?.progress = .done(
+                            seconds: secs,
+                            printMinutes: Int((st?.printTimeSeconds ?? 0) / 60),
+                            grams: st?.filamentGrams ?? 0
+                        )
+                        self?.lastSliceWasRemote = false
+                    case .cancelled: self?.progress = .cancelled
+                    default:
+                        self?.progress = .failed(core.lastError)
+                    }
+                    self?.finishSlice()
+                }
+            } catch {
+                await MainActor.run {
+                    self?.progress = .failed(error.localizedDescription)
+                    self?.finishSlice()
+                }
+            }
+        }
+    }
+
+    /// Wie slice(), aber ueber den eigenen Server statt lokal - siehe
+    /// docs/remote-slicing.md. Projekt sichern (dieselbe Funktion wie
+    /// "Projekt sichern" im Menue), hochladen, Fortschritt abfragen,
+    /// G-Code herunterladen. Fuellt dieselben veroeffentlichten Felder
+    /// wie der lokale Weg (progress/stats/gcodeURL), damit die
+    /// Oberflaeche keinen zweiten Zustand kennen muss.
+    private func sliceRemote() {
+        guard sliceTask == nil else { return }
+        guard let basis = RemoteSliceClient.normalizedBaseURL(
+            from: UserDefaults.standard.string(forKey: Self.remoteSliceHostKey) ?? "")
+        else {
+            progress = .failed(SimpleModeState.shared.text(
+                english: "No remote server configured.",
+                german: "Kein Remote-Server eingerichtet."))
+            return
+        }
+        let token = try? RemoteSliceCredentialStore().load()
+
+        backgroundTask = UIApplication.shared.beginBackgroundTask(
+            withName: "psm-slice-remote") { [weak self] in
+            self?.cancel()
+        }
+        progress = .running(percent: 0, stage: SimpleModeState.shared.text(
+            english: "uploading", german: "wird hochgeladen"))
+        stats = nil
+        gcodeURL = nil
+
+        saveProject()
+        guard let projektURL = projectURL else {
+            progress = .failed(SimpleModeState.shared.text(
+                english: "Could not export the project.",
+                german: "Projekt ließ sich nicht exportieren."))
+            finishSlice()
+            return
+        }
+
+        let t0 = Date()
+        sliceTask = Task.detached(priority: .userInitiated) { [weak self] in
+            guard let self else { return }
+            do {
+                let jobId = try await self.remoteClient.submitJob(
+                    projectFileURL: projektURL, baseURL: basis, token: token)
+                try await self.remotePollLoop(
+                    jobId: jobId, baseURL: basis, token: token, t0: t0)
+            } catch {
+                await MainActor.run {
+                    self.progress = Task.isCancelled
+                        ? .cancelled : .failed(error.localizedDescription)
+                    self.finishSlice()
+                }
+            }
+        }
+    }
+
+    private func remotePollLoop(
+        jobId: String, baseURL: URL, token: String?, t0: Date
+    ) async throws {
+        while !Task.isCancelled {
+            let stand = try await remoteClient.fetchStatus(
+                jobId: jobId, baseURL: baseURL, token: token)
+            switch stand.status {
+            case "queued":
+                await MainActor.run {
+                    self.progress = .running(percent: 0, stage: SimpleModeState.shared.text(
+                        english: "waiting in queue", german: "wartet in der Warteschlange"))
+                }
+            case "running":
+                await MainActor.run {
+                    self.progress = .running(
+                        percent: stand.percent ?? 0, stage: stand.stage ?? "")
+                }
+            case "done":
+                // suggestedGcodeName() fragt den lokalen Kern nach dem
+                // letzten LOKALEN Slice-Ergebnis - beim Remote-Schneiden
+                // gab es nie eines, der Kern meldet dann "veraltet"
+                // (sichtbar im Protokoll). Deshalb hier direkt ueber
+                // SliceSummary benennen, ohne den Kern zu fragen. Der
+                // Zugriff auf `objects` gehoert ausserdem auf den
+                // Hauptthread - remotePollLoop laeuft ohne @MainActor im
+                // Hintergrund-Task von sliceRemote().
+                let name = await MainActor.run {
+                    SliceSummary.shared.fileName(project: self.objects.first?.name ?? "")
+                }
+                let ziel = FileManager.default.temporaryDirectory
+                    .appendingPathComponent(name)
+                try? FileManager.default.removeItem(at: ziel)
+                try await remoteClient.downloadGcode(
+                    jobId: jobId, baseURL: baseURL, token: token, to: ziel)
+                let secs = Date().timeIntervalSince(t0)
+                await MainActor.run {
+                    self.gcodeURL = ziel
+                    // Speist die heruntergeladene Datei in dieselbe
+                    // Vorschau wie ein lokaler Schnitt ein. Schlaegt das
+                    // fehl (kaputte Datei, o.ae.), bleibt die Vorschau
+                    // leer statt die restliche Anzeige zu blockieren -
+                    // Export und Senden haengen nicht daran.
+                    try? self.core?.loadGcodeForPreview(path: ziel.path)
+                    self.progress = .done(
+                        seconds: secs,
+                        printMinutes: Int((stand.stats?.printTimeSeconds ?? 0) / 60),
+                        grams: stand.stats?.filamentG ?? 0)
+                    self.lastSliceWasRemote = true
+                    // Der Server liefert Zeit/Gewicht direkt mit - anders als
+                    // beim lokalen Schnitt setzt hier aber nie
+                    // psm_slice_wait self.stats, darum blieb die
+                    // Seitenleisten-Zusammenfassung (abschluss) nach jedem
+                    // Remote-Schnitt leer. Kosten kennt nur der lokale Kern
+                    // (aus dem Filamentpreis-Profil) - hier nur fuer den
+                    // ersten Extruder genaehert, mehrfarbige Projekte
+                    // koennen leicht daneben liegen.
+                    let kostenProKg = Double(
+                        self.core?["filament_cost"]?
+                            .split(separator: ",").first.map(String.init) ?? "0") ?? 0
+                    let gramm = stand.stats?.filamentG ?? 0
+                    self.stats = PsmCore.SliceStats(
+                        printTimeSeconds: stand.stats?.printTimeSeconds ?? 0,
+                        filamentMm: stand.stats?.filamentMm ?? 0,
+                        filamentGrams: gramm,
+                        cost: kostenProKg * gramm / 1000,
+                        objects: self.objects.count)
+                    self.finishSlice()
+                }
+                return
+            case "failed":
+                await MainActor.run {
+                    self.progress = .failed(stand.error ?? SimpleModeState.shared.text(
+                        english: "Slicing failed on the server.",
+                        german: "Slicen ist auf dem Server fehlgeschlagen."))
+                    self.finishSlice()
+                }
+                return
+            default:
+                break
+            }
+            try await Task.sleep(nanoseconds: 800_000_000)
+        }
+        // Schleife nur wegen Abbruch verlassen - kein Zweig im switch
+        // oben hat sonst zurueckgekehrt.
+        await MainActor.run {
+            self.progress = .cancelled
+            self.finishSlice()
+        }
+    }
+
+    /// Schneidet nacheinander jedes Bett mit Objekten und legt je eine
+    /// G-Code-Datei an. Die Ansicht bleibt am Ende wieder beim Bett, von
+    /// dem aus aufgerufen wurde - wer "alle Betten" tippt, will nicht
+    /// nebenbei auch noch woanders landen.
+    func sliceAll() {
+        guard let core, sliceTask == nil else { return }
+        let ziele = beds.filter { $0.objectCount > 0 }.map(\.index)
+        guard !ziele.isEmpty else { return }
+        let ausgangsbett = Int(activeBedIndex)
+
+        backgroundTask = UIApplication.shared.beginBackgroundTask(withName: "psm-slice-all") { [weak self] in
+            self?.cancel()
+        }
+        progress = .running(percent: 0, stage: "wird vorbereitet")
+        stats = nil
+        gcodeURL = nil
+        gcodeURLs = []
+        sliceAllProgress = (0, ziele.count)
+
+        sliceTask = Task.detached(priority: .userInitiated) { [weak self] in
+            guard let self else { return }
+            var dateien: [URL] = []
+            var summeSekunden = 0.0
+            var summeGramm = 0.0
+
+            for (i, bettIndex) in ziele.enumerated() {
+                await MainActor.run {
+                    self.selectBed(bettIndex)
+                    self.sliceAllProgress = (i + 1, ziele.count)
+                    self.progress = .running(
+                        percent: 0,
+                        stage: "Bett \(i + 1)/\(ziele.count)")
+                }
+                do {
+                    try core.startSlice { percent, stage in
+                        Task { @MainActor in
+                            self.progress = .running(
+                                percent: percent,
+                                stage: "Bett \(i + 1)/\(ziele.count): \(stage)")
+                        }
+                        return false
+                    }
+                    let zustand = core.awaitSlice()
+                    switch zustand {
+                    case .done:
+                        let st = core.sliceStats()
+                        summeSekunden += st?.printTimeSeconds ?? 0
+                        summeGramm += st?.filamentGrams ?? 0
+                        if let url = await MainActor.run(body: {
+                            self.writeGcodeAside(bettIndex: bettIndex)
+                        }) {
+                            dateien.append(url)
+                        }
+                    case .cancelled:
+                        await MainActor.run {
+                            self.progress = .cancelled
+                            self.selectBed(ausgangsbett)
+                            self.sliceAllProgress = nil
+                            self.finishSlice()
+                        }
+                        return
+                    default:
+                        await MainActor.run {
+                            self.progress = .failed(core.lastError)
+                            self.selectBed(ausgangsbett)
+                            self.sliceAllProgress = nil
+                            self.finishSlice()
+                        }
+                        return
+                    }
+                } catch {
+                    await MainActor.run {
+                        self.progress = .failed(error.localizedDescription)
+                        self.selectBed(ausgangsbett)
+                        self.sliceAllProgress = nil
+                        self.finishSlice()
+                    }
+                    return
+                }
+            }
+
+            await MainActor.run {
+                self.selectBed(ausgangsbett)
+                self.gcodeURLs = dateien
+                self.gcodeURL = dateien.first
+                self.sliceAllProgress = nil
+                self.progress = .done(
+                    seconds: summeSekunden,
+                    printMinutes: Int(summeSekunden / 60),
+                    grams: summeGramm)
+                self.finishSlice()
+            }
+        }
+    }
+
+    func cancel() {
+        core?.cancelSlice()
+        // Wirkt nur beim entfernten Weg (die lokale Schleife wartet auf
+        // core.cancelSlice(), nicht auf die Task-Abbruchpruefung) - dort
+        // ist es die einzige Bremse, siehe remotePollLoop().
+        sliceTask?.cancel()
+    }
+
+    func exportGcode(to url: URL) throws {
+        try core?.exportGcode(to: url.path)
+    }
+
+    /// Legt den G-Code als Datei ab, damit das Teilen-Blatt sie
+    /// weitergeben kann. Der Name kommt aus dem gemeinsamen Modul - dort
+    /// steht auch, was aus einem Modellnamen mit Leerzeichen und
+    /// Schraegstrichen wird.
+    private func writeGcode() {
+        guard let core else { return }
+        // Hier kann der Kern die Frage beantworten: das Ergebnis ist
+        // gerade erst entstanden. Beim Projektsichern konnte er es
+        // nicht - psm_gcode_suggested_name verlangt ein aktuelles
+        // Schnittergebnis.
+        let name = Self.dateiname(suggestedGcodeName())
+            ?? SliceSummary.shared.fileName(project: objects.first?.name ?? "")
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent(name)
+        try? FileManager.default.removeItem(at: url)
+        do {
+            try core.exportGcode(to: url.path)
+            gcodeURL = url
+        } catch {
+            gcodeURL = nil
+        }
+    }
+
+    /// Wie writeGcode(), aber fuer "Alle Betten schneiden": der
+    /// Bettname steht im Dateinamen, damit man am Drucker noch weiss,
+    /// welche Datei zu welchem Bett gehoert - und nichts wird
+    /// ueberschrieben, waehrend die Schleife laeuft.
+    private func writeGcodeAside(bettIndex: Int) -> URL? {
+        guard let core else { return nil }
+        let basis = Self.dateiname(suggestedGcodeName())
+            ?? SliceSummary.shared.fileName(project: objects.first?.name ?? "")
+        let endung = (basis as NSString).pathExtension
+        let stamm = (basis as NSString).deletingPathExtension
+        let bettname = bedLabel(bettIndex).replacingOccurrences(of: " ", with: "-")
+        let name = "\(stamm)-\(bettname).\(endung)"
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent(name)
+        try? FileManager.default.removeItem(at: url)
+        do {
+            try core.exportGcode(to: url.path)
+            return url
+        } catch {
+            return nil
+        }
+    }
+
+    /// Ein Vorschlag des Kerns, auf einen Dateinamen gestutzt.
+    ///
+    /// Was aus `output_filename_format` kommt, ist eine Vorlage aus dem
+    /// Druckprofil und darf alles enthalten, was ein Dateiname nicht
+    /// vertraegt - Leerzeichen, Klammern, im schlimmsten Fall einen
+    /// Schraegstrich. Die Endung bleibt aber stehen: ein Drucker
+    /// erkennt an ihr, ob er ASCII oder BGCode bekommt.
+    ///
+    /// Nil, wenn nichts Brauchbares uebrig bleibt - dann greift der
+    /// Name aus dem gemeinsamen Modul.
+    private static func dateiname(_ vorschlag: String) -> String? {
+        let endung = (vorschlag as NSString).pathExtension.lowercased()
+        guard endung == "gcode" || endung == "bgcode" else { return nil }
+        let stamm = String((vorschlag as NSString).deletingPathExtension.map {
+            $0.isLetter || $0.isNumber || $0 == "-" || $0 == "_" || $0 == "." ? $0 : "_"
+        })
+        guard !stamm.isEmpty else { return nil }
+        return stamm + "." + endung
+    }
+
+    /// Zurueck in den Ruhezustand - das Blatt ist weg, das Ergebnis
+    /// bleibt es aber nicht: ein neuer Slice ueberschreibt es ohnehin.
+    func dismissProgress() {
+        progress = .idle
+    }
+
+    /// Was fehlt, bevor geschnitten werden kann. Die Beurteilung steht im
+    /// gemeinsamen Modul, damit beide Apps dieselben Gruende nennen.
+    /// Wo ein Objekt relativ zum Druckraum liegt.
+    func bedState(_ id: Int32) -> PsmCore.BedState {
+        core?.bedState(id) ?? .unknown
+    }
+
+    /// Die Objekte, die so nicht gedruckt werden koennen.
+    ///
+    /// "Outside" und "Below" zaehlen mit: PrusaSlicer laesst sie beim
+    /// Drucken zwar stillschweigend weg, aber jemand, der ein Objekt
+    /// neben das Bett gelegt hat, will es drucken - und bekaeme sonst
+    /// einen G-Code, in dem es fehlt, ohne dass es jemand gesagt haette.
+    var objectsOffBed: [PsmCore.ObjectInfo] {
+        objects.filter { $0.outsideBed }
+    }
+
+    var sliceBlockers: [String] { hinderungsgruende(objektzahl: objects.count) }
+
+    /// Fuer "Alle Betten slicen": leer ist erst, wenn kein Bett etwas traegt.
+    /// Bis zum 16.09.2026 blockte ein leeres aktives Bett den Lauf mit
+    /// "Nichts auf dem Bett", obwohl Bett 2 belegt war (Zwilling: SlicerModel.kt).
+    var sliceAllBlockers: [String] {
+        hinderungsgruende(objektzahl: beds.reduce(0) { $0 + $1.objectCount })
+    }
+
+    private func hinderungsgruende(objektzahl: Int) -> [String] {
+        var gruende = SliceSummary.shared.blockers(
+            objects: Int32(objektzahl),
+            printer: selectedPreset(for: "printer") ?? "",
+            filament: selectedPreset(for: "filament") ?? "",
+            print: selectedPreset(for: "print") ?? ""
+        )
+        let daneben = objectsOffBed
+        if !daneben.isEmpty {
+            let namen = daneben.map { $0.name }.joined(separator: ", ")
+            gruende.append(Bilingual(
+                english: "Outside the print area: " + namen,
+                german: "Außerhalb des Druckbereichs: " + namen).text)
+        }
+        return gruende
+    }
+
+    private func finishSlice() {
+        sliceTask = nil
+        if backgroundTask != .invalid {
+            UIApplication.shared.endBackgroundTask(backgroundTask)
+            backgroundTask = .invalid
+        }
+    }
+}

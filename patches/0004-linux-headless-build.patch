@@ -1,0 +1,15 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 0000000..0000000 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -253,7 +253,9 @@ if (CMAKE_SYSTEM_NAME STREQUAL "Linux")
+     set(THREADS_PREFER_PTHREAD_FLAG ON)
+     find_package(Threads REQUIRED)
+
+-    find_package(DBus1 REQUIRED)
++    if (SLIC3R_GUI)
++        find_package(DBus1 REQUIRED)
++    endif ()
+ endif()
+
+ if (CMAKE_COMPILER_IS_GNUCC OR CMAKE_COMPILER_IS_GNUXX)

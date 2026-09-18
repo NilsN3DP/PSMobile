@@ -1,0 +1,3 @@
+/* Systemdialoge - Gegenstueck zur deutschen Fassung in de.lproj. Info.plist selbst traegt Deutsch als Vorgabe. */
+"NSLocalNetworkUsageDescription" = "To send G-code to your printer on the same network.";
+"NSCameraUsageDescription" = "To scan the QR code of your remote slicing server.";

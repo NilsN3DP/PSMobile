@@ -1,0 +1,104 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- Ohne diese vier Schluessel baut die App zwar, laesst sich aber
+         nicht installieren: der Simulator meldet nur "Missing bundle ID"
+         und nennt nicht, welcher Eintrag fehlt. Xcode traegt sie nur
+         selbst nach, wenn es die Info.plist erzeugt - hier gehoert sie
+         uns, also stehen sie hier. Die Werte kommen aus den
+         Bau-Einstellungen, damit sie nicht doppelt gepflegt werden. -->
+    <key>CFBundleIdentifier</key>
+    <string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+    <key>CFBundleExecutable</key>
+    <string>$(EXECUTABLE_NAME)</string>
+    <key>CFBundleName</key>
+    <string>$(PRODUCT_NAME)</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+
+    <key>CFBundleDisplayName</key>
+    <string>Slicer Mobile</string>
+    <key>CFBundleShortVersionString</key>
+    <string>0.2.2</string>
+    <key>CFBundleVersion</key>
+    <string>30</string>
+
+    <!-- Modelle aus der Files-App und aus anderen Apps entgegennehmen -->
+    <key>UISupportsDocumentBrowser</key>
+    <true/>
+    <key>LSSupportsOpeningDocumentsInPlace</key>
+    <true/>
+    <key>UIFileSharingEnabled</key>
+    <true/>
+
+    <key>CFBundleDocumentTypes</key>
+    <array>
+        <dict>
+            <key>CFBundleTypeName</key>
+            <string>3D-Modell</string>
+            <key>LSHandlerRank</key>
+            <string>Alternate</string>
+            <key>LSItemContentTypes</key>
+            <array>
+                <string>public.standard-tesselated-geometry-format</string>
+                <string>public.item</string>
+            </array>
+        </dict>
+        <dict>
+            <key>CFBundleTypeName</key>
+            <string>ZIP-Archiv</string>
+            <key>LSHandlerRank</key>
+            <string>Alternate</string>
+            <key>LSItemContentTypes</key>
+            <array>
+                <string>public.zip-archive</string>
+            </array>
+        </dict>
+    </array>
+
+    <!-- Ein Drucker im eigenen Netz ist ein lokales Geraet. iOS fragt
+         dafuer seit Version 14 um Erlaubnis und will wissen, wofuer. -->
+    <key>NSLocalNetworkUsageDescription</key>
+    <string>Um G-Code an deinen Drucker im selben Netzwerk zu senden.</string>
+
+    <!-- PrusaLink spricht im Heimnetz meist HTTP. Nur das lokale Netz
+         wird freigegeben, nicht das offene Internet: NSAllowsArbitraryLoads
+         waere die bequeme und deutlich weitere Ausnahme. In der App muss
+         Klartext ausserdem je Drucker ausdruecklich erlaubt werden. -->
+    <key>NSAppTransportSecurity</key>
+    <dict>
+        <key>NSAllowsLocalNetworking</key>
+        <true/>
+    </dict>
+
+    <!-- QR-Pairing fuer Remote Slicing: Serveradresse und Token per
+         Kamera einscannen statt abtippen - siehe RemoteSliceView.swift. -->
+    <key>NSCameraUsageDescription</key>
+    <string>Um den QR-Code deines Remote-Slice-Servers einzuscannen.</string>
+
+    <key>UILaunchScreen</key>
+    <dict/>
+
+    <!-- Dunkel schon beim Start und in Systemdialogen - wie
+         .preferredColorScheme(.dark) in PSMobileApp und Androids Theme. -->
+    <key>UIUserInterfaceStyle</key>
+    <string>Dark</string>
+    <key>UISupportedInterfaceOrientations</key>
+    <array>
+        <string>UIInterfaceOrientationPortrait</string>
+        <string>UIInterfaceOrientationLandscapeLeft</string>
+        <string>UIInterfaceOrientationLandscapeRight</string>
+    </array>
+    <!-- iPad: alle vier Ausrichtungen, sonst lehnt App Store Connect den
+         Upload ab (ITMS-90474, iPad-Multitasking). Android beschraenkt
+         die Ausrichtung ohnehin nicht. -->
+    <key>UISupportedInterfaceOrientations~ipad</key>
+    <array>
+        <string>UIInterfaceOrientationPortrait</string>
+        <string>UIInterfaceOrientationPortraitUpsideDown</string>
+        <string>UIInterfaceOrientationLandscapeLeft</string>
+        <string>UIInterfaceOrientationLandscapeRight</string>
+    </array>
+</dict>
+</plist>

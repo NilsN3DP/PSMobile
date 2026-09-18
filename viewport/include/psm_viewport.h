@@ -1,0 +1,372 @@
+/*
+ * psm_viewport.h - Lebenszyklus und Eingabe des 3D-Viewports.
+ *
+ * Wichtig zur Abgrenzung gegenueber psmobile_core.h:
+ * Hier gehen ausschliesslich Steuerbefehle durch (Groesse, Frame, Geste).
+ * Geometrie wandert NIE ueber diese Grenze - der Viewport liest das Modell
+ * direkt aus der Session, weil er im selben C++-Prozessraum lebt.
+ * Siehe docs/entscheidungen.md, E-03.
+ *
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
+#ifndef PSM_VIEWPORT_H
+#define PSM_VIEWPORT_H
+
+#include <stdint.h>
+#include "psmobile_core.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+typedef struct psm_viewport psm_viewport;
+
+/**
+ * @param shader_dir Verzeichnis mit den GLES-Shadern, also
+ *                   <resdir>/shaders/ES. Die stammen unveraendert aus
+ *                   PrusaSlicer (SLIC3R_OPENGL_ES).
+ *
+ * Muss auf dem GL-Thread mit gueltigem Kontext aufgerufen werden.
+ */
+PSM_API psm_viewport *psm_viewport_create(psm_session *session, const char *shader_dir);
+
+PSM_API void psm_viewport_destroy(psm_viewport *v);
+
+PSM_API void psm_viewport_resize(psm_viewport *v, int width, int height);
+
+/** Zeichnet ein Bild. Nur auf dem GL-Thread. */
+PSM_API void psm_viewport_render(psm_viewport *v);
+
+/** Nach jeder Aenderung am Modell aufrufen - baut die Puffer neu auf. */
+PSM_API void psm_viewport_invalidate(psm_viewport *v);
+
+/* --- Kamera ------------------------------------------------------- */
+
+PSM_API void psm_viewport_orbit(psm_viewport *v, float dx, float dy);
+PSM_API void psm_viewport_pan(psm_viewport *v, float dx, float dy);
+PSM_API void psm_viewport_zoom(psm_viewport *v, float factor);
+PSM_API void psm_viewport_reset_view(psm_viewport *v);
+
+/** Feste Blickrichtung: 0 iso, 1 oben, 2 vorne, 3 hinten, 4 links, 5 rechts, 6 unten. */
+PSM_API void psm_viewport_view_preset(psm_viewport *v, int which);
+
+/** Blickrichtung lesen (Radiant): yaw 0 = Kamera vor dem Bett (-Y), waechst
+ *  nach +X; pitch 0 = Augenhoehe, pi/2 = von oben. Fuer den Ansichtswuerfel,
+ *  der dieselbe Drehung zeigt wie die Szene. Liefert 0 ohne Viewport. */
+PSM_API int psm_viewport_camera_angles(const psm_viewport *v, float *yaw, float *pitch);
+
+/* --- Mehrbett -------------------------------------------------------
+ *
+ * Aus: nur das aktive Bett steht im sichtbaren Raum, wie bisher. Der
+ * Kern kennt die Versaetze aller Betten laengst (siehe psm_bed_*), nur
+ * der Viewport hat sie nie gezeichnet.
+ *
+ * An: alle Betten liegen raeumlich versetzt in derselben Szene, wie
+ * PrusaSlicers Mehrplatten-Ansicht. Kostet mehr Geometrie und
+ * Strahltests pro Bild - deshalb ein eigener Schalter statt
+ * Standardverhalten. Auf schwacher Hardware bleibt Aus die guenstigere
+ * Wahl. Ein Tipp auf ein Objekt eines anderen Betts macht dieses Bett
+ * aktiv, wie ein Wechsel ueber den Bettwaehler. */
+PSM_API void psm_viewport_set_multi_bed_render(psm_viewport *v, int32_t enabled);
+
+/**
+ * Schwenkt die Kamera zum Mittelpunkt des angegebenen Betts und zoomt
+ * so, dass genau dieses Bett das Bild fuellt - derselbe enge Fit wie
+ * beim allerersten Kamerastand. Bei ausgeschaltetem Mehrbett-Modus
+ * liegt jedes Bett ohnehin am selben Ursprung; dort bewegt sich nichts.
+ */
+PSM_API void psm_viewport_focus_bed(psm_viewport *v, int32_t bed_index);
+
+/**
+ * Bildschirmposition fuer ein Namensschild am jeweiligen Bett in der
+ * raeumlichen Mehrbett-Darstellung - eine Ecke der Druckflaeche, leicht
+ * nach innen versetzt. `position` ist dieselbe Schleifenposition wie
+ * beim Zeichnen (0 .. Bettanzahl), nicht zwingend der echte Bettindex.
+ * @return 0 wenn kein Mehrbett-Modus aktiv ist oder das Bett hinter der
+ *         Kamera liegt, sonst 1.
+ */
+PSM_API int psm_viewport_bed_label_anchor(
+    psm_viewport *v, int32_t position, float *out_x, float *out_y);
+
+/* --- Auswahl ------------------------------------------------------ */
+
+/** Strahltest an Bildschirmposition. Liefert die Objekt-ID oder PSM_INVALID_ID. */
+PSM_API psm_object_id psm_viewport_pick(psm_viewport *v, float x, float y);
+
+PSM_API void psm_viewport_set_selection(psm_viewport *v, psm_object_id id);
+
+/** Mehrfachauswahl; primary traegt Gizmos und numerische Bearbeitung. */
+PSM_API void psm_viewport_set_selections(psm_viewport *v,
+                                         const psm_object_id *ids,
+                                         size_t count,
+                                         psm_object_id primary);
+
+/**
+ * Vom gespeicherten Schichthoehenprofil abgeleitete Renderdaten.
+ *
+ * Der Vertragstest und native Diagnosecode koennen damit pruefen, ob aus
+ * dem gespeicherten Profil renderbare Daten entstanden sind. Die
+ * Farbdaten selbst bleiben im C++-Renderer.
+ */
+typedef struct {
+    int32_t texture_width;
+    int32_t texture_height;
+    int32_t texture_cells;
+    float   object_max_z;
+    float   min_layer_height;
+    float   max_layer_height;
+} psm_layer_visualization_info;
+
+/**
+ * Erzeugt dieselben Profildaten, die der Editor-Shader verwendet.
+ *
+ * @return 1 bei nichtleerem, renderbarem Profil, sonst 0.
+ */
+PSM_API int psm_viewport_layer_visualization_info(
+    psm_session *session,
+    psm_object_id object_id,
+    psm_layer_visualization_info *out);
+
+/**
+ * Meldet nur eine im GL-Viewport wirklich aktive Profildarstellung.
+ *
+ * Anders als psm_viewport_layer_visualization_info ist dies kein
+ * CPU-Vorabtest: Shader und Textur muessen bereits erfolgreich im
+ * letzten Renderdurchlauf aufgebaut worden sein.
+ */
+PSM_API int psm_viewport_active_layer_visualization(
+    psm_viewport *v,
+    psm_layer_visualization_info *out);
+
+typedef struct {
+    psm_object_id object_id;
+    int32_t       volume_index;
+    int32_t       facet_index;
+    int32_t       instance_index;
+    float         position[3];
+    float         normal[3];
+} psm_surface_hit;
+
+/**
+ * Exakter Dreieckstreffer fuer Flachlegen, Bemalen und Messen.
+ * Anders als psm_viewport_pick prueft dieser Aufruf nicht nur Huellboxen.
+ */
+PSM_API int psm_viewport_pick_surface(psm_viewport *v, float x, float y,
+                                      psm_surface_hit *out);
+
+/**
+ * Aktive Maloptionen fuer abgeleitete Annotation und Cursor.
+ *
+ * Der Viewport speichert keine Facetten. Er liest bei invalidate() erneut
+ * die volumebasierte Annotation aus dem Kern und zeichnet nur deren Pass.
+ */
+PSM_API void psm_viewport_set_paint_options(
+    psm_viewport *v,
+    int32_t enabled,
+    psm_paint_tool tool,
+    const psm_paint_options *options);
+
+typedef struct {
+    int32_t cursor_visible;
+    int32_t annotation_visible;
+    int32_t mode;
+    int32_t shape;
+    float   radius_mm;
+    size_t  annotation_facets;
+} psm_paint_visualization_info;
+
+/** Im letzten Renderdurchlauf tatsaechlich sichtbare Malinformationen. */
+PSM_API int psm_viewport_active_paint_visualization(
+    psm_viewport *v,
+    psm_paint_visualization_info *out);
+
+/*
+ * Ausgewaehltes Objekt mit dem Finger verschieben.
+ *
+ * Der Bildschirmversatz wird auf die Bettebene projiziert, damit sich das
+ * Objekt unter dem Finger mitbewegt statt mit fester Empfindlichkeit -
+ * bei schraeger Kamera waere jede Pixelumrechnung falsch.
+ *
+ * @return 1 wenn etwas bewegt wurde, sonst 0.
+ */
+PSM_API int psm_viewport_drag_selected(psm_viewport *v,
+                                       float from_x, float from_y,
+                                       float to_x, float to_y);
+
+/*
+ * Schliesst ein Ziehen ab und ordnet das Objekt dem Bett zu, ueber dem
+ * es losgelassen wurde.
+ *
+ * Ohne das bleibt ein Objekt in der raeumlichen Mehrbett-Darstellung an
+ * seinem alten Bett haengen, auch wenn es sichtbar auf einem anderen
+ * liegt: die gespeicherte Position ist bettlokal, der Versatz der
+ * Betten steckt allein in der Darstellung. Der Versatz wird beim
+ * Wechsel herausgerechnet, damit das Objekt dort liegen bleibt, wo der
+ * Finger es abgesetzt hat. Ueber den Bettwechsel entscheidet der
+ * Mittelpunkt, nicht der Rand.
+ *
+ * Ausserhalb des Mehrbett-Modus und ueber keinem Bett passiert nichts.
+ * Beim Wechsel wird das Zielbett aktiv, wie beim Tippen auf ein Objekt
+ * eines fremden Betts.
+ *
+ * @param out_new_id optional; das Objekt bekommt beim Bettwechsel eine
+ *                   neue Kennung. Ohne Wechsel bleibt es die alte.
+ * @return 1 wenn das Objekt das Bett gewechselt hat, sonst 0.
+ */
+PSM_API int psm_viewport_drop_selected(psm_viewport *v,
+                                       psm_object_id *out_new_id);
+
+/*
+ * Ausgewaehltes Objekt gleichmaessig skalieren.
+ *
+ * Fuer die Spreizgeste: solange das Skalieren-Werkzeug aktiv ist,
+ * vergroessert und verkleinert sie das Objekt, statt die Kamera zu
+ * zoomen. Danach setzt der Aufruf es wieder aufs Bett - sonst schwebt es
+ * beim Verkleinern in der Luft oder steckt beim Vergroessern darin.
+ *
+ * @return 1 wenn skaliert wurde, sonst 0.
+ */
+PSM_API int psm_viewport_scale_selected(psm_viewport *v, float factor);
+
+/**
+ * Meldet den Anfang einer Geste.
+ *
+ * Danach setzt der naechste veraendernde Aufruf genau einen
+ * Wiederherstellungspunkt, die folgenden keinen mehr. Ohne das ist ein
+ * Zug am Griff hundert Schritte in der Rueckgaengig-Kette.
+ */
+PSM_API void psm_viewport_gesture_begin(psm_viewport *v);
+
+/* --- Griffe am Objekt ---------------------------------------------- */
+/*
+ * PrusaSlicers Gizmo-Klassen haengen an wx und an dessen eigenem
+ * Auswahlmechanismus; sie sind nicht uebernehmbar. Aussehen und
+ * Bedienlogik folgen dem Original, der Code ist neu - einer der wenigen
+ * Punkte, an denen E-12 den Nachbau vorsieht.
+ */
+typedef enum {
+    PSM_GIZMO_NONE   = 0,
+    PSM_GIZMO_MOVE   = 1,   /* drei Pfeile entlang der Achsen */
+    PSM_GIZMO_ROTATE = 2,   /* drei Kreise um die Achsen */
+    PSM_GIZMO_SCALE  = 3    /* Wuerfel an den Achsenenden */
+} psm_gizmo_mode;
+
+PSM_API void psm_viewport_set_gizmo(psm_viewport *v, psm_gizmo_mode mode);
+PSM_API psm_gizmo_mode psm_viewport_get_gizmo(const psm_viewport *v);
+
+/**
+ * Sucht den Griff unter dem Finger.
+ *
+ * Nicht ueber GL-Picking, sondern indem die Ankerpunkte der Griffe auf
+ * den Bildschirm projiziert werden und der naechste innerhalb des
+ * Schwellwerts gewinnt. Auf dem Tablet muss der grosszuegig sein - der
+ * Desktop kommt mit fuenf Pixeln aus, ein Finger nicht.
+ *
+ * @param radius_px Trefferradius in Bildpunkten
+ * @return 0 = X, 1 = Y, 2 = Z, 3 = gleichmaessig (nur Skalieren),
+ *         -1 = keiner
+ */
+PSM_API int psm_viewport_gizmo_pick(psm_viewport *v, float x, float y, float radius_px);
+
+/**
+ * Bildschirmsegment einer Move-Gizmo-Achse.
+ *
+ * Die Werte sind Renderpixel mit Ursprung links oben. Damit kann die
+ * Bedienoberflaeche dieselbe Geometrie fuer Barrierefreiheit und Tests
+ * melden, die auch die viewportseitige Treffererkennung verwendet.
+ */
+typedef struct {
+    float from_x;
+    float from_y;
+    float to_x;
+    float to_y;
+} psm_gizmo_screen_axis;
+
+/**
+ * Projiziert eine Move-Gizmo-Achse auf den Bildschirm.
+ *
+ * @return 1 bei sichtbarer Achse, sonst 0.
+ */
+PSM_API int psm_viewport_gizmo_axis_screen(psm_viewport *v, int axis,
+                                           psm_gizmo_screen_axis *out);
+
+/**
+ * Wendet einen Zug auf den zuvor gegriffenen Griff an.
+ *
+ * @param axis   Ergebnis von psm_viewport_gizmo_pick
+ * @param snap   1 = auf sinnvolle Schritte rasten (15 Grad, 1 mm)
+ * @return 1 wenn sich etwas geaendert hat
+ */
+PSM_API int psm_viewport_gizmo_drag(psm_viewport *v, int axis,
+                                    float from_x, float from_y,
+                                    float to_x, float to_y, int snap);
+
+/* --- Vorschau ------------------------------------------------------ */
+/*
+ * Die G-Code-Vorschau ist derselbe Renderer wie im Vorschau-Tab des
+ * Desktops: libvgcode aus PrusaSlicer, mit dessen eigener Umwandlung
+ * von Print nach GCodeInputData. Nichts davon ist nachgebaut.
+ */
+
+typedef enum {
+    PSM_VIEW_EDITOR  = 0,   /* Bett und Modelle */
+    PSM_VIEW_PREVIEW = 1    /* Werkzeugwege */
+} psm_view_mode;
+
+typedef enum {
+    PSM_PREVIEW_VIEW_FEATURE  = 0,
+    PSM_PREVIEW_VIEW_EXTRUDER = 1
+} psm_preview_view;
+
+PSM_API void psm_viewport_set_mode(psm_viewport *v, psm_view_mode mode);
+PSM_API psm_view_mode psm_viewport_get_mode(psm_viewport *v);
+
+/**
+ * Uebernimmt das Ergebnis des letzten Slice-Laufs in die Vorschau.
+ * Muss auf dem GL-Thread laufen. Ohne fertigen Slice passiert nichts.
+ * @return 1 bei Erfolg.
+ */
+PSM_API int psm_viewport_load_preview(psm_viewport *v);
+
+PSM_API int32_t psm_viewport_layer_count(psm_viewport *v);
+
+/** Sichtbaren Layerbereich setzen, wie der linke Regler im Desktop. */
+PSM_API void psm_viewport_set_layer_range(psm_viewport *v, int32_t first, int32_t last);
+
+/**
+ * Die Grenzen des Werkzeugweg-Bereichs innerhalb der gerade sichtbaren
+ * Schicht(en) - wie der untere "Moves"-Regler im Desktop, der durch
+ * eine einzelne Schicht scrubt statt zwischen Schichten zu wechseln.
+ * Aendert sich der Layerbereich (psm_viewport_set_layer_range), aendern
+ * sich auch diese Grenzen - deshalb vor jedem Aufbau des unteren
+ * Reglers neu abfragen.
+ *
+ * @return 0 wenn kein G-Code geladen ist, sonst 1.
+ */
+PSM_API int psm_viewport_move_range_bounds(
+    psm_viewport *v, int32_t *out_min, int32_t *out_max);
+
+/** Sichtbaren Werkzeugweg-Bereich setzen, wie der untere Regler im Desktop. */
+PSM_API void psm_viewport_set_move_range(psm_viewport *v, int32_t first, int32_t last);
+
+/** Farbsicht und Touch-Filter der finalen Werkzeugwege. */
+PSM_API void psm_viewport_set_preview_view(psm_viewport *v,
+                                           psm_preview_view view);
+PSM_API void psm_viewport_set_role_visible(
+    psm_viewport *v,
+    psm_preview_feature_role role,
+    int32_t visible);
+PSM_API void psm_viewport_set_extruder_visible(
+    psm_viewport *v,
+    int32_t extruder,
+    int32_t visible);
+
+/** Letzte Fehlermeldung des Viewports, etwa beim Laden der Shader. */
+PSM_API const char *psm_viewport_last_error(psm_viewport *v);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif /* PSM_VIEWPORT_H */

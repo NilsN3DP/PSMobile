@@ -1,0 +1,31 @@
+name: Parity iOS -> Android
+
+# Keeps the Android UI at the iOS state. The port made both sides congruent;
+# this run makes sure they stay that way. Rules: docs/twin-conventions.md
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+jobs:
+  paritaet:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The twin comparison needs the base revision, not only the last commit.
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Full parity check
+        run: python tools/paritaet_pruefen.py
+
+      - name: Twins changed together
+        if: github.event_name == 'pull_request'
+        run: |
+          BASIS="origin/${{ github.base_ref }}"
+          git fetch --quiet origin "${{ github.base_ref }}"
+          python tools/paritaet_pruefen.py --geaendert --basis "$(git merge-base HEAD "$BASIS")"

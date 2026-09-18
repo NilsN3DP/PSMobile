@@ -1,0 +1,101 @@
+diff --git a/src/libslic3r/CMakeLists.txt b/src/libslic3r/CMakeLists.txt
+index 777744b..97297b9 100644
+--- a/src/libslic3r/CMakeLists.txt
++++ b/src/libslic3r/CMakeLists.txt
+@@ -660,9 +660,13 @@ target_link_libraries(libslic3r PUBLIC
+     prusa_fdm_mixer
+ )
+ 
+-if (APPLE)
++if ((APPLE OR ANDROID) AND SLIC3R_ENABLE_FORMAT_STEP)
+     # TODO: we need to fix notarization with the separate shared library
+     target_link_libraries(libslic3r PUBLIC OCCTWrapper)
++    # PSMobile: STEP.cpp ruft die Wrapper-Funktion dann direkt auf,
++    # statt sie nachzuladen. Ohne diesen Merker weiss die Datei nicht,
++    # ob es den Wrapper ueberhaupt gibt.
++    target_compile_definitions(libslic3r PRIVATE SLIC3R_OCCT_WRAPPER_LINKED)
+ endif ()
+ 
+ if (TARGET OpenVDB::openvdb)
+diff --git a/src/libslic3r/Format/STEP.cpp b/src/libslic3r/Format/STEP.cpp
+index c55f0dd..a5b28f2 100644
+--- a/src/libslic3r/Format/STEP.cpp
++++ b/src/libslic3r/Format/STEP.cpp
+@@ -26,7 +26,7 @@
+ 
+ namespace Slic3r {
+ 
+-#if __APPLE__
++#if defined(SLIC3R_OCCT_WRAPPER_LINKED)
+ extern "C" bool load_step_internal(const char *path, OCCTResult* res, std::optional<std::pair<double, double>> deflections /*= std::nullopt*/);
+ #endif
+ 
+@@ -37,7 +37,7 @@ LoadStepFn get_load_step_fn()
+ {
+     static LoadStepFn load_step_fn = nullptr;
+ 
+-#ifndef __APPLE__
++#if !defined(SLIC3R_OCCT_WRAPPER_LINKED)
+     constexpr const char* fn_name = "load_step_internal";
+ #endif
+ 
+@@ -61,7 +61,7 @@ LoadStepFn get_load_step_fn()
+             FreeLibrary(module);
+             throw;
+         }
+-#elif __APPLE__
++#elif defined(SLIC3R_OCCT_WRAPPER_LINKED)
+         load_step_fn = &load_step_internal;
+ #else
+         libpath /= "OCCTWrapper.so";
+diff --git a/src/occt_wrapper/CMakeLists.txt b/src/occt_wrapper/CMakeLists.txt
+index f6df6e7..c0cf08d 100644
+--- a/src/occt_wrapper/CMakeLists.txt
++++ b/src/occt_wrapper/CMakeLists.txt
+@@ -1,8 +1,11 @@
+ cmake_minimum_required(VERSION 3.13)
+ project(OCCTWrapper)
+ 
+-if (APPLE)
++if (APPLE OR ANDROID)
+     # TODO: we need to fix notarization with the separate shared library
++    # PSMobile: auf Android aus demselben Grund wie auf Apple statisch -
++    # ein nachladbares Modul neben der ausfuehrbaren Datei gibt es auf
++    # einem Telefon nicht.
+     add_library(OCCTWrapper STATIC OCCTWrapper.cpp)
+ else ()
+     add_library(OCCTWrapper MODULE OCCTWrapper.cpp)
+diff --git a/src/libvgcode/glad/src/gles2.c b/src/libvgcode/glad/src/gles2.c
+index e9642e9..f0a2af6 100644
+--- a/src/libvgcode/glad/src/gles2.c
++++ b/src/libvgcode/glad/src/gles2.c
+@@ -761,6 +761,18 @@ static GLADapiproc glad_dlsym_handle(void* handle, const char *name) {
+   typedef __eglMustCastToProperFunctionPointerType (GLAD_API_PTR *PFNEGLGETPROCADDRESSPROC)(const char *name);
+ #endif
+   extern __eglMustCastToProperFunctionPointerType emscripten_GetProcAddress(const char *name);
++#elif GLAD_PLATFORM_APPLE
++  /* iOS kennt kein EGL. Die GLES-Symbole kommen ueber OpenGLES.framework
++     und liegen damit bereits im Prozess - dlsym auf RTLD_DEFAULT findet
++     sie. Deshalb hier nur die Typen nachbilden und den Adressbeschaffer
++     selbst stellen, statt einen EGL-Header zu suchen, den es nicht gibt. */
++  #include <dlfcn.h>
++  typedef void (*__eglMustCastToProperFunctionPointerType)(void);
++  typedef __eglMustCastToProperFunctionPointerType (GLAD_API_PTR *PFNEGLGETPROCADDRESSPROC)(const char *name);
++  static __eglMustCastToProperFunctionPointerType glad_apple_get_proc(const char *name) {
++      return (__eglMustCastToProperFunctionPointerType) dlsym(RTLD_DEFAULT, name);
++  }
++  #define eglGetProcAddress glad_apple_get_proc
+ #elif GLAD_GLES2_USE_SYSTEM_EGL
+   #include <EGL/egl.h>
+   typedef __eglMustCastToProperFunctionPointerType (GLAD_API_PTR *PFNEGLGETPROCADDRESSPROC)(const char *name);
+@@ -796,7 +808,9 @@ static void* _glad_GLES2_loader_handle = NULL;
+ static void* glad_gles2_dlopen_handle(void) {
+ #if GLAD_PLATFORM_EMSCRIPTEN
+ #elif GLAD_PLATFORM_APPLE
+-    static const char *NAMES[] = {"libGLESv2.dylib"};
++    /* Auf iOS gibt es keine libGLESv2.dylib - das Framework traegt die
++       Symbole. Der alte Name bleibt fuer macOS-Installationen stehen. */
++    static const char *NAMES[] = {"/System/Library/Frameworks/OpenGLES.framework/OpenGLES", "libGLESv2.dylib"};
+ #elif GLAD_PLATFORM_WIN32
+     static const char *NAMES[] = {"GLESv2.dll", "libGLESv2.dll"};
+ #else

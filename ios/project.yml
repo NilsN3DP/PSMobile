@@ -1,0 +1,204 @@
+# XcodeGen-Spezifikation.
+#
+# Bewusst kein eingecheckter .xcodeproj-Ordner: der ist unlesbar im Diff
+# und kollidiert bei jeder Aenderung. Stattdessen:
+#
+#   brew install xcodegen
+#   cd ios && xcodegen generate
+#
+# Voraussetzung: build/scripts/build-ios.sh core wurde bereits ausgefuehrt
+# und hat libpsmobile_core.a erzeugt.
+
+name: PSMobile
+options:
+  bundleIdPrefix: de.psmobile
+  # 16.0 statt 15.0: NavigationStack gibt es erst ab 16, und die Geraete,
+  # die dazwischen liegen - iPhone 7, iPad Air 2, iPad mini 4 - haben zum
+  # Slicen ohnehin zu wenig Arbeitsspeicher. Die urspruengliche Begruendung
+  # fuer 15.0 ("deckt alles ab, was genug RAM hat") gilt fuer 16.0 genauso.
+  deploymentTarget:
+    iOS: "16.0"
+  createIntermediateGroups: true
+
+settings:
+  base:
+    # Ohne Namen heisst das Ergebnis woertlich ".app" beziehungsweise
+    # ".xctest", und xcodebuild meldet "Multiple commands produce ...".
+    # Das klingt nach zwei kollidierenden Zielen und ist doch nur ein
+    # fehlender Name. Hier global, damit es nicht bei jedem neuen Ziel
+    # von vorne losgeht.
+    PRODUCT_NAME: $(TARGET_NAME)
+    # Der Kern wird als SIMULATORARM64 gebaut, eine Intel-Fassung gibt es
+    # nicht und braucht es nicht - Mac-Rechner mit Intel bauen kein iOS
+    # mehr fuer uns. Ohne diesen Ausschluss uebersetzt xcodebuild beim
+    # test-Durchlauf trotzdem zusaetzlich fuer x86_64 und meldet dann
+    # seitenweise "found architecture arm64, required architecture
+    # x86_64" - was wie ein kaputtes Archiv aussieht und keines ist.
+    EXCLUDED_ARCHS[sdk=iphonesimulator*]: x86_64
+    SWIFT_VERSION: "5.9"
+    ENABLE_BITCODE: NO
+    CLANG_ENABLE_MODULES: YES
+    SWIFT_OBJC_BRIDGING_HEADER: PSMobile/Support/PSMobile-Bridging-Header.h
+    # Such- und Bibliothekspfade nach Plattform getrennt.
+    #
+    # Frueher standen Geraet und Simulator gemeinsam in je einer Liste,
+    # mit der Begruendung, Xcode ignoriere nicht vorhandene Pfade. Das
+    # stimmte nur, solange genau eine der beiden Fassungen gebaut war.
+    # Sobald beide existierten, gewann die erstgenannte, und der
+    # Simulatorbau scheiterte an "building for iOS-simulator, but linking
+    # in object file built for iOS" - was wie ein kaputtes Archiv
+    # aussieht und keines ist.
+    #
+    # Das Framework enthaelt die gemeinsamen Regeln (E-13) und wird von
+    # build/scripts/build-shared-ios.sh gebaut, nicht eingecheckt.
+    FRAMEWORK_SEARCH_PATHS[sdk=iphonesimulator*]:
+      - $(SRCROOT)/../android/shared/build/bin/iosSimulatorArm64/debugFramework
+    FRAMEWORK_SEARCH_PATHS[sdk=iphoneos*]:
+      - $(SRCROOT)/../android/shared/build/bin/iosArm64/debugFramework
+    HEADER_SEARCH_PATHS:
+      - $(SRCROOT)/../core/include
+      - $(SRCROOT)/../viewport/include
+    LIBRARY_SEARCH_PATHS[sdk=iphonesimulator*]:
+      - $(SRCROOT)/../build-out/ios-core-SIMULATORARM64
+      - $(SRCROOT)/../build-out/ios-destdir-SIMULATORARM64/usr/local/lib
+    LIBRARY_SEARCH_PATHS[sdk=iphoneos*]:
+      - $(SRCROOT)/../build-out/ios-core-OS64
+      - $(SRCROOT)/../build-out/ios-destdir-OS64/usr/local/lib
+
+targets:
+  PSMobile:
+    type: application
+    platform: iOS
+    sources:
+      - path: PSMobile
+      # Profile und Shader aus PrusaSlicer. Der Ordner wird von
+      # build/scripts/stage-resources.sh befuellt.
+      #
+      # Das gehoert unter sources mit ausgewiesener Bauphase, nicht unter
+      # ein eigenes resources - das kennt XcodeGen nicht und ueberliest
+      # es wortlos. Die App baute dadurch sauber durch, hatte aber ein
+      # leeres Bundle, und der Fehler zeigte sich erst zur Laufzeit als
+      # Shader nicht gefunden.
+      - path: Resources/psresources
+        type: folder
+        buildPhase: resources
+      # Seitenstruktur, Beschriftungen und Icons aus PrusaSlicer.
+      - path: Resources/psui
+        type: folder
+        buildPhase: resources
+      # Die Schraube fuer den Randfall "STEP laedt": auf einem echten Geraet
+      # kann die App nicht ins Bundle des Test-Runners lesen, also liegt
+      # sie in der App selbst (88 KB). Gegenstueck: assets/selbsttest/ drueben.
+      - path: ../testdata/screw.step
+        buildPhase: resources
+    settings:
+      base:
+        INFOPLIST_FILE: PSMobile/Support/Info.plist
+        PRODUCT_BUNDLE_IDENTIFIER: de.psmobile
+        # 1 = iPhone, 2 = iPad. Ohne beides laeuft die App auf dem iPad im
+        # iPhone-Fenster mitten auf schwarzem Grund - sie startet, sieht
+        # aber aus wie ein Fehler. Das iPad ist das eigentliche Ziel.
+        TARGETED_DEVICE_FAMILY: "1,2"
+        # Der Kern ist C++ - ohne libc++ fehlen beim Linken alle Symbole.
+        OTHER_LDFLAGS:
+          - -lc++
+          # Die zusammengefasste Fassung, nicht libpsmobile_core allein:
+          # darin stecken libslic3r und alle Dependencies. Erzeugt von
+          # build/scripts/build-ios.sh.
+          - -lpsmobile_core_all
+          # Kotlin/Native als statisches Framework - dieselbe Ueberlegung
+          # wie beim Kern: kein Signieraufwand fuer etwas, das ohnehin
+          # nur in dieser App steckt.
+          - -framework
+          - PSMShared
+    dependencies:
+      - sdk: OpenGLES.framework
+      - sdk: Metal.framework
+
+  # Nur die reine Rechnerei, kein Bildschirmtest. Die Skalierungsregeln
+  # muessen mit denen auf Android uebereinstimmen, und das laesst sich
+  # ohne Geraet pruefen - siehe PSMobileTests/PSScaleTests.swift und
+  # android/.../UiScaleForTest.kt.
+  PSMobileTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: PSMobileTests
+      # Die gepruefte Datei wird mitkompiliert statt ueber "@testable
+      # import" aus der App geholt. Sonst haengt ein Test ueber vier
+      # Rechenregeln am Linken der gesamten App - und die zieht die 141 MB
+      # grosse libpsmobile_core_all mit. Das lohnt sich nicht, und es
+      # macht den Test von Dingen abhaengig, die er gar nicht prueft.
+      # Dasselbe Verhaeltnis wie auf Android: die Regeltests dort laufen
+      # ohne das NDK.
+      - path: PSMobile/UI/PSScale.swift
+      - path: PSMobile/UI/PreviewRange.swift
+      - path: PSMobile/Viewport/GestureAnchor.swift
+      - path: PSMobile/BedModeState.swift
+      - path: PSMobile/RemoteSliceCompletion.swift
+      # Hier standen bis zum 10.09.2026 zwei weitere Eintraege:
+      # PSMobile/UI/FavoriteSettings.swift und
+      # PSMobile/Screens/AdvancedInspectorLayout.swift. Beide Dateien hat
+      # es im Repository nie gegeben - `git log --diff-filter=D` findet
+      # keine Loeschung dazu. xcodegen bricht bei so einem Verweis mit
+      # einem Spec-Validierungsfehler ab, bevor irgendetwas erzeugt wird:
+      # das iOS-Projekt liess sich dadurch ueberhaupt nicht bauen.
+      # Wer die Dateien nachtraegt, traegt hier auch die Zeilen nach.
+      - path: PSMobile/Core/PrinterReadyPolicy.swift
+      - path: PSMobile/Core/PrinterCompatibilityPolicy.swift
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: de.psmobile.tests
+        GENERATE_INFOPLIST_FILE: YES
+        # Der Testhost liefert die App samt PSMShared bereits. Das Bundle
+        # selbst testet nur reine Swift-Dateien; ein zweites statisches
+        # PSMShared wuerde Kotlin/Native-Klassen doppelt laden und den
+        # Prozess vor dem Teststart abstuerzen lassen.
+        OTHER_LDFLAGS: []
+    # Bewusst ohne Testhost und ohne Abhaengigkeit zur App.
+    #
+    # Zweimal versucht, zweimal an derselben Wand: die Abhaengigkeit
+    # bringt "@testable import PSMobile" trotzdem nicht zum Laufen, zieht
+    # aber PSMShared ein zweites Mal in den Prozess. Kotlin/Native-Klassen
+    # liegen dann doppelt vor, und der Lauf bricht vor dem ersten Fall ab
+    # - mit einer Wand aus "Class ... is implemented in both".
+    #
+    # Also: was geprueft werden soll, wird oben mitkompiliert. Was das
+    # nicht zulaesst, weil es am Zustand der App haengt, gehoert in einen
+    # Oberflaechentest.
+
+  # Bedient die App wie ein Finger. simctl kann das nicht - es kann
+  # installieren, starten und ein Bild machen, aber nicht tippen. Ohne
+  # dieses Ziel laesst sich jeder Bildschirm nur ansehen.
+  PSMobileUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - path: PSMobileUITests
+      # Die STEP-Probe fuer den Randfall "STEP laedt" - dieselbe Datei
+      # liegt auf Android unter androidTest/assets.
+      - path: ../testdata/screw.step
+        buildPhase: resources
+    dependencies:
+      - target: PSMobile
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: de.psmobile.uitests
+        GENERATE_INFOPLIST_FILE: YES
+
+# Ohne diesen Eintrag kennt das erzeugte Schema keine Testaktion, und
+# xcodebuild antwortet mit "Scheme PSMobile is not currently configured
+# for the test action" - was klingt, als fehle das Testziel, dabei fehlt
+# nur seine Verknuepfung.
+schemes:
+  PSMobile:
+    build:
+      targets:
+        PSMobile: all
+    run:
+      config: Debug
+    test:
+      config: Debug
+      targets:
+        - PSMobileTests
+        - PSMobileUITests

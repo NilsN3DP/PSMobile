@@ -1,0 +1,157 @@
+package de.psmobile.shared.rules
+
+import de.psmobile.shared.rules.SimpleModeState
+
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.buildJsonArray
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.doubleOrNull
+import kotlinx.serialization.json.intOrNull
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.put
+
+/** Ein Anteil referenziert einen physischen Kopf, 0-basiert für die App. */
+data class ColorMixComponent(val head: Int, val ratio: Double)
+
+/** Ein virtueller Extruder, den libslic3r beim Slicen in Köpfe auflöst. */
+data class ColorMixRecipe(
+    val id: Int,
+    val components: List<ColorMixComponent>,
+    val color: String? = null,
+)
+
+/**
+ * Exakte 3MF-Darstellung für PrusaSlicers FullSpectrum/ColorMix.
+ * Die UI arbeitet mit 0-basierten Kopfnummern, im gespeicherten JSON sind
+ * sie – wie auch die Extruderzuordnung – 1-basiert.
+ */
+object ColorMixCodec {
+    private val json = Json { ignoreUnknownKeys = true }
+
+    /**
+     * Der sichtbare Farbeindruck eines Rezeptes. Das ist bewusst eine
+     * Vorschau: Beim Druck wechseln die beteiligten Positionen, sie werden
+     * nicht in einer Duese physisch zusammengeschmolzen.
+     */
+    fun previewColor(
+        physicalColors: List<String>,
+        components: List<ColorMixComponent>,
+    ): String? = runCatching<String> {
+        val normalized = normalize(components)
+        require(normalized.all { it.head in physicalColors.indices }) {
+            "ColorMix-Position existiert nicht"
+        }
+        val channels = normalized.map { component ->
+            parseRgb(physicalColors[component.head]) to component.ratio
+        }
+        val red = blend(channels) { it.first }
+        val green = blend(channels) { it.second }
+        val blue = blend(channels) { it.third }
+        "#${red.hexByte()}${green.hexByte()}${blue.hexByte()}"
+    }.getOrNull()
+
+    private fun Int.hexByte(): String {
+        val digits = "0123456789ABCDEF"
+        val byte = coerceIn(0, 255)
+        return "${digits[byte / 16]}${digits[byte % 16]}"
+    }
+
+    fun decode(source: String): List<ColorMixRecipe> = runCatching {
+        val root = json.parseToJsonElement(source).jsonObject
+        val physicalCount = root["physical_extruders"]?.jsonArray?.size ?: Int.MAX_VALUE
+        root["virtual_extruders"]?.jsonArray.orEmpty().mapNotNull { item ->
+            val entry = item.jsonObject
+            if (entry["kind"]?.jsonPrimitive?.content != "fullspectrum") return@mapNotNull null
+            val id = entry["id"]?.jsonPrimitive?.intOrNull ?: return@mapNotNull null
+            runCatching {
+                require(id > physicalCount) { "Virtuelle ID kollidiert mit einem physischen Kopf" }
+                val components = entry["components"]?.jsonArray.orEmpty().map { raw ->
+                    val part = raw.jsonObject
+                    val physical = part["extruder"]?.jsonPrimitive?.intOrNull
+                        ?: error("ColorMix-Komponente ohne Kopf")
+                    val ratio = part["ratio"]?.jsonPrimitive?.doubleOrNull
+                        ?: error("ColorMix-Komponente ohne Anteil")
+                    require(physical in 1..physicalCount) { "ColorMix-Kopf existiert nicht" }
+                    ColorMixComponent(physical - 1, ratio)
+                }
+                ColorMixRecipe(id, normalize(components), entry["color"]?.jsonPrimitive?.contentOrNull)
+            }.getOrNull()
+        }
+    }.getOrDefault(emptyList())
+
+    fun encode(
+        physicalColors: List<String>,
+        recipes: List<ColorMixRecipe>,
+    ): String {
+        val validated = recipes.map { recipe ->
+            require(recipe.id > physicalColors.size) { SimpleModeState.text(
+            "Virtual ID must be higher than the physical tools",
+            "Virtuelle ID muss hinter den physischen Köpfen liegen") }
+            recipe.copy(components = normalize(recipe.components).also { components ->
+                require(components.all { it.head in physicalColors.indices }) { "ColorMix-Kopf existiert nicht" }
+            })
+        }
+        require(validated.map(ColorMixRecipe::id).distinct().size == validated.size) { SimpleModeState.text(
+            "Virtual IDs must be unique", "Virtuelle IDs müssen eindeutig sein") }
+
+        val root = buildJsonObject {
+            put("version", 1)
+            put("physical_extruders", buildJsonArray {
+                physicalColors.forEachIndexed { index, color ->
+                    add(buildJsonObject { put("id", index + 1); put("color", color) })
+                }
+            })
+            put("virtual_extruders", buildJsonArray {
+                validated.forEach { recipe ->
+                    add(buildJsonObject {
+                        put("id", recipe.id)
+                        put("kind", "fullspectrum")
+                        recipe.color?.takeIf(String::isNotBlank)?.let { put("color", it) }
+                        put("components", buildJsonArray {
+                            recipe.components.forEach { component ->
+                                add(buildJsonObject {
+                                    put("extruder", component.head + 1)
+                                    put("ratio", component.ratio)
+                                })
+                            }
+                        })
+                    })
+                }
+            })
+        }
+        return root.toString()
+    }
+
+    /** 2–3 verschiedene physische Köpfe, immer auf Summe 1 normiert. */
+    fun normalize(raw: List<ColorMixComponent>): List<ColorMixComponent> {
+        val merged = raw.filter { it.head >= 0 && it.ratio > 0.0 }
+            .groupBy(ColorMixComponent::head)
+            .map { (head, values) -> ColorMixComponent(head, values.sumOf(ColorMixComponent::ratio)) }
+            .sortedBy(ColorMixComponent::head)
+        require(merged.size in 2..3) { SimpleModeState.text(
+            "ColorMix needs two or three different tools",
+            "ColorMix benötigt zwei oder drei verschiedene Köpfe") }
+        val total = merged.sumOf(ColorMixComponent::ratio)
+        require(total > 0.0) { SimpleModeState.text(
+            "ColorMix shares must be positive", "ColorMix-Anteile müssen positiv sein") }
+        return merged.map { it.copy(ratio = it.ratio / total) }
+    }
+
+    private fun parseRgb(raw: String): Triple<Int, Int, Int> {
+        require(raw.length == 7 && raw.firstOrNull() == '#') { SimpleModeState.text("Invalid RGB colour", "Ungültige RGB-Farbe") }
+        val value = raw.drop(1).toLongOrNull(16) ?: error(SimpleModeState.text("Invalid RGB colour", "Ungültige RGB-Farbe"))
+        return Triple(
+            ((value shr 16) and 0xFF).toInt(),
+            ((value shr 8) and 0xFF).toInt(),
+            (value and 0xFF).toInt(),
+        )
+    }
+
+    private fun blend(
+        channels: List<Pair<Triple<Int, Int, Int>, Double>>,
+        component: (Triple<Int, Int, Int>) -> Int,
+    ): Int = (channels.sumOf { (rgb, ratio) -> component(rgb) * ratio } + 0.5).toInt()
+}
